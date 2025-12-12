@@ -1,0 +1,9 @@
+---
+ceph_cluster_id: "4de37616-ef82-4295-8ff0-7309d4b34812"
+
+# v1 MON endpoint for pve
+ceph_monitors:
+  - "10.10.201.41:6789"
+
+ceph_k8s_user: "k8s"
+ceph_k8s_key: "AQBwejhp7lzSBBAAxa8TJhMRakcjYeOgMigqtg=="

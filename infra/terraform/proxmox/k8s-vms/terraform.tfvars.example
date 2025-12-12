@@ -1,0 +1,2 @@
+proxmox_token_id     = "graham@pam!terraform"
+proxmox_token_secret = "baffe34b-b66e-4263-abb3-3a14006092b2"

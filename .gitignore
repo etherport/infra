@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# Terraform
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+!**/*.tfvars.example
+
+# Ansible/Kubespray artifacts
+**/*.retry
+**/inventory/**/artifacts/
+**/inventory/**/credentials/
+
+# Kubeconfigs
+**/admin.conf
+**/*.kubeconfig
+**/.kube/
+**/kubeconfig/
+
+# Secrets (commit templates only)
+**/*secret*.yaml
+!**/*secret-template*.yaml
+!**/*.secret-template.yaml
