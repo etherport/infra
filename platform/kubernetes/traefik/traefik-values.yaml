@@ -1,0 +1,67 @@
+ports:
+  web:
+    # New syntax since chart v34+
+    redirections:
+      entryPoint:
+        to: websecure
+        scheme: https
+        permanent: true
+  websecure:
+    tls:
+      enabled: true
+
+service:
+  enabled: true
+  type: LoadBalancer
+  annotations: {}
+  labels: {}
+  spec:
+    loadBalancerIP: 10.10.201.70
+
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+
+additionalArguments:
+#  - "--entrypoints.web.address=:80"
+#  - "--entrypoints.websecure.address=:443"
+
+  - "--entrypoints.websecure.http.tls.certresolver=route53"
+  - "--entrypoints.websecure.http.tls.domains[0].main=wind.etherport.net"
+  - "--entrypoints.websecure.http.tls.domains[0].sans=*.wind.etherport.net"
+
+  - "--certificatesresolvers.route53.acme.dnschallenge=true"
+  - "--certificatesresolvers.route53.acme.dnschallenge.provider=route53"
+  - "--certificatesresolvers.route53.acme.dnschallenge.disablePropagationCheck=true"
+  - "--certificatesresolvers.route53.acme.email=dervish_guess_0n@icloud.com"
+  - "--certificatesresolvers.route53.acme.storage=/data/acme.json"
+
+env:
+  - name: AWS_REGION
+    value: "us-west-2"   # change to your region
+  - name: AWS_ACCESS_KEY_ID
+    valueFrom:
+      secretKeyRef:
+        name: route53-credentials
+        key: AWS_ACCESS_KEY_ID
+  - name: AWS_SECRET_ACCESS_KEY
+    valueFrom:
+      secretKeyRef:
+        name: route53-credentials
+        key: AWS_SECRET_ACCESS_KEY
+  - name: AWS_HOSTED_ZONE_ID
+    value: "Z03500581XDWV5SKF5PK8"
+
+persistence:
+  enabled: true
+  existingClaim: traefik-ceph-pvc
+  path: /data
+
+ingressRoute:
+  dashboard:
+    enabled: true
+    entryPoints:
+      - websecure
+    # Restrict to a hostname on your domain
+    matchRule: "Host(`traefik.wind.etherport.net`)"
+    # TODO later: add middlewares here for auth

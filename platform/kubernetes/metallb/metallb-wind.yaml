@@ -1,0 +1,18 @@
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: wind-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - 10.10.201.70-10.10.201.90
+
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: wind-l2
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - wind-pool

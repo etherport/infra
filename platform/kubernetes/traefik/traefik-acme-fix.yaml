@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: traefik-acme-fix
+  namespace: traefik
+spec:
+  restartPolicy: Never
+  containers:
+    - name: fixer
+      image: busybox:1.36
+      command:
+        - sh
+        - -c
+        - |
+          set -ex
+          mkdir -p /data
+          touch /data/acme.json
+          chown 65532:65532 /data/acme.json
+          chmod 600 /data/acme.json
+          ls -l /data
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: traefik-ceph-pvc

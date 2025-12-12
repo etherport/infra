@@ -1,0 +1,11 @@
+nfs:
+  server: 10.10.209.10
+  path: /var/nfs/shared/K8s
+
+storageClass:
+  name: nfs-storage
+  defaultClass: true        # makes this the default StorageClass
+  reclaimPolicy: Delete
+  allowVolumeExpansion: true
+  accessModes: ReadWriteMany
+  volumeBindingMode: Immediate

@@ -1,0 +1,172 @@
+---
+# Play 1: prepare all K8s nodes for Ceph RBD
+# (ceph-common + rbd module)
+
+- name: Install Ceph client tools on K8s nodes
+  hosts: k8s_cluster
+  become: true
+  tasks:
+    - name: Ensure apt cache is up to date
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install ceph-common
+      apt:
+        name: ceph-common
+        state: present
+
+    - name: Ensure rbd kernel module is loaded
+      modprobe:
+        name: rbd
+        state: present
+
+    - name: Persist rbd module across reboots
+      copy:
+        dest: /etc/modules-load.d/rbd.conf
+        content: "rbd\n"
+        owner: root
+        group: root
+        mode: "0644"
+
+# Play 2: install Ceph-CSI + StorageClass from a control-plane node
+
+- name: Install Ceph-CSI RBD and StorageClass
+  hosts: kube_control_plane
+  become: true
+  run_once: true        # run only on the first control-plane node
+  vars:
+    kubeconfig_path: /etc/kubernetes/admin.conf
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+  tasks:
+    - name: Ensure ceph-csi namespace exists
+      shell: kubectl create namespace ceph-csi --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Create ceph-csi configmap (cluster + mons)
+      copy:
+        dest: /tmp/csi-config-map.yaml
+        content: |
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: ceph-csi-config
+            namespace: ceph-csi
+          data:
+            config.json: |-
+              [
+                {
+                  "clusterID": "{{ ceph_cluster_id }}",
+                  "monitors": [
+                  {% for mon in ceph_monitors %}
+                    "{{ mon }}"{% if not loop.last %},{% endif %}
+                  {% endfor %}
+                  ]
+                }
+              ]
+    - name: Apply ceph-csi configmap
+      shell: kubectl apply -f /tmp/csi-config-map.yaml
+
+    - name: Create ceph-csi KMS configmap (empty)
+      copy:
+        dest: /tmp/csi-kms-config-map.yaml
+        content: |
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: ceph-csi-encryption-kms-config
+            namespace: ceph-csi
+          data:
+            config.json: |-
+              {}
+    - name: Apply ceph-csi KMS configmap
+      shell: kubectl apply -f /tmp/csi-kms-config-map.yaml
+
+    - name: Create ceph.conf configmap
+      copy:
+        dest: /tmp/ceph-config-map.yaml
+        content: |
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: ceph-config
+            namespace: ceph-csi
+          data:
+            ceph.conf: |
+              [global]
+              auth_cluster_required = cephx
+              auth_service_required = cephx
+              auth_client_required = cephx
+            keyring: |
+    - name: Apply ceph-config configmap
+      shell: kubectl apply -f /tmp/ceph-config-map.yaml
+
+    - name: Apply Ceph-CSI RBD RBAC and controllers
+      shell: |
+        kubectl apply -f https://raw.githubusercontent.com/ceph/ceph-csi/v3.11.0/deploy/rbd/kubernetes/csi-provisioner-rbac.yaml
+        kubectl apply -f https://raw.githubusercontent.com/ceph/ceph-csi/v3.11.0/deploy/rbd/kubernetes/csi-nodeplugin-rbac.yaml
+        kubectl apply -f https://raw.githubusercontent.com/ceph/ceph-csi/v3.11.0/deploy/rbd/kubernetes/csi-rbdplugin-provisioner.yaml
+        kubectl apply -f https://raw.githubusercontent.com/ceph/ceph-csi/v3.11.0/deploy/rbd/kubernetes/csi-rbdplugin.yaml
+
+
+    - name: Create RBD Secret for Ceph-CSI
+      copy:
+        dest: /tmp/csi-rbd-secret.yaml
+        content: |
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: csi-rbd-secret
+            namespace: ceph-csi
+          stringData:
+            userID: "{{ ceph_k8s_user }}"
+            userKey: "{{ ceph_k8s_key }}"
+    - name: Apply RBD Secret
+      shell: kubectl apply -f /tmp/csi-rbd-secret.yaml
+
+    - name: Create ceph-rbd StorageClass
+      copy:
+        dest: /tmp/ceph-rbd-sc.yaml
+        content: |
+          apiVersion: storage.k8s.io/v1
+          kind: StorageClass
+          metadata:
+            name: ceph-rbd
+          provisioner: rbd.csi.ceph.com
+          parameters:
+            clusterID: "{{ ceph_cluster_id }}"
+            pool: k8s-ceph
+            imageFeatures: layering
+
+            csi.storage.k8s.io/provisioner-secret-name: csi-rbd-secret
+            csi.storage.k8s.io/provisioner-secret-namespace: ceph-csi
+            csi.storage.k8s.io/controller-expand-secret-name: csi-rbd-secret
+            csi.storage.k8s.io/controller-expand-secret-namespace: ceph-csi
+            csi.storage.k8s.io/node-stage-secret-name: csi-rbd-secret
+            csi.storage.k8s.io/node-stage-secret-namespace: ceph-csi
+
+          reclaimPolicy: Delete
+          allowVolumeExpansion: true
+          mountOptions:
+            - discard
+    - name: Apply ceph-rbd StorageClass
+      shell: kubectl apply -f /tmp/ceph-rbd-sc.yaml
+
+    - name: Create test PVC to verify provisioning
+      copy:
+        dest: /tmp/rbd-test-pvc.yaml
+        content: |
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: rbd-test-pvc
+            namespace: default
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 1Gi
+            storageClassName: ceph-rbd
+    - name: Apply test PVC
+      shell: kubectl apply -f /tmp/rbd-test-pvc.yaml

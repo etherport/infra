@@ -1,0 +1,49 @@
+# --- Basic components ---
+prometheus:
+  enabled: true
+  prometheusSpec:
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: ceph-rbd
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: ceph-rbd
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+
+grafana:
+  enabled: true
+
+  # Admin login (change this later)
+  adminUser: admin
+  adminPassword: "ChangeMe123!"
+
+  # Persist Grafana dashboards & config
+  persistence:
+    enabled: true
+    storageClassName: ceph-rbd
+    accessModes: ["ReadWriteOnce"]
+    size: 5Gi
+
+  # Expose Grafana via Traefik
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations: {}
+    hosts:
+      - grafana.wind.etherport.net
+    path: /
+    pathType: Prefix
+    # No tls section here; Traefik will terminate TLS using the wildcard cert
