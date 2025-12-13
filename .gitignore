@@ -20,6 +20,7 @@
 **/kubeconfig/
 
 # Secrets (commit templates only)
+**/secrets/*
 **/*secret*.yaml
 !**/*secret-template*.yaml
 !**/*.secret-template.yaml

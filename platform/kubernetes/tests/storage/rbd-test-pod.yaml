@@ -1,0 +1,18 @@
+# rbd-test-pod.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rbd-test-pod
+  namespace: default
+spec:
+  containers:
+  - name: busybox
+    image: busybox
+    command: ["sh", "-c", "while true; do ls -al /data; sleep 10; done"]
+    volumeMounts:
+    - name: data
+      mountPath: /data
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: rbd-test-pvc
