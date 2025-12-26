@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kopia
+  namespace: backups
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kopia
+  template:
+    metadata:
+      labels:
+        app: kopia
+    spec:
+      containers:
+        - name: kopia
+          image: kopia/kopia:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 51515
+          env:
+            - name: KOPIA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kopia-credentials
+                  key: KOPIA_PASSWORD
+            - name: KOPIA_SERVER_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kopia-credentials
+                  key: KOPIA_SERVER_USER
+            - name: KOPIA_SERVER_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: kopia-credentials
+                  key: KOPIA_SERVER_PASS
+          command: ["/bin/sh", "/opt/entrypoint/entrypoint.sh"]
+          volumeMounts:
+            - name: repo
+              mountPath: /repo
+            - name: config
+              mountPath: /root/.config/kopia
+              subPath: config
+            - name: config
+              mountPath: /root/.cache/kopia
+              subPath: cache
+            - name: entrypoint
+              mountPath: /opt/entrypoint
+      volumes:
+        - name: repo
+          persistentVolumeClaim:
+            claimName: kopia-repo-pvc
+        - name: config
+          persistentVolumeClaim:
+            claimName: kopia-config-pvc
+        - name: entrypoint
+          configMap:
+            name: kopia-entrypoint
+            defaultMode: 0755

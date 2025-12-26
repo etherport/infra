@@ -119,6 +119,11 @@ kube_apiserver_port: 6443  # (https)
 # TODO: it needs to be changed to nftables when the upstream use nftables as default
 kube_proxy_mode: iptables
 
+# Expose kube-proxy metrics on the node IP (Prometheus can scrape http://<node-ip>:10249/metrics)
+# Fixes Prometheus kube-proxy scrape failures when metrics are bound only to localhost (127.0.0.1).
+# NOTE: Kubespray renders this into the kube-proxy ConfigMap as `metricsBindAddress`.
+kube_proxy_metrics_bind_address: "0.0.0.0:10249"
+
 # configure arp_ignore and arp_announce to avoid answering ARP queries from kube-ipvs0 interface
 # must be set to true for MetalLB, kube-vip(ARP enabled) to work
 kube_proxy_strict_arp: false

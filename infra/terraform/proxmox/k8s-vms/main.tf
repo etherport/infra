@@ -27,6 +27,11 @@ locals {
   vlan_tag     = 201
   gateway_201  = "10.10.201.1"
 
+  # IMPORTANT: Use a modern CPU type for Kubernetes nodes.
+  # `qemu64` can hide CPU flags and break some containers (e.g., glibc x86-64-v2 requirement).
+  # Recommended by the provider docs: "x86-64-v2-AES". Using "host" is fine for single-node labs.
+  cpu_type    = "host"
+
   k8s_nodes = {
     k8s-cp1 = {
       ip        = "10.10.201.50"
@@ -65,6 +70,7 @@ resource "proxmox_virtual_environment_vm" "k8s_nodes" {
 
   cpu {
     cores = each.value.vcpus
+    type  = local.cpu_type
   }
 
   memory {

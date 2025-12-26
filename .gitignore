@@ -7,6 +7,9 @@
 **/*.tfstate.*
 **/*.tfvars
 !**/*.tfvars.example
+**/terraform.tfvars.local
+**/*.tfvars.local
+**/terraform.tfvars.*.local
 
 # Ansible/Kubespray artifacts
 **/*.retry

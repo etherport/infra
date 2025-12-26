@@ -1,0 +1,57 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: s3-sync-content
+  namespace: backups
+spec:
+  schedule: "15 9 * * *"   # daily @ 09:15 UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: sync
+              image: public.ecr.aws/aws-cli/aws-cli:2.32.16
+              command: ["/bin/sh","-c"]
+              args:
+                - |
+                  set -e
+                  /scripts/sync-and-verify.sh
+              env:
+                - name: SHARE_NAME
+                  value: "content"
+                - name: SRC_PATH
+                  value: "/src"
+                - name: DEST_BUCKET
+                  value: "archive.wind.etherport.net"
+                - name: DEST_PREFIX
+                  value: "objects/content"
+                - name: BATCH_PREFIX
+                  value: "batch"
+              envFrom:
+                - secretRef:
+                    name: aws-backup-credentials
+              volumeMounts:
+                - name: nfs-src
+                  mountPath: /src
+                  readOnly: true
+                - name: script
+                  mountPath: /scripts
+                - name: work
+                  mountPath: /work
+          volumes:
+            - name: nfs-src
+              nfs:
+                server: sequoia.wind.etherport.net
+                path: /var/nfs/shared/Content
+            - name: script
+              configMap:
+                name: aws-s3-sync-script
+                defaultMode: 0755
+            - name: work
+              emptyDir: {}

@@ -1,0 +1,16 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: kopia
+  namespace: backups
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`kopia.wind.etherport.net`)
+      kind: Rule
+      services:
+        - name: kopia
+          port: 80
+  tls:
+    certResolver: route53

@@ -1,0 +1,164 @@
+apiVersion: v1
+data:
+  sync-and-verify.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    : "${SHARE_NAME:?need SHARE_NAME}"
+    : "${SRC_PATH:?need SRC_PATH}"
+    : "${DEST_BUCKET:?need DEST_BUCKET}"
+    : "${DEST_PREFIX:?need DEST_PREFIX}"
+    : "${BATCH_PREFIX:?need BATCH_PREFIX}"
+    : "${AWS_REGION:?need AWS_REGION}"
+    : "${AWS_ACCOUNT_ID:?need AWS_ACCOUNT_ID}"
+    : "${S3_BATCH_ROLE_ARN:?need S3_BATCH_ROLE_ARN}"
+
+    TS="$(date -u +%Y%m%dT%H%M%SZ)"
+    RUN_ID="${SHARE_NAME}-${TS}"
+    LOG_DIR="/work/logs"
+    mkdir -p "$LOG_DIR"
+
+    DEST_URI="s3://${DEST_BUCKET}/${DEST_PREFIX}/"
+    MANIFEST_KEY="${BATCH_PREFIX}/manifests/${SHARE_NAME}/${RUN_ID}.csv"
+    MANIFEST_URI="s3://${DEST_BUCKET}/${MANIFEST_KEY}"
+    REPORT_PREFIX="${BATCH_PREFIX}/reports/${SHARE_NAME}/${RUN_ID}/"
+    RUN_SUMMARY_KEY="${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.json"
+    RUN_SUMMARY_URI="s3://${DEST_BUCKET}/${RUN_SUMMARY_KEY}"
+
+    DRYRUN_OUT="${LOG_DIR}/dryrun.txt"
+    SYNC_OUT="${LOG_DIR}/sync.txt"
+    MANIFEST_FILE="${LOG_DIR}/manifest.csv"
+    SUMMARY_FILE="${LOG_DIR}/summary.json"
+
+    echo "=== [$RUN_ID] Dry-run to detect uploads/updates ==="
+    # We keep output visible so we can parse it into a manifest.
+    # For large directories, this could be noisy; that's expected.
+    aws s3 sync "${SRC_PATH}" "${DEST_URI}" \
+      --delete \
+      --checksum-algorithm SHA256 \
+      --exact-timestamps \
+      --dryrun \
+      | tee "${DRYRUN_OUT}"
+
+    echo "=== [$RUN_ID] Real sync ==="
+    aws s3 sync "${SRC_PATH}" "${DEST_URI}" \
+      --delete \
+      --checksum-algorithm SHA256 \
+      --exact-timestamps \
+      | tee "${SYNC_OUT}"
+
+    # Build manifest for Batch Ops: CSV with header Bucket,Key
+    # We include only objects that were uploaded in this run.
+    # aws s3 sync dryrun output lines look like:
+    #   (dryrun) upload: /path/file -> s3://bucket/prefix/file
+    # We'll parse those and convert to (Bucket,Key).
+    echo "Bucket,Key" > "${MANIFEST_FILE}"
+
+    # Extract only upload lines
+    # shellcheck disable=SC2002
+    cat "${DRYRUN_OUT}" \
+      | grep -E '^\(dryrun\)\s+upload:\s+' \
+      | sed -E 's/^\(dryrun\)\s+upload:\s+.*\s+->\s+s3:\/\///' \
+      | awk -F/ '{
+          bucket=$1;
+          key=substr($0, length(bucket)+2);
+          if (bucket != "" && key != "") {
+            print bucket "," key
+          }
+        }' \
+      >> "${MANIFEST_FILE}" || true
+
+    UPLOAD_COUNT="$(($(wc -l < "${MANIFEST_FILE}") - 1))"
+    echo "Uploads/updates detected (for checksum job): ${UPLOAD_COUNT}"
+
+    if [[ "${UPLOAD_COUNT}" -le 0 ]]; then
+      echo "No uploads detected. Writing summary and exiting without Batch Ops job."
+      cat > "${SUMMARY_FILE}" <<JSON
+    {
+      "run_id": "${RUN_ID}",
+      "share": "${SHARE_NAME}",
+      "timestamp_utc": "${TS}",
+      "source": "${SRC_PATH}",
+      "destination": "${DEST_URI}",
+      "uploads_for_verification": 0,
+      "batch_job_created": false
+    }
+    JSON
+      aws s3 cp "${SUMMARY_FILE}" "${RUN_SUMMARY_URI}" --region "${AWS_REGION}"
+      exit 0
+    fi
+
+    echo "=== Upload manifest to S3 ==="
+    aws s3 cp "${MANIFEST_FILE}" "${MANIFEST_URI}" --region "${AWS_REGION}"
+
+    # Need ETag for the manifest object for create-job
+    MANIFEST_ETAG="$(aws s3api head-object --bucket "${DEST_BUCKET}" --key "${MANIFEST_KEY}" --query ETag --output text --region "${AWS_REGION}" | tr -d '"')"
+
+    echo "=== Create S3 Batch Operations job: Compute checksum (SHA256 FULL_OBJECT) ==="
+    JOB_JSON="$(cat <<JSON
+    {
+      "AccountId": "${AWS_ACCOUNT_ID}",
+      "Operation": {
+        "S3ComputeObjectChecksum": {
+          "ChecksumAlgorithm": "SHA256",
+          "ChecksumType": "FULL_OBJECT"
+        }
+      },
+      "Manifest": {
+        "Spec": {
+          "Format": "S3BatchOperations_CSV_20180820",
+          "Fields": ["Bucket","Key"]
+        },
+        "Location": {
+          "ObjectArn": "arn:aws:s3:::${DEST_BUCKET}/${MANIFEST_KEY}",
+          "ETag": "${MANIFEST_ETAG}"
+        }
+      },
+      "Report": {
+        "Bucket": "arn:aws:s3:::${DEST_BUCKET}",
+        "Format": "Report_CSV_20180820",
+        "Enabled": true,
+        "Prefix": "${REPORT_PREFIX}",
+        "ReportScope": "AllTasks"
+      },
+      "Priority": 10,
+      "RoleArn": "${S3_BATCH_ROLE_ARN}",
+      "ClientRequestToken": "${RUN_ID}",
+      "ConfirmationRequired": false,
+      "Description": "Checksum verify (SHA256) for ${SHARE_NAME} run ${RUN_ID}"
+    }
+    JSON
+    )"
+
+    JOB_ID="$(aws s3control create-job \
+      --region "${AWS_REGION}" \
+      --cli-input-json "${JOB_JSON}" \
+      --query JobId \
+      --output text
+    )"
+
+    echo "Batch job created: ${JOB_ID}"
+
+    cat > "${SUMMARY_FILE}" <<JSON
+    {
+      "run_id": "${RUN_ID}",
+      "share": "${SHARE_NAME}",
+      "timestamp_utc": "${TS}",
+      "source": "${SRC_PATH}",
+      "destination": "${DEST_URI}",
+      "manifest_s3": "${MANIFEST_URI}",
+      "uploads_for_verification": ${UPLOAD_COUNT},
+      "batch_job_created": true,
+      "batch_job_id": "${JOB_ID}",
+      "batch_report_prefix": "s3://${DEST_BUCKET}/${REPORT_PREFIX}"
+    }
+    JSON
+
+    aws s3 cp "${SUMMARY_FILE}" "${RUN_SUMMARY_URI}" --region "${AWS_REGION}"
+
+    echo "=== Done ==="
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: aws-s3-sync-script
+  namespace: backups
