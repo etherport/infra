@@ -17,18 +17,11 @@ spec:
           restartPolicy: Never
           containers:
             - name: sync
-              image: public.ecr.aws/aws-cli/aws-cli:2.32.16
+              image: ghcr.io/sparked-diamond/aws-s3-sync:main
               command: ["/bin/bash","-lc"]
               args:
                 - |
                   set -euo pipefail
-
-                  # Ensure runtime deps for report parsing and optional verification artifacts.
-                  if command -v yum >/dev/null 2>&1; then
-                    yum -y -q install jq python3 >/dev/null
-                  elif command -v microdnf >/dev/null 2>&1; then
-                    microdnf -y install jq python3 >/dev/null
-                  fi
 
                   # --- AWS auth preflight ---
                   echo "[preflight] aws sts get-caller-identity" >&2
@@ -94,8 +87,6 @@ spec:
                 - name: nfs-src
                   mountPath: /src
                   readOnly: true
-                - name: script
-                  mountPath: /scripts
                 - name: work
                   mountPath: /work
           volumes:
@@ -104,9 +95,5 @@ spec:
               nfs:
                 server: sequoia.wind.etherport.net
                 path: /var/nfs/shared/REPLACE_ME
-            - name: script
-              configMap:
-                name: aws-s3-sync-script
-                defaultMode: 0755
             - name: work
               emptyDir: {}

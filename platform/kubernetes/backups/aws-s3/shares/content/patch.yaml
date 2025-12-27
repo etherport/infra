@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: s3-sync-content
+  name: s3-sync-template
   namespace: backups
 spec:
   # keep suspend true (inherited), keep schedule for reference
