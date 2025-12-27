@@ -4,5 +4,7 @@ kind: Kustomization
 resources:
   - ../../base
 
+namePrefix: s3-sync-mark-
+
 patches:
   - path: patch.yaml
