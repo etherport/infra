@@ -1,11 +1,11 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: s3-sync-scans
+  name: s3-sync-template
   namespace: backups
 spec:
-  schedule: "15 9 * * *"   # daily @ 09:15 UTC (01:15 PT during standard time)
-  suspend: true
+  schedule: "15 9 * * *"   # placeholder; kept for reference
+  suspend: true            # IMPORTANT: nothing runs automatically yet
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 5
@@ -24,36 +24,55 @@ spec:
                   set -euo pipefail
 
                   # Ensure runtime deps for report parsing and optional verification artifacts.
-                  # (The aws-cli image doesn't always include jq/python3 by default.)
                   if command -v yum >/dev/null 2>&1; then
                     yum -y -q install jq python3 >/dev/null
                   elif command -v microdnf >/dev/null 2>&1; then
                     microdnf -y install jq python3 >/dev/null
                   fi
 
+                  # --- AWS auth preflight ---
+                  echo "[preflight] aws sts get-caller-identity" >&2
+                  acct="$(aws sts get-caller-identity --query Account --output text)"
+                  echo "[preflight] AWS Account: ${acct}" >&2
+
+                  if [[ "${acct}" != "${AWS_ACCOUNT_ID}" ]]; then
+                    echo "[preflight] ERROR: AWS account mismatch. Expected ${AWS_ACCOUNT_ID}, got ${acct}" >&2
+                    exit 2
+                  fi
+
                   /scripts/sync-and-verify.sh
               env:
+                # --- per-share values (overridden by patches) ---
                 - name: SHARE_NAME
-                  value: "scans"
+                  value: "REPLACE_ME"
                 - name: SRC_PATH
                   value: "/src"
                 - name: DEST_BUCKET
-                  value: "archive-test.wind.etherport.net"
+                  value: "archive-test.wind.etherport.net"   # overridden per share
                 - name: DEST_PREFIX
-                  value: "objects/scans"
+                  value: "objects/REPLACE_ME"                # overridden per share
+
+                # --- centralized AWS + behavior settings ---
                 - name: AWS_REGION
                   value: "us-west-2"
+                - name: AWS_DEFAULT_REGION
+                  value: "us-west-2"
+                - name: AWS_EC2_METADATA_DISABLED
+                  value: "true"
+                - name: AWS_PAGER
+                  value: ""
+
                 - name: EXPECTED_BUCKET_OWNER
                   value: "830881980142"
                 - name: AWS_ACCOUNT_ID
                   value: "830881980142"
                 - name: S3_BATCH_ROLE_ARN
                   value: "arn:aws:iam::830881980142:role/s3-batch-ops-checksum-role"
+
                 - name: BATCH_PREFIX
                   value: "batch"
 
-                # For now, wait for the S3 Batch Operations checksum job to finish so we
-                # can download the report, build verification JSONL, and produce summaries.
+                # keep checksum verification + reporting for now
                 - name: WAIT_FOR_BATCH
                   value: "true"
                 - name: BATCH_POLL_INTERVAL_SECONDS
@@ -61,6 +80,7 @@ spec:
                 - name: BATCH_MAX_WAIT_SECONDS
                   value: "7200"
 
+                # Prometheus Pushgateway
                 - name: PUSHGATEWAY_URL
                   value: "http://pushgateway.monitoring.svc.cluster.local:9091"
                 - name: PUSHGATEWAY_JOB
@@ -79,10 +99,11 @@ spec:
                 - name: work
                   mountPath: /work
           volumes:
+            # NFS will be patched per share
             - name: nfs-src
               nfs:
                 server: sequoia.wind.etherport.net
-                path: /var/nfs/shared/Scans
+                path: /var/nfs/shared/REPLACE_ME
             - name: script
               configMap:
                 name: aws-s3-sync-script

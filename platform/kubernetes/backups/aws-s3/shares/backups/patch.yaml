@@ -1,0 +1,26 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: s3-sync-backups
+  namespace: backups
+spec:
+  # keep suspend true (inherited), keep schedule for reference
+  schedule: "15 9 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: sync
+              env:
+                - name: SHARE_NAME
+                  value: "backups"
+                - name: DEST_BUCKET
+                  value: "archive.wind.etherport.net"
+                - name: DEST_PREFIX
+                  value: "objects/backups"
+          volumes:
+            - name: nfs-src
+              nfs:
+                server: sequoia.wind.etherport.net
+                path: /var/nfs/shared/Backups
