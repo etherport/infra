@@ -3,10 +3,10 @@ kind: Kustomization
 resources:
 - gotk-components.yaml
 - gotk-sync.yaml
-- ../../platform/kubernetes/backups/aws-s3/shares/scans
-- ../../platform/kubernetes/backups/aws-s3/shares/archive
-- ../../platform/kubernetes/backups/aws-s3/shares/backups
-- ../../platform/kubernetes/backups/aws-s3/shares/content
-- ../../platform/kubernetes/backups/aws-s3/shares/graham
-- ../../platform/kubernetes/backups/aws-s3/shares/mark
-- ../../platform/kubernetes/backups/aws-s3/shares/media
+- ../../../platform/kubernetes/backups/aws-s3/shares/scans
+- ../../../platform/kubernetes/backups/aws-s3/shares/archive
+- ../../../platform/kubernetes/backups/aws-s3/shares/backups
+- ../../../platform/kubernetes/backups/aws-s3/shares/content
+- ../../../platform/kubernetes/backups/aws-s3/shares/graham
+- ../../../platform/kubernetes/backups/aws-s3/shares/mark
+- ../../../platform/kubernetes/backups/aws-s3/shares/media
