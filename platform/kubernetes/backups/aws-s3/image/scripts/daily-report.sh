@@ -186,16 +186,19 @@ for share in list(shares_data.keys()):
 for job in jobs_json:
     job_name = job.get('metadata', {}).get('name', '')
 
-    # Extract share name from job name (format: s3-sync-{share}-{timestamp})
+    # Extract share name from job name (format: s3-sync-{share}-*)
     if not job_name.startswith('s3-sync-'):
         continue
 
-    parts = job_name.split('-')
-    if len(parts) < 3:
+    # Remove 's3-sync-' prefix and extract first component as share name
+    rest = job_name[8:]  # Remove 's3-sync-'
+    parts = rest.split('-')
+    if len(parts) < 1:
         continue
 
-    # Share name is between s3-sync- prefix and timestamp suffix
-    share = '-'.join(parts[2:-1]) if len(parts) > 3 else parts[2]
+    # Share name is the first part after 's3-sync-'
+    # E.g., 's3-sync-scans-manual-20251228' -> 'scans'
+    share = parts[0]
 
     if share not in shares_data:
         continue
