@@ -15,7 +15,7 @@ spec:
                 - name: SHARE_NAME
                   value: "backups"
                 - name: DEST_BUCKET
-                  value: "archive-test.wind.etherport.net"
+                  value: "archive.wind.etherport.net"
                 - name: DEST_PREFIX
                   value: "objects/backups"
 
