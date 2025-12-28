@@ -1,0 +1,5 @@
+# Share excludes: archive
+
+*.cache
+*.gallery
+*.installer-compatibility

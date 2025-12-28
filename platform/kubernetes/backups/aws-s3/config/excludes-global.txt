@@ -1,0 +1,21 @@
+# Global excludes applied to ALL shares.
+# Each non-empty, non-comment line becomes: --exclude "<pattern>"
+#
+# This file mirrors DEFAULT_EXCLUDE_PATTERNS in sync-and-verify.sh
+
+# macOS / NAS metadata
+.DS_Store
+*/.DS_Store
+*.DS_Store
+._*
+*/._*
+.Spotlight-V100/*
+.Trashes/*
+*/.AppleDouble/*
+.AppleDouble/*
+
+# Common large caches / previews
+*.lrdata
+*.lrdata/*
+*Premiere*Preview*
+*Premiere*Preview*/*

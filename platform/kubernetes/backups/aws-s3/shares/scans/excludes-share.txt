@@ -1,0 +1,2 @@
+# Share excludes: scans
+# No additional excludes beyond excludes-global.txt

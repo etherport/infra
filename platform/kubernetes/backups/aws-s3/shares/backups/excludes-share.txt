@@ -1,0 +1,14 @@
+# Share excludes: backups
+
+*.TempReceipt.bom
+*.adobeTemp/
+*.cache
+*.config
+*.gallery
+*.installer-compatibility
+*.local
+*.localized
+*_CCC SafetyNet
+*.Trash-1000/
+/VMWare
+/Veeam
