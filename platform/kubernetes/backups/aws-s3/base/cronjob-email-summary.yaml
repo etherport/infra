@@ -18,7 +18,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: report
-              image: ghcr.io/sparked-diamond/aws-s3-sync:latest
+              image: ghcr.io/sparked-diamond/aws-s3-sync:main
               command: ["/bin/bash","-lc"]
               args:
                 - |
