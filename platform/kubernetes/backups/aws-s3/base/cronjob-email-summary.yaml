@@ -22,7 +22,7 @@ spec:
               command: ["/bin/bash","-lc"]
               args:
                 - |
-                  /app/daily-report.sh | /app/send-email.sh
+                  /scripts/daily-report.sh | /scripts/send-email.sh
               env:
                 - name: PROM_URL
                   value: "http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
