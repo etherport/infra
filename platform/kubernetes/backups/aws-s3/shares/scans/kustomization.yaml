@@ -1,6 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+namespace: backups
+
 resources:
   - ../../base
 
@@ -14,3 +16,11 @@ patches:
       name: s3-sync-template
       namespace: backups
     path: patch.yaml
+
+configMapGenerator:
+  - name: aws-s3-sync-excludes-share
+    files:
+      - excludes-share.txt
+
+generatorOptions:
+  disableNameSuffixHash: true

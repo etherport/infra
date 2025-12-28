@@ -11,14 +11,44 @@ spec:
           containers:
             - name: sync
               env:
+                # --- share identity / destination ---
                 - name: SHARE_NAME
                   value: "scans"
                 - name: DEST_BUCKET
                   value: "archive-test.wind.etherport.net"
                 - name: DEST_PREFIX
                   value: "objects/scans"
+
+                # --- exclude file locations (read by sync-and-verify.sh) ---
+                - name: EXCLUDES_GLOBAL_FILE
+                  value: "/etc/aws-s3-sync/excludes-global.txt"
+                - name: EXCLUDES_SHARE_FILE
+                  value: "/etc/aws-s3-sync/excludes-share.txt"
+
+              volumeMounts:
+                - name: excludes-global
+                  mountPath: /etc/aws-s3-sync/excludes-global.txt
+                  subPath: excludes-global.txt
+                  readOnly: true
+                - name: excludes-share
+                  mountPath: /etc/aws-s3-sync/excludes-share.txt
+                  subPath: excludes-share.txt
+                  readOnly: true
+
           volumes:
+            # --- NFS source mount (share-specific) ---
             - name: nfs-src
               nfs:
                 server: sequoia.wind.etherport.net
                 path: /var/nfs/shared/Scans
+
+            # --- exclude configmaps ---
+            - name: excludes-global
+              configMap:
+                name: aws-s3-sync-excludes-global
+                defaultMode: 0444
+            - name: excludes-share
+              configMap:
+                name: aws-s3-sync-excludes-share
+                optional: true
+                defaultMode: 0444
