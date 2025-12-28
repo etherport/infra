@@ -148,18 +148,65 @@ SYNC_OUT="${LOG_DIR}/sync.txt"
 MANIFEST_FILE="${LOG_DIR}/manifest.csv"
 SUMMARY_FILE="${LOG_DIR}/summary.json"
 
-# Exclusions: keep S3 clean (macOS / NAS metadata)
-# Note: aws s3 sync excludes are relative to the source/destination path.
-EXCLUDE_ARGS=(
-  --exclude ".DS_Store"
-  --exclude "*/.DS_Store"
-  --exclude "._*"
-  --exclude "*/._*"
-  --exclude ".Spotlight-V100/*"
-  --exclude ".Trashes/*"
-  --exclude "*/.AppleDouble/*"
-  --exclude ".AppleDouble/*"
+# Exclusions
+# Load exclusion patterns from text files so we can keep a global list plus per-share add-ons.
+# Each non-empty, non-comment line becomes: --exclude "<pattern>"
+# Patterns are evaluated by `aws s3 sync` relative to SRC_PATH/DEST_URI.
+EXCLUDES_GLOBAL_FILE="${EXCLUDES_GLOBAL_FILE:-/config/excludes-global.txt}"
+EXCLUDES_SHARE_FILE="${EXCLUDES_SHARE_FILE:-/config/excludes-share.txt}"
+
+# Built-in fallback defaults if config files are missing (keeps S3 clean).
+DEFAULT_EXCLUDE_PATTERNS=(
+  # macOS / NAS metadata
+  ".DS_Store"
+  "*/.DS_Store"
+  "*.DS_Store"
+  "._*"
+  "*/._*"
+  ".Spotlight-V100/*"
+  ".Trashes/*"
+  "*/.AppleDouble/*"
+  ".AppleDouble/*"
+
+  # Common large caches / previews
+  "*.lrdata"
+  "*.lrdata/*"
+  "*Premiere*Preview*"
+  "*Premiere*Preview*/*"
 )
+
+EXCLUDE_ARGS=()
+
+add_excludes_from_file() {
+  local f="$1"
+  [[ -f "$f" ]] || return 0
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    # trim whitespace
+    line="$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+
+    # skip blanks and comments
+    [[ -z "$line" ]] && continue
+    [[ "$line" == \#* ]] && continue
+
+    EXCLUDE_ARGS+=( "--exclude" "$line" )
+  done < "$f"
+}
+
+# Load file-driven excludes first
+add_excludes_from_file "$EXCLUDES_GLOBAL_FILE"
+add_excludes_from_file "$EXCLUDES_SHARE_FILE"
+
+# If no excludes were loaded, fall back to defaults
+if [[ ${#EXCLUDE_ARGS[@]} -eq 0 ]]; then
+  echo "[excludes] WARN: no exclude files found/loaded; using built-in defaults" >&2
+  for p in "${DEFAULT_EXCLUDE_PATTERNS[@]}"; do
+    EXCLUDE_ARGS+=( "--exclude" "$p" )
+  done
+else
+  echo "[excludes] Loaded excludes from: ${EXCLUDES_GLOBAL_FILE} and ${EXCLUDES_SHARE_FILE}" >&2
+  echo "[excludes] Total patterns loaded: $(( ${#EXCLUDE_ARGS[@]} / 2 ))" >&2
+fi
 
 # Helpers: use s3api for small artifact uploads/downloads so we can enforce ExpectedBucketOwner.
 # NOTE: Some aws-cli builds don't support --expected-bucket-owner on `aws s3 cp`, but s3api does.
