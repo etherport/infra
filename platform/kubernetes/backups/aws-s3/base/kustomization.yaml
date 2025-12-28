@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: backups
 
 resources:
+  - 01-rbac.yaml
   - cronjob.yaml
   - cronjob-email-summary.yaml
 
