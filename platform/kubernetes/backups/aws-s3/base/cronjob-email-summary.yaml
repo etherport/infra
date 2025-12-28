@@ -31,7 +31,5 @@ spec:
               envFrom:
                 - configMapRef:
                     name: aws-s3-sync-email
-              # needs AWS creds only if your send-email uses SES (it does)
-              envFrom:
                 - secretRef:
                     name: aws-backup-credentials
