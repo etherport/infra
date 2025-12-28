@@ -131,58 +131,51 @@ def prom_query(query):
         print(f"[warn] Prometheus query failed: {e}", file=sys.stderr)
         return []
 
-# Get metrics for all shares
-shares_data = {}
+# Build a map of latest Prometheus metrics per share
+prom_metrics_by_share = {}
 for metric in metrics_json:
     labels = metric.get('metric', {})
     share = labels.get('share', '')
     if not share:
         continue
 
-    timestamp = int(float(metric.get('value', [0, 0])[1]))
+    prom_metrics_by_share[share] = {
+        'bucket': labels.get('bucket', ''),
+        'timestamp': int(float(metric.get('value', [0, 0])[1])),
+    }
 
-    # Only include if timestamp is within lookback window
-    if timestamp < start_epoch:
-        continue
-
-    if share not in shares_data:
-        shares_data[share] = {
-            'share': share,
-            'bucket': labels.get('bucket', ''),
-            'timestamp': timestamp,
-        }
-
-# For each share, get additional metrics
-for share in list(shares_data.keys()):
+# For each share with metrics, get additional metrics from Prometheus
+for share in list(prom_metrics_by_share.keys()):
     # Get success status
     success_result = prom_query(f'homelab_backup_last_run_success{{share="{share}"}}')
     if success_result:
-        shares_data[share]['success'] = int(float(success_result[0]['value'][1]))
+        prom_metrics_by_share[share]['success'] = int(float(success_result[0]['value'][1]))
     else:
-        shares_data[share]['success'] = 0
+        prom_metrics_by_share[share]['success'] = 0
 
     # Get files transferred
     files_result = prom_query(f'homelab_backup_last_run_files_total{{share="{share}"}}')
     if files_result:
-        shares_data[share]['files'] = int(float(files_result[0]['value'][1]))
+        prom_metrics_by_share[share]['files'] = int(float(files_result[0]['value'][1]))
     else:
-        shares_data[share]['files'] = 0
+        prom_metrics_by_share[share]['files'] = 0
 
     # Get bytes transferred
     bytes_result = prom_query(f'homelab_backup_last_run_bytes_total{{share="{share}"}}')
     if bytes_result:
-        shares_data[share]['bytes'] = int(float(bytes_result[0]['value'][1]))
+        prom_metrics_by_share[share]['bytes'] = int(float(bytes_result[0]['value'][1]))
     else:
-        shares_data[share]['bytes'] = 0
+        prom_metrics_by_share[share]['bytes'] = 0
 
     # Get duration
     duration_result = prom_query(f'homelab_backup_last_run_duration_seconds{{share="{share}"}}')
     if duration_result:
-        shares_data[share]['duration'] = int(float(duration_result[0]['value'][1]))
+        prom_metrics_by_share[share]['duration'] = int(float(duration_result[0]['value'][1]))
     else:
-        shares_data[share]['duration'] = 0
+        prom_metrics_by_share[share]['duration'] = 0
 
-# Match with Kubernetes Jobs to get timing details
+# Collect all job executions in the time window (job-centric, not share-centric)
+executions = []
 for job in jobs_json:
     job_name = job.get('metadata', {}).get('name', '')
 
@@ -197,39 +190,50 @@ for job in jobs_json:
         continue
 
     # Share name is the first part after 's3-sync-'
-    # E.g., 's3-sync-scans-manual-20251228' -> 'scans'
     share = parts[0]
-
-    if share not in shares_data:
-        continue
 
     status = job.get('status', {})
     start_time = parse_ts(status.get('startTime'))
     completion_time = parse_ts(status.get('completionTime'))
 
-    # Check if job is in our time window
-    if start_time and start_time.timestamp() >= start_epoch:
-        shares_data[share]['start_time'] = start_time
-        shares_data[share]['end_time'] = completion_time
-        shares_data[share]['job_name'] = job_name
+    # Only include jobs that started in our time window
+    if not start_time or start_time.timestamp() < start_epoch:
+        continue
 
-        # Determine job status
-        if status.get('active', 0) > 0:
-            shares_data[share]['job_status'] = 'running'
-        elif status.get('succeeded', 0) > 0:
-            shares_data[share]['job_status'] = 'succeeded'
-        elif status.get('failed', 0) > 0:
-            shares_data[share]['job_status'] = 'failed'
-        else:
-            shares_data[share]['job_status'] = 'unknown'
+    # Determine job status
+    if status.get('active', 0) > 0:
+        job_status = 'running'
+    elif status.get('succeeded', 0) > 0:
+        job_status = 'succeeded'
+    elif status.get('failed', 0) > 0:
+        job_status = 'failed'
+    else:
+        job_status = 'unknown'
+
+    # Get Prometheus metrics for this share (may not exist for older jobs)
+    metrics = prom_metrics_by_share.get(share, {})
+
+    execution = {
+        'job_name': job_name,
+        'share': share,
+        'start_time': start_time,
+        'end_time': completion_time,
+        'job_status': job_status,
+        'success': metrics.get('success', 0),
+        'files': metrics.get('files', 0),
+        'bytes': metrics.get('bytes', 0),
+        'duration': metrics.get('duration', 0),
+    }
+
+    executions.append(execution)
 
 # Calculate summary totals
-total_executions = len(shares_data)
-total_completed = sum(1 for s in shares_data.values() if s.get('job_status') == 'succeeded')
-total_in_progress = sum(1 for s in shares_data.values() if s.get('job_status') == 'running')
-total_errors = sum(1 for s in shares_data.values() if s.get('job_status') in ['failed', 'unknown'] or s.get('success', 0) == 0)
-total_files = sum(s.get('files', 0) for s in shares_data.values())
-total_bytes = sum(s.get('bytes', 0) for s in shares_data.values())
+total_executions = len(executions)
+total_completed = sum(1 for e in executions if e.get('job_status') == 'succeeded' and e.get('success', 0) == 1)
+total_in_progress = sum(1 for e in executions if e.get('job_status') == 'running')
+total_errors = sum(1 for e in executions if e.get('job_status') in ['failed', 'unknown'] or (e.get('job_status') == 'succeeded' and e.get('success', 0) == 0))
+total_files = sum(e.get('files', 0) for e in executions)
+total_bytes = sum(e.get('bytes', 0) for e in executions)
 
 # Generate HTML
 html = f"""<!DOCTYPE html>
@@ -282,9 +286,13 @@ body {{
     text-align: center;
     border: 1px solid #e0e0e0;
 }}
-.metric-card.executions {{
+.metric-card.completed {{
     background-color: #d4edda;
     border-color: #c3e6cb;
+}}
+.metric-card.in-progress {{
+    background-color: #fff3cd;
+    border-color: #ffeaa7;
 }}
 .metric-card.errors {{
     background-color: #f8d7da;
@@ -368,19 +376,19 @@ body {{
     <div class="summary-period">Summary period: {start_pt.strftime('%Y-%m-%d %H:%M')} PT – {now_pt.strftime('%Y-%m-%d %H:%M')} PT</div>
 
     <div class="metrics-grid">
-        <div class="metric-card executions">
+        <div class="metric-card">
             <div class="metric-label">Executions</div>
             <div class="metric-value">{total_executions}</div>
         </div>
-        <div class="metric-card">
+        <div class="metric-card{' completed' if total_completed > 0 else ''}">
             <div class="metric-label">Completed</div>
             <div class="metric-value">{total_completed}</div>
         </div>
-        <div class="metric-card">
+        <div class="metric-card{' in-progress' if total_in_progress > 0 else ''}">
             <div class="metric-label">In progress</div>
             <div class="metric-value">{total_in_progress}</div>
         </div>
-        <div class="metric-card errors">
+        <div class="metric-card{' errors' if total_errors > 0 else ''}">
             <div class="metric-label">Errors</div>
             <div class="metric-value">{total_errors}</div>
         </div>
@@ -396,13 +404,13 @@ body {{
 </div>
 """
 
-# Sort shares by name
-sorted_shares = sorted(shares_data.values(), key=lambda x: x['share'])
+# Sort executions by start time (most recent first)
+sorted_executions = sorted(executions, key=lambda x: x.get('start_time') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
 
-for share_data in sorted_shares:
-    share = share_data['share']
-    job_status = share_data.get('job_status', 'unknown')
-    success = share_data.get('success', 0)
+for execution in sorted_executions:
+    share = execution['share']
+    job_status = execution.get('job_status', 'unknown')
+    success = execution.get('success', 0)
 
     # Determine status and badge
     if job_status == 'running':
@@ -415,8 +423,8 @@ for share_data in sorted_shares:
         status_text = 'error'
         status_class = 'error'
 
-    start_time = share_data.get('start_time')
-    end_time = share_data.get('end_time')
+    start_time = execution.get('start_time')
+    end_time = execution.get('end_time')
     start_pt = to_pt(start_time) if start_time else None
     end_pt = to_pt(end_time) if end_time else None
 
@@ -429,11 +437,11 @@ for share_data in sorted_shares:
     <div class="task-details">
         <div class="detail-row">
             <span class="detail-label">Files transferred</span>
-            <span class="detail-value">{share_data.get('files', 0):,}</span>
+            <span class="detail-value">{execution.get('files', 0):,}</span>
         </div>
         <div class="detail-row">
             <span class="detail-label">Data transferred</span>
-            <span class="detail-value">{format_bytes(share_data.get('bytes', 0))}</span>
+            <span class="detail-value">{format_bytes(execution.get('bytes', 0))}</span>
         </div>
         <div class="detail-row">
             <span class="detail-label">Start time (PT)</span>
@@ -445,7 +453,7 @@ for share_data in sorted_shares:
         </div>
         <div class="detail-row">
             <span class="detail-label">Duration</span>
-            <span class="detail-value">{format_duration(share_data.get('duration', 0))}</span>
+            <span class="detail-value">{format_duration(execution.get('duration', 0))}</span>
         </div>
     </div>
 </div>
