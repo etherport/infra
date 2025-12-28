@@ -18,8 +18,19 @@ fi
 BODY_FILE="${1:-/dev/stdin}"
 BODY="$(cat "$BODY_FILE")"
 
-# Use classic SES send-email (simplest CLI surface for plain text).
-aws --region "$AWS_REGION" ses send-email \
-  --from "$SOURCE" \
-  --destination "ToAddresses=$EMAIL_TO" \
-  --message "Subject={Data=$EMAIL_SUBJECT,Charset=utf-8},Body={Text={Data=$BODY,Charset=utf-8}}"
+# Use JSON input to properly escape body content with newlines and special chars
+JSON_INPUT=$(jq -n \
+  --arg from "$SOURCE" \
+  --arg to "$EMAIL_TO" \
+  --arg subject "$EMAIL_SUBJECT" \
+  --arg body "$BODY" \
+  '{
+    Source: $from,
+    Destination: { ToAddresses: [$to] },
+    Message: {
+      Subject: { Data: $subject, Charset: "utf-8" },
+      Body: { Text: { Data: $body, Charset: "utf-8" } }
+    }
+  }')
+
+aws --region "$AWS_REGION" ses send-email --cli-input-json "$JSON_INPUT"
