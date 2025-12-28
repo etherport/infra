@@ -24,6 +24,9 @@ set -euo pipefail
 
 SEND_EMAIL_SCRIPT="${SEND_EMAIL_SCRIPT:-/scripts/send-email.sh}"
 LOOKBACK_HOURS="${LOOKBACK_HOURS:-24}"
+DEST_BUCKET="${DEST_BUCKET:-archive-test.wind.etherport.net}"
+BATCH_PREFIX="${BATCH_PREFIX:-batch}"
+AWS_REGION="${AWS_REGION:-us-west-2}"
 
 if ! command -v kubectl >/dev/null 2>&1; then
   echo "[daily-report] ERROR: kubectl not found" >&2
@@ -174,6 +177,94 @@ for share in list(prom_metrics_by_share.keys()):
     else:
         prom_metrics_by_share[share]['duration'] = 0
 
+# Helper to download and parse S3 summary JSON for a specific execution
+def get_s3_summary_metrics(share, start_time_epoch):
+    """
+    Try to download the S3 summary JSON for this execution.
+    Returns dict with metrics or empty dict if not found.
+    """
+    import subprocess
+
+    dest_bucket = os.environ.get('DEST_BUCKET', 'archive-test.wind.etherport.net')
+    batch_prefix = os.environ.get('BATCH_PREFIX', 'batch')
+    aws_region = os.environ.get('AWS_REGION', 'us-west-2')
+
+    # List summary files for this share
+    s3_prefix = f"s3://{dest_bucket}/{batch_prefix}/runs/{share}/"
+
+    try:
+        # List all summary JSON files for this share
+        result = subprocess.run(
+            ['aws', 's3', 'ls', s3_prefix, '--region', aws_region],
+            capture_output=True, text=True, timeout=10
+        )
+
+        if result.returncode != 0:
+            return {}
+
+        # Parse the listing to find files matching our time window
+        # Files are named like: scans-20251228T214429Z.json
+        # We want the one closest to our start_time
+        best_match = None
+        best_diff = float('inf')
+
+        for line in result.stdout.strip().split('\n'):
+            if not line or not line.endswith('.json'):
+                continue
+
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+
+            filename = parts[-1]
+
+            # Extract timestamp from filename (format: {share}-{timestamp}.json)
+            # Example: scans-20251228T214429Z.json
+            if not filename.startswith(f'{share}-'):
+                continue
+
+            ts_part = filename[len(share)+1:-5]  # Remove "share-" prefix and ".json" suffix
+
+            # Parse timestamp: 20251228T214429Z -> epoch
+            try:
+                file_dt = datetime.strptime(ts_part, '%Y%m%dT%H%M%SZ').replace(tzinfo=timezone.utc)
+                file_epoch = int(file_dt.timestamp())
+
+                # Find the file closest to our job's start time
+                diff = abs(file_epoch - start_time_epoch)
+                if diff < best_diff and diff < 300:  # Within 5 minutes
+                    best_diff = diff
+                    best_match = filename
+            except:
+                continue
+
+        if not best_match:
+            return {}
+
+        # Download the summary file
+        s3_path = f"{s3_prefix}{best_match}"
+        result = subprocess.run(
+            ['aws', 's3', 'cp', s3_path, '-', '--region', aws_region],
+            capture_output=True, text=True, timeout=10
+        )
+
+        if result.returncode != 0:
+            return {}
+
+        summary = json.loads(result.stdout)
+
+        # Extract metrics from summary
+        return {
+            'success': 1 if summary.get('sync_exit_code', 1) == 0 else 0,
+            'files': summary.get('files_transferred', 0),
+            'bytes': summary.get('bytes_transferred', 0),
+            'duration': summary.get('duration_seconds', 0),
+        }
+
+    except Exception as e:
+        print(f"[warn] Failed to fetch S3 summary for {share}: {e}", file=sys.stderr)
+        return {}
+
 # Collect all job executions in the time window (job-centric, not share-centric)
 executions = []
 for job in jobs_json:
@@ -210,8 +301,13 @@ for job in jobs_json:
     else:
         job_status = 'unknown'
 
-    # Get Prometheus metrics for this share (may not exist for older jobs)
-    metrics = prom_metrics_by_share.get(share, {})
+    # Try to get metrics from S3 summary JSON (most accurate)
+    start_time_epoch = int(start_time.timestamp())
+    metrics = get_s3_summary_metrics(share, start_time_epoch)
+
+    # Fall back to Prometheus if S3 summary not found
+    if not metrics:
+        metrics = prom_metrics_by_share.get(share, {})
 
     execution = {
         'job_name': job_name,

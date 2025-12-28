@@ -29,6 +29,12 @@ spec:
                   value: "http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
                 - name: SHARES
                   value: "scans archive backups content graham mark media"
+                - name: DEST_BUCKET
+                  value: "archive-test.wind.etherport.net"
+                - name: BATCH_PREFIX
+                  value: "batch"
+                - name: AWS_REGION
+                  value: "us-west-2"
               envFrom:
                 - configMapRef:
                     name: aws-s3-sync-email
