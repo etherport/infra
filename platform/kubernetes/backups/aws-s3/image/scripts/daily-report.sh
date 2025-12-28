@@ -4,35 +4,34 @@ set -euo pipefail
 # ------------------------------------------------------------------------------
 # daily-report.sh
 #
-# Sends a daily summary email of S3 sync CronJobs/Jobs in a namespace.
+# Generates HTML email report of S3 sync executions in the last 24 hours.
+# Queries Prometheus for backup metrics and Kubernetes for job details.
 #
 # Requires:
-#   - kubectl in PATH inside the container
-#   - aws cli in PATH (already in your image)
+#   - kubectl, curl, jq, python3 in PATH
 #   - /scripts/send-email.sh present and executable
-#   - AWS creds in env (for SES), and EMAIL_* env vars for send-email.sh
+#   - AWS creds in env (for SES), and EMAIL_* env vars
 #
 # Env:
-#   REPORT_NAMESPACE          (default: backups)
-#   REPORT_LOOKBACK_HOURS     (default: 24)
-#   CRONJOB_NAME_PREFIX       (default: s3-sync-)
-#
-# send-email.sh requires:
-#   EMAIL_FROM, EMAIL_TO, EMAIL_SUBJECT (and optional EMAIL_FROM_NAME)
+#   PROM_URL                  Prometheus URL (required)
+#   EMAIL_FROM, EMAIL_TO, EMAIL_SUBJECT (required)
 # ------------------------------------------------------------------------------
 
-REPORT_NAMESPACE="${REPORT_NAMESPACE:-backups}"
-REPORT_LOOKBACK_HOURS="${REPORT_LOOKBACK_HOURS:-24}"
-CRONJOB_NAME_PREFIX="${CRONJOB_NAME_PREFIX:-s3-sync-}"
-
-SEND_EMAIL_SCRIPT="${SEND_EMAIL_SCRIPT:-/scripts/send-email.sh}"
-
+: "${PROM_URL:?missing PROM_URL}"
 : "${EMAIL_FROM:?missing EMAIL_FROM}"
 : "${EMAIL_TO:?missing EMAIL_TO}"
 : "${EMAIL_SUBJECT:?missing EMAIL_SUBJECT}"
 
+SEND_EMAIL_SCRIPT="${SEND_EMAIL_SCRIPT:-/scripts/send-email.sh}"
+LOOKBACK_HOURS="${LOOKBACK_HOURS:-24}"
+
 if ! command -v kubectl >/dev/null 2>&1; then
-  echo "[daily-report] ERROR: kubectl not found in container PATH. Add kubectl to the image." >&2
+  echo "[daily-report] ERROR: kubectl not found" >&2
+  exit 2
+fi
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "[daily-report] ERROR: python3 not found" >&2
   exit 2
 fi
 
@@ -41,190 +40,426 @@ if [[ ! -x "$SEND_EMAIL_SCRIPT" ]]; then
   exit 2
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "[daily-report] ERROR: python3 not found in container PATH." >&2
-  exit 2
-fi
+NOW_EPOCH=$(date +%s)
+LOOKBACK_SECONDS=$((LOOKBACK_HOURS * 3600))
+START_EPOCH=$((NOW_EPOCH - LOOKBACK_SECONDS))
 
-NOW_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+# Query Prometheus for backup metrics
+# We want the latest metrics for each share that were updated in the last 24 hours
+PROM_QUERY='homelab_backup_last_run_timestamp_seconds'
 
-CRONJOBS_JSON="$(kubectl -n "$REPORT_NAMESPACE" get cronjobs.batch -o json)"
-JOBS_JSON="$(kubectl -n "$REPORT_NAMESPACE" get jobs.batch -o json)"
+METRICS_JSON=$(curl -sS "${PROM_URL}/api/v1/query?query=${PROM_QUERY}" | jq -c '.data.result')
 
-export REPORT_NAMESPACE REPORT_LOOKBACK_HOURS CRONJOB_NAME_PREFIX NOW_UTC CRONJOBS_JSON JOBS_JSON EMAIL_SUBJECT
+# Get all Jobs from Kubernetes in backups namespace
+JOBS_JSON=$(kubectl -n backups get jobs -o json | jq -c '.items')
 
-REPORT_FILE="$(mktemp)"
+# Generate HTML report using Python
+export NOW_EPOCH START_EPOCH LOOKBACK_HOURS METRICS_JSON JOBS_JSON PROM_URL
+
+REPORT_FILE=$(mktemp)
 trap 'rm -f "$REPORT_FILE"' EXIT
 
-python3 - <<'PY' > "${REPORT_FILE}"
-import os, json
-from datetime import datetime, timedelta, timezone
+python3 - > "${REPORT_FILE}" <<'PYTHON'
+import os, json, sys
+from datetime import datetime, timezone, timedelta
+from collections import defaultdict
+import urllib.request
+import urllib.parse
 
-ns = os.environ.get("REPORT_NAMESPACE", "backups")
-lookback_hours = int(os.environ.get("REPORT_LOOKBACK_HOURS", "24"))
-prefix = os.environ.get("CRONJOB_NAME_PREFIX", "s3-sync-")
-now_utc = os.environ.get("NOW_UTC")
-subject = os.environ.get("EMAIL_SUBJECT", "Sequoia to S3 Sync Report")
+now_epoch = int(os.environ['NOW_EPOCH'])
+start_epoch = int(os.environ['START_EPOCH'])
+lookback_hours = int(os.environ['LOOKBACK_HOURS'])
+prom_url = os.environ['PROM_URL']
+
+metrics_json = json.loads(os.environ['METRICS_JSON'])
+jobs_json = json.loads(os.environ['JOBS_JSON'])
+
+now = datetime.fromtimestamp(now_epoch, tz=timezone.utc)
+start = datetime.fromtimestamp(start_epoch, tz=timezone.utc)
+
+# Convert to Pacific Time for display
+pacific_offset = timedelta(hours=-8)  # PST (adjust for PDT as needed)
+now_pt = now + pacific_offset
+start_pt = start + pacific_offset
 
 def parse_ts(s):
     if not s:
         return None
     try:
         if s.endswith("Z"):
-            return datetime.fromisoformat(s.replace("Z","+00:00"))
+            return datetime.fromisoformat(s.replace("Z", "+00:00"))
         return datetime.fromisoformat(s)
-    except Exception:
+    except:
         return None
 
-now = parse_ts(now_utc) or datetime.now(timezone.utc)
-since = now - timedelta(hours=lookback_hours)
-
-cronjobs = json.loads(os.environ["CRONJOBS_JSON"])["items"]
-jobs = json.loads(os.environ["JOBS_JSON"])["items"]
-
-# Relevant cronjobs
-cj_map = {}
-for cj in cronjobs:
-    name = cj["metadata"]["name"]
-    if name.startswith(prefix):
-        cj_map[name] = cj
-
-# Jobs by owning cronjob
-jobs_by_cj = {name: [] for name in cj_map.keys()}
-
-for job in jobs:
-    owners = job.get("metadata", {}).get("ownerReferences", []) or []
-    cj_owner = None
-    for o in owners:
-        if o.get("kind") == "CronJob":
-            cj_owner = o.get("name")
-            break
-    if not cj_owner or cj_owner not in jobs_by_cj:
-        continue
-
-    st = parse_ts(job.get("status", {}).get("startTime"))
-    created = parse_ts(job.get("metadata", {}).get("creationTimestamp"))
-    active = (job.get("status", {}).get("active", 0) or 0) > 0
-
-    if active:
-        jobs_by_cj[cj_owner].append(job)
-        continue
-
-    t = st or created
-    if t and t >= since:
-        jobs_by_cj[cj_owner].append(job)
-
-def job_state(job):
-    st = job.get("status", {}) or {}
-    if (st.get("active", 0) or 0) > 0:
-        return "RUNNING"
-    if (st.get("failed", 0) or 0) > 0:
-        return "FAILED"
-    if (st.get("succeeded", 0) or 0) > 0:
-        return "SUCCEEDED"
-    return "UNKNOWN"
-
-def job_duration(job):
-    st = parse_ts(job.get("status", {}).get("startTime"))
-    ct = parse_ts(job.get("status", {}).get("completionTime"))
-    if not st:
-        return ""
-    end = ct or now
-    secs = max(0, int((end - st).total_seconds()))
-    h = secs // 3600
-    m = (secs % 3600) // 60
-    s = secs % 60
-    if h:
-        return f"{h}h {m:02d}m"
-    if m:
-        return f"{m}m {s:02d}s"
-    return f"{s}s"
-
-def fmt_ts(dt):
+def to_pt(dt):
     if not dt:
-        return ""
-    return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+        return None
+    return dt + pacific_offset
 
-summary = []
-for cj_name, cj in sorted(cj_map.items()):
-    js = jobs_by_cj.get(cj_name, [])
+def format_bytes(b):
+    if b == 0:
+        return "0 B"
+    units = ["B", "KB", "MB", "GB", "TB"]
+    i = 0
+    while b >= 1024 and i < len(units) - 1:
+        b /= 1024.0
+        i += 1
+    return f"{b:.1f} {units[i]}"
 
-    def sort_key(job):
-        st = parse_ts(job.get("status", {}).get("startTime"))
-        ct = parse_ts(job.get("metadata", {}).get("creationTimestamp"))
-        return st or ct or datetime(1970,1,1,tzinfo=timezone.utc)
+def format_duration(seconds):
+    if seconds == 0:
+        return "-"
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    if h > 0:
+        return f"{h}h {m}m {s}s"
+    elif m > 0:
+        return f"{m}m {s}s"
+    else:
+        return f"{s}s"
 
-    js_sorted = sorted(js, key=sort_key, reverse=True)
-    latest = js_sorted[0] if js_sorted else None
+# Query Prometheus for each metric we need
+def prom_query(query):
+    url = f"{prom_url}/api/v1/query?query={urllib.parse.quote(query)}"
+    try:
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            data = json.load(resp)
+            return data.get('data', {}).get('result', [])
+    except Exception as e:
+        print(f"[warn] Prometheus query failed: {e}", file=sys.stderr)
+        return []
 
-    suspend = bool((cj.get("spec", {}) or {}).get("suspend", False))
+# Get metrics for all shares
+shares_data = {}
+for metric in metrics_json:
+    labels = metric.get('metric', {})
+    share = labels.get('share', '')
+    if not share:
+        continue
 
-    latest_state = job_state(latest) if latest else "NO-RUN"
-    latest_start = parse_ts(latest.get("status", {}).get("startTime")) if latest else None
-    latest_end = parse_ts(latest.get("status", {}).get("completionTime")) if latest else None
+    timestamp = int(float(metric.get('value', [0, 0])[1]))
 
-    summary.append({
-        "cronjob": cj_name,
-        "suspend": suspend,
-        "latest_job": latest.get("metadata", {}).get("name") if latest else "",
-        "state": latest_state,
-        "start": latest_start,
-        "end": latest_end,
-        "duration": job_duration(latest) if latest else "",
-        "active": int((latest.get("status", {}) or {}).get("active", 0) or 0) if latest else 0,
-    })
+    # Only include if timestamp is within lookback window
+    if timestamp < start_epoch:
+        continue
 
-failed = [x for x in summary if x["state"] == "FAILED"]
-running = [x for x in summary if x["state"] == "RUNNING"]
-succeeded = [x for x in summary if x["state"] == "SUCCEEDED"]
-norun = [x for x in summary if x["state"] == "NO-RUN"]
-unknown = [x for x in summary if x["state"] == "UNKNOWN"]
+    if share not in shares_data:
+        shares_data[share] = {
+            'share': share,
+            'bucket': labels.get('bucket', ''),
+            'timestamp': timestamp,
+        }
 
-lines = []
-lines.append(subject)
-lines.append("")
-lines.append(f"Namespace: {ns}")
-lines.append(f"Window: last {lookback_hours} hours (since {fmt_ts(since)})")
-lines.append(f"Generated: {fmt_ts(now)}")
-lines.append("")
+# For each share, get additional metrics
+for share in list(shares_data.keys()):
+    # Get success status
+    success_result = prom_query(f'homelab_backup_last_run_success{{share="{share}"}}')
+    if success_result:
+        shares_data[share]['success'] = int(float(success_result[0]['value'][1]))
+    else:
+        shares_data[share]['success'] = 0
 
-def section(title, rows):
-    lines.append(title)
-    lines.append("-" * len(title))
-    if not rows:
-        lines.append("(none)")
-        lines.append("")
-        return
-    for r in rows:
-        susp = " (suspended)" if r["suspend"] else ""
-        lines.append(f"- {r['cronjob']}{susp}")
-        lines.append(f"  state: {r['state']}{' (active='+str(r['active'])+')' if r['active'] else ''}")
-        if r["start"]:
-            lines.append(f"  start: {fmt_ts(r['start'])}")
-        if r["end"]:
-            lines.append(f"  end:   {fmt_ts(r['end'])}")
-        if r["duration"]:
-            lines.append(f"  dur:   {r['duration']}")
-        if r["latest_job"]:
-            lines.append(f"  job:   {r['latest_job']}")
-        lines.append("")
-    lines.append("")
+    # Get files transferred
+    files_result = prom_query(f'homelab_backup_last_run_files_total{{share="{share}"}}')
+    if files_result:
+        shares_data[share]['files'] = int(float(files_result[0]['value'][1]))
+    else:
+        shares_data[share]['files'] = 0
 
-section("FAILED", failed)
-section("RUNNING / IN PROGRESS", running)
-section("SUCCEEDED", succeeded)
-section("NO RUNS IN WINDOW", norun)
-if unknown:
-    section("UNKNOWN", unknown)
+    # Get bytes transferred
+    bytes_result = prom_query(f'homelab_backup_last_run_bytes_total{{share="{share}"}}')
+    if bytes_result:
+        shares_data[share]['bytes'] = int(float(bytes_result[0]['value'][1]))
+    else:
+        shares_data[share]['bytes'] = 0
 
-lines.append("Notes")
-lines.append("-----")
-lines.append("- This report summarizes Kubernetes Job status for each sync CronJob.")
-lines.append("- For per-run details, inspect logs for the referenced Job name.")
-lines.append("")
+    # Get duration
+    duration_result = prom_query(f'homelab_backup_last_run_duration_seconds{{share="{share}"}}')
+    if duration_result:
+        shares_data[share]['duration'] = int(float(duration_result[0]['value'][1]))
+    else:
+        shares_data[share]['duration'] = 0
 
-print("\n".join(lines))
-PY
+# Match with Kubernetes Jobs to get timing details
+for job in jobs_json:
+    job_name = job.get('metadata', {}).get('name', '')
 
-"$SEND_EMAIL_SCRIPT" "$REPORT_FILE"
+    # Extract share name from job name (format: s3-sync-{share}-{timestamp})
+    if not job_name.startswith('s3-sync-'):
+        continue
+
+    parts = job_name.split('-')
+    if len(parts) < 3:
+        continue
+
+    # Share name is between s3-sync- prefix and timestamp suffix
+    share = '-'.join(parts[2:-1]) if len(parts) > 3 else parts[2]
+
+    if share not in shares_data:
+        continue
+
+    status = job.get('status', {})
+    start_time = parse_ts(status.get('startTime'))
+    completion_time = parse_ts(status.get('completionTime'))
+
+    # Check if job is in our time window
+    if start_time and start_time.timestamp() >= start_epoch:
+        shares_data[share]['start_time'] = start_time
+        shares_data[share]['end_time'] = completion_time
+        shares_data[share]['job_name'] = job_name
+
+        # Determine job status
+        if status.get('active', 0) > 0:
+            shares_data[share]['job_status'] = 'running'
+        elif status.get('succeeded', 0) > 0:
+            shares_data[share]['job_status'] = 'succeeded'
+        elif status.get('failed', 0) > 0:
+            shares_data[share]['job_status'] = 'failed'
+        else:
+            shares_data[share]['job_status'] = 'unknown'
+
+# Calculate summary totals
+total_executions = len(shares_data)
+total_completed = sum(1 for s in shares_data.values() if s.get('job_status') == 'succeeded')
+total_in_progress = sum(1 for s in shares_data.values() if s.get('job_status') == 'running')
+total_errors = sum(1 for s in shares_data.values() if s.get('job_status') in ['failed', 'unknown'] or s.get('success', 0) == 0)
+total_files = sum(s.get('files', 0) for s in shares_data.values())
+total_bytes = sum(s.get('bytes', 0) for s in shares_data.values())
+
+# Generate HTML
+html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {{
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #f5f5f5;
+}}
+.header {{
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}}
+.header h1 {{
+    margin: 0 0 8px 0;
+    font-size: 28px;
+    font-weight: 600;
+}}
+.header .meta {{
+    color: #666;
+    font-size: 14px;
+}}
+.summary {{
+    margin-bottom: 20px;
+}}
+.summary-period {{
+    font-size: 16px;
+    margin-bottom: 16px;
+    color: #333;
+}}
+.metrics-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}}
+.metric-card {{
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid #e0e0e0;
+}}
+.metric-card.executions {{
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+}}
+.metric-card.errors {{
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+}}
+.metric-label {{
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 8px;
+}}
+.metric-value {{
+    font-size: 32px;
+    font-weight: 600;
+    color: #333;
+}}
+.task-card {{
+    background: white;
+    padding: 24px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    border: 1px solid #e0e0e0;
+}}
+.task-header {{
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}}
+.status-badge {{
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: lowercase;
+}}
+.status-succeeded {{
+    background-color: #d4edda;
+    color: #155724;
+}}
+.status-running {{
+    background-color: #fff3cd;
+    color: #856404;
+}}
+.status-error {{
+    background-color: #f8d7da;
+    color: #721c24;
+}}
+.task-details {{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}}
+.detail-row {{
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+}}
+.detail-label {{
+    color: #666;
+    font-size: 14px;
+}}
+.detail-value {{
+    color: #333;
+    font-weight: 500;
+    font-size: 14px;
+}}
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h1>S3 Backup Executions</h1>
+    <div class="meta">Run time: {now_pt.strftime('%Y-%m-%d %H:%M:%S')} PT</div>
+</div>
+
+<div class="summary">
+    <div class="summary-period">Summary period: {start_pt.strftime('%Y-%m-%d %H:%M')} PT – {now_pt.strftime('%Y-%m-%d %H:%M')} PT</div>
+
+    <div class="metrics-grid">
+        <div class="metric-card executions">
+            <div class="metric-label">Executions</div>
+            <div class="metric-value">{total_executions}</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Completed</div>
+            <div class="metric-value">{total_completed}</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">In progress</div>
+            <div class="metric-value">{total_in_progress}</div>
+        </div>
+        <div class="metric-card errors">
+            <div class="metric-label">Errors</div>
+            <div class="metric-value">{total_errors}</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Total files transferred</div>
+            <div class="metric-value">{total_files:,}</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Total data transferred</div>
+            <div class="metric-value">{format_bytes(total_bytes)}</div>
+        </div>
+    </div>
+</div>
+"""
+
+# Sort shares by name
+sorted_shares = sorted(shares_data.values(), key=lambda x: x['share'])
+
+for share_data in sorted_shares:
+    share = share_data['share']
+    job_status = share_data.get('job_status', 'unknown')
+    success = share_data.get('success', 0)
+
+    # Determine status and badge
+    if job_status == 'running':
+        status_text = 'in progress'
+        status_class = 'running'
+    elif job_status == 'succeeded' and success == 1:
+        status_text = 'completed'
+        status_class = 'succeeded'
+    else:
+        status_text = 'error'
+        status_class = 'error'
+
+    start_time = share_data.get('start_time')
+    end_time = share_data.get('end_time')
+    start_pt = to_pt(start_time) if start_time else None
+    end_pt = to_pt(end_time) if end_time else None
+
+    html += f"""
+<div class="task-card">
+    <div class="task-header">
+        <span>Sequoia to S3 - {share.title()}</span>
+        <span class="status-badge status-{status_class}">{status_text}</span>
+    </div>
+    <div class="task-details">
+        <div class="detail-row">
+            <span class="detail-label">Files transferred</span>
+            <span class="detail-value">{share_data.get('files', 0):,}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">Data transferred</span>
+            <span class="detail-value">{format_bytes(share_data.get('bytes', 0))}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">Start time (PT)</span>
+            <span class="detail-value">{start_pt.strftime('%H:%M') if start_pt else '-'}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">End time (PT)</span>
+            <span class="detail-value">{end_pt.strftime('%H:%M') if end_pt else '-'}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">Duration</span>
+            <span class="detail-value">{format_duration(share_data.get('duration', 0))}</span>
+        </div>
+    </div>
+</div>
+"""
+
+html += """
+</body>
+</html>
+"""
+
+print(html)
+PYTHON
+
+# Send HTML email
+HTML_BODY=$(cat "$REPORT_FILE")
+export HTML_BODY
+
+"$SEND_EMAIL_SCRIPT" --html
+
 echo "[daily-report] sent to $EMAIL_TO"
