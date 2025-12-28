@@ -1,0 +1,37 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: s3-sync-daily-report
+  namespace: backups
+spec:
+  schedule: "0 6 * * *"
+  timeZone: "America/Los_Angeles"
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: report
+              image: ghcr.io/sparked-diamond/aws-s3-sync:latest
+              command: ["/bin/bash","-lc"]
+              args:
+                - |
+                  /app/daily-report.sh | /app/send-email.sh
+              env:
+                - name: PROM_URL
+                  value: "http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
+                - name: SHARES
+                  value: "scans archive backups content graham mark media"
+              envFrom:
+                - configMapRef:
+                    name: aws-s3-sync-email
+              # needs AWS creds only if your send-email uses SES (it does)
+              envFrom:
+                - secretRef:
+                    name: aws-backup-credentials

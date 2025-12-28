@@ -5,11 +5,15 @@ namespace: backups
 
 resources:
   - cronjob.yaml
+  - cronjob-email-summary.yaml
 
 configMapGenerator:
   - name: aws-s3-sync-excludes-global
     files:
       - excludes-global.txt
+  - name: aws-s3-sync-email
+    envs:
+      - email.env
 
 generatorOptions:
   disableNameSuffixHash: true

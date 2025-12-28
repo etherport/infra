@@ -125,6 +125,7 @@ WAIT_FOR_BATCH="${WAIT_FOR_BATCH:-false}"
 BATCH_POLL_INTERVAL_SECONDS="${BATCH_POLL_INTERVAL_SECONDS:-30}"
 BATCH_MAX_WAIT_SECONDS="${BATCH_MAX_WAIT_SECONDS:-3600}"
 
+
 # Helper: treat common truthy strings as true (true/1/yes/y)
 is_true() {
   local v="${1:-}"
@@ -133,6 +134,59 @@ is_true() {
     true|1|yes|y) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# Optional: SES email alerts (failure-only)
+# Expects /scripts/send-email.sh to read EMAIL_FROM/EMAIL_FROM_NAME/EMAIL_TO/EMAIL_SUBJECT
+# and to accept the email body via STDIN.
+EMAIL_ENABLED="${EMAIL_ENABLED:-false}"
+EMAIL_ON_FAILURE="${EMAIL_ON_FAILURE:-true}"
+EMAIL_FROM="${EMAIL_FROM:-}"
+EMAIL_FROM_NAME="${EMAIL_FROM_NAME:-Sync Alerts}"
+EMAIL_TO="${EMAIL_TO:-}"
+EMAIL_SUBJECT="${EMAIL_SUBJECT:-Sequoia to S3 Sync Report}"
+SEND_EMAIL_SCRIPT="${SEND_EMAIL_SCRIPT:-/scripts/send-email.sh}"
+
+send_failure_email() {
+  local reason="$1"
+
+  if ! is_true "${EMAIL_ENABLED}"; then
+    return 0
+  fi
+  if ! is_true "${EMAIL_ON_FAILURE}"; then
+    return 0
+  fi
+  if [[ -z "${EMAIL_FROM}" || -z "${EMAIL_TO}" ]]; then
+    echo "[email] WARN: EMAIL_ENABLED=true but EMAIL_FROM/EMAIL_TO not set; skipping email" >&2
+    return 0
+  fi
+  if [[ ! -x "${SEND_EMAIL_SCRIPT}" ]]; then
+    echo "[email] WARN: ${SEND_EMAIL_SCRIPT} not found or not executable; skipping email" >&2
+    return 0
+  fi
+
+  local subject
+  subject="${EMAIL_SUBJECT} (FAILURE: ${SHARE_NAME})"
+
+  {
+    echo "Sequoia to S3 sync FAILURE"
+    echo
+    echo "Run ID:        ${RUN_ID}"
+    echo "Share:         ${SHARE_NAME}"
+    echo "Start (UTC):    ${START_TS_UTC}"
+    echo "Elapsed (sec):  $(elapsed_seconds)"
+    echo "Reason:        ${reason}"
+    echo "Source:        ${SRC_PATH}"
+    echo "Destination:   ${DEST_URI}"
+    echo "Summary (S3):   ${RUN_SUMMARY_URI}"
+    echo
+    echo "--- errors.txt (tail 120) ---"
+    tail -120 "${ERROR_FILE}" 2>/dev/null || true
+    echo
+    echo "--- sync.txt (tail 120) ---"
+    tail -120 "${SYNC_OUT}" 2>/dev/null || true
+  } | EMAIL_SUBJECT="${subject}" EMAIL_FROM_NAME="${EMAIL_FROM_NAME}" EMAIL_FROM="${EMAIL_FROM}" EMAIL_TO="${EMAIL_TO}" "${SEND_EMAIL_SCRIPT}" \
+      || echo "[email] WARN: failed to send failure email" >&2
 }
 
 DEST_URI="s3://${DEST_BUCKET}/${DEST_PREFIX}/"
@@ -275,6 +329,7 @@ set -e
 
 if [[ ${SYNC_RC} -ne 0 ]]; then
   echo "Real sync failed with exit code ${SYNC_RC}" | tee -a "${ERROR_FILE}"
+  send_failure_email "aws s3 sync exited non-zero (rc=${SYNC_RC})"
   # Still continue to try to upload a summary so we can see failures in S3.
 fi
 
@@ -571,6 +626,10 @@ if is_true "${WAIT_FOR_BATCH}"; then
     pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" "${UPLOAD_COUNT}" 1 "${status}"
 
     if [[ "${status}" == "Complete" || "${status}" == "Failed" || "${status}" == "Cancelled" ]]; then
+      if [[ "${status}" != "Complete" ]]; then
+        echo "Batch job ended with status: ${status}" | tee -a "${ERROR_FILE}" || true
+        send_failure_email "S3 Batch Operations job ${JOB_ID} ended with status ${status}"
+      fi
       break
     fi
 
