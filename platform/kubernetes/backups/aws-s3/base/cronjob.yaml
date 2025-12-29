@@ -4,8 +4,9 @@ metadata:
   name: s3-sync-template
   namespace: backups
 spec:
-  schedule: "15 9 * * *"   # placeholder; kept for reference
-  suspend: true            # IMPORTANT: nothing runs automatically yet
+  schedule: "0 1 * * *"    # 1:00 AM PT daily
+  timeZone: "America/Los_Angeles"
+  suspend: false           # Backups run automatically at 1:00 AM PT
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 5
