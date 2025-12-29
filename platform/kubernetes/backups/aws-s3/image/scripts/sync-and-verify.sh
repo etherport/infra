@@ -659,7 +659,7 @@ if is_true "${WAIT_FOR_BATCH}"; then
 
   while [[ ${report_waited} -le ${REPORT_APPEAR_MAX_WAIT_SECONDS} ]]; do
     aws s3api list-objects-v2 \
-      --bucket "${DEST_BUCKET}" \
+      --bucket "${METADATA_BUCKET}" \
       --prefix "${REPORT_RESULTS_PREFIX}" \
       --region "${AWS_REGION}" \
       --expected-bucket-owner "${EXPECTED_BUCKET_OWNER}" \
@@ -685,7 +685,7 @@ if is_true "${WAIT_FOR_BATCH}"; then
   # Fallback: if still no CSV found, list the job prefix (may contain non-results objects)
   if [[ -z "${report_key}" ]]; then
     aws s3api list-objects-v2 \
-      --bucket "${DEST_BUCKET}" \
+      --bucket "${METADATA_BUCKET}" \
       --prefix "${REPORT_JOB_PREFIX}/" \
       --region "${AWS_REGION}" \
       --expected-bucket-owner "${EXPECTED_BUCKET_OWNER}" \
