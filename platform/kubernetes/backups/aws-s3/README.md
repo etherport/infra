@@ -272,6 +272,7 @@ Use this policy for day-to-day backup operations:
             "Effect": "Allow",
             "Action": [
                 "s3:ListBucket",
+                "s3:ListBucketVersions",
                 "s3:GetBucketLocation"
             ],
             "Resource": [
