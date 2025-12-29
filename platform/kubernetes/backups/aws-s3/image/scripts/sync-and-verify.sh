@@ -503,7 +503,7 @@ s3_put_object "${METADATA_BUCKET}" "${MANIFEST_KEY}" "${MANIFEST_FILE}"
 
 # Need ETag for the manifest object for create-job
 MANIFEST_ETAG="$(aws s3api head-object \
-  --bucket "${DEST_BUCKET}" \
+  --bucket "${METADATA_BUCKET}" \
   --key "${MANIFEST_KEY}" \
   --expected-bucket-owner "${EXPECTED_BUCKET_OWNER}" \
   --query ETag \
