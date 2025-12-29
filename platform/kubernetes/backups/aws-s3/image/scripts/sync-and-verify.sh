@@ -702,7 +702,7 @@ if is_true "${WAIT_FOR_BATCH}"; then
 
   if [[ -n "${report_key}" ]]; then
     final_report_key="${report_key}"
-    echo "Downloading batch report: s3://${DEST_BUCKET}/${report_key}"
+    echo "Downloading batch report: s3://${METADATA_BUCKET}/${report_key}"
     s3_get_object "${METADATA_BUCKET}" "${report_key}" "${BATCH_REPORT_FILE}" || true
 
     # Also store a copy of the raw report in the runs/ folder for easier discovery.
