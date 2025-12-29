@@ -74,12 +74,10 @@ This system uses a **two-bucket architecture** to separate data from operational
 ```
 platform/kubernetes/backups/aws-s3/
 ├── README.md                          # This file
-├── base/                              # Base Kubernetes resources
+├── base/                              # Base Kubernetes resources (shared by backup jobs)
 │   ├── namespace.yaml                # backups namespace
 │   ├── rbac.yaml                     # ServiceAccount, Role, RoleBinding for daily-report
 │   ├── cronjob.yaml                  # Template CronJob for backups (per-share)
-│   ├── cronjob-email-summary.yaml    # Daily email report CronJob (deployed separately)
-│   ├── email.env                     # Email configuration (SES)
 │   ├── excludes-global.txt           # Global exclude patterns (all shares)
 │   └── kustomization.yaml            # Base kustomization (for shares)
 ├── daily-report/                      # Daily email report (single instance)
@@ -132,15 +130,16 @@ In `patch.yaml`:
 
 In `base/cronjob.yaml`:
 
-- `schedule`: Default backup schedule (overridden per share if needed)
-- `suspend`: Set to `true` to disable automatic runs
+- `schedule`: Default backup schedule: `0 1 * * *` (1:00 AM PT daily)
+- `timeZone`: Timezone for schedule: `America/Los_Angeles` (handles DST automatically)
+- `suspend`: Set to `false` to enable automatic runs (currently enabled)
 - `AWS_REGION`: AWS region (default: `us-west-2`)
 - `METADATA_BUCKET`: S3 bucket for operational artifacts (default: `logs.archive.wind.etherport.net`)
 - `WAIT_FOR_BATCH`: Wait for S3 Batch Ops verification (default: `true`)
 
 ### Email Notifications
 
-In `base/email.env`:
+In `daily-report/email.env`:
 
 - `EMAIL_ENABLED`: Enable/disable email sending
 - `EMAIL_FROM`: Sender email address (must be verified in SES)
@@ -334,7 +333,7 @@ kubectl -n backups logs job/{job-name}
 
 **Issue**: Email not received
 - **Cause**: SES sender/recipient not verified, EMAIL_ENABLED=false
-- **Fix**: Verify email addresses in SES, check `base/email.env`
+- **Fix**: Verify email addresses in SES, check `daily-report/email.env`
 
 **Issue**: S3 Batch Operations job fails
 - **Cause**: IAM role permissions, bucket ownership mismatch
@@ -356,12 +355,13 @@ aws s3 ls s3://logs.archive.wind.etherport.net/batch/runs/{share}/ --recursive |
 
 ## Backup Schedule
 
-Default schedule: **9:15 AM daily** (per share, configurable)
+Default schedule: **1:00 AM PT daily** (all shares)
 
 Shares can override the schedule in their `patch.yaml`:
 ```yaml
 spec:
-  schedule: "30 8 * * *"  # 8:30 AM daily
+  schedule: "30 8 * * *"    # 8:30 AM PT daily
+  timeZone: "America/Los_Angeles"
 ```
 
 Daily email report: **6:00 AM PT** (summarizes previous 24 hours)
