@@ -182,15 +182,162 @@ Built and published automatically via GitHub Actions:
 
 ### Prerequisites
 
-1. AWS credentials with permissions for:
-   - S3 read/write to data bucket(s) (archive.wind.etherport.net, archive-test.wind.etherport.net)
-   - S3 read/write to metadata bucket (logs.archive.wind.etherport.net)
-   - S3 Batch Operations (create jobs, read reports)
-   - SES send email (from verified sender)
+1. **AWS IAM User** (`kubernetes-s3-backup`) with appropriate permissions (see IAM Policy section below)
 
-2. SOPS encryption key configured
+2. **SOPS encryption key** configured for secrets
 
-3. NFS shares accessible from Kubernetes cluster
+3. **NFS shares** accessible from Kubernetes cluster
+
+### IAM Policies
+
+#### Production Policy (Normal Operations)
+
+Use this policy for day-to-day backup operations:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ListBucketAndLocation",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket",
+                "s3:GetBucketLocation"
+            ],
+            "Resource": [
+                "arn:aws:s3:::archive.wind.etherport.net",
+                "arn:aws:s3:::logs.archive.wind.etherport.net",
+                "arn:aws:s3:::archive-test.wind.etherport.net"
+            ]
+        },
+        {
+            "Sid": "ObjectRWObjectsAndBatchPrefixes",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:DeleteObject",
+                "s3:AbortMultipartUpload",
+                "s3:ListBucketMultipartUploads",
+                "s3:ListMultipartUploadParts",
+                "s3:GetObjectTagging",
+                "s3:PutObjectTagging",
+                "s3:GetObjectVersion",
+                "s3:DeleteObjectVersion"
+            ],
+            "Resource": [
+                "arn:aws:s3:::archive.wind.etherport.net/objects/*",
+                "arn:aws:s3:::archive.wind.etherport.net/batch/*",
+                "arn:aws:s3:::logs.archive.wind.etherport.net/objects/*",
+                "arn:aws:s3:::logs.archive.wind.etherport.net/batch/*",
+                "arn:aws:s3:::archive-test.wind.etherport.net/objects/*",
+                "arn:aws:s3:::archive-test.wind.etherport.net/batch/*"
+            ]
+        },
+        {
+            "Sid": "S3BatchOperationsControlPlane",
+            "Effect": "Allow",
+            "Action": [
+                "s3:CreateJob",
+                "s3:ListJobs",
+                "s3:DescribeJob",
+                "s3:UpdateJobPriority",
+                "s3:UpdateJobStatus"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "AllowPassBatchJobRole",
+            "Effect": "Allow",
+            "Action": "iam:PassRole",
+            "Resource": "arn:aws:iam::830881980142:role/s3-batch-ops-checksum-role"
+        }
+    ]
+}
+```
+
+**Note**: This policy restricts access to `objects/*` and `batch/*` prefixes only, preventing accidental deletion of other bucket contents.
+
+#### Maintenance Policy (Bucket Cleanup)
+
+**⚠️ TEMPORARY USE ONLY** - Use this policy when you need to clean up Object Lock protected files:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ListBucketAndLocation",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket",
+                "s3:GetBucketLocation"
+            ],
+            "Resource": [
+                "arn:aws:s3:::archive.wind.etherport.net",
+                "arn:aws:s3:::logs.archive.wind.etherport.net",
+                "arn:aws:s3:::archive-test.wind.etherport.net"
+            ]
+        },
+        {
+            "Sid": "ObjectRWObjectsAndBatchPrefixes",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:DeleteObject",
+                "s3:AbortMultipartUpload",
+                "s3:ListBucketMultipartUploads",
+                "s3:ListMultipartUploadParts",
+                "s3:GetObjectTagging",
+                "s3:PutObjectTagging",
+                "s3:GetObjectVersion",
+                "s3:DeleteObjectVersion"
+            ],
+            "Resource": [
+                "arn:aws:s3:::archive.wind.etherport.net/*",
+                "arn:aws:s3:::logs.archive.wind.etherport.net/*",
+                "arn:aws:s3:::archive-test.wind.etherport.net/*"
+            ]
+        },
+        {
+            "Sid": "BypassGovernanceRetention",
+            "Effect": "Allow",
+            "Action": "s3:BypassGovernanceRetention",
+            "Resource": [
+                "arn:aws:s3:::archive.wind.etherport.net/*",
+                "arn:aws:s3:::logs.archive.wind.etherport.net/*",
+                "arn:aws:s3:::archive-test.wind.etherport.net/*"
+            ]
+        },
+        {
+            "Sid": "S3BatchOperationsControlPlane",
+            "Effect": "Allow",
+            "Action": [
+                "s3:CreateJob",
+                "s3:ListJobs",
+                "s3:DescribeJob",
+                "s3:UpdateJobPriority",
+                "s3:UpdateJobStatus"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "AllowPassBatchJobRole",
+            "Effect": "Allow",
+            "Action": "iam:PassRole",
+            "Resource": "arn:aws:iam::830881980142:role/s3-batch-ops-checksum-role"
+        }
+    ]
+}
+```
+
+**Key differences**:
+- Allows deletion on all objects (`/*` instead of `objects/*` and `batch/*`)
+- Includes `s3:BypassGovernanceRetention` permission
+
+**⚠️ IMPORTANT**: Revert to the Production Policy immediately after maintenance is complete!
 
 ### Deploy a New Share
 
