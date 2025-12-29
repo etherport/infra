@@ -75,13 +75,17 @@ This system uses a **two-bucket architecture** to separate data from operational
 platform/kubernetes/backups/aws-s3/
 ├── README.md                          # This file
 ├── base/                              # Base Kubernetes resources
-│   ├── 00-namespace.yaml             # backups namespace
-│   ├── 01-rbac.yaml                  # ServiceAccount, Role, RoleBinding for daily-report
+│   ├── namespace.yaml                # backups namespace
+│   ├── rbac.yaml                     # ServiceAccount, Role, RoleBinding for daily-report
 │   ├── cronjob.yaml                  # Template CronJob for backups (per-share)
-│   ├── cronjob-email-summary.yaml    # Daily email report CronJob
+│   ├── cronjob-email-summary.yaml    # Daily email report CronJob (deployed separately)
 │   ├── email.env                     # Email configuration (SES)
 │   ├── excludes-global.txt           # Global exclude patterns (all shares)
-│   └── kustomization.yaml            # Base kustomization
+│   └── kustomization.yaml            # Base kustomization (for shares)
+├── daily-report/                      # Daily email report (single instance)
+│   ├── kustomization.yaml            # Daily-report kustomization
+│   ├── cronjob-email-summary.yaml    # Daily email report CronJob
+│   └── email.env                     # Email configuration
 ├── image/                             # Docker image for backup jobs
 │   ├── Dockerfile                    # AWS CLI + scripts
 │   └── scripts/
@@ -214,6 +218,16 @@ Built and published automatically via GitHub Actions:
    ```bash
    kubectl apply -k shares/{share-name}/
    ```
+
+### Deploy Daily Email Report
+
+The daily email report CronJob is deployed separately (only once, not per-share):
+
+```bash
+kubectl apply -k daily-report/
+```
+
+This creates a single CronJob that monitors all shares and sends one consolidated daily email report.
 
 ### Enable/Disable Automatic Backups
 

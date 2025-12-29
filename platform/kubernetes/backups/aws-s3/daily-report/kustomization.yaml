@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: backups
+
+# Note: Assumes namespace and RBAC are already created by share deployments
+# This deploys only the single daily-report CronJob that monitors all shares
+
+resources:
+  - cronjob-email-summary.yaml
+
+configMapGenerator:
+  - name: aws-s3-sync-email
+    envs:
+      - email.env
+
+generatorOptions:
+  disableNameSuffixHash: true

@@ -7,7 +7,6 @@ resources:
   - namespace.yaml
   - rbac.yaml
   - cronjob.yaml
-  - cronjob-email-summary.yaml
 
 configMapGenerator:
   - name: aws-s3-sync-excludes-global
