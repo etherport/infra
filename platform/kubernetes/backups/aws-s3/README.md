@@ -15,6 +15,22 @@ This system provides automated, scheduled backups of NFS shares to AWS S3 with t
 
 ## Architecture
 
+### Two-Bucket Design
+
+This system uses a **two-bucket architecture** to separate data from operational metadata:
+
+1. **Data Buckets** (`DEST_BUCKET`): Store actual backed-up objects
+   - `archive.wind.etherport.net` - Production data with Object Lock and Glacier lifecycle policies
+   - `archive-test.wind.etherport.net` - Test data bucket (no Object Lock)
+   - Contains: `objects/{share}/...` - the actual backed-up files
+
+2. **Metadata Bucket** (`METADATA_BUCKET`): Store operational artifacts
+   - `logs.archive.wind.etherport.net` - Shared metadata bucket for all shares
+   - Contains: Manifests, batch reports, run summaries, transfer logs, verification reports
+   - Does NOT have Glacier lifecycle policies (metadata needs to remain accessible)
+
+### Data Flow
+
 ```
 ┌─────────────────┐
 │  NFS Shares     │
@@ -22,12 +38,21 @@ This system provides automated, scheduled backups of NFS shares to AWS S3 with t
 └────────┬────────┘
          │
          ▼
-┌─────────────────┐     ┌──────────────────┐
-│  Kubernetes     │────▶│  AWS S3          │
-│  CronJobs       │     │  (archive.wind.  │
-│  (per share)    │     │   etherport.net) │
-└────────┬────────┘     └──────────────────┘
-         │                       │
+┌─────────────────┐     ┌──────────────────────────┐
+│  Kubernetes     │────▶│  Data Bucket             │
+│  CronJobs       │     │  archive.wind.           │
+│  (per share)    │     │   etherport.net          │
+└────────┬────────┘     │  └─ objects/{share}/...  │
+         │              └──────────────────────────┘
+         │
+         ├─────────────▶┌──────────────────────────┐
+         │              │  Metadata Bucket         │
+         │              │  logs.archive.wind.      │
+         │              │   etherport.net          │
+         │              │  └─ batch/manifests/...  │
+         │              │  └─ batch/reports/...    │
+         │              │  └─ batch/runs/...       │
+         │              └────────┬─────────────────┘
          │                       │
          ▼                       ▼
 ┌─────────────────┐     ┌──────────────────┐
@@ -106,6 +131,7 @@ In `base/cronjob.yaml`:
 - `schedule`: Default backup schedule (overridden per share if needed)
 - `suspend`: Set to `true` to disable automatic runs
 - `AWS_REGION`: AWS region (default: `us-west-2`)
+- `METADATA_BUCKET`: S3 bucket for operational artifacts (default: `logs.archive.wind.etherport.net`)
 - `WAIT_FOR_BATCH`: Wait for S3 Batch Ops verification (default: `true`)
 
 ### Email Notifications
@@ -154,7 +180,8 @@ Built and published automatically via GitHub Actions:
 ### Prerequisites
 
 1. AWS credentials with permissions for:
-   - S3 read/write to backup bucket
+   - S3 read/write to data bucket(s) (archive.wind.etherport.net, archive-test.wind.etherport.net)
+   - S3 read/write to metadata bucket (logs.archive.wind.etherport.net)
    - S3 Batch Operations (create jobs, read reports)
    - SES send email (from verified sender)
 
@@ -243,16 +270,22 @@ Sent daily at 6:00 AM PT via `s3-sync-daily-report` CronJob.
 
 ### S3 Artifacts
 
-Each backup run produces the following artifacts in S3:
+Each backup run produces the following artifacts in the **metadata bucket** (`logs.archive.wind.etherport.net`):
 
 ```
-s3://{bucket}/batch/
+s3://logs.archive.wind.etherport.net/batch/
 ├── manifests/{share}/{run-id}.csv       # S3 Batch Ops manifest
 ├── reports/{share}/{run-id}/            # S3 Batch Ops reports
 │   └── job-{job-id}/results/*.csv       # Verification report
 ├── runs/{share}/{run-id}.json           # Run summary
 ├── runs/{share}/{run-id}.verification.jsonl  # Per-object verification
 └── transfers/{share}/{run-id}.jsonl     # Per-file transfer log
+```
+
+Actual backed-up data is stored in the **data buckets**:
+```
+s3://archive.wind.etherport.net/objects/{share}/...       # Production data
+s3://archive-test.wind.etherport.net/objects/{share}/...  # Test data (scans share)
 ```
 
 **Run ID Format**: `{share}-{timestamp}` (e.g., `scans-20251228T214429Z`)
@@ -301,10 +334,10 @@ kubectl -n backups logs job/{job-name}
 
 ```bash
 # Download run summary
-aws s3 cp s3://{bucket}/batch/runs/{share}/{run-id}.json - | jq .
+aws s3 cp s3://logs.archive.wind.etherport.net/batch/runs/{share}/{run-id}.json - | jq .
 
 # List recent runs for a share
-aws s3 ls s3://{bucket}/batch/runs/{share}/ --recursive | tail -10
+aws s3 ls s3://logs.archive.wind.etherport.net/batch/runs/{share}/ --recursive | tail -10
 ```
 
 ## Backup Schedule
@@ -389,6 +422,6 @@ image: ghcr.io/sparked-diamond/aws-s3-sync:sha-{commit-hash}
 
 For issues or questions:
 - Check logs: `kubectl -n backups logs job/{job-name}`
-- Review S3 run summaries: `s3://{bucket}/batch/runs/{share}/`
+- Review S3 run summaries: `s3://logs.archive.wind.etherport.net/batch/runs/{share}/`
 - Examine Prometheus metrics in Grafana
 - Check daily email reports for execution history

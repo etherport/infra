@@ -5,6 +5,7 @@ set -euo pipefail
 : "${SRC_PATH:?need SRC_PATH}"
 : "${DEST_BUCKET:?need DEST_BUCKET}"
 : "${DEST_PREFIX:?need DEST_PREFIX}"
+: "${METADATA_BUCKET:?need METADATA_BUCKET}"
 : "${BATCH_PREFIX:?need BATCH_PREFIX}"
 : "${AWS_REGION:?need AWS_REGION}"
 : "${AWS_ACCOUNT_ID:?need AWS_ACCOUNT_ID}"
@@ -191,11 +192,11 @@ send_failure_email() {
 
 DEST_URI="s3://${DEST_BUCKET}/${DEST_PREFIX}/"
 MANIFEST_KEY="${BATCH_PREFIX}/manifests/${SHARE_NAME}/${RUN_ID}.csv"
-MANIFEST_URI="s3://${DEST_BUCKET}/${MANIFEST_KEY}"
+MANIFEST_URI="s3://${METADATA_BUCKET}/${MANIFEST_KEY}"
  # NOTE: no trailing slash to avoid double-slash paths like ...Z//job-...
 REPORT_PREFIX="${BATCH_PREFIX}/reports/${SHARE_NAME}/${RUN_ID}"
 RUN_SUMMARY_KEY="${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.json"
-RUN_SUMMARY_URI="s3://${DEST_BUCKET}/${RUN_SUMMARY_KEY}"
+RUN_SUMMARY_URI="s3://${METADATA_BUCKET}/${RUN_SUMMARY_KEY}"
 
 DRYRUN_OUT="${LOG_DIR}/dryrun.txt"
 SYNC_OUT="${LOG_DIR}/sync.txt"
@@ -266,12 +267,13 @@ fi
 # NOTE: Some aws-cli builds don't support --expected-bucket-owner on `aws s3 cp`, but s3api does.
 
 s3_put_object() {
-  # Usage: s3_put_object <key> <local_file>
-  local key="$1"
-  local file="$2"
+  # Usage: s3_put_object <bucket> <key> <local_file>
+  local bucket="$1"
+  local key="$2"
+  local file="$3"
 
   aws s3api put-object \
-    --bucket "${DEST_BUCKET}" \
+    --bucket "${bucket}" \
     --key "${key}" \
     --body "${file}" \
     --region "${AWS_REGION}" \
@@ -280,12 +282,13 @@ s3_put_object() {
 }
 
 s3_get_object() {
-  # Usage: s3_get_object <key> <local_out_file>
-  local key="$1"
-  local out="$2"
+  # Usage: s3_get_object <bucket> <key> <local_out_file>
+  local bucket="$1"
+  local key="$2"
+  local out="$3"
 
   aws s3api get-object \
-    --bucket "${DEST_BUCKET}" \
+    --bucket "${bucket}" \
     --key "${key}" \
     --region "${AWS_REGION}" \
     --expected-bucket-owner "${EXPECTED_BUCKET_OWNER}" \
@@ -491,12 +494,12 @@ JSON
   success_flag=0
   if [[ ${SYNC_RC:-0} -eq 0 ]]; then success_flag=1; fi
   pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" 0 0 ""
-  s3_put_object "${RUN_SUMMARY_KEY}" "${SUMMARY_FILE}"
+  s3_put_object "${METADATA_BUCKET}" "${RUN_SUMMARY_KEY}" "${SUMMARY_FILE}"
   exit 0
 fi
 
 echo "=== Upload manifest to S3 ==="
-s3_put_object "${MANIFEST_KEY}" "${MANIFEST_FILE}"
+s3_put_object "${METADATA_BUCKET}" "${MANIFEST_KEY}" "${MANIFEST_FILE}"
 
 # Need ETag for the manifest object for create-job
 MANIFEST_ETAG="$(aws s3api head-object \
@@ -523,12 +526,12 @@ JOB_JSON="$(cat <<JSON
       "Fields": ["Bucket","Key"]
     },
     "Location": {
-      "ObjectArn": "arn:aws:s3:::${DEST_BUCKET}/${MANIFEST_KEY}",
+      "ObjectArn": "arn:aws:s3:::${METADATA_BUCKET}/${MANIFEST_KEY}",
       "ETag": "${MANIFEST_ETAG}"
     }
   },
   "Report": {
-    "Bucket": "arn:aws:s3:::${DEST_BUCKET}",
+    "Bucket": "arn:aws:s3:::${METADATA_BUCKET}",
     "Format": "Report_CSV_20180820",
     "Enabled": true,
     "Prefix": "${REPORT_PREFIX}",
@@ -579,28 +582,28 @@ cat > "${SUMMARY_FILE}" <<JSON
   "source": "${SRC_PATH}",
   "destination": "${DEST_URI}",
   "manifest_s3": "${MANIFEST_URI}",
-  "transfer_list_s3": "s3://${DEST_BUCKET}/${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.csv",
-  "transfer_log_jsonl_s3": "s3://${DEST_BUCKET}/${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.jsonl",
-  "verification_log_jsonl_s3": "s3://${DEST_BUCKET}/${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.verification.jsonl",
+  "transfer_list_s3": "s3://${METADATA_BUCKET}/${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.csv",
+  "transfer_log_jsonl_s3": "s3://${METADATA_BUCKET}/${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.jsonl",
+  "verification_log_jsonl_s3": "s3://${METADATA_BUCKET}/${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.verification.jsonl",
   "files_transferred": ${TOTAL_FILES},
   "bytes_transferred": ${TOTAL_BYTES},
   "sync_exit_code": ${SYNC_RC},
   "uploads_for_verification": ${UPLOAD_COUNT},
   "batch_job_created": true,
   "batch_job_id": "${JOB_ID}",
-  "batch_report_prefix": "s3://${DEST_BUCKET}/${REPORT_PREFIX}/",
+  "batch_report_prefix": "s3://${METADATA_BUCKET}/${REPORT_PREFIX}/",
   "wait_for_batch": "${WAIT_FOR_BATCH}"
 }
 JSON
 
 # Upload run summary
-s3_put_object "${RUN_SUMMARY_KEY}" "${SUMMARY_FILE}"
+s3_put_object "${METADATA_BUCKET}" "${RUN_SUMMARY_KEY}" "${SUMMARY_FILE}"
 
 # Upload transfer logs (per-file) for auditing
 TRANSFER_LIST_KEY="${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.csv"
 TRANSFER_JSONL_KEY="${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.jsonl"
-s3_put_object "${TRANSFER_LIST_KEY}" "${TRANSFER_LIST_FILE}"
-s3_put_object "${TRANSFER_JSONL_KEY}" "${TRANSFER_LOG_JSONL}"
+s3_put_object "${METADATA_BUCKET}" "${TRANSFER_LIST_KEY}" "${TRANSFER_LIST_FILE}"
+s3_put_object "${METADATA_BUCKET}" "${TRANSFER_JSONL_KEY}" "${TRANSFER_LOG_JSONL}"
 
 if is_true "${WAIT_FOR_BATCH}"; then
   echo "=== Waiting for Batch job to complete (max ${BATCH_MAX_WAIT_SECONDS}s) ==="
@@ -700,11 +703,11 @@ if is_true "${WAIT_FOR_BATCH}"; then
   if [[ -n "${report_key}" ]]; then
     final_report_key="${report_key}"
     echo "Downloading batch report: s3://${DEST_BUCKET}/${report_key}"
-    s3_get_object "${report_key}" "${BATCH_REPORT_FILE}" || true
+    s3_get_object "${METADATA_BUCKET}" "${report_key}" "${BATCH_REPORT_FILE}" || true
 
     # Also store a copy of the raw report in the runs/ folder for easier discovery.
     REPORT_COPY_KEY="${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.batch-report.csv"
-    s3_put_object "${REPORT_COPY_KEY}" "${BATCH_REPORT_FILE}" || true
+    s3_put_object "${METADATA_BUCKET}" "${REPORT_COPY_KEY}" "${BATCH_REPORT_FILE}" || true
 
     # Best-effort: generate a per-object verification JSONL and summary JSON (requires python3).
     if command -v python3 >/dev/null 2>&1; then
@@ -924,11 +927,11 @@ PY
       # Upload the verification JSONL (if created)
       if [[ -s "${VERIFY_LOG_JSONL}" ]]; then
         VERIFY_KEY="${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.verification.jsonl"
-        s3_put_object "${VERIFY_KEY}" "${VERIFY_LOG_JSONL}" || true
+        s3_put_object "${METADATA_BUCKET}" "${VERIFY_KEY}" "${VERIFY_LOG_JSONL}" || true
       fi
       # Upload the reports-summary JSON (generated by python above)
       if [[ -s "${BATCH_REPORT_SUMMARY_FILE}" ]]; then
-        s3_put_object "${BATCH_PREFIX}/reports-summary/${SHARE_NAME}/${RUN_ID}.json" "${BATCH_REPORT_SUMMARY_FILE}" || true
+        s3_put_object "${METADATA_BUCKET}" "${BATCH_PREFIX}/reports-summary/${SHARE_NAME}/${RUN_ID}.json" "${BATCH_REPORT_SUMMARY_FILE}" || true
       fi
     else
       echo "python3 not available in this container; skipping per-object verification JSONL generation. Raw report is stored in S3." 
@@ -1036,10 +1039,10 @@ PY
 
         # Upload audit artifacts
         if [[ -s "${FILE_AUDIT_JSONL}" ]]; then
-          s3_put_object "${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.file-audit.jsonl" "${FILE_AUDIT_JSONL}" || true
+          s3_put_object "${METADATA_BUCKET}" "${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.file-audit.jsonl" "${FILE_AUDIT_JSONL}" || true
         fi
         if [[ -s "${FILE_AUDIT_CSV}" ]]; then
-          s3_put_object "${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.file-audit.csv" "${FILE_AUDIT_CSV}" || true
+          s3_put_object "${METADATA_BUCKET}" "${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.file-audit.csv" "${FILE_AUDIT_CSV}" || true
         fi
       fi
   else
@@ -1076,9 +1079,9 @@ if is_true "${WAIT_FOR_BATCH}"; then
   "source": "${SRC_PATH}",
   "destination": "${DEST_URI}",
   "manifest_s3": "${MANIFEST_URI}",
-  "transfer_list_s3": "s3://${DEST_BUCKET}/${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.csv",
-  "transfer_log_jsonl_s3": "s3://${DEST_BUCKET}/${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.jsonl",
-  "verification_log_jsonl_s3": "s3://${DEST_BUCKET}/${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.verification.jsonl",
+  "transfer_list_s3": "s3://${METADATA_BUCKET}/${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.csv",
+  "transfer_log_jsonl_s3": "s3://${METADATA_BUCKET}/${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.jsonl",
+  "verification_log_jsonl_s3": "s3://${METADATA_BUCKET}/${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.verification.jsonl",
   "files_transferred": ${TOTAL_FILES},
   "bytes_transferred": ${TOTAL_BYTES},
   "sync_exit_code": ${SYNC_RC},
@@ -1086,15 +1089,15 @@ if is_true "${WAIT_FOR_BATCH}"; then
   "batch_job_created": true,
   "batch_job_id": "${JOB_ID}",
   "batch_status": "${final_batch_status}",
-  "batch_report_prefix": "s3://${DEST_BUCKET}/${REPORT_PREFIX}/",
+  "batch_report_prefix": "s3://${METADATA_BUCKET}/${REPORT_PREFIX}/",
   "batch_report_key": "${final_report_key_local}",
-  "reports_summary_s3": "s3://${DEST_BUCKET}/${reports_summary_key}",
+  "reports_summary_s3": "s3://${METADATA_BUCKET}/${reports_summary_key}",
   "wait_for_batch": "${WAIT_FOR_BATCH}"
 }
 JSON
 
   # Overwrite the run summary key with final info
-  s3_put_object "${RUN_SUMMARY_KEY}" "${SUMMARY_FILE}" || true
+  s3_put_object "${METADATA_BUCKET}" "${RUN_SUMMARY_KEY}" "${SUMMARY_FILE}" || true
 fi
 
 # Final metrics emission (if WAIT_FOR_BATCH=true we may know final status; otherwise InProgress already emitted)

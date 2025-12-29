@@ -24,7 +24,7 @@ set -euo pipefail
 
 SEND_EMAIL_SCRIPT="${SEND_EMAIL_SCRIPT:-/scripts/send-email.sh}"
 LOOKBACK_HOURS="${LOOKBACK_HOURS:-24}"
-DEST_BUCKET="${DEST_BUCKET:-archive-test.wind.etherport.net}"
+METADATA_BUCKET="${METADATA_BUCKET:-logs.archive.wind.etherport.net}"
 BATCH_PREFIX="${BATCH_PREFIX:-batch}"
 AWS_REGION="${AWS_REGION:-us-west-2}"
 
@@ -57,7 +57,7 @@ METRICS_JSON=$(curl -sS "${PROM_URL}/api/v1/query?query=${PROM_QUERY}" | jq -c '
 JOBS_JSON=$(kubectl -n backups get jobs -o json | jq -c '.items')
 
 # Generate HTML report using Python
-export NOW_EPOCH START_EPOCH LOOKBACK_HOURS METRICS_JSON JOBS_JSON PROM_URL
+export NOW_EPOCH START_EPOCH LOOKBACK_HOURS METRICS_JSON JOBS_JSON PROM_URL METADATA_BUCKET
 
 REPORT_FILE=$(mktemp)
 trap 'rm -f "$REPORT_FILE"' EXIT
@@ -185,12 +185,12 @@ def get_s3_summary_metrics(share, start_time_epoch):
     """
     import subprocess
 
-    dest_bucket = os.environ.get('DEST_BUCKET', 'archive-test.wind.etherport.net')
+    metadata_bucket = os.environ.get('METADATA_BUCKET', 'logs.archive.wind.etherport.net')
     batch_prefix = os.environ.get('BATCH_PREFIX', 'batch')
     aws_region = os.environ.get('AWS_REGION', 'us-west-2')
 
     # List summary files for this share
-    s3_prefix = f"s3://{dest_bucket}/{batch_prefix}/runs/{share}/"
+    s3_prefix = f"s3://{metadata_bucket}/{batch_prefix}/runs/{share}/"
 
     try:
         # List all summary JSON files for this share

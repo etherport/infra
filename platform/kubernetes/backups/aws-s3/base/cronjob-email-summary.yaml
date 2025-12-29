@@ -36,9 +36,9 @@ spec:
                 - name: SHARES
                   value: "scans archive backups content graham mark media"
 
-                # S3 bucket containing run summary JSON files
-                - name: DEST_BUCKET
-                  value: "archive-test.wind.etherport.net"
+                # S3 bucket containing run summary JSON files and batch artifacts
+                - name: METADATA_BUCKET
+                  value: "logs.archive.wind.etherport.net"
 
                 # S3 key prefix for batch operation artifacts
                 - name: BATCH_PREFIX

@@ -44,6 +44,8 @@ spec:
                   value: "archive-test.wind.etherport.net"   # overridden per share
                 - name: DEST_PREFIX
                   value: "objects/REPLACE_ME"                # overridden per share
+                - name: METADATA_BUCKET
+                  value: "logs.archive.wind.etherport.net"   # shared metadata bucket for all shares
 
                 # --- centralized AWS + behavior settings ---
                 - name: AWS_REGION
