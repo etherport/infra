@@ -274,6 +274,10 @@ for job in jobs_json:
     if not job_name.startswith('s3-sync-'):
         continue
 
+    # Exclude the daily-report job itself
+    if 'daily-report' in job_name:
+        continue
+
     # Remove 's3-sync-' prefix and extract first component as share name
     rest = job_name[8:]  # Remove 's3-sync-'
     parts = rest.split('-')
