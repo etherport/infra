@@ -473,28 +473,54 @@ if [[ "${UPLOAD_COUNT}" -le 0 ]]; then
   END_TS_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   DURATION_SECONDS=$((END_EPOCH - START_EPOCH))
 
-  cat > "${SUMMARY_FILE}" <<JSON
+  # Generate consolidated report (no files to verify case)
+  CONSOLIDATED_REPORT="${LOG_DIR}/consolidated-report.json"
+  CONSOLIDATED_REPORT_KEY="${SHARE_NAME}/${TS}/report.json"
+
+  cat > "${CONSOLIDATED_REPORT}" <<JSON
 {
-  "run_id": "${RUN_ID}",
+  "executionId": "${RUN_ID}",
   "share": "${SHARE_NAME}",
-  "start_time_utc": "${START_TS_UTC}",
-  "end_time_utc": "${END_TS_UTC}",
-  "duration_seconds": ${DURATION_SECONDS},
-  "timestamp_utc": "${TS}",
+  "status": "$([[ ${SYNC_RC:-0} -eq 0 ]] && echo SUCCESS || echo FAILED)",
+  "startTime": "${START_TS_UTC}",
+  "endTime": "${END_TS_UTC}",
+  "durationSeconds": ${DURATION_SECONDS},
+  "summary": {
+    "filesTransferred": ${TOTAL_FILES:-0},
+    "filesVerified": 0,
+    "filesSucceeded": 0,
+    "filesFailed": 0,
+    "bytesTransferred": ${TOTAL_BYTES:-0},
+    "transferRateMBps": $(awk "BEGIN {if (${DURATION_SECONDS} > 0) print ${TOTAL_BYTES:-0} / ${DURATION_SECONDS} / 1024 / 1024; else print 0}")
+  },
   "source": "${SRC_PATH}",
   "destination": "${DEST_URI}",
-  "files_transferred": ${TOTAL_FILES:-0},
-  "bytes_transferred": ${TOTAL_BYTES:-0},
-  "sync_exit_code": ${SYNC_RC:-0},
-  "uploads_for_verification": 0,
-  "batch_job_created": false
+  "sync": {
+    "exitCode": ${SYNC_RC:-0},
+    "filesTransferred": ${TOTAL_FILES:-0},
+    "bytesTransferred": ${TOTAL_BYTES:-0}
+  },
+  "verification": {
+    "batchJobId": "",
+    "batchStatus": "not_required",
+    "objectsTotal": 0,
+    "objectsSucceeded": 0,
+    "objectsFailed": 0,
+    "topErrorCodes": {}
+  },
+  "files": [],
+  "errors": []
 }
 JSON
+
   # Push metrics (success = 1 if sync exit code was 0)
   success_flag=0
   if [[ ${SYNC_RC:-0} -eq 0 ]]; then success_flag=1; fi
   pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" 0 0 ""
-  s3_put_object "${METADATA_BUCKET}" "${RUN_SUMMARY_KEY}" "${SUMMARY_FILE}"
+
+  # Upload consolidated report
+  s3_put_object "${METADATA_BUCKET}" "${CONSOLIDATED_REPORT_KEY}" "${CONSOLIDATED_REPORT}"
+  echo "Consolidated report uploaded to: s3://${METADATA_BUCKET}/${CONSOLIDATED_REPORT_KEY}"
   exit 0
 fi
 
@@ -571,39 +597,8 @@ if ! is_true "${WAIT_FOR_BATCH}"; then
   pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" "${UPLOAD_COUNT}" 1 "InProgress"
 fi
 
-cat > "${SUMMARY_FILE}" <<JSON
-{
-  "run_id": "${RUN_ID}",
-  "share": "${SHARE_NAME}",
-  "start_time_utc": "${START_TS_UTC}",
-  "end_time_utc": "${END_TS_UTC}",
-  "duration_seconds": ${DURATION_SECONDS},
-  "timestamp_utc": "${TS}",
-  "source": "${SRC_PATH}",
-  "destination": "${DEST_URI}",
-  "manifest_s3": "${MANIFEST_URI}",
-  "transfer_list_s3": "s3://${METADATA_BUCKET}/${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.csv",
-  "transfer_log_jsonl_s3": "s3://${METADATA_BUCKET}/${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.jsonl",
-  "verification_log_jsonl_s3": "s3://${METADATA_BUCKET}/${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.verification.jsonl",
-  "files_transferred": ${TOTAL_FILES},
-  "bytes_transferred": ${TOTAL_BYTES},
-  "sync_exit_code": ${SYNC_RC},
-  "uploads_for_verification": ${UPLOAD_COUNT},
-  "batch_job_created": true,
-  "batch_job_id": "${JOB_ID}",
-  "batch_report_prefix": "s3://${METADATA_BUCKET}/${REPORT_PREFIX}/",
-  "wait_for_batch": "${WAIT_FOR_BATCH}"
-}
-JSON
-
-# Upload run summary
-s3_put_object "${METADATA_BUCKET}" "${RUN_SUMMARY_KEY}" "${SUMMARY_FILE}"
-
-# Upload transfer logs (per-file) for auditing
-TRANSFER_LIST_KEY="${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.csv"
-TRANSFER_JSONL_KEY="${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.jsonl"
-s3_put_object "${METADATA_BUCKET}" "${TRANSFER_LIST_KEY}" "${TRANSFER_LIST_FILE}"
-s3_put_object "${METADATA_BUCKET}" "${TRANSFER_JSONL_KEY}" "${TRANSFER_LOG_JSONL}"
+# NOTE: We no longer upload individual transfer logs/summaries to S3 to reduce object bloat.
+# All data will be included in the final consolidated report generated at the end of the script.
 
 if is_true "${WAIT_FOR_BATCH}"; then
   echo "=== Waiting for Batch job to complete (max ${BATCH_MAX_WAIT_SECONDS}s) ==="
@@ -705,11 +700,7 @@ if is_true "${WAIT_FOR_BATCH}"; then
     echo "Downloading batch report: s3://${METADATA_BUCKET}/${report_key}"
     s3_get_object "${METADATA_BUCKET}" "${report_key}" "${BATCH_REPORT_FILE}" || true
 
-    # Also store a copy of the raw report in the runs/ folder for easier discovery.
-    REPORT_COPY_KEY="${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.batch-report.csv"
-    s3_put_object "${METADATA_BUCKET}" "${REPORT_COPY_KEY}" "${BATCH_REPORT_FILE}" || true
-
-    # Best-effort: generate a per-object verification JSONL and summary JSON (requires python3).
+    # Parse batch report locally (no longer upload raw report to S3 to reduce bloat)
     if command -v python3 >/dev/null 2>&1; then
       echo "Parsing batch report into verification JSONL + summary (python3)"
       RUN_ID_ENV="$RUN_ID" \
@@ -924,17 +915,9 @@ summary = {
 with open(summary_out, "w") as out:
     json.dump(summary, out, indent=2)
 PY
-      # Upload the verification JSONL (if created)
-      if [[ -s "${VERIFY_LOG_JSONL}" ]]; then
-        VERIFY_KEY="${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.verification.jsonl"
-        s3_put_object "${METADATA_BUCKET}" "${VERIFY_KEY}" "${VERIFY_LOG_JSONL}" || true
-      fi
-      # Upload the reports-summary JSON (generated by python above)
-      if [[ -s "${BATCH_REPORT_SUMMARY_FILE}" ]]; then
-        s3_put_object "${METADATA_BUCKET}" "${BATCH_PREFIX}/reports-summary/${SHARE_NAME}/${RUN_ID}.json" "${BATCH_REPORT_SUMMARY_FILE}" || true
-      fi
+      # Verification JSONL and summary kept local (will be in consolidated report)
     else
-      echo "python3 not available in this container; skipping per-object verification JSONL generation. Raw report is stored in S3." 
+      echo "python3 not available in this container; skipping per-object verification parsing." 
     fi
 
       # Produce a combined per-file audit log (transfer + verification) for easier human review.
@@ -1037,13 +1020,7 @@ with open(out_csv,'w',newline='') as out:
         w.writerow(r)
 PY
 
-        # Upload audit artifacts
-        if [[ -s "${FILE_AUDIT_JSONL}" ]]; then
-          s3_put_object "${METADATA_BUCKET}" "${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.file-audit.jsonl" "${FILE_AUDIT_JSONL}" || true
-        fi
-        if [[ -s "${FILE_AUDIT_CSV}" ]]; then
-          s3_put_object "${METADATA_BUCKET}" "${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.file-audit.csv" "${FILE_AUDIT_CSV}" || true
-        fi
+        # File-audit artifacts kept local (will be in consolidated report)
       fi
   else
     echo "No batch report object found yet under prefix: ${REPORT_PREFIX}"
@@ -1067,37 +1044,7 @@ if is_true "${WAIT_FOR_BATCH}"; then
   END_EPOCH="$(date +%s)"
   END_TS_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-  # Build an updated summary (same key) that includes batch results info
-  cat > "${SUMMARY_FILE}" <<JSON
-{
-  "run_id": "${RUN_ID}",
-  "share": "${SHARE_NAME}",
-  "start_time_utc": "${START_TS_UTC}",
-  "end_time_utc": "${END_TS_UTC}",
-  "duration_seconds": ${DURATION_SECONDS},
-  "timestamp_utc": "${TS}",
-  "source": "${SRC_PATH}",
-  "destination": "${DEST_URI}",
-  "manifest_s3": "${MANIFEST_URI}",
-  "transfer_list_s3": "s3://${METADATA_BUCKET}/${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.csv",
-  "transfer_log_jsonl_s3": "s3://${METADATA_BUCKET}/${BATCH_PREFIX}/transfers/${SHARE_NAME}/${RUN_ID}.jsonl",
-  "verification_log_jsonl_s3": "s3://${METADATA_BUCKET}/${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.verification.jsonl",
-  "files_transferred": ${TOTAL_FILES},
-  "bytes_transferred": ${TOTAL_BYTES},
-  "sync_exit_code": ${SYNC_RC},
-  "uploads_for_verification": ${UPLOAD_COUNT},
-  "batch_job_created": true,
-  "batch_job_id": "${JOB_ID}",
-  "batch_status": "${final_batch_status}",
-  "batch_report_prefix": "s3://${METADATA_BUCKET}/${REPORT_PREFIX}/",
-  "batch_report_key": "${final_report_key_local}",
-  "reports_summary_s3": "s3://${METADATA_BUCKET}/${reports_summary_key}",
-  "wait_for_batch": "${WAIT_FOR_BATCH}"
-}
-JSON
-
-  # Overwrite the run summary key with final info
-  s3_put_object "${METADATA_BUCKET}" "${RUN_SUMMARY_KEY}" "${SUMMARY_FILE}" || true
+  # NOTE: Summary file no longer uploaded - consolidated report will be generated below
 fi
 
 # Final metrics emission (if WAIT_FOR_BATCH=true we may know final status; otherwise InProgress already emitted)
@@ -1108,6 +1055,195 @@ if [[ -n "${final_status}" ]]; then
   pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" "${UPLOAD_COUNT}" 1 "${final_status}"
 else
   pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" "${UPLOAD_COUNT}" 1 ""
+fi
+
+#
+# Generate consolidated report (DataSync-style single JSON report per execution)
+#
+CONSOLIDATED_REPORT="${LOG_DIR}/consolidated-report.json"
+CONSOLIDATED_REPORT_KEY="${SHARE_NAME}/${TS}/report.json"
+
+if command -v python3 >/dev/null 2>&1; then
+  echo "=== Generating consolidated report ==="
+
+  RUN_ID_ENV="$RUN_ID" \
+  SHARE_NAME_ENV="$SHARE_NAME" \
+  START_TS_UTC_ENV="$START_TS_UTC" \
+  END_TS_UTC_ENV="${END_TS_UTC:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" \
+  DURATION_SECONDS_ENV="$DURATION_SECONDS" \
+  SRC_PATH_ENV="$SRC_PATH" \
+  DEST_URI_ENV="$DEST_URI" \
+  TOTAL_FILES_ENV="$TOTAL_FILES" \
+  TOTAL_BYTES_ENV="$TOTAL_BYTES" \
+  SYNC_RC_ENV="${SYNC_RC:-0}" \
+  UPLOAD_COUNT_ENV="${UPLOAD_COUNT:-0}" \
+  JOB_ID_ENV="${JOB_ID:-}" \
+  BATCH_STATUS_ENV="${final_batch_status:-}" \
+  TRANSFER_LOG_JSONL_ENV="$TRANSFER_LOG_JSONL" \
+  FILE_AUDIT_JSONL_ENV="${FILE_AUDIT_JSONL:-}" \
+  BATCH_REPORT_SUMMARY_FILE_ENV="${BATCH_REPORT_SUMMARY_FILE:-}" \
+  CONSOLIDATED_REPORT_ENV="$CONSOLIDATED_REPORT" \
+  python3 - <<'PY' || echo "WARN: failed to generate consolidated report" >&2
+import os, json, sys
+from datetime import datetime, timezone
+
+# Environment variables
+run_id = os.environ.get('RUN_ID_ENV', '')
+share_name = os.environ.get('SHARE_NAME_ENV', '')
+start_ts = os.environ.get('START_TS_UTC_ENV', '')
+end_ts = os.environ.get('END_TS_UTC_ENV', '')
+duration = int(os.environ.get('DURATION_SECONDS_ENV', '0'))
+src_path = os.environ.get('SRC_PATH_ENV', '')
+dest_uri = os.environ.get('DEST_URI_ENV', '')
+total_files = int(os.environ.get('TOTAL_FILES_ENV', '0'))
+total_bytes = int(os.environ.get('TOTAL_BYTES_ENV', '0'))
+sync_rc = int(os.environ.get('SYNC_RC_ENV', '0'))
+upload_count = int(os.environ.get('UPLOAD_COUNT_ENV', '0'))
+job_id = os.environ.get('JOB_ID_ENV', '')
+batch_status = os.environ.get('BATCH_STATUS_ENV', '')
+transfers_path = os.environ.get('TRANSFER_LOG_JSONL_ENV', '')
+file_audit_path = os.environ.get('FILE_AUDIT_JSONL_ENV', '')
+batch_summary_path = os.environ.get('BATCH_REPORT_SUMMARY_FILE_ENV', '')
+output_path = os.environ.get('CONSOLIDATED_REPORT_ENV', '')
+
+# Determine overall status
+if sync_rc != 0:
+    status = "FAILED"
+elif batch_status and batch_status.lower() != "complete":
+    status = "FAILED"
+else:
+    status = "SUCCESS"
+
+# Load file-level details if available
+files = []
+if file_audit_path and os.path.exists(file_audit_path):
+    with open(file_audit_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+                # Transform to DataSync-style format
+                file_rec = {
+                    "path": rec.get('local_path', ''),
+                    "s3_key": rec.get('s3_key', ''),
+                    "action": "uploaded" if rec.get('upload_status') == 'reported' else "unknown",
+                    "status": "success" if rec.get('verify_status', '').lower() == 'succeeded' else "failed",
+                    "sourceChecksum": "",  # Not available from local file
+                    "destChecksum": rec.get('checksum', ''),
+                    "checksumAlgorithm": rec.get('checksum_algorithm', ''),
+                    "size": rec.get('bytes', 0),
+                    "transferTimeMs": 0,  # Not tracked per-file currently
+                    "errorCode": rec.get('verify_error_code', ''),
+                    "errorMessage": rec.get('verify_error_message', '')
+                }
+                files.append(file_rec)
+            except Exception as e:
+                print(f"WARN: failed to parse file audit record: {e}", file=sys.stderr)
+                continue
+elif transfers_path and os.path.exists(transfers_path):
+    # Fallback: use transfers log if file-audit not available
+    with open(transfers_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+                file_rec = {
+                    "path": rec.get('local_path', ''),
+                    "s3_key": rec.get('s3_key', ''),
+                    "action": rec.get('action', 'uploaded'),
+                    "status": "transferred",  # No verification info
+                    "sourceChecksum": "",
+                    "destChecksum": "",
+                    "checksumAlgorithm": "",
+                    "size": rec.get('bytes', 0),
+                    "transferTimeMs": 0,
+                    "errorCode": "",
+                    "errorMessage": ""
+                }
+                files.append(file_rec)
+            except Exception as e:
+                print(f"WARN: failed to parse transfer record: {e}", file=sys.stderr)
+                continue
+
+# Load batch summary if available
+verification_summary = {}
+if batch_summary_path and os.path.exists(batch_summary_path):
+    try:
+        with open(batch_summary_path, 'r') as f:
+            verification_summary = json.load(f)
+    except Exception as e:
+        print(f"WARN: failed to parse batch summary: {e}", file=sys.stderr)
+
+# Count successes/failures
+files_succeeded = sum(1 for f in files if f['status'] == 'success')
+files_failed = sum(1 for f in files if f['status'] == 'failed')
+
+# Build consolidated report
+report = {
+    "executionId": run_id,
+    "share": share_name,
+    "status": status,
+    "startTime": start_ts,
+    "endTime": end_ts,
+    "durationSeconds": duration,
+    "summary": {
+        "filesTransferred": total_files,
+        "filesVerified": verification_summary.get('objects_succeeded', 0),
+        "filesSucceeded": files_succeeded,
+        "filesFailed": files_failed,
+        "bytesTransferred": total_bytes,
+        "transferRateMBps": round(total_bytes / duration / 1024 / 1024, 1) if duration > 0 else 0
+    },
+    "source": src_path,
+    "destination": dest_uri,
+    "sync": {
+        "exitCode": sync_rc,
+        "filesTransferred": total_files,
+        "bytesTransferred": total_bytes
+    },
+    "verification": {
+        "batchJobId": job_id,
+        "batchStatus": batch_status,
+        "objectsTotal": verification_summary.get('objects_total', 0),
+        "objectsSucceeded": verification_summary.get('objects_succeeded', 0),
+        "objectsFailed": verification_summary.get('objects_failed', 0),
+        "topErrorCodes": verification_summary.get('top_error_codes', {})
+    },
+    "files": files,
+    "errors": []
+}
+
+# Add errors if any
+if sync_rc != 0:
+    report['errors'].append({
+        "stage": "sync",
+        "message": f"aws s3 sync exited with code {sync_rc}"
+    })
+if batch_status and batch_status.lower() != "complete":
+    report['errors'].append({
+        "stage": "verification",
+        "message": f"S3 Batch Operations job ended with status: {batch_status}"
+    })
+
+# Write consolidated report
+with open(output_path, 'w') as f:
+    json.dump(report, f, indent=2)
+
+print(f"Consolidated report written to: {output_path}")
+PY
+
+  # Upload consolidated report to S3
+  if [[ -s "${CONSOLIDATED_REPORT}" ]]; then
+    echo "Uploading consolidated report to: s3://${METADATA_BUCKET}/${CONSOLIDATED_REPORT_KEY}"
+    s3_put_object "${METADATA_BUCKET}" "${CONSOLIDATED_REPORT_KEY}" "${CONSOLIDATED_REPORT}"
+    echo "Consolidated report available at: s3://${METADATA_BUCKET}/${CONSOLIDATED_REPORT_KEY}"
+  fi
+else
+  echo "WARN: python3 not available; skipping consolidated report generation"
 fi
 
 echo "=== Done ==="
