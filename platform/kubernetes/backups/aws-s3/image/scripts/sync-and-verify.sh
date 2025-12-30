@@ -1241,6 +1241,16 @@ PY
     echo "Uploading consolidated report to: s3://${METADATA_BUCKET}/${CONSOLIDATED_REPORT_KEY}"
     s3_put_object "${METADATA_BUCKET}" "${CONSOLIDATED_REPORT_KEY}" "${CONSOLIDATED_REPORT}"
     echo "Consolidated report available at: s3://${METADATA_BUCKET}/${CONSOLIDATED_REPORT_KEY}"
+
+    # Cleanup: Remove AWS Batch Ops infrastructure files now that data is in consolidated report
+    if [[ -n "${JOB_ID:-}" ]]; then
+      echo "Cleaning up batch infrastructure files..."
+      # Delete manifest
+      aws s3 rm "s3://${METADATA_BUCKET}/${MANIFEST_KEY}" --region "${AWS_REGION}" 2>/dev/null || true
+      # Delete batch reports directory (contains manifest.json, results/*.csv, etc.)
+      aws s3 rm "s3://${METADATA_BUCKET}/${REPORT_PREFIX}/job-${JOB_ID}/" --recursive --region "${AWS_REGION}" 2>/dev/null || true
+      echo "Cleanup complete - only consolidated report remains"
+    fi
   fi
 else
   echo "WARN: python3 not available; skipping consolidated report generation"
