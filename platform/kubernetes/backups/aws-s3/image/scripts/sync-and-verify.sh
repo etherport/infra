@@ -26,10 +26,10 @@ PUSHGATEWAY_URL="${PUSHGATEWAY_URL:-}"   # leave empty to disable
 PUSHGATEWAY_JOB="${PUSHGATEWAY_JOB:-aws-s3-sync}"
 DEBUG_PUSHGATEWAY="${DEBUG_PUSHGATEWAY:-false}"
 
-# Usage: pushgateway_emit <status> <duration_seconds> <bytes> <files> <uploads_for_verification> [batch_job_created] [batch_status]
+# Usage: pushgateway_emit <status> <duration_seconds> <bytes> <files> <uploads_for_verification> [batch_job_created] [batch_status] [verified_succeeded] [verified_failed]
 # Pushes backup metrics for this run. The job name is set by PUSHGATEWAY_JOB (default: aws-s3-sync), and additional grouping labels (share, bucket) are appended for consistent labeling in Grafana.
 pushgateway_emit() {
-  # Usage: pushgateway_emit <status> <duration_seconds> <bytes> <files> <uploads_for_verification> [batch_job_created] [batch_status]
+  # Usage: pushgateway_emit <status> <duration_seconds> <bytes> <files> <uploads_for_verification> [batch_job_created] [batch_status] [verified_succeeded] [verified_failed]
   local status="$1"
   local duration="$2"
   local bytes="$3"
@@ -37,6 +37,8 @@ pushgateway_emit() {
   local uploads_verify="$5"
   local batch_created="${6:-0}"
   local batch_status="${7:-}"  # optional string
+  local verified_succeeded="${8:-0}"  # optional count
+  local verified_failed="${9:-0}"     # optional count
 
   [[ -z "${PUSHGATEWAY_URL}" ]] && return 0
 
@@ -65,11 +67,15 @@ homelab_backup_last_run_uploads_for_verification_total ${uploads_verify}
 homelab_backup_last_run_success ${status}
 # TYPE homelab_backup_last_run_batch_job_created gauge
 homelab_backup_last_run_batch_job_created ${batch_created}
+# TYPE homelab_backup_last_run_verified_succeeded_total gauge
+homelab_backup_last_run_verified_succeeded_total ${verified_succeeded}
+# TYPE homelab_backup_last_run_verified_failed_total gauge
+homelab_backup_last_run_verified_failed_total ${verified_failed}
 EOF
 )"
 
   if [[ "${http_code}" != 2* ]]; then
-    echo "[pushgateway] WARN: push failed (HTTP ${http_code})" >&2
+    record_warning "Pushgateway metrics push failed (HTTP ${http_code})"
     if [[ "${DEBUG_PUSHGATEWAY}" == "true" ]]; then
       echo "[pushgateway] response:" >&2
       cat /tmp/pushgateway_resp.txt >&2 || true
@@ -85,7 +91,7 @@ EOF
 )"
 
     if [[ "${http_code}" != 2* ]]; then
-      echo "[pushgateway] WARN: push (batch_status) failed (HTTP ${http_code})" >&2
+      record_warning "Pushgateway batch_status push failed (HTTP ${http_code})"
       if [[ "${DEBUG_PUSHGATEWAY}" == "true" ]]; then
         echo "[pushgateway] response:" >&2
         cat /tmp/pushgateway_resp2.txt >&2 || true
@@ -108,6 +114,44 @@ START_TS_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 # Helper: elapsed seconds since start (safe under set -u)
 elapsed_seconds() {
   echo $(( $(date +%s) - START_EPOCH ))
+}
+
+# Global warning counter for degraded state alerting
+WARNING_COUNT=0
+WARNINGS_FILE="${LOG_DIR}/warnings.txt"
+
+# Helper: increment warning counter and log warning
+record_warning() {
+  local msg="$1"
+  ((WARNING_COUNT++)) || true
+  echo "[WARNING] ${msg}" | tee -a "${WARNINGS_FILE}" >&2
+}
+
+# Retry wrapper for transient AWS API failures
+# Usage: aws_retry <max_attempts> <command...>
+aws_retry() {
+  local max_attempts="$1"
+  shift
+  local attempt=1
+  local delay=2
+
+  while [[ ${attempt} -le ${max_attempts} ]]; do
+    if "$@"; then
+      return 0
+    fi
+
+    local exit_code=$?
+
+    if [[ ${attempt} -lt ${max_attempts} ]]; then
+      echo "[retry] Attempt ${attempt}/${max_attempts} failed (exit ${exit_code}), retrying in ${delay}s..." >&2
+      sleep ${delay}
+      delay=$((delay * 2))  # Exponential backoff
+      ((attempt++)) || true
+    else
+      echo "[retry] All ${max_attempts} attempts failed (exit ${exit_code})" >&2
+      return ${exit_code}
+    fi
+  done
 }
 
 # Files produced by this run
@@ -189,6 +233,98 @@ send_failure_email() {
   } | EMAIL_SUBJECT="${subject}" EMAIL_FROM_NAME="${EMAIL_FROM_NAME}" EMAIL_FROM="${EMAIL_FROM}" EMAIL_TO="${EMAIL_TO}" "${SEND_EMAIL_SCRIPT}" \
       || echo "[email] WARN: failed to send failure email" >&2
 }
+
+# Distributed lock using Kubernetes ConfigMap to prevent concurrent job execution
+# for the same share (prevents both CronJob overlap AND manual job conflicts)
+LOCK_NAME="aws-s3-sync-lock-${SHARE_NAME}"
+LOCK_NAMESPACE="${LOCK_NAMESPACE:-backups}"
+LOCK_MAX_AGE_SECONDS=86400  # 24 hours - consider lock stale after this
+
+acquire_lock() {
+  echo "[lock] Attempting to acquire lock: ${LOCK_NAME}"
+
+  # Check if kubectl is available
+  if ! command -v kubectl &>/dev/null; then
+    echo "[lock] WARN: kubectl not available, skipping lock mechanism" >&2
+    return 0
+  fi
+
+  # Try to create the ConfigMap (lock)
+  if kubectl create configmap "${LOCK_NAME}" \
+      --from-literal=owner="${RUN_ID}" \
+      --from-literal=started_at="$(date +%s)" \
+      --namespace="${LOCK_NAMESPACE}" &>/dev/null; then
+    echo "[lock] Lock acquired successfully"
+    return 0
+  fi
+
+  # Lock already exists - check if it's stale
+  echo "[lock] Lock already exists, checking age..."
+  local lock_started_at
+  lock_started_at=$(kubectl get configmap "${LOCK_NAME}" \
+    --namespace="${LOCK_NAMESPACE}" \
+    -o jsonpath='{.data.started_at}' 2>/dev/null || echo "0")
+
+  local now_epoch
+  now_epoch=$(date +%s)
+  local lock_age=$((now_epoch - lock_started_at))
+
+  if [[ ${lock_age} -gt ${LOCK_MAX_AGE_SECONDS} ]]; then
+    echo "[lock] Lock is stale (${lock_age}s old), removing and retrying..."
+    kubectl delete configmap "${LOCK_NAME}" --namespace="${LOCK_NAMESPACE}" &>/dev/null || true
+    sleep 2
+
+    # Retry acquisition
+    if kubectl create configmap "${LOCK_NAME}" \
+        --from-literal=owner="${RUN_ID}" \
+        --from-literal=started_at="$(date +%s)" \
+        --namespace="${LOCK_NAMESPACE}" &>/dev/null; then
+      echo "[lock] Lock acquired after removing stale lock"
+      return 0
+    fi
+  fi
+
+  # Lock is held by another job
+  local lock_owner
+  lock_owner=$(kubectl get configmap "${LOCK_NAME}" \
+    --namespace="${LOCK_NAMESPACE}" \
+    -o jsonpath='{.data.owner}' 2>/dev/null || echo "unknown")
+
+  echo "[lock] ERROR: Lock held by another job: ${lock_owner} (age: ${lock_age}s)" >&2
+  echo "[lock] Skipping this execution to prevent concurrent uploads" >&2
+
+  # Send email notification about skipped execution
+  if is_true "${EMAIL_ENABLED}"; then
+    local subject="${EMAIL_SUBJECT} (SKIPPED: ${SHARE_NAME})"
+    {
+      echo "Sequoia to S3 sync SKIPPED (concurrent execution prevented)"
+      echo
+      echo "Run ID:         ${RUN_ID}"
+      echo "Share:          ${SHARE_NAME}"
+      echo "Lock holder:    ${lock_owner}"
+      echo "Lock age (sec): ${lock_age}"
+      echo "Start (UTC):    ${START_TS_UTC}"
+      echo
+      echo "Another backup job is currently running for this share."
+      echo "This execution was skipped to prevent concurrent uploads."
+    } | EMAIL_SUBJECT="${subject}" EMAIL_FROM_NAME="${EMAIL_FROM_NAME}" EMAIL_FROM="${EMAIL_FROM}" EMAIL_TO="${EMAIL_TO}" "${SEND_EMAIL_SCRIPT}" \
+        || echo "[email] WARN: failed to send skip notification email" >&2 2>/dev/null
+  fi
+
+  exit 0
+}
+
+release_lock() {
+  if ! command -v kubectl &>/dev/null; then
+    return 0
+  fi
+
+  echo "[lock] Releasing lock: ${LOCK_NAME}"
+  kubectl delete configmap "${LOCK_NAME}" --namespace="${LOCK_NAMESPACE}" &>/dev/null || true
+}
+
+# Ensure lock is released on exit (success or failure)
+trap release_lock EXIT
 
 DEST_URI="s3://${DEST_BUCKET}/${DEST_PREFIX}/"
 MANIFEST_KEY="${BATCH_PREFIX}/manifests/${SHARE_NAME}/${RUN_ID}.csv"
@@ -272,7 +408,7 @@ s3_put_object() {
   local key="$2"
   local file="$3"
 
-  aws s3api put-object \
+  aws_retry 3 aws s3api put-object \
     --bucket "${bucket}" \
     --key "${key}" \
     --body "${file}" \
@@ -287,7 +423,7 @@ s3_get_object() {
   local key="$2"
   local out="$3"
 
-  aws s3api get-object \
+  aws_retry 3 aws s3api get-object \
     --bucket "${bucket}" \
     --key "${key}" \
     --region "${AWS_REGION}" \
@@ -295,6 +431,9 @@ s3_get_object() {
     "${out}" \
     >/dev/null
 }
+
+# Acquire distributed lock to prevent concurrent executions
+acquire_lock
 
 echo "=== [$RUN_ID] Dry-run to detect uploads/updates ==="
 # Dry-run is informational only; we build the manifest from the REAL sync output.
@@ -573,7 +712,7 @@ JOB_JSON="$(cat <<JSON
 JSON
 )"
 
-JOB_ID="$(aws s3control create-job \
+JOB_ID="$(aws_retry 3 aws s3control create-job \
   --account-id "${AWS_ACCOUNT_ID}" \
   --region "${AWS_REGION}" \
   --cli-input-json "${JOB_JSON}" \
@@ -607,7 +746,7 @@ if is_true "${WAIT_FOR_BATCH}"; then
 
   while [[ ${waited} -lt ${BATCH_MAX_WAIT_SECONDS} ]]; do
     # Describe the job and capture status
-    aws s3control describe-job \
+    aws_retry 3 aws s3control describe-job \
       --account-id "${AWS_ACCOUNT_ID}" \
       --job-id "${JOB_ID}" \
       --region "${AWS_REGION}" \
@@ -647,9 +786,9 @@ if is_true "${WAIT_FOR_BATCH}"; then
   REPORT_JOB_PREFIX="${REPORT_PREFIX}/job-${JOB_ID}"
   REPORT_RESULTS_PREFIX="${REPORT_JOB_PREFIX}/results/"
 
-  # Wait (briefly) for the results CSV to appear.
+  # Wait for the results CSV to appear (up to 15 minutes for large batch jobs)
   REPORT_APPEAR_POLL_SECONDS="${REPORT_APPEAR_POLL_SECONDS:-10}"
-  REPORT_APPEAR_MAX_WAIT_SECONDS="${REPORT_APPEAR_MAX_WAIT_SECONDS:-300}"
+  REPORT_APPEAR_MAX_WAIT_SECONDS="${REPORT_APPEAR_MAX_WAIT_SECONDS:-900}"
   report_waited=0
 
   while [[ ${report_waited} -le ${REPORT_APPEAR_MAX_WAIT_SECONDS} ]]; do
@@ -710,7 +849,7 @@ if is_true "${WAIT_FOR_BATCH}"; then
       BATCH_REPORT_FILE_ENV="$BATCH_REPORT_FILE" \
       VERIFY_LOG_JSONL_ENV="$VERIFY_LOG_JSONL" \
       BATCH_REPORT_SUMMARY_FILE_ENV="$BATCH_REPORT_SUMMARY_FILE" \
-      python3 - <<'PY' || echo "WARN: failed to parse batch report; raw report still stored in S3." >&2
+      python3 - <<'PY' || record_warning "Failed to parse batch report (raw report still in S3)"
 import os, csv, json, re
 from collections import Counter
 
@@ -933,7 +1072,7 @@ PY
         VERIFY_LOG_JSONL_ENV="$VERIFY_LOG_JSONL" \
         FILE_AUDIT_JSONL_ENV="$FILE_AUDIT_JSONL" \
         FILE_AUDIT_CSV_ENV="$FILE_AUDIT_CSV" \
-        python3 - <<'PY' || echo "WARN: failed to build file-audit artifacts; continuing." >&2
+        python3 - <<'PY' || record_warning "Failed to build file-audit artifacts"
 import os, json, csv
 
 run_id = os.environ.get('RUN_ID_ENV','')
@@ -1051,10 +1190,19 @@ fi
 final_status="${status:-}"  # from WAIT_FOR_BATCH loop, may be empty
 success_flag=0
 if [[ ${SYNC_RC:-0} -eq 0 ]]; then success_flag=1; fi
+
+# Extract verification metrics if available
+verified_succeeded=0
+verified_failed=0
+if [[ -f "${BATCH_REPORT_SUMMARY_FILE:-}" ]]; then
+  verified_succeeded=$(jq -r '.objects_succeeded // 0' "${BATCH_REPORT_SUMMARY_FILE}" 2>/dev/null || echo 0)
+  verified_failed=$(jq -r '.objects_failed // 0' "${BATCH_REPORT_SUMMARY_FILE}" 2>/dev/null || echo 0)
+fi
+
 if [[ -n "${final_status}" ]]; then
-  pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" "${UPLOAD_COUNT}" 1 "${final_status}"
+  pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" "${UPLOAD_COUNT}" 1 "${final_status}" "${verified_succeeded}" "${verified_failed}"
 else
-  pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" "${UPLOAD_COUNT}" 1 ""
+  pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" "${UPLOAD_COUNT}" 1 "" "${verified_succeeded}" "${verified_failed}"
 fi
 
 #
@@ -1083,7 +1231,7 @@ if command -v python3 >/dev/null 2>&1; then
   FILE_AUDIT_JSONL_ENV="${FILE_AUDIT_JSONL:-}" \
   BATCH_REPORT_SUMMARY_FILE_ENV="${BATCH_REPORT_SUMMARY_FILE:-}" \
   CONSOLIDATED_REPORT_ENV="$CONSOLIDATED_REPORT" \
-  python3 - <<'PY' || echo "WARN: failed to generate consolidated report" >&2
+  python3 - <<'PY' || record_warning "Failed to generate consolidated report"
 import os, json, sys
 from datetime import datetime, timezone
 
@@ -1240,20 +1388,68 @@ PY
   if [[ -s "${CONSOLIDATED_REPORT}" ]]; then
     echo "Uploading consolidated report to: s3://${METADATA_BUCKET}/${CONSOLIDATED_REPORT_KEY}"
     s3_put_object "${METADATA_BUCKET}" "${CONSOLIDATED_REPORT_KEY}" "${CONSOLIDATED_REPORT}"
-    echo "Consolidated report available at: s3://${METADATA_BUCKET}/${CONSOLIDATED_REPORT_KEY}"
 
-    # Cleanup: Remove AWS Batch Ops infrastructure files now that data is in consolidated report
-    if [[ -n "${JOB_ID:-}" ]]; then
-      echo "Cleaning up batch infrastructure files..."
-      # Delete manifest
-      aws s3 rm "s3://${METADATA_BUCKET}/${MANIFEST_KEY}" --region "${AWS_REGION}" 2>/dev/null || true
-      # Delete batch reports directory (contains manifest.json, results/*.csv, etc.)
-      aws s3 rm "s3://${METADATA_BUCKET}/${REPORT_PREFIX}/job-${JOB_ID}/" --recursive --region "${AWS_REGION}" 2>/dev/null || true
-      echo "Cleanup complete - only consolidated report remains"
+    # Verify upload succeeded before cleanup
+    echo "Verifying consolidated report upload..."
+    if aws s3api head-object \
+        --bucket "${METADATA_BUCKET}" \
+        --key "${CONSOLIDATED_REPORT_KEY}" \
+        --region "${AWS_REGION}" \
+        --expected-bucket-owner "${EXPECTED_BUCKET_OWNER}" \
+        >/dev/null 2>&1; then
+      echo "Consolidated report available at: s3://${METADATA_BUCKET}/${CONSOLIDATED_REPORT_KEY}"
+
+      # Cleanup: Remove AWS Batch Ops infrastructure files now that data is in consolidated report
+      # Only cleanup if batch job completed successfully
+      if [[ -n "${JOB_ID:-}" ]]; then
+        if [[ "${final_batch_status:-}" == "Complete" ]]; then
+          echo "Cleaning up batch infrastructure files..."
+          # Delete manifest
+          aws s3 rm "s3://${METADATA_BUCKET}/${MANIFEST_KEY}" --region "${AWS_REGION}" 2>/dev/null || true
+          # Delete batch reports directory (contains manifest.json, results/*.csv, etc.)
+          aws s3 rm "s3://${METADATA_BUCKET}/${REPORT_PREFIX}/job-${JOB_ID}/" --recursive --region "${AWS_REGION}" 2>/dev/null || true
+          echo "Cleanup complete - only consolidated report remains"
+        else
+          echo "WARN: Batch job status is '${final_batch_status:-Unknown}', not 'Complete' - preserving batch infrastructure files" >&2
+          record_warning "Batch job status '${final_batch_status:-Unknown}' - batch files preserved"
+        fi
+      fi
+    else
+      echo "ERROR: Failed to verify consolidated report upload - skipping cleanup to preserve batch data" >&2
+      echo "ERROR: Batch infrastructure files retained at: s3://${METADATA_BUCKET}/${REPORT_PREFIX}/" >&2
     fi
   fi
 else
-  echo "WARN: python3 not available; skipping consolidated report generation"
+  record_warning "python3 not available - consolidated report generation skipped"
+fi
+
+# Check for warnings and send degraded state alert
+if [[ ${WARNING_COUNT} -gt 0 ]]; then
+  echo "=== Backup completed with ${WARNING_COUNT} warning(s) ==="
+
+  if is_true "${EMAIL_ENABLED}"; then
+    local subject="${EMAIL_SUBJECT} (DEGRADED: ${SHARE_NAME})"
+    {
+      echo "Sequoia to S3 sync completed with WARNINGS"
+      echo
+      echo "Run ID:        ${RUN_ID}"
+      echo "Share:         ${SHARE_NAME}"
+      echo "Start (UTC):    ${START_TS_UTC}"
+      echo "Duration (sec): $(elapsed_seconds)"
+      echo "Warnings:      ${WARNING_COUNT}"
+      echo
+      echo "Source:        ${SRC_PATH}"
+      echo "Destination:   ${DEST_URI}"
+      echo "Summary (S3):   ${RUN_SUMMARY_URI}"
+      echo
+      echo "--- warnings.txt ---"
+      cat "${WARNINGS_FILE}" 2>/dev/null || echo "(no warnings file)"
+      echo
+      echo "--- errors.txt (tail 60) ---"
+      tail -60 "${ERROR_FILE}" 2>/dev/null || echo "(no errors file)"
+    } | EMAIL_SUBJECT="${subject}" EMAIL_FROM_NAME="${EMAIL_FROM_NAME}" EMAIL_FROM="${EMAIL_FROM}" EMAIL_TO="${EMAIL_TO}" "${SEND_EMAIL_SCRIPT}" \
+        || echo "[email] WARN: failed to send degraded state email" >&2
+  fi
 fi
 
 echo "=== Done ==="

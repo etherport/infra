@@ -65,6 +65,7 @@ trap 'rm -f "$REPORT_FILE"' EXIT
 python3 - > "${REPORT_FILE}" <<'PYTHON'
 import os, json, sys
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from collections import defaultdict
 import urllib.request
 import urllib.parse
@@ -80,10 +81,10 @@ jobs_json = json.loads(os.environ['JOBS_JSON'])
 now = datetime.fromtimestamp(now_epoch, tz=timezone.utc)
 start = datetime.fromtimestamp(start_epoch, tz=timezone.utc)
 
-# Convert to Pacific Time for display
-pacific_offset = timedelta(hours=-8)  # PST (adjust for PDT as needed)
-now_pt = now + pacific_offset
-start_pt = start + pacific_offset
+# Convert to Pacific Time for display (handles DST automatically)
+pacific = ZoneInfo("America/Los_Angeles")
+now_pt = now.astimezone(pacific)
+start_pt = start.astimezone(pacific)
 
 def parse_ts(s):
     if not s:
@@ -98,7 +99,7 @@ def parse_ts(s):
 def to_pt(dt):
     if not dt:
         return None
-    return dt + pacific_offset
+    return dt.astimezone(pacific)
 
 def format_bytes(b):
     if b == 0:

@@ -16,9 +16,17 @@ spec:
       template:
         spec:
           restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
           containers:
             - name: sync
               image: ghcr.io/sparked-diamond/aws-s3-sync:main
+              imagePullPolicy: Always
               command: ["/bin/bash","-lc"]
               args:
                 - |
@@ -35,6 +43,19 @@ spec:
                   fi
 
                   /scripts/sync-and-verify.sh
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+                readOnlyRootFilesystem: false
+              resources:
+                requests:
+                  memory: "512Mi"
+                  cpu: "200m"
+                limits:
+                  memory: "2Gi"
+                  cpu: "2000m"
               env:
                 # --- per-share values (overridden by patches) ---
                 - name: SHARE_NAME
@@ -58,10 +79,10 @@ spec:
                 - name: AWS_PAGER
                   value: ""
 
-                - name: EXPECTED_BUCKET_OWNER
-                  value: "830881980142"
+                # AWS Account ID - centralized definition
                 - name: AWS_ACCOUNT_ID
                   value: "830881980142"
+                # EXPECTED_BUCKET_OWNER defaults to AWS_ACCOUNT_ID in script
                 - name: S3_BATCH_ROLE_ARN
                   value: "arn:aws:iam::830881980142:role/s3-batch-ops-checksum-role"
 
