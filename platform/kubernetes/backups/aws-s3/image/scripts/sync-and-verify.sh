@@ -641,43 +641,62 @@ echo "Approx bytes uploaded (sum of local file sizes): ${TOTAL_BYTES}"
 
  # Build manifest for Batch Ops: CSV **without a header row**.
 # IMPORTANT: S3BatchOperations_CSV_20180820 must NOT include headers.
-# We include only objects that were uploaded/copied in this run.
+# CRITICAL: Generate manifest from S3 listing (not transfer logs) to ensure keys match exactly.
+# This prevents URL encoding mismatches between transfer logs and actual S3 keys.
 : > "${MANIFEST_FILE}"
 
-# Prefer the structured JSONL we generated from aws s3 sync output.
-# This also prevents the multi-bucket manifest problem (Batch Ops allows only 1 bucket per job).
-if command -v jq >/dev/null 2>&1 && [[ -s "${TRANSFER_LOG_JSONL}" ]]; then
-  jq -r --arg b "${DEST_BUCKET}" '
-    select(.action=="upload" or .action=="copy")
-    | select(.s3_bucket==$b)
-    | [.s3_bucket, .s3_key] | @csv
-  ' "${TRANSFER_LOG_JSONL}" \
-  | sort -u \
-  >> "${MANIFEST_FILE}" || true
-else
-  # Fallback: parse sync output directly (best-effort)
-  # Use proper CSV quoting to handle commas in filenames
-  awk -v forced_bucket="${DEST_BUCKET}" '
-    /^(upload:|copy:)/ {
-      uri="";
-      for (i=1; i<=NF; i++) {
-        if ($i ~ /^s3:\/\//) { uri=$i }
-      }
-      if (uri != "") {
-        sub(/^s3:\/\//, "", uri);
-        n=split(uri, a, "/");
-        bucket=a[1];
-        key=substr(uri, length(bucket)+2);
-        # Escape quotes in fields and wrap in quotes for proper CSV format
-        if (key != "") {
-          gsub(/"/, "\"\"", forced_bucket);
-          gsub(/"/, "\"\"", key);
-          print "\"" forced_bucket "\",\"" key "\"";
-        }
-      }
+echo "Generating manifest from S3 listing to ensure exact key matching..."
+
+# Extract the S3 prefix from DEST_URI (e.g., s3://bucket/prefix/ -> prefix/)
+S3_PREFIX="${DEST_URI#s3://${DEST_BUCKET}/}"
+
+# Generate manifest from S3 listing - keys will match exactly as stored in S3
+aws s3 ls "s3://${DEST_BUCKET}/${S3_PREFIX}" --recursive --region "${AWS_REGION}" | \
+  awk -v bucket="${DEST_BUCKET}" '{
+    if (NF >= 4) {
+      # Extract key from ls output (everything after date, time, size)
+      key = $0;
+      sub(/^ *[0-9]+-[0-9]+-[0-9]+ +[0-9]+:[0-9]+:[0-9]+ +[0-9]+ +/, "", key);
+      # Escape quotes for CSV and wrap fields in quotes
+      gsub(/"/, "\"\"", bucket);
+      gsub(/"/, "\"\"", key);
+      print "\"" bucket "\",\"" key "\"";
     }
-  ' "${SYNC_OUT}" | sort -u >> "${MANIFEST_FILE}" || true
-fi
+  }' | sort -u >> "${MANIFEST_FILE}" || {
+    # Fallback: If S3 listing fails, use transfer logs (old behavior)
+    echo "WARN: S3 listing failed, falling back to transfer log parsing" >&2
+
+    if command -v jq >/dev/null 2>&1 && [[ -s "${TRANSFER_LOG_JSONL}" ]]; then
+      jq -r --arg b "${DEST_BUCKET}" '
+        select(.action=="upload" or .action=="copy")
+        | select(.s3_bucket==$b)
+        | [.s3_bucket, .s3_key] | @csv
+      ' "${TRANSFER_LOG_JSONL}" \
+      | sort -u \
+      >> "${MANIFEST_FILE}" || true
+    else
+      # Fallback: parse sync output directly (best-effort)
+      awk -v forced_bucket="${DEST_BUCKET}" '
+        /^(upload:|copy:)/ {
+          uri="";
+          for (i=1; i<=NF; i++) {
+            if ($i ~ /^s3:\/\//) { uri=$i }
+          }
+          if (uri != "") {
+            sub(/^s3:\/\//, "", uri);
+            n=split(uri, a, "/");
+            bucket=a[1];
+            key=substr(uri, length(bucket)+2);
+            if (key != "") {
+              gsub(/"/, "\"\"", forced_bucket);
+              gsub(/"/, "\"\"", key);
+              print "\"" forced_bucket "\",\"" key "\"";
+            }
+          }
+        }
+      ' "${SYNC_OUT}" | sort -u >> "${MANIFEST_FILE}" || true
+    fi
+  }
 
  # No header row => count all non-empty lines
 UPLOAD_COUNT="$(awk 'NF {c++} END {print c+0}' "${MANIFEST_FILE}")"
@@ -1330,13 +1349,8 @@ file_audit_path = os.environ.get('FILE_AUDIT_JSONL_ENV', '')
 batch_summary_path = os.environ.get('BATCH_REPORT_SUMMARY_FILE_ENV', '')
 output_path = os.environ.get('CONSOLIDATED_REPORT_ENV', '')
 
-# Determine overall status
-if sync_rc != 0:
-    status = "FAILED"
-elif batch_status and batch_status.lower() != "complete":
-    status = "FAILED"
-else:
-    status = "SUCCESS"
+# Note: Overall status determination moved after file-level analysis
+# to include verification failure count in the decision
 
 # Load file-level details if available
 files = []
@@ -1405,6 +1419,18 @@ if batch_summary_path and os.path.exists(batch_summary_path):
 # Count successes/failures
 files_succeeded = sum(1 for f in files if f['status'] == 'success')
 files_failed = sum(1 for f in files if f['status'] == 'failed')
+
+# Determine overall status based on sync result, batch status, AND file failures
+if sync_rc != 0:
+    status = "FAILED"
+elif batch_status and batch_status.lower() not in ["complete", "not_required", ""]:
+    # Batch job failed or was cancelled
+    status = "FAILED"
+elif files_failed > 0:
+    # Batch completed but some files failed verification
+    status = "FAILED"
+else:
+    status = "SUCCESS"
 
 # Build consolidated report
 report = {

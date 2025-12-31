@@ -11,6 +11,19 @@
         group: root
         mode: "0755"
 
+    - name: Ensure Cilium runtime directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /var/run/cilium
+        - /var/run/netns
+        - /run/cilium
+        - /run/cilium/cgroupv2
+
     - name: Ensure NFS client utilities are installed
       apt:
         name: nfs-common

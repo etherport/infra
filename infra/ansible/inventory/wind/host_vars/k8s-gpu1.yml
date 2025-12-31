@@ -1,0 +1,13 @@
+# GPU worker node configuration
+# This node has an NVIDIA Tesla P40 GPU passed through from Proxmox
+
+# Node labels for GPU workload scheduling
+node_labels:
+  gpu: "true"
+  gpu-type: "tesla-p40"
+  nvidia.com/gpu: "true"
+
+# Node taints to prevent non-GPU workloads from being scheduled here
+# Workloads must have matching tolerations to run on this node
+node_taints:
+  - "nvidia.com/gpu=true:NoSchedule"

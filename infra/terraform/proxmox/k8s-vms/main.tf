@@ -108,6 +108,76 @@ resource "proxmox_virtual_environment_vm" "k8s_nodes" {
   on_boot = true
 }
 
+# GPU worker node with Tesla P40 passthrough
+resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
+  node_name   = local.node_name
+  name        = "k8s-gpu1"
+  description = "Managed by Terraform (k8s GPU worker node)"
+  tags        = ["terraform", "k8s", "gpu"]
+
+  # Q35 machine type is required for PCI passthrough
+  machine = "q35"
+
+  # Clone from your existing Ubuntu 24.04 cloud-init template (VM 9000)
+  clone {
+    vm_id = 9000
+    full  = true
+  }
+
+  cpu {
+    cores = 8
+    type  = local.cpu_type
+  }
+
+  memory {
+    dedicated = 32768  # 32GB RAM
+  }
+
+  disk {
+    datastore_id = local.storage_name
+    interface    = "scsi0"
+    size         = 80
+    file_format  = "raw"
+    discard      = "on"
+    ssd          = true
+  }
+
+  network_device {
+    bridge  = local.bridge_name
+    model   = "virtio"
+    vlan_id = local.vlan_tag
+  }
+
+  # GPU passthrough - Tesla P40
+  # IMPORTANT: You must configure this in Proxmox first:
+  # 1. Enable IOMMU in host BIOS and /etc/default/grub
+  # 2. Blacklist nouveau driver
+  # 3. Load vfio-pci driver
+  # 4. Identify GPU PCI address (lspci | grep NVIDIA)
+  # 5. Create resource mapping in Proxmox UI (Datacenter > Resource Mappings)
+  hostpci {
+    device  = "hostpci0"
+    mapping = "gpu-tesla-p40"  # Resource mapping name in Proxmox
+    pcie    = true
+    rombar  = true
+  }
+
+  # cloud-init: static IP
+  initialization {
+    datastore_id = local.storage_name
+
+    ip_config {
+      ipv4 {
+        address = "10.10.201.53/24"
+        gateway = local.gateway_201
+      }
+    }
+  }
+
+  started = true
+  on_boot = true
+}
+
 output "k8s_nodes" {
   value = {
     for name, vm in proxmox_virtual_environment_vm.k8s_nodes :
@@ -115,5 +185,12 @@ output "k8s_nodes" {
       name = vm.name
       ip   = local.k8s_nodes[name].ip
     }
+  }
+}
+
+output "k8s_gpu_node" {
+  value = {
+    name = proxmox_virtual_environment_vm.k8s_gpu1.name
+    ip   = "10.10.201.53"
   }
 }
