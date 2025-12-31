@@ -108,6 +108,8 @@ spec:
               envFrom:
                 - secretRef:
                     name: aws-backup-credentials
+                - configMapRef:
+                    name: aws-s3-sync-email
               volumeMounts:
                 - name: nfs-src
                   mountPath: /src
