@@ -192,6 +192,21 @@ EMAIL_TO="${EMAIL_TO:-}"
 EMAIL_SUBJECT="${EMAIL_SUBJECT:-Sequoia to S3 Sync Report}"
 SEND_EMAIL_SCRIPT="${SEND_EMAIL_SCRIPT:-/scripts/send-email.sh}"
 
+format_duration() {
+  local seconds=$1
+  local h=$((seconds / 3600))
+  local m=$(( (seconds % 3600) / 60 ))
+  local s=$((seconds % 60))
+
+  if (( h > 0 )); then
+    printf "%dh %dm %ds" "$h" "$m" "$s"
+  elif (( m > 0 )); then
+    printf "%dm %ds" "$m" "$s"
+  else
+    printf "%ds" "$s"
+  fi
+}
+
 send_failure_email() {
   local reason="$1"
 
@@ -248,7 +263,7 @@ send_failure_email() {
     <div class="info-label">Share:</div><div class="info-value">SHARE_PLACEHOLDER</div>
     <div class="info-label">Run ID:</div><div class="info-value">RUN_ID_PLACEHOLDER</div>
     <div class="info-label">Started:</div><div class="info-value">START_PLACEHOLDER</div>
-    <div class="info-label">Duration:</div><div class="info-value">DURATION_PLACEHOLDER seconds</div>
+    <div class="info-label">Duration:</div><div class="info-value">DURATION_PLACEHOLDER</div>
     <div class="info-label">Source:</div><div class="info-value">SOURCE_PLACEHOLDER</div>
     <div class="info-label">Destination:</div><div class="info-value">DEST_PLACEHOLDER</div>
   </div>
@@ -280,7 +295,7 @@ HTML_END
   html_body="${html_body//SHARE_PLACEHOLDER/$SHARE_NAME}"
   html_body="${html_body//RUN_ID_PLACEHOLDER/$RUN_ID}"
   html_body="${html_body//START_PLACEHOLDER/$START_TS_UTC}"
-  html_body="${html_body//DURATION_PLACEHOLDER/$(elapsed_seconds)}"
+  html_body="${html_body//DURATION_PLACEHOLDER/$(format_duration $(elapsed_seconds))}"
   html_body="${html_body//SOURCE_PLACEHOLDER/$SRC_PATH}"
   html_body="${html_body//DEST_PLACEHOLDER/$DEST_URI}"
   html_body="${html_body//ERROR_LOG_PLACEHOLDER/$error_log}"
