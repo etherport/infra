@@ -15,6 +15,7 @@ spec:
       backoffLimit: 1
       template:
         spec:
+          serviceAccountName: s3-sync
           restartPolicy: Never
           securityContext:
             runAsNonRoot: true

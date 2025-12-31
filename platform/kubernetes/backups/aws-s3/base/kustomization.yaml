@@ -5,6 +5,7 @@ namespace: backups
 
 resources:
   - namespace.yaml
+  - serviceaccount.yaml
   - rbac.yaml
   - cronjob.yaml
 
