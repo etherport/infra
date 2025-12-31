@@ -1,0 +1,70 @@
+# NVIDIA GPU Operator Helm Values
+# Deploys GPU drivers, device plugin, and monitoring for Tesla P40
+
+# Operator configuration
+operator:
+  defaultRuntime: containerd
+
+# Driver configuration
+driver:
+  enabled: true
+  # Use precompiled drivers for Secure Boot compatibility
+  use_precompiled: true
+
+# Toolkit configuration
+toolkit:
+  enabled: true
+
+# Device Plugin configuration with time-slicing
+devicePlugin:
+  enabled: true
+  version: v0.17.0
+
+  # Time-slicing configuration for multiple workloads
+  config:
+    name: time-slicing-config
+    create: true
+    default: "tesla-p40-shared"
+
+    # Define time-slicing profile for Tesla P40
+    # Allows 2 containers to share the GPU (Plex + LLM)
+    data:
+      tesla-p40-shared: |-
+        version: v1
+        flags:
+          migStrategy: none
+        sharing:
+          timeSlicing:
+            renameByDefault: true
+            failRequestsGreaterThanOne: true
+            resources:
+              - name: nvidia.com/gpu
+                replicas: 2
+
+# MIG (Multi-Instance GPU) - not applicable for Tesla P40
+mig:
+  strategy: none
+
+# GPU Feature Discovery
+gfd:
+  enabled: true
+
+# DCGM Exporter for Prometheus monitoring
+dcgmExporter:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+
+# Node Feature Discovery
+nfd:
+  enabled: true  # Required to detect GPU hardware
+
+# Tolerations to run on GPU nodes with taint
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+# Node selector to only run on GPU nodes
+nodeSelector:
+  nvidia.com/gpu: "true"
