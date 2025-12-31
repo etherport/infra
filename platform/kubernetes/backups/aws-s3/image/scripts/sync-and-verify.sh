@@ -637,11 +637,11 @@ if command -v jq >/dev/null 2>&1 && [[ -s "${TRANSFER_LOG_JSONL}" ]]; then
     | select(.s3_bucket==$b)
     | [.s3_bucket, .s3_key] | @csv
   ' "${TRANSFER_LOG_JSONL}" \
-  | sed 's/^"//;s/"$//;s/","/,/' \
   | sort -u \
   >> "${MANIFEST_FILE}" || true
 else
   # Fallback: parse sync output directly (best-effort)
+  # Use proper CSV quoting to handle commas in filenames
   awk -v forced_bucket="${DEST_BUCKET}" '
     /^(upload:|copy:)/ {
       uri="";
@@ -653,7 +653,12 @@ else
         n=split(uri, a, "/");
         bucket=a[1];
         key=substr(uri, length(bucket)+2);
-        if (key != "") print forced_bucket "," key;
+        # Escape quotes in fields and wrap in quotes for proper CSV format
+        if (key != "") {
+          gsub(/"/, "\"\"", forced_bucket);
+          gsub(/"/, "\"\"", key);
+          print "\"" forced_bucket "\",\"" key "\"";
+        }
       }
     }
   ' "${SYNC_OUT}" | sort -u >> "${MANIFEST_FILE}" || true

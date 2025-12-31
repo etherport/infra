@@ -255,12 +255,20 @@ def get_s3_summary_metrics(share, start_time_epoch):
         summary = json.loads(result.stdout)
 
         # Extract metrics from consolidated report
-        # Report structure: {sync: {exitCode, filesTransferred, bytesTransferred}, summary: {...}, durationSeconds}
+        # Report structure: {status, sync: {exitCode, filesTransferred, bytesTransferred}, summary: {...}, durationSeconds}
+        report_status = summary.get('status', 'UNKNOWN')
         sync_data = summary.get('sync', {})
         summary_data = summary.get('summary', {})
 
+        # Check both top-level status field AND sync exitCode
+        # Report status should be "SUCCESS" and sync exitCode should be 0
+        is_success = (
+            report_status == 'SUCCESS' and
+            sync_data.get('exitCode', 1) == 0
+        )
+
         return {
-            'success': 1 if sync_data.get('exitCode', 1) == 0 else 0,
+            'success': 1 if is_success else 0,
             'files': summary_data.get('filesTransferred', 0),
             'bytes': summary_data.get('bytesTransferred', 0),
             'duration': summary.get('durationSeconds', 0),

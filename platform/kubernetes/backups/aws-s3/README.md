@@ -345,6 +345,65 @@ Use this policy for day-to-day backup operations:
 
 **⚠️ IMPORTANT**: Revert to the Production Policy immediately after maintenance is complete!
 
+#### S3 Batch Operations Role Policy
+
+The `s3-batch-ops-checksum-role` IAM role is assumed by S3 Batch Operations to compute checksums. This role **must** have the following policy attached:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ReadObjectsToComputeChecksum",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject",
+                "s3:GetObjectVersion",
+                "s3:GetObjectAttributes",
+                "s3:GetObjectRetention",
+                "s3:GetObjectLegalHold"
+            ],
+            "Resource": [
+                "arn:aws:s3:::archive.wind.etherport.net/objects/*",
+                "arn:aws:s3:::logs.archive.wind.etherport.net/objects/*",
+                "arn:aws:s3:::archive-test.wind.etherport.net/objects/*"
+            ]
+        },
+        {
+            "Sid": "WriteChecksumMetadata",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObjectTagging",
+                "s3:PutObjectVersionTagging"
+            ],
+            "Resource": [
+                "arn:aws:s3:::archive.wind.etherport.net/objects/*",
+                "arn:aws:s3:::logs.archive.wind.etherport.net/objects/*",
+                "arn:aws:s3:::archive-test.wind.etherport.net/objects/*"
+            ]
+        }
+    ]
+}
+```
+
+**Trust Relationship** for `s3-batch-ops-checksum-role`:
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "batchoperations.s3.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+        }
+    ]
+}
+```
+
+**⚠️ CRITICAL**: The `s3:GetObjectRetention` and `s3:GetObjectLegalHold` permissions are **required** for buckets with Object Lock enabled (like `archive.wind.etherport.net`). Without these permissions, S3 Batch Operations jobs will fail immediately with access denied errors.
+
 ### Deploy a New Share
 
 1. Create directory: `shares/{share-name}/`
@@ -491,9 +550,15 @@ kubectl -n backups logs job/{job-name}
 - **Cause**: SES sender/recipient not verified, EMAIL_ENABLED=false
 - **Fix**: Verify email addresses in SES, check `daily-report/email.env`
 
-**Issue**: S3 Batch Operations job fails
-- **Cause**: IAM role permissions, bucket ownership mismatch
-- **Fix**: Verify `S3_BATCH_ROLE_ARN`, check `EXPECTED_BUCKET_OWNER`
+**Issue**: S3 Batch Operations job fails immediately (status: Failed after 15 seconds)
+- **Cause**: Missing Object Lock permissions on `s3-batch-ops-checksum-role` IAM role
+- **Symptoms**: Batch job transitions from `New` → `Failed` in ~15 seconds, no task results generated
+- **Fix**: Ensure `s3-batch-ops-checksum-role` has `s3:GetObjectRetention` and `s3:GetObjectLegalHold` permissions (see S3 Batch Operations Role Policy section)
+- **Verification**: Check IAM role policy attached to `s3-batch-ops-checksum-role`
+
+**Issue**: S3 Batch Operations job fails (other causes)
+- **Cause**: Bucket ownership mismatch, incorrect role ARN
+- **Fix**: Verify `S3_BATCH_ROLE_ARN` matches actual role, check `EXPECTED_BUCKET_OWNER`
 
 **Issue**: Job pods stuck in ImagePullBackOff
 - **Cause**: Missing GHCR pull secrets
