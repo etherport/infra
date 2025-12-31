@@ -136,11 +136,17 @@ def prom_query(query):
         return []
 
 # Build a map of latest Prometheus metrics per share
+# Only include actual backup shares (exclude daily-report and other non-backup jobs)
+expected_shares = os.environ.get('SHARES', 'scans archive backups content graham mark media').split()
 prom_metrics_by_share = {}
 for metric in metrics_json:
     labels = metric.get('metric', {})
     share = labels.get('share', '')
     if not share:
+        continue
+
+    # Skip shares that aren't in the expected backup shares list
+    if share not in expected_shares:
         continue
 
     prom_metrics_by_share[share] = {

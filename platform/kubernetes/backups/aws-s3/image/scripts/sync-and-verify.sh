@@ -213,24 +213,80 @@ send_failure_email() {
   local subject
   subject="${EMAIL_SUBJECT} (FAILURE: ${SHARE_NAME})"
 
-  {
-    echo "Sequoia to S3 sync FAILURE"
-    echo
-    echo "Run ID:        ${RUN_ID}"
-    echo "Share:         ${SHARE_NAME}"
-    echo "Start (UTC):    ${START_TS_UTC}"
-    echo "Elapsed (sec):  $(elapsed_seconds)"
-    echo "Reason:        ${reason}"
-    echo "Source:        ${SRC_PATH}"
-    echo "Destination:   ${DEST_URI}"
-    echo "Summary (S3):   ${RUN_SUMMARY_URI}"
-    echo
-    echo "--- errors.txt (tail 120) ---"
-    tail -120 "${ERROR_FILE}" 2>/dev/null || true
-    echo
-    echo "--- sync.txt (tail 120) ---"
-    tail -120 "${SYNC_OUT}" 2>/dev/null || true
-  } | EMAIL_SUBJECT="${subject}" EMAIL_FROM_NAME="${EMAIL_FROM_NAME}" EMAIL_FROM="${EMAIL_FROM}" EMAIL_TO="${EMAIL_TO}" "${SEND_EMAIL_SCRIPT}" \
+  local html_body
+  html_body=$(cat <<'HTML_END'
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; }
+  .header { background: #dc3545; color: white; padding: 20px; border-radius: 8px 8px 0 0; margin: -20px -20px 20px -20px; }
+  .header h1 { margin: 0; font-size: 24px; }
+  .status { display: inline-block; background: #721c24; color: white; padding: 4px 12px; border-radius: 4px; font-size: 14px; font-weight: bold; margin-top: 8px; }
+  .info-grid { display: grid; grid-template-columns: 140px 1fr; gap: 12px; margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; }
+  .info-label { font-weight: 600; color: #666; }
+  .info-value { color: #333; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; }
+  .section { margin: 24px 0; }
+  .section-title { font-size: 16px; font-weight: 600; color: #495057; margin-bottom: 12px; border-bottom: 2px solid #dee2e6; padding-bottom: 8px; }
+  .log-box { background: #2d2d2d; color: #f8f8f2; padding: 16px; border-radius: 6px; overflow-x: auto; font-family: 'SF Mono', Consolas, monospace; font-size: 12px; line-height: 1.5; }
+  .reason-box { background: #f8d7da; border-left: 4px solid #dc3545; padding: 16px; border-radius: 4px; margin: 20px 0; }
+  .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; font-size: 12px; color: #6c757d; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>⚠️ Backup Failure</h1>
+    <div class="status">FAILED</div>
+  </div>
+
+  <div class="reason-box">
+    <strong>Failure Reason:</strong><br>
+    REASON_PLACEHOLDER
+  </div>
+
+  <div class="info-grid">
+    <div class="info-label">Share:</div><div class="info-value">SHARE_PLACEHOLDER</div>
+    <div class="info-label">Run ID:</div><div class="info-value">RUN_ID_PLACEHOLDER</div>
+    <div class="info-label">Started:</div><div class="info-value">START_PLACEHOLDER</div>
+    <div class="info-label">Duration:</div><div class="info-value">DURATION_PLACEHOLDER seconds</div>
+    <div class="info-label">Source:</div><div class="info-value">SOURCE_PLACEHOLDER</div>
+    <div class="info-label">Destination:</div><div class="info-value">DEST_PLACEHOLDER</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Error Output</div>
+    <div class="log-box">ERROR_LOG_PLACEHOLDER</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Sync Output</div>
+    <div class="log-box">SYNC_LOG_PLACEHOLDER</div>
+  </div>
+
+  <div class="footer">
+    Sequoia NAS → AWS S3 Backup System<br>
+    Report generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+  </div>
+</body>
+</html>
+HTML_END
+)
+
+  # Escape HTML entities and replace placeholders
+  local error_log=$(tail -60 "${ERROR_FILE}" 2>/dev/null | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' || echo "No error log available")
+  local sync_log=$(tail -60 "${SYNC_OUT}" 2>/dev/null | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' || echo "No sync log available")
+
+  html_body="${html_body//REASON_PLACEHOLDER/$reason}"
+  html_body="${html_body//SHARE_PLACEHOLDER/$SHARE_NAME}"
+  html_body="${html_body//RUN_ID_PLACEHOLDER/$RUN_ID}"
+  html_body="${html_body//START_PLACEHOLDER/$START_TS_UTC}"
+  html_body="${html_body//DURATION_PLACEHOLDER/$(elapsed_seconds)}"
+  html_body="${html_body//SOURCE_PLACEHOLDER/$SRC_PATH}"
+  html_body="${html_body//DEST_PLACEHOLDER/$DEST_URI}"
+  html_body="${html_body//ERROR_LOG_PLACEHOLDER/$error_log}"
+  html_body="${html_body//SYNC_LOG_PLACEHOLDER/$sync_log}"
+
+  HTML_BODY="$html_body" EMAIL_SUBJECT="${subject}" EMAIL_FROM_NAME="${EMAIL_FROM_NAME}" EMAIL_FROM="${EMAIL_FROM}" EMAIL_TO="${EMAIL_TO}" "${SEND_EMAIL_SCRIPT}" --html \
       || echo "[email] WARN: failed to send failure email" >&2
 }
 
