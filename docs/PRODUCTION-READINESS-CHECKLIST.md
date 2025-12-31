@@ -211,20 +211,21 @@
 
 ### Kubernetes Platform
 
-- [ ] **Deploy NVIDIA GPU Operator**
-  - Install via Helm or manifests
-  - Configure for time-slicing (2 replicas initially)
-  - Verify driver installation on GPU node
-  - File: `platform/kubernetes/gpu-operator/` (new)
-  - Assignee:
-  - Due:
+- [x] **Deploy NVIDIA GPU Operator**
+  - ✅ Installed via Helm (nvidia/gpu-operator)
+  - ✅ Configured for time-slicing (2 replicas)
+  - ✅ Driver v580.105.08 installed successfully
+  - ✅ GPU resources available: nvidia.com/gpu.shared: 2
+  - File: `platform/kubernetes/gpu-operator/values.yaml`
+  - Completed: 2025-12-31
+  - Note: Fixed Secure Boot incompatibility with NVIDIA drivers
 
-- [ ] **Configure GPU time-slicing**
-  - Create time-slicing ConfigMap
-  - Set replicas: 2 (Plex + LLM simultaneously)
-  - File: `platform/kubernetes/gpu-operator/time-slicing-config.yaml`
-  - Assignee:
-  - Due:
+- [x] **Configure GPU time-slicing**
+  - ✅ Time-slicing ConfigMap created via Helm values
+  - ✅ Replicas: 2 (Plex + LLM simultaneously)
+  - ✅ Resource name: nvidia.com/gpu.shared
+  - File: `platform/kubernetes/gpu-operator/values.yaml`
+  - Completed: 2025-12-31
 
 - [x] **Configure GPU node taints/labels**
   - Taint: `nvidia.com/gpu=true:NoSchedule`
@@ -310,16 +311,16 @@
 ### Summary Statistics
 
 - **Total Items**: 40
-- **Completed**: 4 (10%)
+- **Completed**: 6 (15%)
 - **In Progress**: 0 (0%)
-- **Not Started**: 36 (90%)
+- **Not Started**: 34 (85%)
 
 ### By Priority
 
 | Priority | Total | Completed | Remaining |
 |----------|-------|-----------|-----------|
 | P1 (Critical Security) | 3 | 1 | 2 |
-| P2 (Infrastructure Stability) | 19 | 3 | 16 |
+| P2 (Infrastructure Stability) | 19 | 5 | 14 |
 | P3 (Documentation) | 14 | 0 | 14 |
 | P4 (Continuous Improvement) | 4 | 0 | 4 |
 
