@@ -7,11 +7,15 @@ Automated backup system for syncing NFS shares to AWS S3 with checksum verificat
 This system provides automated, scheduled backups of NFS shares to AWS S3 with the following features:
 
 - **Automated Sync**: Kubernetes CronJobs run daily backups for each configured share
+- **Distributed Locking**: ConfigMap-based lock mechanism prevents concurrent backups of the same share
 - **Checksum Verification**: S3 Batch Operations compute SHA256 checksums to verify data integrity
-- **Email Notifications**: Daily HTML email reports with execution summaries and per-share metrics
+- **Email Notifications**:
+  - HTML-formatted failure alerts sent immediately via AWS SES
+  - Daily summary reports with execution metrics for all shares
 - **Exclude Patterns**: Global and per-share exclude patterns to filter unwanted files
 - **Prometheus Integration**: Metrics pushed to Prometheus Pushgateway for monitoring
-- **Immutable Logs**: All run summaries, transfer logs, and verification reports stored in S3
+- **Consolidated Reports**: Single JSON report per execution with all metrics and verification results
+- **Pod Security**: Runs as non-root (UID 1000) with dropped capabilities and read-only root filesystem
 
 ## Architecture
 
@@ -76,7 +80,8 @@ platform/kubernetes/backups/aws-s3/
 ├── README.md                          # This file
 ├── base/                              # Base Kubernetes resources (shared by backup jobs)
 │   ├── namespace.yaml                # backups namespace
-│   ├── rbac.yaml                     # ServiceAccount, Role, RoleBinding for daily-report
+│   ├── serviceaccount.yaml           # ServiceAccount with GHCR imagePullSecrets
+│   ├── rbac.yaml                     # Role & RoleBinding for distributed lock (ConfigMap management)
 │   ├── cronjob.yaml                  # Template CronJob for backups (per-share)
 │   ├── excludes-global.txt           # Global exclude patterns (all shares)
 │   └── kustomization.yaml            # Base kustomization (for shares)
@@ -427,21 +432,24 @@ Sent daily at 6:00 AM PT via `s3-sync-daily-report` CronJob.
   - Files and data transferred
   - Start/end times and duration
 
-**Metrics Source**: Individual run summary JSON files from S3 (`batch/runs/{share}/{run-id}.json`)
+**Metrics Source**: Consolidated report JSON files from S3 (`{share}/{timestamp}/report.json`)
 
 ### S3 Artifacts
 
-Each backup run produces the following artifacts in the **metadata bucket** (`logs.archive.wind.etherport.net`):
+Each backup run produces a **consolidated report** in the **metadata bucket** (`logs.archive.wind.etherport.net`):
 
 ```
-s3://logs.archive.wind.etherport.net/batch/
-├── manifests/{share}/{run-id}.csv       # S3 Batch Ops manifest
-├── reports/{share}/{run-id}/            # S3 Batch Ops reports
-│   └── job-{job-id}/results/*.csv       # Verification report
-├── runs/{share}/{run-id}.json           # Run summary
-├── runs/{share}/{run-id}.verification.jsonl  # Per-object verification
-└── transfers/{share}/{run-id}.jsonl     # Per-file transfer log
+s3://logs.archive.wind.etherport.net/
+└── {share}/{timestamp}/report.json      # Consolidated report with all metrics
 ```
+
+The consolidated report contains:
+- Execution metadata (ID, share, status, timestamps, duration)
+- Summary statistics (files transferred, verified, succeeded, failed, bytes, transfer rate)
+- Source and destination paths
+- Sync details (exit code, files, bytes)
+- Verification results (batch job ID, status, success/failure counts)
+- Warnings and errors
 
 Actual backed-up data is stored in the **data buckets**:
 ```
@@ -449,7 +457,7 @@ s3://archive.wind.etherport.net/objects/{share}/...       # Production data
 s3://archive-test.wind.etherport.net/objects/{share}/...  # Test data (scans share)
 ```
 
-**Run ID Format**: `{share}-{timestamp}` (e.g., `scans-20251228T214429Z`)
+**Timestamp Format**: `YYYYMMDDTHHMMSSZ` (e.g., `20251231T013042Z`)
 
 ## Troubleshooting
 
@@ -491,14 +499,14 @@ kubectl -n backups logs job/{job-name}
 - **Cause**: Missing GHCR pull secrets
 - **Fix**: Verify `ghcr-creds` secret exists in backups namespace
 
-### View S3 Run Summary
+### View S3 Consolidated Report
 
 ```bash
-# Download run summary
-aws s3 cp s3://logs.archive.wind.etherport.net/batch/runs/{share}/{run-id}.json - | jq .
+# Download consolidated report
+aws s3 cp s3://logs.archive.wind.etherport.net/{share}/{timestamp}/report.json - | jq .
 
 # List recent runs for a share
-aws s3 ls s3://logs.archive.wind.etherport.net/batch/runs/{share}/ --recursive | tail -10
+aws s3 ls s3://logs.archive.wind.etherport.net/{share}/ | tail -10
 ```
 
 ## Backup Schedule
@@ -520,7 +528,9 @@ Daily email report: **6:00 AM PT** (summarizes previous 24 hours)
 - **Checksum Verification**: SHA256 FULL_OBJECT checksums via S3 Batch Operations
 - **Bucket Owner Checks**: All S3 operations validate expected bucket owner
 - **Read-only NFS Mounts**: Source NFS shares mounted read-only
-- **RBAC**: Limited ServiceAccount permissions (daily-report can only list Jobs/CronJobs)
+- **RBAC**: Limited ServiceAccount permissions for ConfigMap management (distributed locking)
+- **Pod Security**: Non-root execution (UID 1000), dropped capabilities, seccomp profile
+- **Distributed Locking**: Prevents concurrent backups of the same share via ConfigMap mutex
 
 ## Maintenance
 
