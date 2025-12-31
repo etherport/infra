@@ -118,6 +118,16 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
   # Q35 machine type is required for PCI passthrough
   machine = "q35"
 
+  # BIOS configuration - disable Secure Boot for NVIDIA driver compatibility
+  bios = "ovmf"
+
+  efi_disk {
+    datastore_id      = local.storage_name
+    file_format       = "raw"
+    type              = "4m"
+    pre_enrolled_keys = false  # Disable Secure Boot for NVIDIA driver compatibility
+  }
+
   # Clone from your existing Ubuntu 24.04 cloud-init template (VM 9000)
   clone {
     vm_id = 9000
