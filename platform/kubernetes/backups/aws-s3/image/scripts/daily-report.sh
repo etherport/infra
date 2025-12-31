@@ -193,14 +193,14 @@ def get_s3_summary_metrics(share, start_time_epoch):
     import subprocess
 
     metadata_bucket = os.environ.get('METADATA_BUCKET', 'logs.archive.wind.etherport.net')
-    batch_prefix = os.environ.get('BATCH_PREFIX', 'batch')
     aws_region = os.environ.get('AWS_REGION', 'us-west-2')
 
-    # List summary files for this share
-    s3_prefix = f"s3://{metadata_bucket}/{batch_prefix}/runs/{share}/"
+    # List consolidated report directories for this share
+    # Reports are stored at: s3://{metadata_bucket}/{share}/{timestamp}/report.json
+    s3_prefix = f"s3://{metadata_bucket}/{share}/"
 
     try:
-        # List all summary JSON files for this share
+        # List all directories (timestamps) for this share
         result = subprocess.run(
             ['aws', 's3', 'ls', s3_prefix, '--region', aws_region],
             capture_output=True, text=True, timeout=10
@@ -209,47 +209,41 @@ def get_s3_summary_metrics(share, start_time_epoch):
         if result.returncode != 0:
             return {}
 
-        # Parse the listing to find files matching our time window
-        # Files are named like: scans-20251228T214429Z.json
+        # Parse the listing to find timestamp directories matching our time window
+        # Directories are named like: 20251231T003444Z/
         # We want the one closest to our start_time
         best_match = None
         best_diff = float('inf')
 
         for line in result.stdout.strip().split('\n'):
-            if not line or not line.endswith('.json'):
+            if not line or not line.endswith('/'):
                 continue
 
             parts = line.split()
-            if len(parts) < 4:
+            if len(parts) < 2:
                 continue
 
-            filename = parts[-1]
+            # Directory name is the last part (format: 20251231T003444Z/)
+            dirname = parts[-1].rstrip('/')
 
-            # Extract timestamp from filename (format: {share}-{timestamp}.json)
-            # Example: scans-20251228T214429Z.json
-            if not filename.startswith(f'{share}-'):
-                continue
-
-            ts_part = filename[len(share)+1:-5]  # Remove "share-" prefix and ".json" suffix
-
-            # Parse timestamp: 20251228T214429Z -> epoch
+            # Parse timestamp: 20251231T003444Z -> epoch
             try:
-                file_dt = datetime.strptime(ts_part, '%Y%m%dT%H%M%SZ').replace(tzinfo=timezone.utc)
+                file_dt = datetime.strptime(dirname, '%Y%m%dT%H%M%SZ').replace(tzinfo=timezone.utc)
                 file_epoch = int(file_dt.timestamp())
 
-                # Find the file closest to our job's start time
+                # Find the directory closest to our job's start time
                 diff = abs(file_epoch - start_time_epoch)
                 if diff < best_diff and diff < 300:  # Within 5 minutes
                     best_diff = diff
-                    best_match = filename
+                    best_match = dirname
             except:
                 continue
 
         if not best_match:
             return {}
 
-        # Download the summary file
-        s3_path = f"{s3_prefix}{best_match}"
+        # Download the consolidated report file
+        s3_path = f"{s3_prefix}{best_match}/report.json"
         result = subprocess.run(
             ['aws', 's3', 'cp', s3_path, '-', '--region', aws_region],
             capture_output=True, text=True, timeout=10
@@ -260,12 +254,16 @@ def get_s3_summary_metrics(share, start_time_epoch):
 
         summary = json.loads(result.stdout)
 
-        # Extract metrics from summary
+        # Extract metrics from consolidated report
+        # Report structure: {sync: {exitCode, filesTransferred, bytesTransferred}, summary: {...}, durationSeconds}
+        sync_data = summary.get('sync', {})
+        summary_data = summary.get('summary', {})
+
         return {
-            'success': 1 if summary.get('sync_exit_code', 1) == 0 else 0,
-            'files': summary.get('files_transferred', 0),
-            'bytes': summary.get('bytes_transferred', 0),
-            'duration': summary.get('duration_seconds', 0),
+            'success': 1 if sync_data.get('exitCode', 1) == 0 else 0,
+            'files': summary_data.get('filesTransferred', 0),
+            'bytes': summary_data.get('bytesTransferred', 0),
+            'duration': summary.get('durationSeconds', 0),
         }
 
     except Exception as e:
