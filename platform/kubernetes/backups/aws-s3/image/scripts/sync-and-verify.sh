@@ -748,7 +748,7 @@ else
         --output json 2>/dev/null > "${RESULT_FILE}.tmp"; then
       
       # Success - object exists and we got metadata
-      jq --arg bucket "${BUCKET}" \
+      jq -c --arg bucket "${BUCKET}" \
          --arg key "${KEY}" \
          '{
            bucket: $bucket,
@@ -763,7 +763,7 @@ else
       
     else
       # Failed - file doesn't exist or error occurred
-      jq -n \
+      jq -cn \
         --arg bucket "${BUCKET}" \
         --arg key "${KEY}" \
         '{
