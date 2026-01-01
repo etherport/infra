@@ -86,13 +86,35 @@ resource "proxmox_virtual_environment_vm" "k8s_nodes" {
     ssd          = true
   }
 
+  # Primary network interface (VLAN 201 - management)
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = local.vlan_tag
   }
 
+  # Additional network interfaces for multi-VLAN support (Home Assistant, etc.)
+  network_device {
+    bridge  = local.bridge_name
+    model   = "virtio"
+    vlan_id = 202  # Client VLAN
+  }
+
+  network_device {
+    bridge  = local.bridge_name
+    model   = "virtio"
+    vlan_id = 204  # IoT devices VLAN
+  }
+
+  network_device {
+    bridge  = local.bridge_name
+    model   = "virtio"
+    vlan_id = 205  # Security VLAN
+  }
+
   # cloud-init: static IPs for each node
+  # Note: cloud-init only configures the first interface (eth0)
+  # Additional interfaces (eth1-eth3) must be configured via systemd-networkd
   initialization {
     datastore_id = local.storage_name
 
@@ -152,10 +174,30 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
     ssd          = true
   }
 
+  # Primary network interface (VLAN 201 - management)
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = local.vlan_tag
+  }
+
+  # Additional network interfaces for multi-VLAN support (Home Assistant, etc.)
+  network_device {
+    bridge  = local.bridge_name
+    model   = "virtio"
+    vlan_id = 202  # Client VLAN
+  }
+
+  network_device {
+    bridge  = local.bridge_name
+    model   = "virtio"
+    vlan_id = 204  # IoT devices VLAN
+  }
+
+  network_device {
+    bridge  = local.bridge_name
+    model   = "virtio"
+    vlan_id = 205  # Security VLAN
   }
 
   # GPU passthrough - Tesla P40

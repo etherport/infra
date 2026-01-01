@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: home-assistant
+  namespace: home-automation
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # Ensures PVC is unmounted before new pod starts
+  selector:
+    matchLabels:
+      app: home-assistant
+  template:
+    metadata:
+      labels:
+        app: home-assistant
+      annotations:
+        k8s.v1.cni.cncf.io/networks: |
+          [
+            {
+              "name": "multus-system/vlan202-client",
+              "ips": ["10.10.202.25/24"],
+              "gateway": ["10.10.202.1"]
+            },
+            {
+              "name": "multus-system/vlan204-iot",
+              "ips": ["10.10.204.25/24"],
+              "gateway": ["10.10.204.1"]
+            },
+            {
+              "name": "multus-system/vlan205-security",
+              "ips": ["10.10.205.25/24"],
+              "gateway": ["10.10.205.1"]
+            }
+          ]
+    spec:
+      containers:
+      - name: home-assistant
+        image: ghcr.io/home-assistant/home-assistant:stable
+        ports:
+        - name: http
+          containerPort: 8123
+          protocol: TCP
+        env:
+        - name: TZ
+          value: "America/Los_Angeles"
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8123
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8123
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 3
+        securityContext:
+          privileged: true  # Required for device access
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: home-assistant-config

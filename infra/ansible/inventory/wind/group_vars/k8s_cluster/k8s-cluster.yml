@@ -67,7 +67,8 @@ credentials_dir: "{{ inventory_dir }}/credentials"
 kube_network_plugin: cilium
 
 # Setting multi_networking to true will install Multus: https://github.com/k8snetworkplumbingwg/multus-cni
-kube_network_plugin_multus: false
+# Enabled for multi-VLAN access (Home Assistant device discovery across VLANs 202, 204, 205)
+kube_network_plugin_multus: true
 
 # Kubernetes internal network for services, unused block of space.
 kube_service_addresses: 10.43.0.0/16
