@@ -56,8 +56,10 @@ dcgmExporter:
     enabled: true
 
 # Node Feature Discovery
+# Disabled - NFD is managed by Kubespray (node_feature_discovery_enabled: true in addons.yml)
+# This prevents duplicate NFD deployments
 nfd:
-  enabled: true  # Required to detect GPU hardware
+  enabled: false
 
 # Tolerations to run on GPU nodes with taint
 tolerations:

@@ -24,9 +24,9 @@ Home Assistant has access to multiple VLANs for device discovery:
 
 ### 1. Multus CNI Installation
 
-```bash
-kubectl apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v4.1.0/deployments/multus-daemonset-thick.yml
-```
+**Note:** Multus is managed by Kubespray. It will be installed automatically when you run the Kubespray playbook with `kube_network_plugin_multus: true` enabled in the inventory configuration.
+
+See `/Users/grahamsmith/Projects/homelab-infra/infra/ansible/KUBESPRAY_MIGRATION.md` for deployment steps.
 
 ### 2. Node Network Configuration
 
