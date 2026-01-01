@@ -220,7 +220,6 @@ Use this policy for day-to-day backup operations:
             "Action": [
                 "s3:PutObject",
                 "s3:GetObject",
-                "s3:HeadObject",
                 "s3:DeleteObject",
                 "s3:AbortMultipartUpload",
                 "s3:ListBucketMultipartUploads",
@@ -245,7 +244,7 @@ Use this policy for day-to-day backup operations:
 
 **Note**:
 - This policy restricts access to `objects/*`, `reports/*`, and `batch/*` prefixes only, preventing accidental deletion of other bucket contents
-- `s3:HeadObject` permission is used for direct verification of uploaded files
+- `s3:GetObject` permission covers HEAD operations used for direct verification
 - No S3 Batch Operations or IAM PassRole permissions needed (simplified from previous S3 Batch Operations approach)
 
 #### Maintenance Policy (Bucket Cleanup)
@@ -276,7 +275,6 @@ Use this policy for day-to-day backup operations:
             "Action": [
                 "s3:PutObject",
                 "s3:GetObject",
-                "s3:HeadObject",
                 "s3:DeleteObject",
                 "s3:AbortMultipartUpload",
                 "s3:ListBucketMultipartUploads",
