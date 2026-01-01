@@ -709,7 +709,7 @@ if [[ "${UPLOAD_COUNT}" -le 0 ]]; then
 
   # Generate consolidated report (no files to verify case)
   CONSOLIDATED_REPORT="${LOG_DIR}/consolidated-report.json"
-  CONSOLIDATED_REPORT_KEY="${SHARE_NAME}/${TS}/report.json"
+  CONSOLIDATED_REPORT_KEY="reports/${SHARE_NAME}/${TS}/report.json"
 
   cat > "${CONSOLIDATED_REPORT}" <<JSON
 {
@@ -1304,7 +1304,7 @@ fi
 # Generate consolidated report (DataSync-style single JSON report per execution)
 #
 CONSOLIDATED_REPORT="${LOG_DIR}/consolidated-report.json"
-CONSOLIDATED_REPORT_KEY="${SHARE_NAME}/${TS}/report.json"
+CONSOLIDATED_REPORT_KEY="reports/${SHARE_NAME}/${TS}/report.json"
 
 if command -v python3 >/dev/null 2>&1; then
   echo "=== Generating consolidated report ==="
@@ -1502,19 +1502,19 @@ PY
       echo "Consolidated report available at: s3://${METADATA_BUCKET}/${CONSOLIDATED_REPORT_KEY}"
 
       # Cleanup: Remove AWS Batch Ops infrastructure files now that data is in consolidated report
-      # Only cleanup if batch job completed successfully
+      # Cleanup for both successful AND failed batch jobs (data is in consolidated report either way)
       if [[ -n "${JOB_ID:-}" ]]; then
-        if [[ "${final_batch_status:-}" == "Complete" ]]; then
-          echo "Cleaning up batch infrastructure files..."
-          # Delete manifest
-          aws s3 rm "s3://${METADATA_BUCKET}/${MANIFEST_KEY}" --region "${AWS_REGION}" 2>/dev/null || true
-          # Delete batch reports directory (contains manifest.json, results/*.csv, etc.)
-          aws s3 rm "s3://${METADATA_BUCKET}/${REPORT_PREFIX}/job-${JOB_ID}/" --recursive --region "${AWS_REGION}" 2>/dev/null || true
-          echo "Cleanup complete - only consolidated report remains"
-        else
-          echo "WARN: Batch job status is '${final_batch_status:-Unknown}', not 'Complete' - preserving batch infrastructure files" >&2
-          record_warning "Batch job status '${final_batch_status:-Unknown}' - batch files preserved"
-        fi
+        echo "Cleaning up batch infrastructure files (status: ${final_batch_status:-Unknown})..."
+
+        # Delete manifest (no longer needed)
+        aws s3 rm "s3://${METADATA_BUCKET}/${MANIFEST_KEY}" --region "${AWS_REGION}" 2>/dev/null || \
+          echo "WARN: Could not delete manifest ${MANIFEST_KEY}" >&2
+
+        # Delete batch reports directory (contains manifest.json, results/*.csv, etc.)
+        aws s3 rm "s3://${METADATA_BUCKET}/${REPORT_PREFIX}/job-${JOB_ID}/" --recursive --region "${AWS_REGION}" 2>/dev/null || \
+          echo "WARN: Could not delete batch reports ${REPORT_PREFIX}/job-${JOB_ID}/" >&2
+
+        echo "Cleanup complete - only consolidated report remains"
       fi
     else
       echo "ERROR: Failed to verify consolidated report upload - skipping cleanup to preserve batch data" >&2
