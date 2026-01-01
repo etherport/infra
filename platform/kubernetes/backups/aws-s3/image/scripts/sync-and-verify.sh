@@ -1059,6 +1059,7 @@ if batch_summary_path and os.path.exists(batch_summary_path):
 # Count successes/failures
 files_succeeded = sum(1 for f in files if f['status'] == 'success')
 files_failed = sum(1 for f in files if f['status'] == 'failed')
+files_verified = sum(1 for f in files if f.get('destChecksum'))
 
 # Determine overall status based on sync result, batch status, AND file failures
 if sync_rc != 0:
@@ -1082,7 +1083,7 @@ report = {
     "durationSeconds": duration,
     "summary": {
         "filesTransferred": total_files,
-        "filesVerified": verification_summary.get('objects_succeeded', 0),
+        "filesVerified": files_verified,
         "filesSucceeded": files_succeeded,
         "filesFailed": files_failed,
         "bytesTransferred": total_bytes,
@@ -1098,9 +1099,9 @@ report = {
     "verification": {
         "batchJobId": job_id,
         "batchStatus": batch_status,
-        "objectsTotal": verification_summary.get('objects_total', 0),
-        "objectsSucceeded": verification_summary.get('objects_succeeded', 0),
-        "objectsFailed": verification_summary.get('objects_failed', 0),
+        "objectsTotal": files_verified,
+        "objectsSucceeded": files_succeeded,
+        "objectsFailed": files_failed,
         "topErrorCodes": verification_summary.get('top_error_codes', {})
     },
     "files": files,
