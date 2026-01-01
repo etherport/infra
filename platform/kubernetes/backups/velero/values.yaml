@@ -1,0 +1,34 @@
+configuration:
+  backupStorageLocation:
+    - bucket: velero.wind.etherport.net
+      provider: aws
+      default: true
+      config:
+        region: us-west-2
+  volumeSnapshotLocation:
+    - provider: aws
+      config:
+        region: us-west-2
+  features: EnableCSI
+
+credentials:
+  existingSecret: cloud-credentials
+
+initContainers:
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.10.0
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+snapshotsEnabled: true
+deployNodeAgent: true
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+
+kubectl:
+  image:
+    tag: "1.33"

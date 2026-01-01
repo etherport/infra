@@ -18,17 +18,20 @@ spec:
         k8s.v1.cni.cncf.io/networks: |
           [
             {
-              "name": "multus-system/vlan202-client",
+              "name": "vlan202-client",
+              "namespace": "multus-system",
               "ips": ["10.10.202.25/24"],
               "gateway": ["10.10.202.1"]
             },
             {
-              "name": "multus-system/vlan204-iot",
+              "name": "vlan204-iot",
+              "namespace": "multus-system",
               "ips": ["10.10.204.25/24"],
               "gateway": ["10.10.204.1"]
             },
             {
-              "name": "multus-system/vlan205-security",
+              "name": "vlan205-security",
+              "namespace": "multus-system",
               "ips": ["10.10.205.25/24"],
               "gateway": ["10.10.205.1"]
             }

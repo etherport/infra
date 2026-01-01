@@ -126,33 +126,100 @@ These components are **NOT managed by Kubespray** and should remain in `platform
 3. Backup existing cluster state
 4. Ensure cluster is healthy before starting
 
-### Step 1: Re-run Kubespray (Enable Add-ons)
+### Step 1: Run Pre-flight Playbook
+
+**CRITICAL:** The pre-flight playbook MUST be run before Kubespray to set correct directory ownership for CNI components.
 
 ```bash
 cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible
 
-# Run Kubespray to apply changes
-ansible-playbook -i inventory/wind/hosts.yml \
-  kubespray/cluster.yml \
-  --tags network,apps
-
-# Or for full cluster update:
-ansible-playbook -i inventory/wind/hosts.yml kubespray/cluster.yml
+# Run pre-flight playbook using Kubespray venv
+kubespray/.venv/bin/ansible-playbook \
+  -i inventory/wind/inventory.ini \
+  inventory/wind/pre-flight.yml \
+  --become
 ```
 
-This will:
-- Install Multus CNI
-- Deploy MetalLB via Helm
-- Deploy Cert-Manager via Helm
-- Deploy Node Feature Discovery via Helm
+This ensures:
+- `/opt/cni/bin` is owned by `root:root` (required for Cilium init containers)
+- Cilium runtime directories exist with correct permissions
+- NFS client utilities are installed
 
-### Step 2: Verify Add-on Deployments
+### Step 2: Run Kubespray (Enable Add-ons)
 
 ```bash
+cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible
+
+# IMPORTANT: Use Kubespray venv for correct Ansible version (2.17.x)
+# IMPORTANT: Use inventory.ini not hosts.yml
+# IMPORTANT: Run full playbook without tags to ensure all setup tasks run
+
+kubespray/.venv/bin/ansible-playbook \
+  -i inventory/wind/inventory.ini \
+  kubespray/cluster.yml \
+  --become
+```
+
+**Why full playbook without tags:**
+- Running with `--tags` skips important preinstall tasks
+- Directory permissions may not be set correctly
+- Download tasks may be skipped, causing failures
+- The playbook is idempotent - it only changes what needs changing
+
+This will:
+- Run preinstall tasks (create directories, download binaries)
+- Update Cilium configuration (cni-exclusive: false for Multus)
+- Install Multus CNI
+- Deploy MetalLB with IPAddressPool and L2Advertisement
+- Deploy Cert-Manager
+- Deploy Node Feature Discovery
+
+### Step 3: Deploy Ceph CSI (External Storage)
+
+**IMPORTANT:** Ceph CSI is not part of Kubespray and must be deployed separately to enable persistent storage.
+
+```bash
+cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible
+
+# Deploy Ceph CSI RBD driver
+kubespray/.venv/bin/ansible-playbook \
+  -i inventory/wind/inventory.ini \
+  playbooks/ceph/ceph-k8s.upstream-reference.yml \
+  --become
+
+# If using ansible-vault encrypted secrets:
+# kubespray/.venv/bin/ansible-playbook \
+#   -i inventory/wind/inventory.ini \
+#   playbooks/ceph/ceph-k8s.upstream-reference.yml \
+#   --become \
+#   --ask-vault-pass
+```
+
+**Verify Ceph CSI deployment:**
+```bash
+# Check CSI pods are running
+kubectl get pods -n ceph-csi
+
+# Check CSI driver is registered
+kubectl get csidrivers | grep ceph
+
+# Check storage class exists
+kubectl get sc ceph-rbd
+
+# Verify test PVC is created and bound
+kubectl get pvc -n default rbd-test-pvc
+```
+
+### Step 4: Verify Add-on Deployments
+
+```bash
+# Check Cilium (should all be Running)
+kubectl get pods -n kube-system -l k8s-app=cilium
+
 # Check Multus
 kubectl get pods -n kube-system | grep multus
 
-# Check MetalLB
+# Check MetalLB (should all be 1/1 Running)
 kubectl get pods -n metallb-system
 kubectl get ipaddresspools -n metallb-system
 kubectl get l2advertisements -n metallb-system
@@ -163,9 +230,13 @@ kubectl get pods -n cert-manager
 # Check NFD
 kubectl get pods -n node-feature-discovery
 kubectl get nodes --show-labels | grep feature.node.kubernetes.io
+
+# CRITICAL: Verify Traefik has LoadBalancer IP
+kubectl get svc -n traefik traefik
+# Should show EXTERNAL-IP: 10.10.201.70 (not <pending>)
 ```
 
-### Step 3: Migrate MetalLB (Remove Manual Deployment)
+### Step 5: Migrate MetalLB (Remove Manual Deployment)
 
 **Before removing manual deployment, verify Kubespray MetalLB works:**
 
@@ -189,7 +260,7 @@ git add -A
 git commit -m "Remove manual MetalLB deployment (now managed by Kubespray)"
 ```
 
-### Step 4: Apply Multus NetworkAttachmentDefinitions
+### Step 6: Apply Multus NetworkAttachmentDefinitions
 
 ```bash
 # Apply multus-system namespace
@@ -210,7 +281,7 @@ vlan204-iot        1m
 vlan205-security   1m
 ```
 
-### Step 5: Configure VLAN Interfaces on Nodes
+### Step 7: Configure VLAN Interfaces on Nodes
 
 **Prerequisites:**
 - Terraform changes applied (additional NICs added to VMs)
@@ -236,7 +307,7 @@ EOF'
 sudo systemctl restart systemd-networkd
 ```
 
-### Step 6: Deploy Home Assistant
+### Step 8: Deploy Home Assistant
 
 ```bash
 kubectl apply -f platform/kubernetes/home-automation/
@@ -286,6 +357,43 @@ After migration, verify:
 
 ---
 
+## Security Improvements (Production Readiness)
+
+### 1. Encrypt Ceph Credentials with Ansible Vault
+
+**Current State:** Ceph credentials are stored in plaintext in `inventory/wind/group_vars/all/ceph.yml`
+
+**Recommended:** Encrypt with ansible-vault
+
+```bash
+cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible
+
+# Encrypt the file
+ansible-vault encrypt inventory/wind/group_vars/all/ceph.yml
+
+# Future playbook runs will need vault password
+ansible-playbook ... --ask-vault-pass
+
+# Or use a password file (keep this file secure, not in git!)
+ansible-playbook ... --vault-password-file ~/.ansible-vault-pass
+```
+
+**Alternative Options:**
+- **External Secrets Operator**: Sync secrets from external vault (HashiCorp Vault, AWS Secrets Manager)
+- **Sealed Secrets**: Encrypt secrets that can only be decrypted in-cluster
+
+### 2. Review Other Sensitive Data
+
+Check for other plaintext secrets:
+```bash
+# Search for potential secrets in inventory
+grep -r "key\|password\|secret" inventory/wind/group_vars/ --include="*.yml"
+```
+
+Consider ansible-vault for any sensitive values.
+
+---
+
 ## Configuration Drift Prevention
 
 Going forward:
@@ -294,6 +402,7 @@ Going forward:
 2. **Use Kubespray addons** when available
 3. **Document external components** in `platform/kubernetes/EXTERNAL_COMPONENTS.md`
 4. **Review annually** to see if new Kubespray versions support our external components
+5. **Run deployment playbooks in order**: pre-flight → cluster.yml → ceph-k8s → verify
 
 ---
 
