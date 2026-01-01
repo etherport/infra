@@ -1,0 +1,126 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: plex
+  namespace: plex
+  labels:
+    app: plex
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # Ensure only one instance due to PVC and GPU
+  selector:
+    matchLabels:
+      app: plex
+  template:
+    metadata:
+      labels:
+        app: plex
+    spec:
+      # Run on GPU node
+      nodeSelector:
+        gpu: "true"
+
+      # Tolerate GPU node taint
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+
+      containers:
+        - name: plex
+          image: plexinc/pms-docker:latest
+
+          # GPU resource request for hardware transcoding
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 2Gi
+              nvidia.com/gpu.shared: "1"  # Request 1 GPU time-slice
+            limits:
+              cpu: 4000m
+              memory: 8Gi
+              nvidia.com/gpu.shared: "1"
+
+          env:
+            # Timezone
+            - name: TZ
+              value: "America/Los_Angeles"
+
+            # Plex claim token (optional - for first-time setup)
+            # Get from: https://www.plex.tv/claim/
+            # - name: PLEX_CLAIM
+            #   value: "claim-XXXXXXXXXXXXXXXXXXXX"
+
+            # Advertise IP (LoadBalancer or Ingress IP)
+            # - name: ADVERTISE_IP
+            #   value: "http://plex.wind.etherport.net:32400/"
+
+            # Plex UID/GID (optional - match your NFS permissions)
+            - name: PLEX_UID
+              value: "1000"
+            - name: PLEX_GID
+              value: "1000"
+
+          ports:
+            - name: plex
+              containerPort: 32400
+              protocol: TCP
+
+          volumeMounts:
+            # Plex config and metadata (Ceph RBD)
+            - name: config
+              mountPath: /config
+
+            # Media libraries (NFS)
+            - name: movies
+              mountPath: /media/movies
+              readOnly: true
+
+            - name: tv
+              mountPath: /media/tv
+              readOnly: true
+
+            # Transcode directory (ephemeral for GPU transcoding)
+            - name: transcode
+              mountPath: /transcode
+
+          livenessProbe:
+            httpGet:
+              path: /web/index.html
+              port: 32400
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+
+          readinessProbe:
+            httpGet:
+              path: /web/index.html
+              port: 32400
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+      volumes:
+        # Persistent config storage (Ceph RBD)
+        - name: config
+          persistentVolumeClaim:
+            claimName: plex-config
+
+        # NFS media volumes
+        - name: movies
+          nfs:
+            server: sequoia.wind.etherport.net
+            path: /var/nfs/shared/Media/Movies
+            readOnly: true
+
+        - name: tv
+          nfs:
+            server: sequoia.wind.etherport.net
+            path: /var/nfs/shared/Media/TV Shows
+            readOnly: true
+
+        # Ephemeral transcode storage (tmpfs for fast GPU transcoding)
+        - name: transcode
+          emptyDir:
+            medium: Memory
+            sizeLimit: 4Gi

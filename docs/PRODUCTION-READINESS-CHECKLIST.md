@@ -252,12 +252,15 @@
   - Assignee:
   - Due:
 
-- [ ] **Create GPU workload examples**
-  - Plex deployment with GPU requests
-  - LLM deployment example (Ollama or similar)
-  - File: `platform/kubernetes/examples/gpu-workloads.yaml` (new)
-  - Assignee:
-  - Due:
+- [x] **Create GPU workload examples**
+  - ✅ Plex deployment with GPU hardware transcoding
+  - ✅ Complete manifests: namespace, PVC, deployment, service, ingress
+  - ✅ NFS media mounts (Movies, TV Shows)
+  - ✅ 25GB Ceph storage for config/metadata
+  - ✅ Accessible at https://plex.wind.etherport.net
+  - File: `platform/kubernetes/plex/`
+  - Completed: 2025-12-31
+  - Note: Required linux-modules-extra installation on GPU node for Ceph RBD
 
 ---
 
