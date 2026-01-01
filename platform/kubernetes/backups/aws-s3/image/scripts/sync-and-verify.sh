@@ -397,17 +397,9 @@ release_lock() {
 trap release_lock EXIT
 
 DEST_URI="s3://${DEST_BUCKET}/${DEST_PREFIX}/"
-MANIFEST_KEY="${BATCH_PREFIX}/manifests/${SHARE_NAME}/${RUN_ID}.csv"
-MANIFEST_URI="s3://${METADATA_BUCKET}/${MANIFEST_KEY}"
- # NOTE: no trailing slash to avoid double-slash paths like ...Z//job-...
-REPORT_PREFIX="${BATCH_PREFIX}/reports/${SHARE_NAME}/${RUN_ID}"
-RUN_SUMMARY_KEY="${BATCH_PREFIX}/runs/${SHARE_NAME}/${RUN_ID}.json"
-RUN_SUMMARY_URI="s3://${METADATA_BUCKET}/${RUN_SUMMARY_KEY}"
 
 DRYRUN_OUT="${LOG_DIR}/dryrun.txt"
 SYNC_OUT="${LOG_DIR}/sync.txt"
-MANIFEST_FILE="${LOG_DIR}/manifest.csv"
-SUMMARY_FILE="${LOG_DIR}/summary.json"
 
 # Exclusions
 # Load exclusion patterns from text files so we can keep a global list plus per-share add-ons.
@@ -842,16 +834,20 @@ else
   
   # Export function and credentials for parallel workers
   export -f verify_file
-  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION
-  
+  export AWS_REGION
+  # For IRSA (IAM Roles for Service Accounts) in Kubernetes
+  export AWS_WEB_IDENTITY_TOKEN_FILE AWS_ROLE_ARN AWS_DEFAULT_REGION
+  # For static credentials
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
   # Run verification in parallel
   PARALLEL_JOBS=50
   echo "Starting parallel verification (${PARALLEL_JOBS} workers)..."
-  
+
   if command -v parallel >/dev/null 2>&1; then
-    # Use GNU parallel if available (preferred - has progress bar)
+    # Use GNU parallel if available (no --bar in non-interactive environments)
     cat "${VERIFY_WORK_DIR}/files-to-verify.tsv" | \
-      parallel --colsep '\t' -j "${PARALLEL_JOBS}" --bar \
+      parallel --colsep '\t' -j "${PARALLEL_JOBS}" \
         verify_file {1} {2} "${VERIFY_WORK_DIR}/results" "${AWS_REGION}"
     
   else
@@ -901,7 +897,10 @@ else
   # Create FILE_AUDIT_JSONL in the format expected by consolidated report generation
   # This merges transfer log with verification results
   FILE_AUDIT_JSONL="${LOG_DIR}/file-audit.jsonl"
-  
+
+  # Export environment variables for Python script
+  export TRANSFER_LOG_JSONL VERIFICATION_RESULTS_JSONL FILE_AUDIT_JSONL
+
   python3 - <<'PYAUDIT' || record_warning "Failed to create file audit log"
 import json, os, sys
 
@@ -965,27 +964,29 @@ with open(output_path, 'w') as out:
 
 print(f"File audit log created: {output_path}", file=sys.stderr)
 PYAUDIT
-  
-  TRANSFER_LOG_JSONL_ENV="${TRANSFER_LOG_JSONL}" \
-  VERIFICATION_RESULTS_JSONL_ENV="${VERIFICATION_RESULTS_JSONL}" \
-  FILE_AUDIT_JSONL_ENV="${FILE_AUDIT_JSONL}" \
-  python3 - || true
-  
+
 fi
+
+# Calculate duration
+END_EPOCH="$(date +%s)"
+END_TS_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+DURATION_SECONDS=$((END_EPOCH - START_EPOCH))
 
 # Update metrics
 verified_succeeded="${VERIFIED_SUCCEEDED:-0}"
 verified_failed="${VERIFIED_FAILED:-0}"
 
-# Determine overall success/failure
+# Determine overall success/failure (pushgateway expects 1=success, 0=failure)
 if [[ "${SYNC_RC:-0}" -ne 0 ]]; then
-  success_flag="failed"
+  success_flag=0
   OVERALL_STATUS="FAILED"
 elif [[ "${verified_failed}" -gt 0 ]]; then
-  success_flag="failed"
+  success_flag=0
   OVERALL_STATUS="FAILED"
+  # Send failure notification email
+  send_failure_email "Verification failed: ${verified_failed} of ${VERIFY_COUNT:-0} files failed verification (HEAD object check)"
 else
-  success_flag="success"
+  success_flag=1
   OVERALL_STATUS="SUCCESS"
 fi
 
@@ -1185,7 +1186,7 @@ PY
     echo "Uploading consolidated report to: s3://${METADATA_BUCKET}/${CONSOLIDATED_REPORT_KEY}"
     s3_put_object "${METADATA_BUCKET}" "${CONSOLIDATED_REPORT_KEY}" "${CONSOLIDATED_REPORT}"
 
-    # Verify upload succeeded before cleanup
+    # Verify upload succeeded
     echo "Verifying consolidated report upload..."
     if aws s3api head-object \
         --bucket "${METADATA_BUCKET}" \
@@ -1194,25 +1195,8 @@ PY
         --expected-bucket-owner "${EXPECTED_BUCKET_OWNER}" \
         >/dev/null 2>&1; then
       echo "Consolidated report available at: s3://${METADATA_BUCKET}/${CONSOLIDATED_REPORT_KEY}"
-
-      # Cleanup: Remove AWS Batch Ops infrastructure files now that data is in consolidated report
-      # Cleanup for both successful AND failed batch jobs (data is in consolidated report either way)
-      if [[ -n "${JOB_ID:-}" ]]; then
-        echo "Cleaning up batch infrastructure files (status: ${final_batch_status:-Unknown})..."
-
-        # Delete manifest (no longer needed)
-        aws s3 rm "s3://${METADATA_BUCKET}/${MANIFEST_KEY}" --region "${AWS_REGION}" 2>/dev/null || \
-          echo "WARN: Could not delete manifest ${MANIFEST_KEY}" >&2
-
-        # Delete batch reports directory (contains manifest.json, results/*.csv, etc.)
-        aws s3 rm "s3://${METADATA_BUCKET}/${REPORT_PREFIX}/job-${JOB_ID}/" --recursive --region "${AWS_REGION}" 2>/dev/null || \
-          echo "WARN: Could not delete batch reports ${REPORT_PREFIX}/job-${JOB_ID}/" >&2
-
-        echo "Cleanup complete - only consolidated report remains"
-      fi
     else
-      echo "ERROR: Failed to verify consolidated report upload - skipping cleanup to preserve batch data" >&2
-      echo "ERROR: Batch infrastructure files retained at: s3://${METADATA_BUCKET}/${REPORT_PREFIX}/" >&2
+      echo "ERROR: Failed to verify consolidated report upload" >&2
     fi
   fi
 else
