@@ -140,7 +140,7 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
   }
 
   memory {
-    dedicated = 32768  # 32GB RAM
+    dedicated = 24576  # 24GB RAM
   }
 
   disk {
