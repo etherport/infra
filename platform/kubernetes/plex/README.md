@@ -122,6 +122,21 @@ The Tesla P40 supports:
 - Up to 4K resolution
 - Multiple simultaneous transcodes (time-sliced GPU)
 
+### Network Configuration (Critical for 4K Playback)
+
+**Configure LAN Networks** to ensure high-quality playback without transcoding:
+
+1. Navigate to **Settings** → **Network**
+2. Under **LAN Networks**, add the following networks:
+   ```
+   10.42.0.0/16,10.43.0.0/16
+   ```
+   - `10.42.0.0/16` - Cilium pod network
+   - `10.43.0.0/16` - Kubernetes service network
+3. Save changes
+
+**Why this matters**: Without these networks configured, Plex treats connections from the ingress as "remote" and limits streaming quality. Adding these networks ensures Plex recognizes traffic as local and allows Original/Maximum quality streaming including 4K.
+
 ### Media Libraries
 
 Configure libraries in Plex:
