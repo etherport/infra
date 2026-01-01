@@ -748,19 +748,17 @@ else
         --output json 2>/dev/null > "${RESULT_FILE}.tmp"; then
       
       # Success - object exists and we got metadata
-      jq -n \
-        --arg bucket "${BUCKET}" \
-        --arg key "${KEY}" \
-        --argjson meta "$(cat "${RESULT_FILE}.tmp")" \
-        '{
-          bucket: $bucket,
-          key: $key,
-          status: "succeeded",
-          size: ($meta.ContentLength // 0),
-          etag: ($meta.ETag // ""),
-          checksum_sha256: ($meta.ChecksumSHA256 // ""),
-          last_modified: ($meta.LastModified // "")
-        }' > "${RESULT_FILE}"
+      jq --arg bucket "${BUCKET}" \
+         --arg key "${KEY}" \
+         '{
+           bucket: $bucket,
+           key: $key,
+           status: "succeeded",
+           size: (.ContentLength // 0),
+           etag: (.ETag // ""),
+           checksum_sha256: (.ChecksumSHA256 // ""),
+           last_modified: (.LastModified // "")
+         }' "${RESULT_FILE}.tmp" > "${RESULT_FILE}"
       rm -f "${RESULT_FILE}.tmp"
       
     else
