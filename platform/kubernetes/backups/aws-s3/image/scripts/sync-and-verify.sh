@@ -1068,7 +1068,10 @@ elif batch_status and batch_status.lower() not in ["complete", "not_required", "
     # Batch job failed or was cancelled
     status = "FAILED"
 elif files_failed > 0:
-    # Batch completed but some files failed verification
+    # Verification ran but some files failed
+    status = "FAILED"
+elif files_verified == 0 and total_files > 0:
+    # Files were transferred but verification produced no results
     status = "FAILED"
 else:
     status = "SUCCESS"
