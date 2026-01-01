@@ -196,8 +196,8 @@ def get_s3_summary_metrics(share, start_time_epoch):
     aws_region = os.environ.get('AWS_REGION', 'us-west-2')
 
     # List consolidated report directories for this share
-    # Reports are stored at: s3://{metadata_bucket}/{share}/{timestamp}/report.json
-    s3_prefix = f"s3://{metadata_bucket}/{share}/"
+    # Reports are stored at: s3://{metadata_bucket}/reports/{share}/{timestamp}/report.json
+    s3_prefix = f"s3://{metadata_bucket}/reports/{share}/"
 
     try:
         # List all directories (timestamps) for this share

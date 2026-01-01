@@ -49,7 +49,7 @@ mkdir -p "${WORK_DIR}"
 
 # Step 1: Download existing report
 echo "Step 1: Downloading existing report..."
-REPORT_KEY="${SHARE}/${RUN_ID}/report.json"
+REPORT_KEY="reports/${SHARE}/${RUN_ID}/report.json"
 REPORT_FILE="${WORK_DIR}/report.json"
 
 aws s3 cp "s3://${METADATA_BUCKET}/${REPORT_KEY}" "${REPORT_FILE}"

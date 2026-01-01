@@ -491,7 +491,7 @@ Sent daily at 6:00 AM PT via `s3-sync-daily-report` CronJob.
   - Files and data transferred
   - Start/end times and duration
 
-**Metrics Source**: Consolidated report JSON files from S3 (`{share}/{timestamp}/report.json`)
+**Metrics Source**: Consolidated report JSON files from S3 (`reports/{share}/{timestamp}/report.json`)
 
 ### S3 Artifacts
 
@@ -499,7 +499,9 @@ Each backup run produces a **consolidated report** in the **metadata bucket** (`
 
 ```
 s3://logs.archive.wind.etherport.net/
-└── {share}/{timestamp}/report.json      # Consolidated report with all metrics
+├── reports/                              # Permanent consolidated reports
+│   └── {share}/{timestamp}/report.json   # Consolidated report with all metrics
+└── batch/                                # Temporary verification artifacts (auto-cleaned)
 ```
 
 The consolidated report contains:
@@ -568,10 +570,10 @@ kubectl -n backups logs job/{job-name}
 
 ```bash
 # Download consolidated report
-aws s3 cp s3://logs.archive.wind.etherport.net/{share}/{timestamp}/report.json - | jq .
+aws s3 cp s3://logs.archive.wind.etherport.net/reports/{share}/{timestamp}/report.json - | jq .
 
 # List recent runs for a share
-aws s3 ls s3://logs.archive.wind.etherport.net/{share}/ | tail -10
+aws s3 ls s3://logs.archive.wind.etherport.net/reports/{share}/ | tail -10
 ```
 
 ## Backup Schedule
