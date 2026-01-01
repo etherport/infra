@@ -786,18 +786,18 @@ else
   export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
   # Run verification in parallel
-  PARALLEL_JOBS=50
-  echo "Starting parallel verification (${PARALLEL_JOBS} workers)..."
-
   if command -v parallel >/dev/null 2>&1; then
-    # Use GNU parallel if available (no --bar in non-interactive environments)
+    # Use GNU parallel if available (more memory efficient)
+    PARALLEL_JOBS=50
+    echo "Starting parallel verification (${PARALLEL_JOBS} workers with GNU parallel)..."
     cat "${VERIFY_WORK_DIR}/files-to-verify.tsv" | \
       parallel --colsep '\t' -j "${PARALLEL_JOBS}" \
         verify_file {1} {2} "${VERIFY_WORK_DIR}/results" "${AWS_REGION}"
-    
+
   else
-    # Fallback: simple parallelization using background jobs
-    echo "INFO: GNU parallel not found, using bash background jobs" >&2
+    # Fallback: bash background jobs (less memory efficient, use fewer workers)
+    PARALLEL_JOBS=10
+    echo "INFO: GNU parallel not found, using bash background jobs with ${PARALLEL_JOBS} workers" >&2
     
     COUNT=0
     TOTAL=$(wc -l < "${VERIFY_WORK_DIR}/files-to-verify.tsv" | tr -d ' ')
