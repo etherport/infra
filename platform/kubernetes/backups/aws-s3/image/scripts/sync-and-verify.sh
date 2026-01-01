@@ -632,66 +632,13 @@ echo "Approx bytes uploaded (sum of local file sizes): ${TOTAL_BYTES}"
 
  # Build manifest for Batch Ops: CSV **without a header row**.
 # IMPORTANT: S3BatchOperations_CSV_20180820 must NOT include headers.
-# CRITICAL: Generate manifest from S3 listing (not transfer logs) to ensure keys match exactly.
-# This prevents URL encoding mismatches between transfer logs and actual S3 keys.
-: > "${MANIFEST_FILE}"
-
-echo "Generating manifest from S3 listing to ensure exact key matching..."
-
-# Extract the S3 prefix from DEST_URI (e.g., s3://bucket/prefix/ -> prefix/)
-S3_PREFIX="${DEST_URI#s3://${DEST_BUCKET}/}"
-
-# Generate manifest from S3 listing - keys will match exactly as stored in S3
-aws s3 ls "s3://${DEST_BUCKET}/${S3_PREFIX}" --recursive --region "${AWS_REGION}" | \
-  awk -v bucket="${DEST_BUCKET}" '{
-    if (NF >= 4) {
-      # Extract key from ls output (everything after date, time, size)
-      key = $0;
-      sub(/^ *[0-9]+-[0-9]+-[0-9]+ +[0-9]+:[0-9]+:[0-9]+ +[0-9]+ +/, "", key);
-      # Escape quotes for CSV and wrap fields in quotes
-      gsub(/"/, "\"\"", bucket);
-      gsub(/"/, "\"\"", key);
-      print "\"" bucket "\",\"" key "\"";
-    }
-  }' | sort -u >> "${MANIFEST_FILE}" || {
-    # Fallback: If S3 listing fails, use transfer logs (old behavior)
-    echo "WARN: S3 listing failed, falling back to transfer log parsing" >&2
-
-    if command -v jq >/dev/null 2>&1 && [[ -s "${TRANSFER_LOG_JSONL}" ]]; then
-      jq -r --arg b "${DEST_BUCKET}" '
-        select(.action=="upload" or .action=="copy")
-        | select(.s3_bucket==$b)
-        | [.s3_bucket, .s3_key] | @csv
-      ' "${TRANSFER_LOG_JSONL}" \
-      | sort -u \
-      >> "${MANIFEST_FILE}" || true
-    else
-      # Fallback: parse sync output directly (best-effort)
-      awk -v forced_bucket="${DEST_BUCKET}" '
-        /^(upload:|copy:)/ {
-          uri="";
-          for (i=1; i<=NF; i++) {
-            if ($i ~ /^s3:\/\//) { uri=$i }
-          }
-          if (uri != "") {
-            sub(/^s3:\/\//, "", uri);
-            n=split(uri, a, "/");
-            bucket=a[1];
-            key=substr(uri, length(bucket)+2);
-            if (key != "") {
-              gsub(/"/, "\"\"", forced_bucket);
-              gsub(/"/, "\"\"", key);
-              print "\"" forced_bucket "\",\"" key "\"";
-            }
-          }
-        }
-      ' "${SYNC_OUT}" | sort -u >> "${MANIFEST_FILE}" || true
-    fi
-  }
-
- # No header row => count all non-empty lines
-UPLOAD_COUNT="$(awk 'NF {c++} END {print c+0}' "${MANIFEST_FILE}")"
-echo "Uploads/updates detected (for checksum job): ${UPLOAD_COUNT}"
+# Count uploads from transfer log
+if command -v jq >/dev/null 2>&1 && [[ -s "${TRANSFER_LOG_JSONL}" ]]; then
+  UPLOAD_COUNT=$(jq -r 'select(.action=="upload" or .action=="copy") | .s3_key' "${TRANSFER_LOG_JSONL}" | wc -l | tr -d ' ')
+else
+  UPLOAD_COUNT=0
+fi
+echo "Uploads/updates detected: ${UPLOAD_COUNT}"
 
 if [[ "${UPLOAD_COUNT}" -le 0 ]]; then
   END_EPOCH="$(date +%s)"
