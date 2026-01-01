@@ -8,7 +8,7 @@ This system provides automated, scheduled backups of NFS shares to AWS S3 with t
 
 - **Automated Sync**: Kubernetes CronJobs run daily backups for each configured share
 - **Distributed Locking**: ConfigMap-based lock mechanism prevents concurrent backups of the same share
-- **Checksum Verification**: S3 Batch Operations compute SHA256 checksums to verify data integrity
+- **Direct Verification**: Parallel S3 HEAD requests verify uploaded files exist and capture SHA256 checksums (50x cheaper than S3 Batch Operations)
 - **Email Notifications**:
   - HTML-formatted failure alerts sent immediately via AWS SES
   - Daily summary reports with execution metrics for all shares
@@ -30,7 +30,7 @@ This system uses a **two-bucket architecture** to separate data from operational
 
 2. **Metadata Bucket** (`METADATA_BUCKET`): Store operational artifacts
    - `logs.archive.wind.etherport.net` - Shared metadata bucket for all shares
-   - Contains: Manifests, batch reports, run summaries, transfer logs, verification reports
+   - Contains: Consolidated reports (`reports/{share}/{timestamp}/report.json`), temporary verification artifacts (`batch/`)
    - Does NOT have Glacier lifecycle policies (metadata needs to remain accessible)
 
 ### Data Flow
@@ -46,24 +46,22 @@ This system uses a **two-bucket architecture** to separate data from operational
 │  Kubernetes     │────▶│  Data Bucket             │
 │  CronJobs       │     │  archive.wind.           │
 │  (per share)    │     │   etherport.net          │
-└────────┬────────┘     │  └─ objects/{share}/...  │
+│  - aws s3 sync  │     │  └─ objects/{share}/...  │
+│  - parallel     │     └──────────────────────────┘
+│    S3 HEAD      │
+│    verification │     ┌──────────────────────────┐
+│                 │────▶│  Metadata Bucket         │
+└────────┬────────┘     │  logs.archive.wind.      │
+         │              │   etherport.net          │
+         │              │  └─ reports/{share}/...  │
+         │              │  └─ batch/ (temp files)  │
          │              └──────────────────────────┘
          │
-         ├─────────────▶┌──────────────────────────┐
-         │              │  Metadata Bucket         │
-         │              │  logs.archive.wind.      │
-         │              │   etherport.net          │
-         │              │  └─ batch/manifests/...  │
-         │              │  └─ batch/reports/...    │
-         │              │  └─ batch/runs/...       │
-         │              └────────┬─────────────────┘
-         │                       │
-         ▼                       ▼
-┌─────────────────┐     ┌──────────────────┐
-│  Prometheus     │     │  S3 Batch Ops    │
-│  Pushgateway    │     │  (Checksum       │
-│                 │     │   Verification)  │
-└─────────────────┘     └──────────────────┘
+         ▼
+┌─────────────────┐
+│  Prometheus     │
+│  Pushgateway    │
+└─────────────────┘
          │
          ▼
 ┌─────────────────┐
@@ -140,7 +138,7 @@ In `base/cronjob.yaml`:
 - `suspend`: Set to `false` to enable automatic runs (currently enabled)
 - `AWS_REGION`: AWS region (default: `us-west-2`)
 - `METADATA_BUCKET`: S3 bucket for operational artifacts (default: `logs.archive.wind.etherport.net`)
-- `WAIT_FOR_BATCH`: Wait for S3 Batch Ops verification (default: `true`)
+- `WAIT_FOR_BATCH`: Enable direct verification after sync (default: `true`)
 
 ### Email Notifications
 
@@ -217,11 +215,12 @@ Use this policy for day-to-day backup operations:
             ]
         },
         {
-            "Sid": "ObjectRWObjectsAndBatchPrefixes",
+            "Sid": "ObjectOperations",
             "Effect": "Allow",
             "Action": [
                 "s3:PutObject",
                 "s3:GetObject",
+                "s3:HeadObject",
                 "s3:DeleteObject",
                 "s3:AbortMultipartUpload",
                 "s3:ListBucketMultipartUploads",
@@ -234,35 +233,20 @@ Use this policy for day-to-day backup operations:
             "Resource": [
                 "arn:aws:s3:::archive.wind.etherport.net/objects/*",
                 "arn:aws:s3:::archive.wind.etherport.net/batch/*",
-                "arn:aws:s3:::logs.archive.wind.etherport.net/objects/*",
+                "arn:aws:s3:::logs.archive.wind.etherport.net/reports/*",
                 "arn:aws:s3:::logs.archive.wind.etherport.net/batch/*",
                 "arn:aws:s3:::archive-test.wind.etherport.net/objects/*",
                 "arn:aws:s3:::archive-test.wind.etherport.net/batch/*"
             ]
-        },
-        {
-            "Sid": "S3BatchOperationsControlPlane",
-            "Effect": "Allow",
-            "Action": [
-                "s3:CreateJob",
-                "s3:ListJobs",
-                "s3:DescribeJob",
-                "s3:UpdateJobPriority",
-                "s3:UpdateJobStatus"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "AllowPassBatchJobRole",
-            "Effect": "Allow",
-            "Action": "iam:PassRole",
-            "Resource": "arn:aws:iam::830881980142:role/s3-batch-ops-checksum-role"
         }
     ]
 }
 ```
 
-**Note**: This policy restricts access to `objects/*` and `batch/*` prefixes only, preventing accidental deletion of other bucket contents.
+**Note**:
+- This policy restricts access to `objects/*`, `reports/*`, and `batch/*` prefixes only, preventing accidental deletion of other bucket contents
+- `s3:HeadObject` permission is used for direct verification of uploaded files
+- No S3 Batch Operations or IAM PassRole permissions needed (simplified from previous S3 Batch Operations approach)
 
 #### Maintenance Policy (Bucket Cleanup)
 
@@ -287,11 +271,12 @@ Use this policy for day-to-day backup operations:
             ]
         },
         {
-            "Sid": "ObjectRWObjectsAndBatchPrefixes",
+            "Sid": "ObjectOperations",
             "Effect": "Allow",
             "Action": [
                 "s3:PutObject",
                 "s3:GetObject",
+                "s3:HeadObject",
                 "s3:DeleteObject",
                 "s3:AbortMultipartUpload",
                 "s3:ListBucketMultipartUploads",
@@ -316,93 +301,16 @@ Use this policy for day-to-day backup operations:
                 "arn:aws:s3:::logs.archive.wind.etherport.net/*",
                 "arn:aws:s3:::archive-test.wind.etherport.net/*"
             ]
-        },
-        {
-            "Sid": "S3BatchOperationsControlPlane",
-            "Effect": "Allow",
-            "Action": [
-                "s3:CreateJob",
-                "s3:ListJobs",
-                "s3:DescribeJob",
-                "s3:UpdateJobPriority",
-                "s3:UpdateJobStatus"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "AllowPassBatchJobRole",
-            "Effect": "Allow",
-            "Action": "iam:PassRole",
-            "Resource": "arn:aws:iam::830881980142:role/s3-batch-ops-checksum-role"
         }
     ]
 }
 ```
 
 **Key differences**:
-- Allows deletion on all objects (`/*` instead of `objects/*` and `batch/*`)
+- Allows deletion on all objects (`/*` instead of `objects/*`, `reports/*`, and `batch/*`)
 - Includes `s3:BypassGovernanceRetention` permission
 
 **⚠️ IMPORTANT**: Revert to the Production Policy immediately after maintenance is complete!
-
-#### S3 Batch Operations Role Policy
-
-The `s3-batch-ops-checksum-role` IAM role is assumed by S3 Batch Operations to compute checksums. This role **must** have the following policy attached:
-
-```json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "ReadObjectsToComputeChecksum",
-            "Effect": "Allow",
-            "Action": [
-                "s3:GetObject",
-                "s3:GetObjectVersion",
-                "s3:GetObjectAttributes",
-                "s3:GetObjectRetention",
-                "s3:GetObjectLegalHold"
-            ],
-            "Resource": [
-                "arn:aws:s3:::archive.wind.etherport.net/objects/*",
-                "arn:aws:s3:::logs.archive.wind.etherport.net/objects/*",
-                "arn:aws:s3:::archive-test.wind.etherport.net/objects/*"
-            ]
-        },
-        {
-            "Sid": "WriteChecksumMetadata",
-            "Effect": "Allow",
-            "Action": [
-                "s3:PutObjectTagging",
-                "s3:PutObjectVersionTagging"
-            ],
-            "Resource": [
-                "arn:aws:s3:::archive.wind.etherport.net/objects/*",
-                "arn:aws:s3:::logs.archive.wind.etherport.net/objects/*",
-                "arn:aws:s3:::archive-test.wind.etherport.net/objects/*"
-            ]
-        }
-    ]
-}
-```
-
-**Trust Relationship** for `s3-batch-ops-checksum-role`:
-```json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Principal": {
-                "Service": "batchoperations.s3.amazonaws.com"
-            },
-            "Action": "sts:AssumeRole"
-        }
-    ]
-}
-```
-
-**⚠️ CRITICAL**: The `s3:GetObjectRetention` and `s3:GetObjectLegalHold` permissions are **required** for buckets with Object Lock enabled (like `archive.wind.etherport.net`). Without these permissions, S3 Batch Operations jobs will fail immediately with access denied errors.
 
 ### Deploy a New Share
 
@@ -474,7 +382,8 @@ Metrics are pushed to Prometheus Pushgateway after each backup run:
 - `homelab_backup_last_run_bytes_total` - Bytes transferred
 - `homelab_backup_last_run_files_total` - Files transferred
 - `homelab_backup_last_run_success` - Success flag (1=success, 0=failure)
-- `homelab_backup_last_run_batch_job_created` - S3 Batch job created flag
+- `homelab_backup_verification_files_succeeded` - Number of files successfully verified
+- `homelab_backup_verification_files_failed` - Number of files that failed verification
 
 **Labels**: `job=aws-s3-sync`, `share={share}`, `bucket={bucket}`
 
@@ -552,15 +461,11 @@ kubectl -n backups logs job/{job-name}
 - **Cause**: SES sender/recipient not verified, EMAIL_ENABLED=false
 - **Fix**: Verify email addresses in SES, check `daily-report/email.env`
 
-**Issue**: S3 Batch Operations job fails immediately (status: Failed after 15 seconds)
-- **Cause**: Missing Object Lock permissions on `s3-batch-ops-checksum-role` IAM role
-- **Symptoms**: Batch job transitions from `New` → `Failed` in ~15 seconds, no task results generated
-- **Fix**: Ensure `s3-batch-ops-checksum-role` has `s3:GetObjectRetention` and `s3:GetObjectLegalHold` permissions (see S3 Batch Operations Role Policy section)
-- **Verification**: Check IAM role policy attached to `s3-batch-ops-checksum-role`
-
-**Issue**: S3 Batch Operations job fails (other causes)
-- **Cause**: Bucket ownership mismatch, incorrect role ARN
-- **Fix**: Verify `S3_BATCH_ROLE_ARN` matches actual role, check `EXPECTED_BUCKET_OWNER`
+**Issue**: Verification failures reported
+- **Cause**: Files failed to upload, network issues during transfer, or files deleted between sync and verification
+- **Symptoms**: Consolidated report shows `verifiedFailed > 0`, email alert sent
+- **Fix**: Check report.json for specific failed files, verify NFS source files still exist, re-run backup
+- **Verification**: Review verification details in `s3://logs.archive.wind.etherport.net/reports/{share}/{timestamp}/report.json`
 
 **Issue**: Job pods stuck in ImagePullBackOff
 - **Cause**: Missing GHCR pull secrets
@@ -592,7 +497,7 @@ Daily email report: **6:00 AM PT** (summarizes previous 24 hours)
 ## Security
 
 - **AWS Credentials**: Stored as Kubernetes Secret, encrypted with SOPS
-- **Checksum Verification**: SHA256 FULL_OBJECT checksums via S3 Batch Operations
+- **Direct Verification**: Parallel S3 HEAD requests verify uploaded files and capture SHA256 checksums
 - **Bucket Owner Checks**: All S3 operations validate expected bucket owner
 - **Read-only NFS Mounts**: Source NFS shares mounted read-only
 - **RBAC**: Limited ServiceAccount permissions for ConfigMap management (distributed locking)

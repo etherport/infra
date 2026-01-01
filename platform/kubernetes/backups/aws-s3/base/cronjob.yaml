@@ -84,8 +84,6 @@ spec:
                 - name: AWS_ACCOUNT_ID
                   value: "830881980142"
                 # EXPECTED_BUCKET_OWNER defaults to AWS_ACCOUNT_ID in script
-                - name: S3_BATCH_ROLE_ARN
-                  value: "arn:aws:iam::830881980142:role/s3-batch-ops-checksum-role"
 
                 - name: BATCH_PREFIX
                   value: "batch"
