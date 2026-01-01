@@ -3,9 +3,6 @@ kind: Ingress
 metadata:
   name: plex
   namespace: plex
-  annotations:
-    # Traefik annotations for websocket support and large uploads
-    traefik.ingress.kubernetes.io/router.middlewares: default-redirect-https@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
