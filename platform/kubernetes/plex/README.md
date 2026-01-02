@@ -188,6 +188,76 @@ Stores:
 
 Fast in-memory storage for active transcoding sessions. Automatically cleared on pod restart.
 
+## Remote Access
+
+Plex is configured for remote access via `https://plex.wind.etherport.net`.
+
+### Configuration Requirements
+
+**1. Environment Variables (02-deployment.yaml)**
+```yaml
+- name: ADVERTISE_IP
+  value: "https://plex.wind.etherport.net:443/"
+```
+
+**2. Ingress Configuration (04-ingress.yaml)**
+- Uses Traefik IngressRoute with TLS (Let's Encrypt)
+- Middleware for proper headers (X-Forwarded-Proto)
+- Buffering middleware for large requests
+
+**3. WAF Configuration (CRITICAL for Transcoding)**
+
+If using AWS ALB with WAF, Plex transcode URLs can exceed the default query string size limit (2048 bytes) and will return **403 Forbidden** errors when playing content.
+
+**Fix:** Add a WAF rule to allow Plex before the size restriction rules:
+
+In AWS WAF Web ACL (`CreatedByALB-private-infra-alb`):
+
+1. Go to **Rules** → **Add rules** → **Add my own rules and rule groups**
+2. Rule type: **Rule builder**
+3. Name: `AllowPlexLongURLs`
+4. Type: **Regular rule**
+5. If a request: **matches the statement**
+6. Statement:
+   - Inspect: **Header**
+   - Header field name: `host`
+   - Match type: **Exactly matches string**
+   - String to match: `plex.wind.etherport.net`
+   - Text transformation: **Lowercase**
+7. Action: **Allow**
+8. Priority: **0** (must be first, before managed rule groups)
+
+This bypasses the `SizeRestrictions_QUERYSTRING` rule from `AWSManagedRulesCommonRuleSet` for Plex.
+
+**Note:** Changes may take 1-2 minutes to propagate.
+
+### Verification
+
+1. **Settings → Remote Access** in Plex should show:
+   - Status: "Fully accessible outside your network"
+   - Public port: 443
+
+2. Test remote playback with transcoding:
+   - Access Plex from outside your network (mobile data)
+   - Play content that requires transcoding (different quality/format)
+   - Should play without 403 errors
+
+### Troubleshooting Remote Access
+
+**"Device is not responding"**
+- Check Plex is publishing to plex.tv: `PublishServerOnPlexOnlineKey="1"`
+- Verify custom connections: `customConnections="https://plex.wind.etherport.net:443/"`
+- Restart Plex pod: `kubectl rollout restart deployment/plex -n plex`
+
+**403 Errors When Playing Content**
+- Verify WAF rule is active and priority 0
+- Check WAF logs in CloudWatch for blocked requests
+- Temporarily disable managed rules to confirm WAF is the issue
+
+**Intermittent Connectivity**
+- Enable Relay in Plex Settings → Network
+- Relay acts as fallback when direct connection fails
+
 ## Troubleshooting
 
 ### Pod Won't Start
