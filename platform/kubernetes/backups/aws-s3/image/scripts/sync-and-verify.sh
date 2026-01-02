@@ -551,7 +551,7 @@ fi
 
 # Build a richer transfer list (CSV + JSONL)
 # CSV is easy to eyeball; JSONL is safer for paths/keys that contain commas or quotes.
-echo "run_id,timestamp_utc,action,local_path,s3_bucket,s3_key,bytes,upload_status" > "${TRANSFER_LIST_FILE}"
+echo "run_id,timestamp_utc,action,local_path,s3_bucket,s3_key,bytes,source_sha256,upload_status" > "${TRANSFER_LIST_FILE}"
 : > "${TRANSFER_LOG_JSONL}"
 TOTAL_BYTES=0
 TOTAL_FILES=0
@@ -569,9 +569,12 @@ while IFS= read -r line; do
     s3_key="${s3_noscheme#*/}"
 
     bytes="0"
+    source_sha256=""
     if [[ -f "$local_part" ]]; then
       # GNU stat (amazonlinux) supports -c%s
       bytes="$(stat -c%s "$local_part" 2>/dev/null || echo 0)"
+      # Compute SHA256 checksum of source file for integrity validation
+      source_sha256="$(sha256sum "$local_part" 2>/dev/null | awk '{print $1}')"
     fi
 
     ts_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -582,7 +585,7 @@ while IFS= read -r line; do
       mtime_utc="$(date -u -d "@${mtime_epoch}" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")"
     fi
 
-    echo "${RUN_ID},${ts_utc},upload,\"${local_part//\"/\"\"}\",${s3_bucket},\"${s3_key//\"/\"\"}\",${bytes},reported" >> "${TRANSFER_LIST_FILE}"
+    echo "${RUN_ID},${ts_utc},upload,\"${local_part//\"/\"\"}\",${s3_bucket},\"${s3_key//\"/\"\"}\",${bytes},${source_sha256},reported" >> "${TRANSFER_LIST_FILE}"
 
     # JSONL record (safe encoding via jq)
     jq -cn \
@@ -593,9 +596,10 @@ while IFS= read -r line; do
       --arg s3_bucket "$s3_bucket" \
       --arg s3_key "$s3_key" \
       --arg mtime_utc "$mtime_utc" \
+      --arg source_sha256 "$source_sha256" \
       --arg upload_status "reported" \
       --argjson bytes "$bytes" \
-      '{run_id:$run_id,ts_utc:$ts_utc,action:$action,local_path:$local_path,s3_bucket:$s3_bucket,s3_key:$s3_key,bytes:$bytes,mtime_utc:$mtime_utc,upload_status:$upload_status}' \
+      '{run_id:$run_id,ts_utc:$ts_utc,action:$action,local_path:$local_path,s3_bucket:$s3_bucket,s3_key:$s3_key,bytes:$bytes,mtime_utc:$mtime_utc,source_sha256:$source_sha256,upload_status:$upload_status}' \
       >> "${TRANSFER_LOG_JSONL}"
 
     TOTAL_BYTES=$((TOTAL_BYTES + bytes))
@@ -887,7 +891,23 @@ with open(output_path, 'w') as out:
                     
                     # Get verification result if available
                     verify = verify_map.get(s3_key, {})
-                    
+
+                    # Compare source checksum to S3 checksum for data integrity validation
+                    source_sha256 = transfer.get('source_sha256', '')
+                    s3_sha256 = verify.get('checksum_sha256', '')
+                    checksum_match = None
+                    checksum_mismatch_details = ''
+
+                    if source_sha256 and s3_sha256:
+                        # Both checksums available - compare them
+                        checksum_match = (source_sha256 == s3_sha256)
+                        if not checksum_match:
+                            checksum_mismatch_details = f"Source: {source_sha256}, S3: {s3_sha256}"
+                    elif source_sha256:
+                        checksum_match = None  # S3 checksum unavailable
+                    elif s3_sha256:
+                        checksum_match = None  # Source checksum unavailable
+
                     # Create audit record in expected format
                     audit = {
                         'local_path': transfer.get('local_path', ''),
@@ -898,10 +918,17 @@ with open(output_path, 'w') as out:
                         'verify_status': verify.get('status', 'unknown'),
                         'verify_error_code': verify.get('error_code', ''),
                         'verify_error_message': verify.get('error_message', ''),
-                        'checksum': verify.get('checksum_sha256', ''),
-                        'checksum_algorithm': 'SHA256' if verify.get('checksum_sha256') else ''
+                        'source_sha256': source_sha256,
+                        'checksum': s3_sha256,
+                        'checksum_algorithm': 'SHA256' if s3_sha256 else '',
+                        'checksum_match': checksum_match,
+                        'checksum_mismatch_details': checksum_mismatch_details
                     }
-                    
+
+                    # Log checksum mismatches to stderr for immediate visibility
+                    if checksum_match is False:
+                        print(f"CHECKSUM MISMATCH: {s3_key} - {checksum_mismatch_details}", file=sys.stderr)
+
                     out.write(json.dumps(audit) + '\n')
                     
                 except Exception as e:
@@ -1008,9 +1035,11 @@ if file_audit_path and os.path.exists(file_audit_path):
                     "s3_key": rec.get('s3_key', ''),
                     "action": "uploaded" if rec.get('upload_status') == 'reported' else "unknown",
                     "status": "success" if rec.get('verify_status', '').lower() == 'succeeded' else "failed",
-                    "sourceChecksum": "",  # Not available from local file
+                    "sourceChecksum": rec.get('source_sha256', ''),
                     "destChecksum": rec.get('checksum', ''),
                     "checksumAlgorithm": rec.get('checksum_algorithm', ''),
+                    "checksumMatch": rec.get('checksum_match'),
+                    "checksumMismatchDetails": rec.get('checksum_mismatch_details', ''),
                     "size": rec.get('bytes', 0),
                     "transferTimeMs": 0,  # Not tracked per-file currently
                     "errorCode": rec.get('verify_error_code', ''),
@@ -1061,7 +1090,12 @@ files_succeeded = sum(1 for f in files if f['status'] == 'success')
 files_failed = sum(1 for f in files if f['status'] == 'failed')
 files_verified = sum(1 for f in files if f.get('destChecksum'))
 
-# Determine overall status based on sync result, batch status, AND file failures
+# Count checksum matches/mismatches
+checksum_matches = sum(1 for f in files if f.get('checksumMatch') is True)
+checksum_mismatches = sum(1 for f in files if f.get('checksumMatch') is False)
+checksum_unavailable = sum(1 for f in files if f.get('checksumMatch') is None and (f.get('sourceChecksum') or f.get('destChecksum')))
+
+# Determine overall status based on sync result, batch status, file failures, AND checksum mismatches
 if sync_rc != 0:
     status = "FAILED"
 elif batch_status and batch_status.lower() not in ["complete", "not_required", ""]:
@@ -1069,6 +1103,9 @@ elif batch_status and batch_status.lower() not in ["complete", "not_required", "
     status = "FAILED"
 elif files_failed > 0:
     # Verification ran but some files failed
+    status = "FAILED"
+elif checksum_mismatches > 0:
+    # CRITICAL: Source and S3 checksums don't match - data corruption detected!
     status = "FAILED"
 elif files_verified == 0 and total_files > 0:
     # Files were transferred but verification produced no results
@@ -1089,6 +1126,9 @@ report = {
         "filesVerified": files_verified,
         "filesSucceeded": files_succeeded,
         "filesFailed": files_failed,
+        "checksumMatches": checksum_matches,
+        "checksumMismatches": checksum_mismatches,
+        "checksumUnavailable": checksum_unavailable,
         "bytesTransferred": total_bytes,
         "transferRateMBps": round(total_bytes / duration / 1024 / 1024, 1) if duration > 0 else 0
     },
@@ -1107,6 +1147,15 @@ report = {
         "objectsFailed": files_failed,
         "topErrorCodes": verification_summary.get('top_error_codes', {})
     },
+    "checksumValidation": {
+        "enabled": True,
+        "algorithm": "SHA256",
+        "totalValidated": checksum_matches + checksum_mismatches,
+        "matches": checksum_matches,
+        "mismatches": checksum_mismatches,
+        "unavailable": checksum_unavailable,
+        "mismatchedFiles": [f['s3_key'] for f in files if f.get('checksumMatch') is False]
+    },
     "files": files,
     "errors": []
 }
@@ -1121,6 +1170,13 @@ if batch_status and batch_status.lower() != "complete":
     report['errors'].append({
         "stage": "verification",
         "message": f"S3 Batch Operations job ended with status: {batch_status}"
+    })
+if checksum_mismatches > 0:
+    report['errors'].append({
+        "stage": "checksum_validation",
+        "message": f"CRITICAL: {checksum_mismatches} file(s) have checksum mismatches - data corruption detected!",
+        "severity": "CRITICAL",
+        "mismatchedFiles": [f['s3_key'] for f in files if f.get('checksumMatch') is False]
     })
 
 # Write consolidated report
