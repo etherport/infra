@@ -313,9 +313,12 @@ mv "$REPORT_FILE.tmp" "$REPORT_FILE"
 
 # Add errors array
 if [[ "$CHECKSUM_MISMATCH_COUNT" -gt 0 ]]; then
-  MISMATCHED_FILES=$(jq -r 'select(.status == "checksum_mismatch") | .s3_key' "$RESULTS_JSONL" | jq -R -s 'split("\n") | map(select(length > 0))')
-  jq --argjson mismatched "$MISMATCHED_FILES" \
-     '. + {errors: [{stage: "validation", severity: "CRITICAL", message: "CRITICAL: Data corruption detected - checksums do not match!", mismatchedFiles: $mismatched}]}' \
+  # Extract mismatched files to temp file to avoid argument list too long
+  jq -r 'select(.status == "checksum_mismatch") | .s3_key' "$RESULTS_JSONL" > "$VALIDATION_DIR/mismatched_files.txt"
+  jq -R -s 'split("\n") | map(select(length > 0))' "$VALIDATION_DIR/mismatched_files.txt" > "$VALIDATION_DIR/mismatched_files.json"
+
+  jq --slurpfile mismatched "$VALIDATION_DIR/mismatched_files.json" \
+     '. + {errors: [{stage: "validation", severity: "CRITICAL", message: "CRITICAL: Data corruption detected - checksums do not match!", mismatchedFiles: $mismatched[0]}]}' \
      "$REPORT_FILE" > "$REPORT_FILE.tmp"
   mv "$REPORT_FILE.tmp" "$REPORT_FILE"
 else
