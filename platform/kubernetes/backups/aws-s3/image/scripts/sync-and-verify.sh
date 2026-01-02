@@ -851,7 +851,7 @@ else
   export TRANSFER_LOG_JSONL VERIFICATION_RESULTS_JSONL FILE_AUDIT_JSONL
 
   python3 - <<'PYAUDIT' || record_warning "Failed to create file audit log"
-import json, os, sys
+import json, os, sys, base64
 
 transfers_path = os.environ.get('TRANSFER_LOG_JSONL', '')
 verify_path = os.environ.get('VERIFICATION_RESULTS_JSONL', '')
@@ -894,12 +894,21 @@ with open(output_path, 'w') as out:
 
                     # Compare source checksum to S3 checksum for data integrity validation
                     source_sha256 = transfer.get('source_sha256', '')
-                    s3_sha256 = verify.get('checksum_sha256', '')
+                    s3_sha256_b64 = verify.get('checksum_sha256', '')
                     checksum_match = None
                     checksum_mismatch_details = ''
 
+                    # Convert S3 checksum from base64 to hex for comparison
+                    s3_sha256 = ''
+                    if s3_sha256_b64:
+                        try:
+                            s3_sha256 = base64.b64decode(s3_sha256_b64).hex()
+                        except Exception as e:
+                            print(f"WARN: Failed to decode base64 checksum for {s3_key}: {e}", file=sys.stderr)
+                            s3_sha256 = s3_sha256_b64  # Fall back to original if decode fails
+
                     if source_sha256 and s3_sha256:
-                        # Both checksums available - compare them
+                        # Both checksums available - compare them (both in hex format now)
                         checksum_match = (source_sha256 == s3_sha256)
                         if not checksum_match:
                             checksum_mismatch_details = f"Source: {source_sha256}, S3: {s3_sha256}"
