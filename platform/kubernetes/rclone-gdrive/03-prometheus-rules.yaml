@@ -1,0 +1,52 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rclone-gdrive-alerts
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+  - name: rclone-gdrive-sync
+    interval: 5m
+    rules:
+    - alert: RcloneGDriveSyncFailed
+      expr: rclone_sync_success{source="gdrive",destination="nfs"} == 0
+      for: 5m
+      labels:
+        severity: critical
+        component: backup
+      annotations:
+        summary: "Google Drive sync failed"
+        description: "Rclone Google Drive sync job has failed. Last sync status: {{ $value }}"
+
+    - alert: RcloneGDriveSyncNotRunning
+      expr: (time() - rclone_sync_last_run_timestamp{source="gdrive",destination="nfs"}) > 90000
+      for: 10m
+      labels:
+        severity: warning
+        component: backup
+      annotations:
+        summary: "Google Drive sync hasn't run in 25+ hours"
+        description: "Rclone Google Drive sync hasn't completed successfully in over 25 hours. Last run: {{ $value | humanizeDuration }} ago"
+
+    - alert: RcloneGDriveSyncErrors
+      expr: rclone_sync_errors_total{source="gdrive",destination="nfs"} > 0
+      for: 5m
+      labels:
+        severity: warning
+        component: backup
+      annotations:
+        summary: "Google Drive sync completed with errors"
+        description: "Rclone Google Drive sync completed but encountered {{ $value }} errors. Check logs for details."
+
+    - alert: RcloneGDriveSyncSlow
+      expr: rclone_sync_duration_seconds{source="gdrive",destination="nfs"} > 1800
+      for: 5m
+      labels:
+        severity: info
+        component: backup
+      annotations:
+        summary: "Google Drive sync taking longer than expected"
+        description: "Rclone Google Drive sync took {{ $value | humanizeDuration }} to complete (>30 minutes). This may indicate network issues or large data changes."

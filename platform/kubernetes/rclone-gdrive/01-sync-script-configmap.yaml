@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rclone-sync-script
+  namespace: rclone
+data:
+  sync-and-report.sh: |
+    #!/bin/sh
+    set -e
+
+    PUSHGATEWAY="pushgateway.monitoring.svc.cluster.local:9091"
+    JOB_NAME="rclone_gdrive_sync"
+    INSTANCE="google-drive"
+
+    # Run rclone and capture output and exit code
+    START_TIME=$(date +%s)
+    OUTPUT_FILE="/tmp/rclone-output.txt"
+
+    if rclone sync "gdrive:" "/backup/Graham/Google Drive/" \
+        --config=/config/rclone/rclone.conf \
+        --stats=1m \
+        --stats-log-level=INFO \
+        --log-level=INFO \
+        --exclude=.DS_Store \
+        --exclude=Thumbs.db \
+        --exclude=desktop.ini \
+        2>&1 | tee "$OUTPUT_FILE"; then
+      EXIT_CODE=0
+      STATUS="success"
+    else
+      EXIT_CODE=$?
+      STATUS="failure"
+    fi
+
+    END_TIME=$(date +%s)
+    DURATION=$((END_TIME - START_TIME))
+
+    # Parse metrics from rclone output
+    TRANSFERRED_FILES=$(grep -oP 'Transferred:\s+\K\d+(?=\s+/\s+\d+)' "$OUTPUT_FILE" | tail -1 || echo 0)
+    TOTAL_FILES=$(grep -oP 'Transferred:\s+\d+\s+/\s+\K\d+' "$OUTPUT_FILE" | tail -1 || echo 0)
+    CHECKED_FILES=$(grep -oP 'Checks:\s+\K\d+(?=\s+/)' "$OUTPUT_FILE" | tail -1 || echo 0)
+    TRANSFERRED_BYTES=$(grep -oP 'Transferred:\s+\K[\d.]+\s+\w+' "$OUTPUT_FILE" | head -1 | awk '{
+      val=$1; unit=$2;
+      if (unit=="KiB") print val*1024;
+      else if (unit=="MiB") print val*1024*1024;
+      else if (unit=="GiB") print val*1024*1024*1024;
+      else if (unit=="B") print val;
+      else print 0;
+    }' || echo 0)
+    ERROR_COUNT=$(grep -c "ERROR" "$OUTPUT_FILE" || echo 0)
+
+    # Push metrics to Prometheus PushGateway
+    cat <<EOF | curl --data-binary @- "http://${PUSHGATEWAY}/metrics/job/${JOB_NAME}/instance/${INSTANCE}"
+    # HELP rclone_sync_success Whether the last sync was successful (1=success, 0=failure)
+    # TYPE rclone_sync_success gauge
+    rclone_sync_success{source="gdrive",destination="nfs"} $([ "$STATUS" = "success" ] && echo 1 || echo 0)
+
+    # HELP rclone_sync_duration_seconds Duration of the sync in seconds
+    # TYPE rclone_sync_duration_seconds gauge
+    rclone_sync_duration_seconds{source="gdrive",destination="nfs"} ${DURATION}
+
+    # HELP rclone_sync_files_transferred Number of files transferred
+    # TYPE rclone_sync_files_transferred gauge
+    rclone_sync_files_transferred{source="gdrive",destination="nfs"} ${TRANSFERRED_FILES}
+
+    # HELP rclone_sync_files_total Total number of files processed
+    # TYPE rclone_sync_files_total gauge
+    rclone_sync_files_total{source="gdrive",destination="nfs"} ${TOTAL_FILES}
+
+    # HELP rclone_sync_files_checked Number of files checked
+    # TYPE rclone_sync_files_checked gauge
+    rclone_sync_files_checked{source="gdrive",destination="nfs"} ${CHECKED_FILES}
+
+    # HELP rclone_sync_bytes_transferred Bytes transferred
+    # TYPE rclone_sync_bytes_transferred gauge
+    rclone_sync_bytes_transferred{source="gdrive",destination="nfs"} ${TRANSFERRED_BYTES}
+
+    # HELP rclone_sync_errors_total Number of errors encountered
+    # TYPE rclone_sync_errors_total gauge
+    rclone_sync_errors_total{source="gdrive",destination="nfs"} ${ERROR_COUNT}
+
+    # HELP rclone_sync_last_run_timestamp Unix timestamp of last sync
+    # TYPE rclone_sync_last_run_timestamp gauge
+    rclone_sync_last_run_timestamp{source="gdrive",destination="nfs"} ${END_TIME}
+    EOF
+
+    # Exit with rclone's exit code
+    exit $EXIT_CODE

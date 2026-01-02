@@ -4,7 +4,8 @@ metadata:
   name: gdrive-sync
   namespace: rclone
 spec:
-  schedule: "0 0 * * *"  # Daily at midnight
+  schedule: "0 0 * * *"  # Daily at midnight Pacific time
+  timeZone: "America/Los_Angeles"  # Automatically handles PST/PDT
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
   concurrencyPolicy: Forbid  # Don't allow overlapping syncs
@@ -21,24 +22,17 @@ spec:
           - name: rclone
             image: rclone/rclone:latest
             command:
-              - rclone
-              - sync
-              - "gdrive:"
-              - "/backup/Graham/Google Drive/"
-              - --config=/config/rclone/rclone.conf
-              - --progress
-              - --stats=1m
-              - --stats-log-level=INFO
-              - --log-level=INFO
-              - --exclude=.DS_Store
-              - --exclude=Thumbs.db
-              - --exclude=desktop.ini
+              - /bin/sh
+              - /scripts/sync-and-report.sh
             volumeMounts:
             - name: rclone-config
               mountPath: /config/rclone
               readOnly: true
             - name: backup-nfs
               mountPath: /backup
+            - name: sync-script
+              mountPath: /scripts
+              readOnly: true
             resources:
               requests:
                 memory: 256Mi
@@ -54,3 +48,7 @@ spec:
             nfs:
               server: sequoia.wind.etherport.net
               path: /var/nfs/shared/Backups
+          - name: sync-script
+            configMap:
+              name: rclone-sync-script
+              defaultMode: 0755
