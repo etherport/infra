@@ -88,9 +88,9 @@ spec:
                 - name: BATCH_PREFIX
                   value: "batch"
 
-                # keep checksum verification + reporting for now
+                # Use direct verification only (HEAD requests) to avoid $1/job batch costs
                 - name: WAIT_FOR_BATCH
-                  value: "true"
+                  value: "false"
                 - name: BATCH_POLL_INTERVAL_SECONDS
                   value: "15"
                 - name: BATCH_MAX_WAIT_SECONDS
