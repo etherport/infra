@@ -1,0 +1,65 @@
+# Kured configuration for automated node reboots
+# Deploys: helm install kured kubereboot/kured -f kured-values.yaml
+
+configuration:
+  # Check for reboot required every 5 minutes
+  period: 5m
+
+  # Reboot window (Pacific Time): 2am-6am every day
+  rebootDays:
+    - sun
+    - mon
+    - tue
+    - wed
+    - thu
+    - fri
+    - sat
+  startTime: "2:00"
+  endTime: "6:00"
+  timeZone: "America/Los_Angeles"
+
+  # Message to display when node is draining
+  messageTemplateDrain: "Node {{.NodeName}} will reboot to apply updates"
+  messageTemplateReboot: "Node {{.NodeName}} is rebooting"
+
+  # Prometheus metrics
+  metricsHost: "0.0.0.0"
+  metricsPort: 8080
+
+  # Slack/webhook notification (optional - configure later)
+  notifyUrl: ""
+
+  # Reboot method
+  rebootCommand: "/usr/bin/systemctl reboot"
+
+  # Lock mechanism (prevents multiple nodes rebooting at once)
+  lockTtl: 0  # No TTL - lock held until reboot completes
+  lockReleaseDelay: 0
+
+  # Concurrency control
+  concurrency: 1  # Only one node at a time
+
+# Tolerations to run on control-plane nodes
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/master
+    effect: NoSchedule
+
+# Resources
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi
+
+# ServiceMonitor for Prometheus (if using kube-prometheus-stack)
+serviceMonitor:
+  create: true
+
+# PodDisruptionBudget
+podDisruptionBudget:
+  create: true
+  minAvailable: 1
