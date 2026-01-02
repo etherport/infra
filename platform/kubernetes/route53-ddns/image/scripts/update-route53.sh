@@ -17,11 +17,46 @@
 
 set -euo pipefail
 
+# Script version
+VERSION="1.0.1"
+
 # Configuration
 TTL="${TTL:-300}"
-IP_SERVICE_URL="${IP_SERVICE_URL:-http://checkip.amazonaws.com}"
+IP_SERVICE_URL="${IP_SERVICE_URL:-https://checkip.amazonaws.com}"
 AWS_REGION="${AWS_REGION:-us-west-2}"
 START_EPOCH=$(date +%s)
+
+# Cleanup temporary files on exit
+cleanup() {
+  rm -f /tmp/route53-change-*.json /tmp/metrics.txt 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# Functions
+validate_ip() {
+  local ip="$1"
+  local IFS='.'
+  read -ra octets <<< "$ip"
+  [[ ${#octets[@]} -eq 4 ]] || return 1
+  for octet in "${octets[@]}"; do
+    [[ "$octet" =~ ^[0-9]+$ ]] || return 1
+    ((octet >= 0 && octet <= 255)) || return 1
+  done
+  return 0
+}
+
+fetch_ip_with_retry() {
+  local max_attempts=3
+  local delay=2
+  for ((i=1; i<=max_attempts; i++)); do
+    local ip
+    ip=$(curl -s --max-time 10 "$IP_SERVICE_URL" 2>&1) && [[ -n "$ip" ]] && echo "$ip" && return 0
+    echo "WARNING: IP fetch attempt $i/$max_attempts failed, retrying in ${delay}s..." >&2
+    sleep "$delay"
+    delay=$((delay * 2))
+  done
+  return 1
+}
 
 # Validate required environment variables
 if [[ -z "${HOSTED_ZONES:-}" ]]; then
@@ -54,17 +89,17 @@ echo "IP Service:  ${IP_SERVICE_URL}"
 echo "======================================"
 echo ""
 
-# Get current public IP
+# Get current public IP with retry
 echo "[1/3] Fetching current public IP..."
-CURRENT_IP=$(curl -s --max-time 10 "$IP_SERVICE_URL" || echo "")
+CURRENT_IP=$(fetch_ip_with_retry)
 
 if [[ -z "$CURRENT_IP" ]]; then
-  echo "ERROR: Could not determine current public IP from $IP_SERVICE_URL" >&2
+  echo "ERROR: Could not determine current public IP from $IP_SERVICE_URL after retries" >&2
   exit 1
 fi
 
-# Validate IP format (basic check)
-if ! [[ "$CURRENT_IP" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+# Validate IP format (proper octet validation)
+if ! validate_ip "$CURRENT_IP"; then
   echo "ERROR: Invalid IP address format: $CURRENT_IP" >&2
   exit 1
 fi
@@ -103,28 +138,25 @@ for idx in "${!ZONE_ARRAY[@]}"; do
     continue
   fi
 
-  # Build change batch JSON
-  CHANGE_BATCH=$(cat <<EOF
-{
-  "Comment": "DDNS update for $RECORD_NAME at $(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "Changes": [
-    {
-      "Action": "UPSERT",
-      "ResourceRecordSet": {
-        "Name": "$RECORD_NAME",
-        "Type": "A",
-        "TTL": $TTL,
-        "ResourceRecords": [
-          {
-            "Value": "$CURRENT_IP"
-          }
-        ]
-      }
-    }
-  ]
-}
-EOF
-)
+  # Build change batch JSON (using jq for safe construction)
+  CHANGE_BATCH=$(jq -n \
+    --arg name "$RECORD_NAME" \
+    --arg ip "$CURRENT_IP" \
+    --argjson ttl "$TTL" \
+    --arg comment "DDNS update at $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{
+      Comment: $comment,
+      Changes: [{
+        Action: "UPSERT",
+        ResourceRecordSet: {
+          Name: $name,
+          Type: "A",
+          TTL: $ttl,
+          ResourceRecords: [{Value: $ip}]
+        }
+      }]
+    }'
+  )
 
   # Apply the change
   if aws route53 change-resource-record-sets \

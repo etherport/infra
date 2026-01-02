@@ -12,6 +12,11 @@ spec:
     spec:
       backoffLimit: 2
       template:
+        metadata:
+          labels:
+            app: route53-ddns
+            component: ddns-updater
+            version: v1.0.1
         spec:
           serviceAccountName: route53-ddns
           restartPolicy: Never

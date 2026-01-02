@@ -13,5 +13,5 @@ data:
   # DNS record TTL in seconds
   ttl: "300"
 
-  # URL to fetch public IP from
-  ip_service_url: "http://checkip.amazonaws.com"
+  # URL to fetch public IP from (HTTPS for security)
+  ip_service_url: "https://checkip.amazonaws.com"
