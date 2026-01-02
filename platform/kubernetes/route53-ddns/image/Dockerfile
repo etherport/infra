@@ -1,8 +1,8 @@
 FROM public.ecr.aws/aws-cli/aws-cli:2.32.16
 
 # Install additional utilities
+# Note: curl is already installed (curl-minimal) in the base image
 RUN yum install -y \
-    curl \
     jq \
     && yum clean all
 
