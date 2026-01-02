@@ -83,6 +83,14 @@
         group: root
       notify: Restart unattended-upgrades
 
+    - name: Create systemd override directory
+      file:
+        path: /etc/systemd/system/unattended-upgrades.service.d
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+
     - name: Create unattended-upgrades systemd override
       copy:
         dest: /etc/systemd/system/unattended-upgrades.service.d/override.conf
