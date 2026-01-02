@@ -1,0 +1,96 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: route53-ddns
+  namespace: route53-ddns
+spec:
+  schedule: "*/5 * * * *"  # Every 5 minutes
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          serviceAccountName: route53-ddns
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: ddns
+              image: ghcr.io/sparked-diamond/route53-ddns:main
+              imagePullPolicy: Always
+              command: ["/bin/bash", "-lc"]
+              args:
+                - |
+                  set -euo pipefail
+
+                  # AWS auth preflight
+                  echo "[preflight] aws sts get-caller-identity"
+                  acct="$(aws sts get-caller-identity --query Account --output text)"
+                  echo "[preflight] AWS Account: ${acct}"
+
+                  if [[ "${acct}" != "${AWS_ACCOUNT_ID}" ]]; then
+                    echo "[preflight] ERROR: AWS account mismatch. Expected ${AWS_ACCOUNT_ID}, got ${acct}"
+                    exit 2
+                  fi
+
+                  # Run DDNS update
+                  /scripts/update-route53.sh
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+                readOnlyRootFilesystem: false
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "100m"
+              env:
+                - name: HOSTED_ZONES
+                  valueFrom:
+                    configMapKeyRef:
+                      name: route53-ddns-config
+                      key: hosted_zones
+                - name: RECORD_NAMES
+                  valueFrom:
+                    configMapKeyRef:
+                      name: route53-ddns-config
+                      key: record_names
+                - name: TTL
+                  valueFrom:
+                    configMapKeyRef:
+                      name: route53-ddns-config
+                      key: ttl
+                      optional: true
+                - name: IP_SERVICE_URL
+                  valueFrom:
+                    configMapKeyRef:
+                      name: route53-ddns-config
+                      key: ip_service_url
+                      optional: true
+                - name: AWS_REGION
+                  value: "us-west-2"
+                - name: AWS_DEFAULT_REGION
+                  value: "us-west-2"
+                - name: AWS_EC2_METADATA_DISABLED
+                  value: "true"
+                - name: AWS_PAGER
+                  value: ""
+                - name: AWS_ACCOUNT_ID
+                  value: "830881980142"
+                - name: PUSHGATEWAY_URL
+                  value: "http://pushgateway.monitoring.svc.cluster.local:9091"
+              envFrom:
+                - secretRef:
+                    name: route53-ddns-credentials

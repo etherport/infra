@@ -28,3 +28,4 @@
 !**/*secret-template*.yaml
 !**/*.secret-template.yaml
 platform/kubernetes/icloudpd/04-icloud-cookies-secret.yaml
+platform/kubernetes/route53-ddns/base/secret.yaml cat .gitignore

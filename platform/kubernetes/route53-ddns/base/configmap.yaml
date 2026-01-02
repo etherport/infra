@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: route53-ddns-config
+  namespace: route53-ddns
+data:
+  # Comma-separated list of Route53 hosted zone IDs
+  hosted_zones: "Z10298356ZVPFVHAMFXP,Z03500581XDWV5SKF5PK8"
+
+  # Comma-separated list of DNS record names (must match order of hosted_zones)
+  record_names: "wind.gmsmeg.net,wind.etherport.net"
+
+  # DNS record TTL in seconds
+  ttl: "300"
+
+  # URL to fetch public IP from
+  ip_service_url: "http://checkip.amazonaws.com"
