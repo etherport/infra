@@ -43,6 +43,7 @@ data:
     /app/icloudpd \
       --directory /backup/iCloud \
       --cookie-directory /tmp/cookies \
+      --username graham.m.smith@mac.com \
       --recent 10 \
       --folder-structure "{:%Y/%Y-%m-%d}"
     EXIT_CODE=$?
