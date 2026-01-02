@@ -4,7 +4,7 @@ metadata:
   name: route53-ddns
   namespace: route53-ddns
 spec:
-  schedule: "*/5 * * * *"  # Every 5 minutes
+  schedule: "* * * * *"  # Every minute (for fast failover response)
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 5
