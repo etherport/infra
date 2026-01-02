@@ -57,6 +57,11 @@ Current VLANs:
 - `vlan204-iot`: 10.10.204.0/24 (IoT devices)
 - `vlan205-security`: 10.10.205.0/24 (Security devices)
 
+GPU Node Variants (k8s-gpu1 uses different interface naming):
+- `vlan202-client-gpu`: Uses `enp6s19` interface
+- `vlan204-iot-gpu`: Uses `enp6s20` interface
+- `vlan205-security-gpu`: Uses `enp6s21` interface
+
 ## Usage
 
 Annotate pods with network attachments using `namespace/name` syntax:
@@ -89,6 +94,20 @@ The pod will get:
 - `net1`: First additional network (vlan202-client)
 - `net2`: Second additional network (vlan204-iot)
 - `net3`: Third additional network (vlan205-security)
+
+## Important: VLAN Interface Configuration
+
+The parent interfaces used by Multus macvlan (`ens19/20/21` on worker nodes, `enp6s19/20/21` on GPU node) must be UP before Multus can create virtual interfaces.
+
+**Issue:** After cluster reboot, these interfaces may be DOWN, causing all VLAN networking to fail.
+
+**Solution:** Configure interfaces in Netplan on all nodes. See runbook: `/docs/runbooks/vlan-interfaces-netplan.md`
+
+**Quick check:**
+```bash
+# Verify interfaces are UP
+ssh graham@k8s-w1.wind.etherport.net "ip link show ens19 ens20 ens21 | grep UP"
+```
 
 ## Troubleshooting
 

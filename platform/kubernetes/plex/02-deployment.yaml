@@ -53,8 +53,8 @@ spec:
             #   value: "claim-XXXXXXXXXXXXXXXXXXXX"
 
             # Advertise IP (LoadBalancer or Ingress IP)
-            # - name: ADVERTISE_IP
-            #   value: "http://plex.wind.etherport.net:32400/"
+            - name: ADVERTISE_IP
+              value: "https://plex.wind.etherport.net:443/"
 
             # Plex UID/GID (optional - match your NFS permissions)
             - name: PLEX_UID
