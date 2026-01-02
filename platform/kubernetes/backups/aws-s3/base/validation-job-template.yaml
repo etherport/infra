@@ -1,0 +1,102 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: s3-validation-SHARE-TIMESTAMP
+  namespace: backups
+spec:
+  ttlSecondsAfterFinished: 86400  # Clean up after 24 hours
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: s3-sync
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: validate
+          image: ghcr.io/sparked-diamond/aws-s3-sync:main
+          imagePullPolicy: Always
+          command: ["/bin/bash", "-lc"]
+          args:
+            - |
+              set -euo pipefail
+
+              # AWS auth preflight
+              echo "[preflight] aws sts get-caller-identity" >&2
+              acct="$(aws sts get-caller-identity --query Account --output text)"
+              echo "[preflight] AWS Account: ${acct}" >&2
+
+              if [[ "${acct}" != "${AWS_ACCOUNT_ID}" ]]; then
+                echo "[preflight] ERROR: AWS account mismatch. Expected ${AWS_ACCOUNT_ID}, got ${acct}" >&2
+                exit 2
+              fi
+
+              # Run validation
+              /scripts/validate-existing-backups.sh "${SHARE_NAME}" "${SAMPLE_PERCENT:-100}"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "4Gi"
+              cpu: "2000m"
+          env:
+            # Share configuration (MUST override these for each share)
+            - name: SHARE_NAME
+              value: "REPLACE_ME"
+            - name: SRC_PATH
+              value: "/src"
+            - name: DEST_BUCKET
+              value: "archive.wind.etherport.net"
+            - name: DEST_PREFIX
+              value: "objects/REPLACE_ME"
+            - name: METADATA_BUCKET
+              value: "logs.archive.wind.etherport.net"
+
+            # Validation settings
+            - name: SAMPLE_PERCENT
+              value: "100"  # Set to <100 to validate a random sample
+            - name: PARALLEL_WORKERS
+              value: "50"
+            - name: REPORT_PREFIX
+              value: "validation-reports"
+
+            # AWS configuration
+            - name: AWS_REGION
+              value: "us-west-2"
+            - name: AWS_DEFAULT_REGION
+              value: "us-west-2"
+            - name: AWS_EC2_METADATA_DISABLED
+              value: "true"
+            - name: AWS_PAGER
+              value: ""
+            - name: AWS_ACCOUNT_ID
+              value: "830881980142"
+
+          envFrom:
+            - secretRef:
+                name: aws-backup-credentials
+          volumeMounts:
+            - name: nfs-src
+              mountPath: /src
+              readOnly: true
+            - name: work
+              mountPath: /tmp
+      volumes:
+        - name: nfs-src
+          nfs:
+            server: sequoia.wind.etherport.net
+            path: /var/nfs/shared/REPLACE_ME
+        - name: work
+          emptyDir: {}
