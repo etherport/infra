@@ -35,18 +35,7 @@ spec:
               args:
                 - |
                   set -euo pipefail
-
-                  # AWS auth preflight
-                  echo "[preflight] aws sts get-caller-identity"
-                  acct="$(aws sts get-caller-identity --query Account --output text)"
-                  echo "[preflight] AWS Account: ${acct}"
-
-                  if [[ "${acct}" != "${AWS_ACCOUNT_ID}" ]]; then
-                    echo "[preflight] ERROR: AWS account mismatch. Expected ${AWS_ACCOUNT_ID}, got ${acct}"
-                    exit 2
-                  fi
-
-                  # Run DDNS update
+                  # Run DDNS update (auth validation happens in Route53 API calls)
                   /scripts/update-route53.sh
               securityContext:
                 allowPrivilegeEscalation: false

@@ -47,10 +47,10 @@ validate_ip() {
 
 fetch_ip_with_retry() {
   local max_attempts=3
-  local delay=2
+  local delay=1
   for ((i=1; i<=max_attempts; i++)); do
     local ip
-    ip=$(curl -s --max-time 10 "$IP_SERVICE_URL" 2>&1) && [[ -n "$ip" ]] && echo "$ip" && return 0
+    ip=$(curl -s --max-time 3 "$IP_SERVICE_URL" 2>&1) && [[ -n "$ip" ]] && echo "$ip" && return 0
     echo "WARNING: IP fetch attempt $i/$max_attempts failed, retrying in ${delay}s..." >&2
     sleep "$delay"
     delay=$((delay * 2))
@@ -122,9 +122,12 @@ for idx in "${!ZONE_ARRAY[@]}"; do
   echo "---"
   echo "Processing: $RECORD_NAME (zone: $HOSTED_ZONE_ID)"
 
-  # Get existing record value
+  # Get existing record value (optimized: start at our record, fetch only 1)
   EXISTING_IP=$(aws route53 list-resource-record-sets \
     --hosted-zone-id "$HOSTED_ZONE_ID" \
+    --start-record-name "${RECORD_NAME}." \
+    --start-record-type A \
+    --max-items 1 \
     --query "ResourceRecordSets[?Name == '${RECORD_NAME}.'].ResourceRecords[0].Value" \
     --output text \
     --region "$AWS_REGION" 2>/dev/null || echo "")
