@@ -49,41 +49,20 @@ data:
     }' || echo 0)
     ERROR_COUNT=$(grep -c "ERROR" "$OUTPUT_FILE" || echo 0)
 
-    # Push metrics to Prometheus PushGateway (using wget with post-file)
+    # Push metrics to Prometheus PushGateway (BusyBox-compatible)
     METRICS_FILE="/tmp/metrics.txt"
-    cat <<EOF > "$METRICS_FILE"
-    # HELP rclone_sync_success Whether the last sync was successful (1=success, 0=failure)
-    # TYPE rclone_sync_success gauge
-    rclone_sync_success{source="gdrive",destination="nfs"} $([ "$STATUS" = "success" ] && echo 1 || echo 0)
+    [ "$STATUS" = "success" ] && SUCCESS_VAL=1 || SUCCESS_VAL=0
 
-    # HELP rclone_sync_duration_seconds Duration of the sync in seconds
-    # TYPE rclone_sync_duration_seconds gauge
-    rclone_sync_duration_seconds{source="gdrive",destination="nfs"} ${DURATION}
-
-    # HELP rclone_sync_files_transferred Number of files transferred
-    # TYPE rclone_sync_files_transferred gauge
-    rclone_sync_files_transferred{source="gdrive",destination="nfs"} ${TRANSFERRED_FILES}
-
-    # HELP rclone_sync_files_total Total number of files processed
-    # TYPE rclone_sync_files_total gauge
-    rclone_sync_files_total{source="gdrive",destination="nfs"} ${TOTAL_FILES}
-
-    # HELP rclone_sync_files_checked Number of files checked
-    # TYPE rclone_sync_files_checked gauge
-    rclone_sync_files_checked{source="gdrive",destination="nfs"} ${CHECKED_FILES}
-
-    # HELP rclone_sync_bytes_transferred Bytes transferred
-    # TYPE rclone_sync_bytes_transferred gauge
-    rclone_sync_bytes_transferred{source="gdrive",destination="nfs"} ${TRANSFERRED_BYTES}
-
-    # HELP rclone_sync_errors_total Number of errors encountered
-    # TYPE rclone_sync_errors_total gauge
-    rclone_sync_errors_total{source="gdrive",destination="nfs"} ${ERROR_COUNT}
-
-    # HELP rclone_sync_last_run_timestamp Unix timestamp of last sync
-    # TYPE rclone_sync_last_run_timestamp gauge
-    rclone_sync_last_run_timestamp{source="gdrive",destination="nfs"} ${END_TIME}
-    EOF
+    printf '%s\n' \
+      "rclone_sync_success{source=\"gdrive\",destination=\"nfs\"} ${SUCCESS_VAL}" \
+      "rclone_sync_duration_seconds{source=\"gdrive\",destination=\"nfs\"} ${DURATION}" \
+      "rclone_sync_files_transferred{source=\"gdrive\",destination=\"nfs\"} ${TRANSFERRED_FILES}" \
+      "rclone_sync_files_total{source=\"gdrive\",destination=\"nfs\"} ${TOTAL_FILES}" \
+      "rclone_sync_files_checked{source=\"gdrive\",destination=\"nfs\"} ${CHECKED_FILES}" \
+      "rclone_sync_bytes_transferred{source=\"gdrive\",destination=\"nfs\"} ${TRANSFERRED_BYTES}" \
+      "rclone_sync_errors_total{source=\"gdrive\",destination=\"nfs\"} ${ERROR_COUNT}" \
+      "rclone_sync_last_run_timestamp{source=\"gdrive\",destination=\"nfs\"} ${END_TIME}" \
+      > "$METRICS_FILE"
 
     # Post metrics to PushGateway
     wget --post-file="$METRICS_FILE" -O- -q "http://${PUSHGATEWAY}/metrics/job/${JOB_NAME}/instance/${INSTANCE}"

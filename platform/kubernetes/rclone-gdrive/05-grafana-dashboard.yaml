@@ -28,7 +28,7 @@ data:
       "links": [],
       "panels": [
         {
-          "datasource": "Prometheus",
+          "datasource": "$datasource",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -95,7 +95,7 @@ data:
           "type": "stat"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "$datasource",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -144,7 +144,7 @@ data:
           "type": "stat"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "$datasource",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -201,7 +201,7 @@ data:
           "type": "stat"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "$datasource",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -258,7 +258,7 @@ data:
           "type": "stat"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "$datasource",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -338,7 +338,7 @@ data:
           "type": "timeseries"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "$datasource",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -413,7 +413,7 @@ data:
           "type": "timeseries"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "$datasource",
           "fieldConfig": {
             "defaults": {
               "color": {

@@ -27,3 +27,4 @@
 **/*secret*.yaml
 !**/*secret-template*.yaml
 !**/*.secret-template.yaml
+platform/kubernetes/icloudpd/04-icloud-cookies-secret.yaml

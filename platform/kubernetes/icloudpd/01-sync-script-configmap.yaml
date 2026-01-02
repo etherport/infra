@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: icloud-sync-script
+  namespace: icloudpd
+data:
+  sync-and-report.sh: |
+    #!/bin/sh
+    set -e
+
+    echo "Starting iCloud Photos sync..."
+    echo "Original cookie directory contents:"
+    ls -la /cookie-dir/
+
+    # Copy cookies to a writable location (icloudpd may need to update them)
+    echo "Copying cookies to /tmp/cookies..."
+    mkdir -p /tmp/cookies
+    cp /cookie-dir/* /tmp/cookies/ 2>/dev/null || echo "Error copying cookies"
+    chmod 600 /tmp/cookies/* 2>/dev/null || true
+    ls -la /tmp/cookies/
+
+    START_TIME=$(date +%s)
+
+    # Check NFS mount and permissions
+    echo "Checking NFS mount at /backup:"
+    ls -la /backup/ || echo "Cannot access /backup"
+    df -h /backup || echo "Cannot get disk usage for /backup"
+    echo "Current user: $(whoami), UID: $(id -u), GID: $(id -g)"
+    echo "Testing write permissions to /backup/iCloud:"
+    touch /backup/iCloud/.test 2>&1 && rm /backup/iCloud/.test && echo "Write OK" || echo "Write FAILED"
+
+    # First, verify icloudpd binary exists and is executable
+    echo "Checking icloudpd binary:"
+    ls -la /app/icloudpd || echo "Binary not found!"
+    /app/icloudpd --version || echo "Cannot run icloudpd --version"
+
+    # Run icloudpd with cookie-based authentication
+    echo ""
+    echo "Running icloudpd sync..."
+    echo "Command: /app/icloudpd --directory /backup/iCloud --cookie-directory /cookie-dir --recent 10 --folder-structure {:%Y/%Y-%m-%d}"
+
+    set +e  # Don't exit on error so we can capture exit code
+    /app/icloudpd \
+      --directory /backup/iCloud \
+      --cookie-directory /tmp/cookies \
+      --recent 10 \
+      --folder-structure "{:%Y/%Y-%m-%d}"
+    EXIT_CODE=$?
+    set -e
+
+    if [ $EXIT_CODE -eq 0 ]; then
+      STATUS="success"
+      echo "icloudpd completed successfully with exit code: $EXIT_CODE"
+    else
+      STATUS="failure"
+      echo "icloudpd failed with exit code: $EXIT_CODE"
+    fi
+
+    echo "Checking /backup/iCloud contents after sync:"
+    find /backup/iCloud -type f | head -20 || echo "No files found or cannot list"
+
+    END_TIME=$(date +%s)
+    DURATION=$((END_TIME - START_TIME))
+
+    # Push metrics to Prometheus PushGateway (BusyBox-compatible)
+    METRICS_FILE="/tmp/icloud-metrics.txt"
+    [ "$STATUS" = "success" ] && SUCCESS_VAL=1 || SUCCESS_VAL=0
+
+    printf '%s\n' \
+      "icloud_sync_success{source=\"icloud\",destination=\"nfs\"} ${SUCCESS_VAL}" \
+      "icloud_sync_duration_seconds{source=\"icloud\",destination=\"nfs\"} ${DURATION}" \
+      "icloud_sync_last_run_timestamp{source=\"icloud\",destination=\"nfs\"} ${END_TIME}" \
+      > "$METRICS_FILE"
+
+    # Post metrics to PushGateway
+    wget --post-file="$METRICS_FILE" -O- -q "http://pushgateway.monitoring.svc.cluster.local:9091/metrics/job/icloud_photos_sync/instance/icloud"
+
+    exit $EXIT_CODE
