@@ -11,6 +11,9 @@
       # Add AWS IP when known
 
   tasks:
+    - name: Gather service facts
+      service_facts:
+
     - name: Update apt cache
       apt:
         update_cache: yes
@@ -24,14 +27,21 @@
           - apt-transport-https
         state: present
 
-    - name: Add Microsoft package signing key
-      apt_key:
+    - name: Create keyrings directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Download Microsoft GPG key
+      get_url:
         url: https://packages.microsoft.com/keys/microsoft.asc
-        state: present
+        dest: /etc/apt/keyrings/microsoft.asc
+        mode: "0644"
 
     - name: Add Microsoft package repository
       apt_repository:
-        repo: "deb [arch=amd64] https://packages.microsoft.com/ubuntu/24.04/prod noble main"
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.asc] https://packages.microsoft.com/ubuntu/24.04/prod noble main"
         state: present
         filename: microsoft-prod
 
@@ -89,6 +99,23 @@
         name: technitium
         enabled: yes
         state: started
+
+    - name: Configure firewall - allow DNS (port 53)
+      ufw:
+        rule: allow
+        port: "53"
+        proto: "{{ item }}"
+      loop:
+        - tcp
+        - udp
+      when: ansible_facts.services['ufw.service'] is defined
+
+    - name: Configure firewall - allow Technitium web UI (port 5380)
+      ufw:
+        rule: allow
+        port: "5380"
+        proto: tcp
+      when: ansible_facts.services['ufw.service'] is defined
 
     - name: Wait for Technitium to be ready
       wait_for:

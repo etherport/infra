@@ -83,6 +83,11 @@ resource "proxmox_virtual_environment_vm" "standalone" {
         gateway = local.gateway_201
       }
     }
+    # Use K8s Technitium VIP for initial DNS (before this VM is running)
+    # Falls back to Cloudflare if VIP is unavailable
+    dns {
+      servers = ["10.10.201.5", "1.1.1.1"]
+    }
   }
 
   started = true
