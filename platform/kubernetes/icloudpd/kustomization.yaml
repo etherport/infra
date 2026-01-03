@@ -8,4 +8,5 @@ resources:
   - 01-sync-script-configmap.yaml
   - 02-cronjob.yaml
   - 03-prometheus-rules.yaml
-  - 04-icloud-cookies-secret.yaml
+  # Note: 04-icloud-cookies-secret.yaml should be applied manually (not in git)
+  # - 04-icloud-cookies-secret.yaml
