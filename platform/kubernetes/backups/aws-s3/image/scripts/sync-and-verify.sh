@@ -503,7 +503,7 @@ set +e
 aws s3 sync "${SRC_PATH}" "${DEST_URI}" \
   --delete \
   --checksum-algorithm SHA256 \
-  --exact-timestamps \
+  --size-only \
   --no-progress \
   --dryrun \
   "${EXCLUDE_ARGS[@]}" \
@@ -524,7 +524,7 @@ set +e
 aws s3 sync "${SRC_PATH}" "${DEST_URI}" \
   --delete \
   --checksum-algorithm SHA256 \
-  --exact-timestamps \
+  --size-only \
   --no-progress \
   "${EXCLUDE_ARGS[@]}" \
   2>&1 | tee "${SYNC_OUT}"
