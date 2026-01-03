@@ -792,7 +792,7 @@ else
   # Run verification in parallel
   if command -v parallel >/dev/null 2>&1; then
     # Use GNU parallel if available (more memory efficient)
-    PARALLEL_JOBS=50
+    PARALLEL_JOBS=25
     echo "Starting parallel verification (${PARALLEL_JOBS} workers with GNU parallel)..."
     cat "${VERIFY_WORK_DIR}/files-to-verify.tsv" | \
       parallel --colsep '\t' -j "${PARALLEL_JOBS}" \
