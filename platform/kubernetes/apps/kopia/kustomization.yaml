@@ -13,5 +13,3 @@ resources:
   - 05-deployment.yaml
   - 06-service.yaml
   - 07-ingressroute.yaml
-  - 08-backup-cronjob.yaml
-  - 09-prune-cronjob.yaml
