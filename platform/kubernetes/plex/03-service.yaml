@@ -6,7 +6,8 @@ metadata:
   labels:
     app: plex
 spec:
-  type: ClusterIP
+  type: LoadBalancer
+  loadBalancerIP: 10.10.201.74
   ports:
     - name: plex
       port: 32400
