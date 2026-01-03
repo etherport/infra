@@ -1,18 +1,21 @@
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:
-  name: wind-pool
+  name: primary
   namespace: metallb-system
 spec:
   addresses:
+    - 10.10.201.5/32           # Technitium DNS VIP
     - 10.10.201.70-10.10.201.90
+  autoAssign: true
+  avoidBuggyIPs: false
 
 ---
 apiVersion: metallb.io/v1beta1
 kind: L2Advertisement
 metadata:
-  name: wind-l2
+  name: primary
   namespace: metallb-system
 spec:
   ipAddressPools:
-    - wind-pool
+    - primary

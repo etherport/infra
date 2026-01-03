@@ -51,6 +51,12 @@ locals {
       memory_mb = 8192
       disk_gb   = 80
     }
+    k8s-w3 = {
+      ip        = "10.10.201.53"
+      vcpus     = 4
+      memory_mb = 8192
+      disk_gb   = 80
+    }
   }
 }
 
@@ -214,13 +220,13 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
     rombar  = true
   }
 
-  # cloud-init: static IP
+  # cloud-init: static IP (changed from .53 to .60 for clean IP organization)
   initialization {
     datastore_id = local.storage_name
 
     ip_config {
       ipv4 {
-        address = "10.10.201.53/24"
+        address = "10.10.201.60/24"
         gateway = local.gateway_201
       }
     }
@@ -243,6 +249,6 @@ output "k8s_nodes" {
 output "k8s_gpu_node" {
   value = {
     name = proxmox_virtual_environment_vm.k8s_gpu1.name
-    ip   = "10.10.201.53"
+    ip   = "10.10.201.60"
   }
 }

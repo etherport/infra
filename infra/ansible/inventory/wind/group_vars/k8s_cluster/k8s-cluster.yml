@@ -29,6 +29,10 @@ kube_owner: kube
 # cert files to. Not really changeable...
 kube_cert_group: kube-cert
 
+# Set CNI bin owner to root for compatibility with Cilium's init containers
+# which need write access to /opt/cni/bin
+cni_bin_owner: root
+
 # Cluster Loglevel configuration
 kube_log_level: 2
 
