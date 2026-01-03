@@ -32,13 +32,11 @@ alexa:
     locale: en-US
 
 rest_command:
-  pihole_disable_10s:
-    url: "http://dns1.wind.gmsmeg.net/admin/api.php?disable=10&auth=b2304d5e4d76edbf32f5dc7313ffd86c5441445c7b69c0e8c708dc133c7f6b35"
 
   monitor_usb_c:
-    url: "http://gdisplay.wind.gmsmeg.net/pjctrl?D%3D%2515%2560%256%2513%253%25137%2518"
+    url: "http://gdisplay.wind.etherport.net/pjctrl?D%3D%2515%2560%256%2513%253%25137%2518"
     method: POST
 
   monitor_dp1:
-    url: "http://gdisplay.wind.gmsmeg.net/pjctrl?D%3D%2514%2560%256%2513%252%2515%25219"
+    url: "http://gdisplay.wind.etherport.net/pjctrl?D%3D%2514%2560%256%2513%252%2515%25219"
     method: POST
