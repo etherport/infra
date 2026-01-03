@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: home-assistant-config
+  namespace: home-automation
+data:
+  configuration.yaml: |
+    # Loads default set of integrations. Do not remove.
+    default_config:
+
+    # Load frontend themes from the themes folder
+    frontend:
+      themes: !include_dir_merge_named themes
+
+    automation: !include automations.yaml
+    script: !include scripts.yaml
+    scene: !include scenes.yaml
+
+    http:
+      use_x_forwarded_for: true
+      trusted_proxies:
+        - 10.42.0.0/16      # Kubernetes pod network (Cilium)
+        - 10.43.0.0/16      # Kubernetes service network
+        - 10.10.201.15      # Local s2s vpn interface (to AWS)
+        - 10.255.255.1
+        - 10.10.201.17      # Local vpn server (direct)
+        - 10.10.100.0/22    # AWS environment
+      cors_allowed_origins:
+        - https://ha.wind.etherport.net
+
+    # Leviton account
+    light:
+      - platform: decora_wifi
+        username: grahamsm@gmail.com
+        password: y2wboeu_WuLDBBs9_PvPpbhYhujPNN
+
+    alexa:
+      smart_home:
+        locale: en-US
+
+    rest_command:
+      pihole_disable_10s:
+        url: "http://dns1.wind.gmsmeg.net/admin/api.php?disable=10&auth=b2304d5e4d76edbf32f5dc7313ffd86c5441445c7b69c0e8c708dc133c7f6b35"
+
+      monitor_usb_c:
+        url: "http://gdisplay.wind.gmsmeg.net/pjctrl?D%3D%2515%2560%256%2513%253%25137%2518"
+        method: POST
+
+      monitor_dp1:
+        url: "http://gdisplay.wind.gmsmeg.net/pjctrl?D%3D%2514%2560%256%2513%252%2515%25219"
+        method: POST

@@ -1,0 +1,38 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: home-automation
+
+resources:
+  - namespace.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingressroute.yaml
+
+# ConfigMap generator for configuration.yaml
+# This allows Flux to detect changes and trigger pod restart
+configMapGenerator:
+  - name: home-assistant-config
+    files:
+      - configuration.yaml
+    options:
+      disableNameSuffixHash: false  # Add hash to trigger pod restart on changes
+
+# Patches to ensure pod restarts when ConfigMap changes
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: home-assistant
+      spec:
+        template:
+          metadata:
+            annotations:
+              # This annotation will change when ConfigMap changes
+              # causing the deployment to roll out new pods
+              checksum/config: placeholder
+    target:
+      kind: Deployment
+      name: home-assistant

@@ -1,0 +1,6 @@
+# Ignore secrets that shouldn't be in git
+secrets.yaml
+*.secret.yaml
+
+# Note: configuration.yaml contains some secrets currently
+# TODO: Extract secrets to a SealedSecret or external secret manager
