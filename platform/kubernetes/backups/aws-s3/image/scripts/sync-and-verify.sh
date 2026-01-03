@@ -732,62 +732,59 @@ else
   jq -r 'select(.action=="upload" or .action=="copy") | [.s3_bucket, .s3_key] | @tsv' \
     "${TRANSFER_LOG_JSONL}" > "${VERIFY_WORK_DIR}/files-to-verify.tsv"
   
-  # Verification function (runs in parallel workers)
-  verify_file() {
-    local BUCKET="$1"
-    local KEY="$2"
-    local OUTPUT_DIR="$3"
-    local REGION="$4"
-    
-    # Create safe filename for output (hash of bucket:key)
-    local HASH=$(echo -n "${BUCKET}:${KEY}" | md5sum | awk '{print $1}')
-    local RESULT_FILE="${OUTPUT_DIR}/${HASH}.json"
-    
-    # Try to get object metadata with checksum enabled
-    if aws s3api head-object \
-        --bucket "${BUCKET}" \
-        --key "${KEY}" \
-        --checksum-mode ENABLED \
-        --region "${REGION}" \
-        --output json 2>/dev/null > "${RESULT_FILE}.tmp"; then
-      
-      # Success - object exists and we got metadata
-      jq -c --arg bucket "${BUCKET}" \
-         --arg key "${KEY}" \
-         '{
-           bucket: $bucket,
-           key: $key,
-           status: "succeeded",
-           size: (.ContentLength // 0),
-           etag: (.ETag // ""),
-           checksum_sha256: (.ChecksumSHA256 // ""),
-           last_modified: (.LastModified // "")
-         }' "${RESULT_FILE}.tmp" > "${RESULT_FILE}"
-      rm -f "${RESULT_FILE}.tmp"
-      
-    else
-      # Failed - file doesn't exist or error occurred
-      jq -cn \
-        --arg bucket "${BUCKET}" \
-        --arg key "${KEY}" \
-        '{
-          bucket: $bucket,
-          key: $key,
-          status: "failed",
-          error_code: "NoSuchKey",
-          error_message: "HeadObject failed - object may not exist or is inaccessible"
-        }' > "${RESULT_FILE}"
-      rm -f "${RESULT_FILE}.tmp"
-    fi
-  }
-  
-  # Export function and credentials for parallel workers
-  export -f verify_file
-  export AWS_REGION
-  # For IRSA (IAM Roles for Service Accounts) in Kubernetes
-  export AWS_WEB_IDENTITY_TOKEN_FILE AWS_ROLE_ARN AWS_DEFAULT_REGION
-  # For static credentials
-  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  # Write verification script to file (avoids export -f issues with GNU parallel)
+  # GNU parallel spawns new bash instances that don't inherit exported functions
+  cat > "${VERIFY_WORK_DIR}/verify-one.sh" <<'VERIFY_SCRIPT'
+#!/bin/bash
+set -euo pipefail
+
+BUCKET="$1"
+KEY="$2"
+OUTPUT_DIR="$3"
+REGION="$4"
+
+# Create safe filename for output (hash of bucket:key)
+HASH=$(echo -n "${BUCKET}:${KEY}" | md5sum | awk '{print $1}')
+RESULT_FILE="${OUTPUT_DIR}/${HASH}.json"
+
+# Try to get object metadata with checksum enabled
+if aws s3api head-object \
+    --bucket "${BUCKET}" \
+    --key "${KEY}" \
+    --checksum-mode ENABLED \
+    --region "${REGION}" \
+    --output json 2>/dev/null > "${RESULT_FILE}.tmp"; then
+
+  # Success - object exists and we got metadata
+  jq -c --arg bucket "${BUCKET}" \
+     --arg key "${KEY}" \
+     '{
+       bucket: $bucket,
+       key: $key,
+       status: "succeeded",
+       size: (.ContentLength // 0),
+       etag: (.ETag // ""),
+       checksum_sha256: (.ChecksumSHA256 // ""),
+       last_modified: (.LastModified // "")
+     }' "${RESULT_FILE}.tmp" > "${RESULT_FILE}"
+  rm -f "${RESULT_FILE}.tmp"
+
+else
+  # Failed - file doesn't exist or error occurred
+  jq -cn \
+    --arg bucket "${BUCKET}" \
+    --arg key "${KEY}" \
+    '{
+      bucket: $bucket,
+      key: $key,
+      status: "failed",
+      error_code: "NoSuchKey",
+      error_message: "HeadObject failed - object may not exist or is inaccessible"
+    }' > "${RESULT_FILE}"
+  rm -f "${RESULT_FILE}.tmp"
+fi
+VERIFY_SCRIPT
+  chmod +x "${VERIFY_WORK_DIR}/verify-one.sh"
 
   # Run verification in parallel
   if command -v parallel >/dev/null 2>&1; then
@@ -796,33 +793,51 @@ else
     echo "Starting parallel verification (${PARALLEL_JOBS} workers with GNU parallel)..."
     cat "${VERIFY_WORK_DIR}/files-to-verify.tsv" | \
       parallel --colsep '\t' -j "${PARALLEL_JOBS}" \
-        verify_file {1} {2} "${VERIFY_WORK_DIR}/results" "${AWS_REGION}"
+        "${VERIFY_WORK_DIR}/verify-one.sh" {1} {2} "${VERIFY_WORK_DIR}/results" "${AWS_REGION}"
 
   else
     # Fallback: bash background jobs (less memory efficient, use fewer workers)
     PARALLEL_JOBS=10
     echo "INFO: GNU parallel not found, using bash background jobs with ${PARALLEL_JOBS} workers" >&2
-    
+
     COUNT=0
     TOTAL=$(wc -l < "${VERIFY_WORK_DIR}/files-to-verify.tsv" | tr -d ' ')
-    
+
     while IFS=$'\t' read -r BUCKET KEY; do
-      verify_file "${BUCKET}" "${KEY}" "${VERIFY_WORK_DIR}/results" "${AWS_REGION}" &
-      
+      "${VERIFY_WORK_DIR}/verify-one.sh" "${BUCKET}" "${KEY}" "${VERIFY_WORK_DIR}/results" "${AWS_REGION}" &
+
       COUNT=$((COUNT + 1))
-      
+
       # Wait for batch to complete before starting next batch
       if [[ $((COUNT % PARALLEL_JOBS)) -eq 0 ]]; then
         wait
         echo "Progress: ${COUNT}/${TOTAL} files verified..."
       fi
     done < "${VERIFY_WORK_DIR}/files-to-verify.tsv"
-    
+
     wait  # Wait for remaining jobs
     echo "Progress: ${COUNT}/${TOTAL} files verified... Done!"
   fi
-  
+
   echo "Verification complete, processing results..."
+
+  # Sanity check: verify result files were actually created
+  RESULT_FILE_COUNT=$(find "${VERIFY_WORK_DIR}/results" -name "*.json" -type f 2>/dev/null | wc -l | tr -d ' ')
+  echo "Result files created: ${RESULT_FILE_COUNT} (expected: ${VERIFY_COUNT})"
+
+  if [[ "${RESULT_FILE_COUNT}" -eq 0 ]] && [[ "${VERIFY_COUNT}" -gt 0 ]]; then
+    echo "CRITICAL ERROR: No verification result files created!" >&2
+    echo "This indicates the parallel verification workers failed to execute." >&2
+    record_warning "Verification produced 0 result files for ${VERIFY_COUNT} expected files - parallel execution failed"
+
+    # Mark all as failed since we couldn't verify
+    VERIFIED_SUCCEEDED=0
+    VERIFIED_FAILED="${VERIFY_COUNT}"
+    VERIFICATION_STATUS="failed"
+
+    # Create a marker file explaining the failure
+    echo '{"error": "parallel_execution_failed", "message": "No verification workers produced output", "expected_count": '${VERIFY_COUNT}'}' > "${VERIFY_WORK_DIR}/verification-error.json"
+  fi
   
   # Combine all result files into single JSONL
   VERIFICATION_RESULTS_JSONL="${VERIFY_WORK_DIR}/verification-results.jsonl"
