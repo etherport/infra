@@ -9,6 +9,7 @@ resources:
   - 02-statefulset.yaml
   - 03-service.yaml
   - 04-ingressroute.yaml
+  - 05-secret.sops.yaml
   - 06-cluster-services.yaml
   - 07-dns-sync.yaml
 
