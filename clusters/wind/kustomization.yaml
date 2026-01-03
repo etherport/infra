@@ -5,6 +5,7 @@ resources:
   # Infrastructure
   - ../../platform/kubernetes/metallb
   - ../../platform/kubernetes/traefik
+  - ../../platform/kubernetes/technitium
   # Applications
   - ../../platform/kubernetes/home-automation
   - ../../platform/kubernetes/plex
