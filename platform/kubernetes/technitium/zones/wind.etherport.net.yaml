@@ -28,9 +28,14 @@ records:
     value: 10.10.201.52
     comment: Kubernetes worker 2
 
-  - name: k8s-gpu1
+  - name: k8s-w3
     type: A
     value: 10.10.201.53
+    comment: Kubernetes worker 3
+
+  - name: k8s-gpu1
+    type: A
+    value: 10.10.201.60
     comment: Kubernetes GPU worker
 
   # Traefik Ingress (LoadBalancer VIP)
