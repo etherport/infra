@@ -162,3 +162,9 @@ records:
     type: A
     value: 10.10.202.45
     comment: Graham's display/workstation
+
+  # Test record for GitOps instant sync
+  - name: gitops-test
+    type: A
+    value: 10.10.201.99
+    comment: Test record - delete after verification

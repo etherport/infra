@@ -1,5 +1,5 @@
-# DNS GitOps Sync CronJob
-# Syncs zone records from ConfigMap to Technitium via API every 5 minutes
+# DNS GitOps Sync Watcher
+# Watches zone ConfigMap and syncs to Technitium instantly on change
 # Idempotent - only changes records that differ from desired state
 ---
 apiVersion: v1
@@ -114,67 +114,132 @@ data:
                 added += 1
 
         print(f"\n✅ Sync complete: {added} added, {updated} updated, {unchanged} unchanged")
+        return added + updated  # Return number of changes
+
+    if __name__ == "__main__":
+        main()
+
+  watcher.py: |
+    #!/usr/bin/env python3
+    """Watch ConfigMap for changes and trigger sync."""
+    import hashlib
+    import os
+    import subprocess
+    import sys
+    import time
+
+    ZONE_FILE = os.environ.get("ZONE_FILE", "/zones/zone.yaml")
+    CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", "5"))  # seconds
+
+    def get_file_hash(path):
+        """Get MD5 hash of file contents."""
+        try:
+            with open(path, "rb") as f:
+                return hashlib.md5(f.read()).hexdigest()
+        except FileNotFoundError:
+            return None
+
+    def run_sync():
+        """Run the sync script."""
+        print(f"\n{'='*60}")
+        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Change detected, syncing...")
+        print('='*60)
+        result = subprocess.run(
+            ["python", "/scripts/sync.py"],
+            capture_output=False
+        )
+        return result.returncode == 0
+
+    def main():
+        print(f"DNS GitOps Watcher starting...")
+        print(f"Watching: {ZONE_FILE}")
+        print(f"Check interval: {CHECK_INTERVAL}s")
+
+        # Initial sync on startup
+        print("\n[Startup] Running initial sync...")
+        last_hash = get_file_hash(ZONE_FILE)
+        if last_hash:
+            run_sync()
+        else:
+            print(f"Warning: Zone file not found at {ZONE_FILE}")
+
+        # Watch loop
+        while True:
+            time.sleep(CHECK_INTERVAL)
+            current_hash = get_file_hash(ZONE_FILE)
+
+            if current_hash and current_hash != last_hash:
+                if run_sync():
+                    last_hash = current_hash
+                else:
+                    print("Sync failed, will retry on next check")
+            elif current_hash is None:
+                print(f"Warning: Zone file not found at {ZONE_FILE}")
 
     if __name__ == "__main__":
         main()
 ---
-apiVersion: batch/v1
-kind: CronJob
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: dns-sync
+  name: dns-sync-watcher
   namespace: dns
+  labels:
+    app: dns-sync-watcher
 spec:
-  schedule: "*/5 * * * *"  # Every 5 minutes
-  concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 1
-  failedJobsHistoryLimit: 3
-  jobTemplate:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dns-sync-watcher
+  template:
+    metadata:
+      labels:
+        app: dns-sync-watcher
     spec:
-      ttlSecondsAfterFinished: 300
-      backoffLimit: 2
-      template:
-        spec:
-          restartPolicy: Never
-          containers:
-            - name: sync
-              image: python:3.11-alpine
-              command:
-                - sh
-                - -c
-                - |
-                  pip install -q pyyaml
-                  python /scripts/sync.py
-              env:
-                - name: TECHNITIUM_URL
-                  value: "http://technitium-0.technitium-headless.dns.svc.cluster.local:5380"
-                - name: TECHNITIUM_USER
-                  valueFrom:
-                    secretKeyRef:
-                      name: technitium-admin
-                      key: username
-                - name: TECHNITIUM_PASS
-                  valueFrom:
-                    secretKeyRef:
-                      name: technitium-admin
-                      key: password
-                - name: ZONE_FILE
-                  value: "/zones/zone.yaml"
-              volumeMounts:
-                - name: script
-                  mountPath: /scripts
-                - name: zone-data
-                  mountPath: /zones
-              resources:
-                requests:
-                  memory: "64Mi"
-                  cpu: "50m"
-                limits:
-                  memory: "128Mi"
-                  cpu: "200m"
-          volumes:
+      containers:
+        - name: watcher
+          image: python:3.11-alpine
+          command:
+            - sh
+            - -c
+            - |
+              pip install -q pyyaml
+              python /scripts/watcher.py
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: TECHNITIUM_URL
+              value: "http://technitium-0.technitium-headless.dns.svc.cluster.local:5380"
+            - name: TECHNITIUM_USER
+              valueFrom:
+                secretKeyRef:
+                  name: technitium-admin
+                  key: username
+            - name: TECHNITIUM_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: technitium-admin
+                  key: password
+            - name: ZONE_FILE
+              value: "/zones/zone.yaml"
+            - name: CHECK_INTERVAL
+              value: "5"
+          volumeMounts:
             - name: script
-              configMap:
-                name: dns-sync-script
+              mountPath: /scripts
             - name: zone-data
-              configMap:
-                name: dns-zone-wind
+              mountPath: /zones
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+      volumes:
+        - name: script
+          configMap:
+            name: dns-sync-script
+        - name: zone-data
+          configMap:
+            name: dns-zone-wind
