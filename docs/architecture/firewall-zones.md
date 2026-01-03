@@ -42,17 +42,17 @@ The homelab network uses a **dual-router architecture** with routing responsibil
  │                           L3 Switch ("Switch Rack PoE")                                 │
  │                              Secondary Router                                           │
  │                                                                                         │
- │   Routes: Servers (201), Clients (202), vSAN (209), iSCSI (211)                        │
+ │   Routes: Servers (201), Clients (202), vSAN (209)                                     │
  │   Static routes to AWS via 10.255.253.3                                                 │
  └────────────────────────────────────────────────────────────────────────────────────────┘
-                │              │              │              │
-                ▼              ▼              ▼              ▼
-          ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
-          │ VLAN 201 │   │ VLAN 202 │   │ VLAN 209 │   │ VLAN 211 │
-          │ Servers  │   │ Clients  │   │   vSAN   │   │  iSCSI   │
-          │ TRUSTED  │   │ TRUSTED  │   │  INFRA   │   │  INFRA   │
-          │10.10.201 │   │10.10.202 │   │10.10.209 │   │10.10.211 │
-          └──────────┘   └──────────┘   └──────────┘   └──────────┘
+                │              │              │
+                ▼              ▼              ▼
+          ┌──────────┐   ┌──────────┐   ┌──────────┐
+          │ VLAN 201 │   │ VLAN 202 │   │ VLAN 209 │
+          │ Servers  │   │ Clients  │   │   vSAN   │
+          │ TRUSTED  │   │ TRUSTED  │   │  INFRA   │
+          │10.10.201 │   │10.10.202 │   │10.10.209 │
+          └──────────┘   └──────────┘   └──────────┘
 
                                AWS/WireGuard Routes (via L3 Switch)
                                ─────────────────────────────────────
@@ -68,8 +68,7 @@ The homelab network uses a **dual-router architecture** with routing responsibil
 | Traffic Path | Firewall Applies? | Example |
 |--------------|-------------------|---------|
 | Servers (201) <-> Clients (202) | **No** - L3 switch only | User laptop accessing K8s services |
-| Servers (201) <-> vSAN (209) | **No** - L3 switch only | ESXi host accessing vSAN storage |
-| Clients (202) <-> iSCSI (211) | **No** - L3 switch only | (Should be blocked on L3 switch ACL) |
+| Servers (201) <-> vSAN (209) | **No** - L3 switch only | Proxmox host accessing vSAN storage |
 | Servers (201) <-> IoT (204) | **Yes** - crosses UDM | Server accessing IoT device |
 | Clients (202) <-> Internet | **Yes** - crosses UDM | Web browsing |
 | IoT (204) <-> Security (205) | **Yes** - crosses UDM | Should be blocked |
@@ -79,7 +78,7 @@ The homelab network uses a **dual-router architecture** with routing responsibil
 
 | Traffic Flow | Where to Configure |
 |--------------|-------------------|
-| Between L3-switch VLANs (201, 202, 209, 211) | L3 switch ACLs |
+| Between L3-switch VLANs (201, 202, 209) | L3 switch ACLs |
 | Between UDM VLANs (200, 204, 205, 206, 212) | UDM Zone-Based Firewall |
 | Between L3-switch and UDM VLANs | UDM Zone-Based Firewall (on transit VLAN 4040) |
 | To/from Internet | UDM Zone-Based Firewall |
@@ -102,10 +101,9 @@ The homelab network uses a **dual-router architecture** with routing responsibil
 
 | VLAN | Name | Subnet | Zone | Purpose |
 |------|------|--------|------|---------|
-| 201 | Servers | 10.10.201.0/24 | Trusted | K8s nodes, DNS, infrastructure services |
+| 201 | Servers | 10.10.201.0/24 | Trusted | K8s nodes, DNS, infrastructure services (includes Ceph storage) |
 | 202 | Clients | 10.10.202.0/24 | Trusted | User laptops, phones |
-| 209 | vSAN | 10.10.209.0/24 | Infrastructure | Storage network (vSphere vSAN) |
-| 211 | iSCSI | 10.10.211.0/24 | Infrastructure | Storage network (iSCSI) |
+| 209 | vSAN | 10.10.209.0/24 | Infrastructure | Storage network (Proxmox/NAS) |
 
 ### Static Routes (via L3 Switch at 10.255.253.3)
 
@@ -122,7 +120,7 @@ The network is organized into six security zones based on trust level and functi
 | Zone | Trust Level | Networks | Description |
 |------|-------------|----------|-------------|
 | **Trusted** | High | Management (200), Servers (201), Clients (202) | Full inter-zone access, primary work networks |
-| **Infrastructure** | High (Restricted) | vSAN (209), iSCSI (211), Unifi (212), Inter-VLAN (4040) | Critical infrastructure, access restricted to specific systems |
+| **Infrastructure** | High (Restricted) | vSAN (209), Unifi (212), Inter-VLAN (4040) | Critical infrastructure, access restricted to specific systems |
 | **IoT** | Low | IoT (204) | Smart home devices, limited access |
 | **Security** | Isolated | Security (205) | Cameras, NVR, highly restricted |
 | **Guest** | Untrusted | Guest (206) | Guest WiFi, internet-only access |
@@ -158,12 +156,11 @@ The network is organized into six security zones based on trust level and functi
 | To Guest | Deny (no reason to access guest devices) |
 | To Internet | Allow |
 
-#### Infrastructure Zone (vSAN, iSCSI, Unifi, Inter-VLAN)
+#### Infrastructure Zone (vSAN, Unifi, Inter-VLAN)
 
 | Network | Allowed Sources | Allowed Destinations |
 |---------|-----------------|---------------------|
-| vSAN (209) | ESXi hosts only (from Servers VLAN) | Other vSAN hosts only |
-| iSCSI (211) | ESXi/servers with iSCSI initiators | iSCSI targets only |
+| vSAN (209) | Proxmox hosts, NAS (from Servers VLAN) | Storage targets only |
 | Unifi (212) | Management (200), UDM | UniFi Controller, APs |
 | Inter-VLAN (4040) | UDM (10.255.253.1), L3 Switch (10.255.253.3) | Routing traffic only |
 
@@ -229,8 +226,7 @@ These rules permit specific cross-zone traffic that would otherwise be denied by
 |-----------|--------|-------------|---------------|---------|
 | Unifi-Adoption | 10.10.212.0/24 | 10.10.200.1 | TCP/8080 | UniFi device adoption |
 | Unifi-STUN | 10.10.212.0/24 | 10.10.200.1 | UDP/3478 | STUN for UniFi |
-| vSAN-to-vSAN | 10.10.209.0/24 | 10.10.209.0/24 | All | vSAN cluster traffic |
-| iSCSI-traffic | 10.10.201.0/24 | 10.10.211.0/24 | TCP/3260 | iSCSI initiator to target |
+| vSAN-to-vSAN | 10.10.209.0/24 | 10.10.209.0/24 | All | vSAN/storage cluster traffic |
 
 ### Trusted Zone Cross-Access Rules
 
@@ -292,7 +288,6 @@ Network Isolation settings by network:
 | Security | 205 | **Yes** | Need to allow DNS traffic to Servers zone |
 | Guest | 206 | **No** | Keep isolation enabled for complete guest isolation |
 | vSAN | 209 | No | L3 switch routed, restricted at switch level |
-| iSCSI | 211 | No | L3 switch routed, restricted at switch level |
 | Unifi | 212 | **Yes** | Need to allow adoption/management traffic |
 | Inter-VLAN | 4040 | No | Transit network, restrict at switch level |
 
@@ -369,7 +364,6 @@ Create the following Network Objects:
 | `Security-Network` | IPv4 Address/Subnet | 10.10.205.0/24 |
 | `Guest-Network` | IPv4 Address/Subnet | 10.10.206.0/24 |
 | `vSAN-Network` | IPv4 Address/Subnet | 10.10.209.0/24 |
-| `iSCSI-Network` | IPv4 Address/Subnet | 10.10.211.0/24 |
 | `Unifi-Network` | IPv4 Address/Subnet | 10.10.212.0/24 |
 | `NVR-Server` | IPv4 Address/Subnet | 10.10.205.10 |
 | `Home-Assistant` | IPv4 Address/Subnet | 10.10.204.25 |
@@ -556,16 +550,14 @@ Click on any cell to view the policies applied to that zone pair.
 
 ## L3 Switch ACL Configuration
 
-Since the L3 switch routes traffic between Servers (201), Clients (202), vSAN (209), and iSCSI (211), you must configure ACLs on the switch to enforce security between these networks.
+Since the L3 switch routes traffic between Servers (201), Clients (202), and vSAN (209), you must configure ACLs on the switch to enforce security between these networks.
 
 ### Recommended L3 Switch ACLs
 
 | ACL Name | Source | Destination | Action | Purpose |
 |----------|--------|-------------|--------|---------|
 | Deny-Clients-to-vSAN | 10.10.202.0/24 | 10.10.209.0/24 | Deny | Client devices should not access storage |
-| Deny-Clients-to-iSCSI | 10.10.202.0/24 | 10.10.211.0/24 | Deny | Client devices should not access storage |
-| Allow-Servers-to-vSAN | 10.10.201.0/24 | 10.10.209.0/24 | Allow | ESXi hosts need vSAN access |
-| Allow-Servers-to-iSCSI | 10.10.201.0/24 | 10.10.211.0/24 | Allow | Servers need iSCSI access |
+| Allow-Servers-to-vSAN | 10.10.201.0/24 | 10.10.209.0/24 | Allow | Proxmox hosts need vSAN access |
 | Allow-Clients-to-Servers | 10.10.202.0/24 | 10.10.201.0/24 | Allow | Users access services |
 | Allow-Servers-to-Clients | 10.10.201.0/24 | 10.10.202.0/24 | Allow | Services respond to users |
 
@@ -664,7 +656,7 @@ To determine if traffic passes through the UDM firewall:
 1. Identify source and destination VLANs
 2. Check which device routes each VLAN:
    - VLANs 1, 200, 204, 205, 206, 212, 4040: UDM Pro
-   - VLANs 201, 202, 209, 211: L3 Switch
+   - VLANs 201, 202, 209: L3 Switch
 3. If both VLANs are routed by the same device, UDM firewall rules may not apply
 
 ## Legacy Configuration (Pre-v10.x)
