@@ -2,6 +2,8 @@
 
 GPU-accelerated Plex Media Server deployment with hardware transcoding on Tesla P40.
 
+**Deployment Method**: This application is managed via **Flux GitOps**. Changes are deployed automatically from git commits.
+
 ## Overview
 
 - **Namespace**: `plex`
@@ -9,6 +11,7 @@ GPU-accelerated Plex Media Server deployment with hardware transcoding on Tesla 
 - **Media Access**: NFS mounts from `sequoia.wind.etherport.net`
 - **GPU**: NVIDIA Tesla P40 with time-slicing (hardware transcoding)
 - **Access**: https://plex.wind.etherport.net
+- **GitOps**: Managed by Flux (see [Flux Overview](../../docs/gitops/flux-overview.md))
 
 ## Architecture
 
@@ -54,9 +57,38 @@ GPU-accelerated Plex Media Server deployment with hardware transcoding on Tesla 
 
 ## Deployment
 
-### 1. Apply Manifests
+### GitOps Deployment (Recommended)
+
+This application is managed by Flux. Changes are auto-deployed from git:
 
 ```bash
+# Edit any configuration (e.g., change image version, resources, etc.)
+vim platform/kubernetes/plex/02-deployment.yaml
+
+# Commit and push
+git add platform/kubernetes/plex/02-deployment.yaml
+git commit -m "plex: update configuration"
+git push
+
+# Force Flux to sync immediately (or wait ~10 minutes)
+flux reconcile source git flux-system
+flux reconcile kustomization flux-system
+
+# Verify deployment
+kubectl get pods -n plex
+kubectl logs -n plex -l app=plex -f
+```
+
+See [Making Changes to GitOps Apps](../../docs/gitops/making-changes.md) for detailed workflows.
+
+### Manual Deployment (Not Recommended)
+
+If you need to bypass GitOps (changes will be reverted by Flux):
+
+```bash
+kubectl apply -k platform/kubernetes/plex/
+
+# Or deploy individual files:
 kubectl apply -f 00-namespace.yaml
 kubectl apply -f 01-pvc-config.yaml
 kubectl apply -f 02-deployment.yaml

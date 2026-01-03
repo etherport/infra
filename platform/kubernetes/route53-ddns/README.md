@@ -2,6 +2,8 @@
 
 Containerized dynamic DNS updater for AWS Route53. Automatically updates DNS A records with your current public IP address.
 
+**Deployment Method**: This application is managed via **Flux GitOps**. Changes are deployed automatically from git commits.
+
 ## Features
 
 - ✅ **Multi-domain support**: Update multiple DNS records across different hosted zones
@@ -10,6 +12,7 @@ Containerized dynamic DNS updater for AWS Route53. Automatically updates DNS A r
 - ✅ **Kubernetes-native**: Runs as CronJob, configurable via ConfigMap
 - ✅ **Minimal resources**: 64MB RAM, runs every 5 minutes
 - ✅ **Secure**: Uses IAM credentials, runs as non-root user
+- ✅ **GitOps managed**: Configuration changes via git commits (see [Flux Overview](../../docs/gitops/flux-overview.md))
 
 ## Quick Start
 
@@ -66,6 +69,38 @@ data:
 - Order matters: first zone ID corresponds to first record name, etc.
 
 ### 3. Deploy to Kubernetes
+
+#### GitOps Deployment (Recommended)
+
+This application is managed by Flux. Configuration changes are made via git:
+
+```bash
+# Edit configuration (e.g., add/remove DNS records)
+vim platform/kubernetes/route53-ddns/base/configmap.yaml
+
+# Commit and push
+git add platform/kubernetes/route53-ddns/base/configmap.yaml
+git commit -m "route53-ddns: update DNS records"
+git push
+
+# Force Flux to sync immediately (or wait ~10 minutes)
+flux reconcile source git flux-system
+flux reconcile kustomization flux-system
+
+# Verify CronJob is updated
+kubectl get cronjob -n route53-ddns
+kubectl describe cronjob route53-ddns -n route53-ddns
+
+# Test immediately (don't wait for cron schedule)
+kubectl create job --from=cronjob/route53-ddns route53-test-$(date +%s) -n route53-ddns
+kubectl logs -n route53-ddns job/route53-test-<timestamp>
+```
+
+See [Making Changes to GitOps Apps](../../docs/gitops/making-changes.md) for detailed workflows.
+
+#### Manual Deployment (Not Recommended)
+
+If you need to bypass GitOps (changes will be reverted by Flux):
 
 ```bash
 # Apply all resources

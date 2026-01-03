@@ -2,6 +2,8 @@
 
 Automated daily sync from Google Drive to NFS backup storage using rclone.
 
+**Deployment Method**: This application is managed via **Flux GitOps**. Changes are deployed automatically from git commits.
+
 ## Overview
 
 - **Namespace**: `rclone`
@@ -9,6 +11,7 @@ Automated daily sync from Google Drive to NFS backup storage using rclone.
 - **Source**: Google Drive (My Drive)
 - **Destination**: `sequoia.wind.etherport.net:/var/nfs/shared/Backups/Graham/Google Drive/`
 - **Method**: One-way sync (Google Drive → NFS)
+- **GitOps**: Managed by Flux (see [Flux Overview](../../docs/gitops/flux-overview.md))
 
 ## Architecture
 
@@ -41,9 +44,37 @@ Automated daily sync from Google Drive to NFS backup storage using rclone.
 - NFS server with writable Backups share
 - Kubernetes cluster with CronJob support
 
-### Apply Manifests
+### GitOps Deployment (Recommended)
+
+This application is managed by Flux. Changes are auto-deployed from git:
 
 ```bash
+# Edit configuration (e.g., change schedule, sync settings)
+vim platform/kubernetes/rclone-gdrive/02-cronjob.yaml
+
+# Commit and push
+git add platform/kubernetes/rclone-gdrive/02-cronjob.yaml
+git commit -m "rclone: update sync configuration"
+git push
+
+# Force Flux to sync immediately (or wait ~10 minutes)
+flux reconcile source git flux-system
+flux reconcile kustomization flux-system
+
+# Verify
+kubectl get cronjob -n rclone
+```
+
+See [Making Changes to GitOps Apps](../../docs/gitops/making-changes.md) for detailed workflows.
+
+### Manual Deployment (Not Recommended)
+
+If you need to bypass GitOps (changes will be reverted by Flux):
+
+```bash
+kubectl apply -k platform/kubernetes/rclone-gdrive/
+
+# Or deploy individual files:
 kubectl apply -f 00-namespace.yaml
 # Note: OAuth token must be configured in rclone-config Secret first
 kubectl apply -f 02-cronjob.yaml
