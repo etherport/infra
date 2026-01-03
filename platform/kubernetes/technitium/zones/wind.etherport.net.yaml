@@ -53,10 +53,15 @@ records:
     value: 10.10.201.70
     comment: Technitium DNS web UI (via Traefik)
 
+  - name: dns-fallback
+    type: A
+    value: 10.10.201.6
+    comment: Technitium DNS fallback VM (local)
+
   - name: dns-aws
     type: A
     value: 10.10.100.5
-    comment: Technitium DNS on AWS (failover)
+    comment: Technitium DNS on AWS (remote failover)
 
   # =============================================================================
   # Infrastructure - Network Equipment

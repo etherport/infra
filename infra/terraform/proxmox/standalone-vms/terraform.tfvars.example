@@ -1,0 +1,5 @@
+# Copy this file to terraform.tfvars.local and fill in your values
+# terraform.tfvars.local is gitignored
+
+proxmox_token_id     = "graham@pam!terraform"
+proxmox_token_secret = "your-api-token-secret-here"

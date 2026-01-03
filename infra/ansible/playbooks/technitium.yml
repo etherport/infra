@@ -1,0 +1,109 @@
+---
+- name: Install Technitium DNS Server
+  hosts: dns_servers
+  become: true
+
+  vars:
+    technitium_version: "latest"
+    cluster_addresses:
+      - "10.10.201.5" # K8s cluster VIP
+      - "10.10.201.6" # Local fallback
+      # Add AWS IP when known
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install dependencies
+      apt:
+        name:
+          - curl
+          - wget
+          - apt-transport-https
+        state: present
+
+    - name: Add Microsoft package signing key
+      apt_key:
+        url: https://packages.microsoft.com/keys/microsoft.asc
+        state: present
+
+    - name: Add Microsoft package repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://packages.microsoft.com/ubuntu/24.04/prod noble main"
+        state: present
+        filename: microsoft-prod
+
+    - name: Install .NET runtime
+      apt:
+        name: aspnetcore-runtime-8.0
+        state: present
+        update_cache: yes
+
+    - name: Create Technitium install directory
+      file:
+        path: /opt/technitium
+        state: directory
+        mode: "0755"
+
+    - name: Download Technitium DNS Server
+      get_url:
+        url: "https://download.technitium.com/dns/DnsServerPortable.tar.gz"
+        dest: "/tmp/DnsServerPortable.tar.gz"
+        mode: "0644"
+
+    - name: Extract Technitium
+      unarchive:
+        src: /tmp/DnsServerPortable.tar.gz
+        dest: /opt/technitium
+        remote_src: yes
+        creates: /opt/technitium/DnsServerApp.dll
+
+    - name: Create systemd service file
+      copy:
+        dest: /etc/systemd/system/technitium.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Technitium DNS Server
+          After=network.target
+
+          [Service]
+          Type=simple
+          WorkingDirectory=/opt/technitium
+          ExecStart=/usr/bin/dotnet /opt/technitium/DnsServerApp.dll
+          Restart=always
+          RestartSec=10
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+
+    - name: Enable and start Technitium service
+      systemd:
+        name: technitium
+        enabled: yes
+        state: started
+
+    - name: Wait for Technitium to be ready
+      wait_for:
+        port: 5380
+        delay: 5
+        timeout: 60
+
+    - name: Display access information
+      debug:
+        msg: |
+          Technitium DNS Server installed successfully!
+          Web UI: http://{{ ansible_host }}:5380
+          DNS: {{ ansible_host }}:53
+
+          Next steps:
+          1. Access the web UI and set admin password
+          2. Configure clustering with other Technitium instances
+          3. Import zones and blocklists
