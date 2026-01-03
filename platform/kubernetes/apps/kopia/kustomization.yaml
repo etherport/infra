@@ -4,7 +4,8 @@ kind: Kustomization
 namespace: backups
 
 resources:
-  - 00-namespace.yaml
+  # Note: namespace is already defined by aws-s3/base
+  # - 00-namespace.yaml
   - 01-pvc-repo.yaml
   - 02-pvc-config.yaml
   # Note: 03-secret-template.yaml should be applied manually with actual credentials
