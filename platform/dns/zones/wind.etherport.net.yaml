@@ -1,0 +1,159 @@
+# DNS Zone: wind.etherport.net
+# Managed via GitOps - changes here are synced to Technitium DNS
+#
+# Record types supported: A, AAAA, CNAME, MX, TXT, SRV, CAA
+# SOA and NS records are auto-managed by Technitium and should not be defined here
+#
+zone: wind.etherport.net
+ttl: 3600  # Default TTL (1 hour)
+
+records:
+  # =============================================================================
+  # Infrastructure - Core Services
+  # =============================================================================
+
+  # Kubernetes Cluster
+  - name: k8s-cp1
+    type: A
+    value: 10.10.201.50
+    comment: Kubernetes control plane
+
+  - name: k8s-w1
+    type: A
+    value: 10.10.201.51
+    comment: Kubernetes worker 1
+
+  - name: k8s-w2
+    type: A
+    value: 10.10.201.52
+    comment: Kubernetes worker 2
+
+  - name: k8s-gpu1
+    type: A
+    value: 10.10.201.53
+    comment: Kubernetes GPU worker
+
+  # Traefik Ingress (LoadBalancer VIP)
+  - name: traefik
+    type: A
+    value: 10.10.201.70
+    comment: Traefik ingress controller VIP
+
+  # =============================================================================
+  # Infrastructure - DNS
+  # =============================================================================
+
+  - name: dns
+    type: A
+    value: 10.10.201.70
+    comment: Technitium DNS web UI (via Traefik)
+
+  - name: dns-aws
+    type: A
+    value: 10.10.100.5
+    comment: Technitium DNS on AWS (failover)
+
+  # =============================================================================
+  # Infrastructure - Network Equipment
+  # =============================================================================
+
+  - name: windroute
+    type: A
+    value: 10.10.200.1
+    comment: UDM Pro router
+
+  - name: pve
+    type: A
+    value: 10.10.200.41
+    comment: Proxmox VE hypervisor
+
+  - name: sequoia
+    type: A
+    value: 10.10.209.10
+    comment: Sequoia NAS/storage
+
+  # =============================================================================
+  # Infrastructure - VPN
+  # =============================================================================
+
+  - name: vpn-local
+    type: A
+    value: 10.10.201.15
+    comment: WireGuard VPN local endpoint
+
+  - name: vpn-aws
+    type: A
+    value: 10.10.100.10
+    comment: WireGuard VPN AWS endpoint
+
+  # =============================================================================
+  # Applications - Via Traefik Ingress
+  # =============================================================================
+
+  - name: grafana
+    type: A
+    value: 10.10.201.70
+    comment: Grafana monitoring (via Traefik)
+
+  - name: ha
+    type: A
+    value: 10.10.201.70
+    comment: Home Assistant (via Traefik)
+
+  - name: plex
+    type: A
+    value: 10.10.201.70
+    comment: Plex media server (via Traefik)
+
+  - name: kopia
+    type: A
+    value: 10.10.201.70
+    comment: Kopia backup UI (via Traefik)
+
+  - name: prox
+    type: A
+    value: 10.10.201.70
+    comment: Proxmox UI proxy (via Traefik)
+
+  # =============================================================================
+  # Infrastructure - Power Management (via Traefik)
+  # =============================================================================
+
+  - name: ups1
+    type: A
+    value: 10.10.201.70
+    comment: UPS 1 web UI (via Traefik to 10.10.200.10)
+
+  - name: ups2
+    type: A
+    value: 10.10.201.70
+    comment: UPS 2 web UI (via Traefik to 10.10.200.11)
+
+  - name: pdu1
+    type: A
+    value: 10.10.201.70
+    comment: PDU 1 web UI (via Traefik to 10.10.200.15)
+
+  - name: pdu2
+    type: A
+    value: 10.10.201.70
+    comment: PDU 2 web UI (via Traefik to 10.10.200.16)
+
+  # =============================================================================
+  # Devices - Direct Access
+  # =============================================================================
+
+  - name: protect
+    type: A
+    value: 10.10.212.10
+    comment: UniFi Protect NVR
+
+  - name: print
+    type: A
+    value: 10.10.202.20
+    comment: Network printer
+
+  - name: gdisplay
+    type: A
+    value: 10.10.202.45
+    comment: Graham's display/workstation
