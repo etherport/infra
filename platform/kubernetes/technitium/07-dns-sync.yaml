@@ -1,0 +1,180 @@
+# DNS GitOps Sync CronJob
+# Syncs zone records from ConfigMap to Technitium via API every 5 minutes
+# Idempotent - only changes records that differ from desired state
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dns-sync-script
+  namespace: dns
+data:
+  sync.py: |
+    #!/usr/bin/env python3
+    """Sync DNS records from YAML to Technitium. Idempotent."""
+    import json
+    import os
+    import sys
+    import yaml
+    from urllib.parse import urlencode
+    from urllib.request import Request, urlopen
+
+    def api_request(base_url, endpoint, token=None, params=None):
+        params = params or {}
+        if token:
+            params["token"] = token
+        url = f"{base_url}/api/{endpoint}?{urlencode(params)}"
+        with urlopen(Request(url), timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+            if data.get("status") != "ok":
+                raise Exception(data.get("errorMessage", "API error"))
+            return data
+
+    def get_record_value(rec):
+        rdata = rec.get("rData", {})
+        t = rec.get("type", "")
+        if t in ("A", "AAAA"):
+            return rdata.get("ipAddress", "")
+        elif t == "CNAME":
+            return rdata.get("cname", "")
+        elif t == "MX":
+            return f"{rdata.get('preference', '')} {rdata.get('exchange', '')}"
+        elif t == "TXT":
+            return rdata.get("text", "")
+        return ""
+
+    def main():
+        base_url = os.environ["TECHNITIUM_URL"]
+        user = os.environ["TECHNITIUM_USER"]
+        password = os.environ["TECHNITIUM_PASS"]
+        zone_file = os.environ.get("ZONE_FILE", "/zones/zone.yaml")
+
+        # Login
+        data = api_request(base_url, "user/login", params={"user": user, "pass": password})
+        token = data["token"]
+        print(f"✓ Authenticated to {base_url}")
+
+        # Load zone file
+        with open(zone_file) as f:
+            zone_data = yaml.safe_load(f)
+
+        zone = zone_data["zone"]
+        default_ttl = zone_data.get("ttl", 3600)
+        desired = zone_data.get("records", [])
+        print(f"✓ Loaded {len(desired)} desired records for {zone}")
+
+        # Get current records
+        current_data = api_request(base_url, "zones/records/get", token, {
+            "domain": zone, "zone": zone, "listZone": "true"
+        })
+        current = {
+            (r["name"], r["type"]): get_record_value(r)
+            for r in current_data.get("response", {}).get("records", [])
+            if r["type"] not in ("SOA", "NS")
+        }
+        print(f"✓ Found {len(current)} current records")
+
+        # Sync records
+        added, updated, unchanged = 0, 0, 0
+        for rec in desired:
+            name = rec["name"]
+            domain = zone if name == "@" else f"{name}.{zone}" if not name.endswith(f".{zone}") else name
+
+            params = {
+                "zone": zone,
+                "domain": domain,
+                "type": rec["type"],
+                "ttl": rec.get("ttl", default_ttl),
+                "overwrite": "true",
+                "comments": rec.get("comment", "Managed by GitOps")
+            }
+
+            if rec["type"] in ("A", "AAAA"):
+                params["ipAddress"] = rec["value"]
+            elif rec["type"] == "CNAME":
+                params["cname"] = rec["value"]
+            elif rec["type"] == "MX":
+                parts = rec["value"].split()
+                params["preference"] = parts[0] if len(parts) > 1 else "10"
+                params["exchange"] = parts[-1]
+            elif rec["type"] == "TXT":
+                params["text"] = rec["value"]
+
+            key = (domain, rec["type"])
+            current_val = current.get(key, "")
+
+            if current_val == rec["value"]:
+                unchanged += 1
+            elif key in current:
+                api_request(base_url, "zones/records/add", token, params)
+                print(f"  ~ Updated: {domain} {rec['type']} -> {rec['value']}")
+                updated += 1
+            else:
+                api_request(base_url, "zones/records/add", token, params)
+                print(f"  + Added: {domain} {rec['type']} -> {rec['value']}")
+                added += 1
+
+        print(f"\n✅ Sync complete: {added} added, {updated} updated, {unchanged} unchanged")
+
+    if __name__ == "__main__":
+        main()
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dns-sync
+  namespace: dns
+spec:
+  schedule: "*/5 * * * *"  # Every 5 minutes
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 300
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: sync
+              image: python:3.11-alpine
+              command:
+                - sh
+                - -c
+                - |
+                  pip install -q pyyaml
+                  python /scripts/sync.py
+              env:
+                - name: TECHNITIUM_URL
+                  value: "http://technitium-0.technitium-headless.dns.svc.cluster.local:5380"
+                - name: TECHNITIUM_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: technitium-admin
+                      key: username
+                - name: TECHNITIUM_PASS
+                  valueFrom:
+                    secretKeyRef:
+                      name: technitium-admin
+                      key: password
+                - name: ZONE_FILE
+                  value: "/zones/zone.yaml"
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                - name: zone-data
+                  mountPath: /zones
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "200m"
+          volumes:
+            - name: script
+              configMap:
+                name: dns-sync-script
+            - name: zone-data
+              configMap:
+                name: dns-zone-wind

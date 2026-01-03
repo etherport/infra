@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: dns
+
+resources:
+  - 00-namespace.yaml
+  - 01-configmap.yaml
+  - 02-statefulset.yaml
+  - 03-service.yaml
+  - 04-ingressroute.yaml
+  - 06-cluster-services.yaml
+  - 07-dns-sync.yaml
+
+# Zone data ConfigMap - CronJob syncs this to Technitium every 5 min
+configMapGenerator:
+  - name: dns-zone-wind
+    files:
+      - zone.yaml=zones/wind.etherport.net.yaml
+    options:
+      disableNameSuffixHash: true

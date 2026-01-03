@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: technitium-config
+  namespace: dns
+data:
+  DNS_SERVER_DOMAIN: "dns.wind.etherport.net"
+  DNS_SERVER_PREFER_IPV6: "false"
+  DNS_SERVER_LOG_USING_LOCAL_TIME: "true"
