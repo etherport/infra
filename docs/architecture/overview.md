@@ -2,10 +2,12 @@
 
 ## Physical / Virtual
 - Hypervisor: Proxmox (`pve.wind.etherport.net`)
-- Kubernetes VMs: 1 control-plane + 2 workers
-  - k8s-cp1: 10.10.201.50
-  - k8s-w1:  10.10.201.51
-  - k8s-w2:  10.10.201.52
+- Kubernetes VMs: 1 control-plane + 4 workers
+  - k8s-cp1: 10.10.201.50 (Control Plane)
+  - k8s-w1:  10.10.201.51 (Worker)
+  - k8s-w2:  10.10.201.52 (Worker)
+  - k8s-w3:  10.10.201.53 (Worker)
+  - k8s-gpu1: 10.10.201.54 (GPU Worker with NVIDIA Tesla P40)
 
 ## Networking (high level)
 - Node network: VLAN 201 (10.10.201.0/24)
