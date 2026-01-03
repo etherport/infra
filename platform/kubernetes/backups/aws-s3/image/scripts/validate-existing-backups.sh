@@ -168,9 +168,9 @@ validate_object() {
     --region "$AWS_REGION" \
     --output json 2>/dev/null || echo '{}')
 
-  local S3_SHA256=$(echo "$S3_METADATA" | jq -r '.ChecksumSHA256 // ""')
+  local S3_SHA256_BASE64=$(echo "$S3_METADATA" | jq -r '.ChecksumSHA256 // ""')
 
-  if [[ -z "$S3_SHA256" ]]; then
+  if [[ -z "$S3_SHA256_BASE64" ]]; then
     jq -cn \
       --arg s3_key "$S3_KEY" \
       --arg local_path "$LOCAL_PATH" \
@@ -181,6 +181,9 @@ validate_object() {
       > "$RESULT"
     return
   fi
+
+  # Convert S3 checksum from base64 to hex for comparison
+  local S3_SHA256=$(echo "$S3_SHA256_BASE64" | base64 -d | xxd -p -c 256)
 
   # Compare checksums
   if [[ "$SOURCE_SHA256" == "$S3_SHA256" ]]; then
