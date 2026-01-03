@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - ./flux-system
   - ../../platform/kubernetes/home-automation
+  - ../../platform/kubernetes/route53-ddns/base
   - ../../platform/kubernetes/backups/aws-s3/shares/scans
   # - ../../platform/kubernetes/backups/aws-s3/shares/archive
   # - ../../platform/kubernetes/backups/aws-s3/shares/backups

@@ -5,10 +5,10 @@ metadata:
   namespace: route53-ddns
 data:
   # Comma-separated list of Route53 hosted zone IDs
-  hosted_zones: "Z10298356ZVPFVHAMFXP,Z03500581XDWV5SKF5PK8"
+  hosted_zones: "Z03500581XDWV5SKF5PK8"
 
   # Comma-separated list of DNS record names (must match order of hosted_zones)
-  record_names: "wind.gmsmeg.net,wind.etherport.net"
+  record_names: "wind.etherport.net"
 
   # DNS record TTL in seconds
   ttl: "300"
