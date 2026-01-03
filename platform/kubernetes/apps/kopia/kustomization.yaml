@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: backups
+
+resources:
+  - 00-namespace.yaml
+  - 01-pvc-repo.yaml
+  - 02-pvc-config.yaml
+  # Note: 03-secret-template.yaml should be applied manually with actual credentials
+  # - 03-secret-template.yaml
+  - 04-configmap-entrypoint.yaml
+  - 05-deployment.yaml
+  - 06-service.yaml
+  - 07-ingressroute.yaml
+  - 08-backup-cronjob.yaml
+  - 09-prune-cronjob.yaml

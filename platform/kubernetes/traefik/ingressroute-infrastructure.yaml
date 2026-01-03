@@ -1,0 +1,189 @@
+# IngressRoutes for infrastructure management UIs (UPS, PDU)
+# These devices have web UIs that we want to access via Traefik with valid SSL certs
+#
+# Devices use HTTPS with self-signed certificates:
+#   - ups1.wind.etherport.net -> 10.10.200.10:443
+#   - ups2.wind.etherport.net -> 10.10.200.11:443
+#   - pdu1.wind.etherport.net -> 10.10.200.15:443
+#   - pdu2.wind.etherport.net -> 10.10.200.16:443
+---
+# ServersTransport for self-signed certs on infrastructure devices
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: insecure-transport
+  namespace: traefik
+spec:
+  insecureSkipVerify: true
+---
+# UPS1 - CyberPower/APC UPS
+apiVersion: v1
+kind: Service
+metadata:
+  name: ups1-external
+  namespace: traefik
+spec:
+  ports:
+    - port: 443
+      targetPort: 443
+      protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: ups1-external
+  namespace: traefik
+subsets:
+  - addresses:
+      - ip: 10.10.200.10
+    ports:
+      - port: 443
+        protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: ups1
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`ups1.wind.etherport.net`)
+      kind: Rule
+      services:
+        - name: ups1-external
+          port: 443
+          serversTransport: insecure-transport
+          scheme: https
+  tls:
+    certResolver: route53
+---
+# UPS2
+apiVersion: v1
+kind: Service
+metadata:
+  name: ups2-external
+  namespace: traefik
+spec:
+  ports:
+    - port: 443
+      targetPort: 443
+      protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: ups2-external
+  namespace: traefik
+subsets:
+  - addresses:
+      - ip: 10.10.200.11
+    ports:
+      - port: 443
+        protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: ups2
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`ups2.wind.etherport.net`)
+      kind: Rule
+      services:
+        - name: ups2-external
+          port: 443
+          serversTransport: insecure-transport
+          scheme: https
+  tls:
+    certResolver: route53
+---
+# PDU1
+apiVersion: v1
+kind: Service
+metadata:
+  name: pdu1-external
+  namespace: traefik
+spec:
+  ports:
+    - port: 443
+      targetPort: 443
+      protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: pdu1-external
+  namespace: traefik
+subsets:
+  - addresses:
+      - ip: 10.10.200.15
+    ports:
+      - port: 443
+        protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: pdu1
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`pdu1.wind.etherport.net`)
+      kind: Rule
+      services:
+        - name: pdu1-external
+          port: 443
+          serversTransport: insecure-transport
+          scheme: https
+  tls:
+    certResolver: route53
+---
+# PDU2
+apiVersion: v1
+kind: Service
+metadata:
+  name: pdu2-external
+  namespace: traefik
+spec:
+  ports:
+    - port: 443
+      targetPort: 443
+      protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: pdu2-external
+  namespace: traefik
+subsets:
+  - addresses:
+      - ip: 10.10.200.16
+    ports:
+      - port: 443
+        protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: pdu2
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`pdu2.wind.etherport.net`)
+      kind: Rule
+      services:
+        - name: pdu2-external
+          port: 443
+          serversTransport: insecure-transport
+          scheme: https
+  tls:
+    certResolver: route53

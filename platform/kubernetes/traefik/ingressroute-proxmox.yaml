@@ -1,0 +1,55 @@
+# IngressRoute for Proxmox Web UI
+# Allows access via https://prox.wind.etherport.net instead of https://10.10.200.41:8006
+#
+# Note: Proxmox uses a self-signed certificate, so we need to skip TLS verification
+# on the backend connection while still presenting a valid Let's Encrypt cert to clients.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: proxmox-external
+  namespace: traefik
+spec:
+  ports:
+    - port: 8006
+      targetPort: 8006
+      protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: proxmox-external
+  namespace: traefik
+subsets:
+  - addresses:
+      - ip: 10.10.200.41
+    ports:
+      - port: 8006
+        protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: proxmox-transport
+  namespace: traefik
+spec:
+  insecureSkipVerify: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: proxmox
+  namespace: traefik
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`prox.wind.etherport.net`)
+      kind: Rule
+      services:
+        - name: proxmox-external
+          port: 8006
+          serversTransport: proxmox-transport
+          scheme: https
+  tls:
+    certResolver: route53

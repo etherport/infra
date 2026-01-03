@@ -2,7 +2,16 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ./flux-system
+  # Infrastructure
+  - ../../platform/kubernetes/metallb
+  - ../../platform/kubernetes/traefik
+  # Applications
   - ../../platform/kubernetes/home-automation
+  - ../../platform/kubernetes/plex
+  - ../../platform/kubernetes/icloudpd
+  - ../../platform/kubernetes/rclone-gdrive
+  - ../../platform/kubernetes/apps/kopia
+  # Utilities
   - ../../platform/kubernetes/route53-ddns/base
   - ../../platform/kubernetes/backups/aws-s3/shares/scans
   - ../../platform/kubernetes/backups/aws-s3/daily-report

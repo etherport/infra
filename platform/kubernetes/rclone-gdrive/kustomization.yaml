@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: rclone
+
+resources:
+  - 00-namespace.yaml
+  - 01-sync-script-configmap.yaml
+  - 02-cronjob.yaml
+  - 03-prometheus-rules.yaml
+  - 04-alertmanager-config.yaml
+  - 05-grafana-dashboard.yaml
