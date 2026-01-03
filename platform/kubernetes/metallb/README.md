@@ -1,0 +1,228 @@
+# MetalLB Load Balancer Configuration
+
+MetalLB configuration for bare-metal Kubernetes LoadBalancer services using Layer 2 mode.
+
+**Deployment Method**: This configuration is managed via **Flux GitOps**. Changes are deployed automatically from git commits.
+
+## Overview
+
+MetalLB provides LoadBalancer-type Service support for bare-metal Kubernetes clusters. This configuration defines:
+
+- **IP Address Pool**: 10.10.201.5/32 and 10.10.201.70-10.10.201.90
+- **Mode**: Layer 2 (ARP-based)
+- **Namespace**: `metallb-system` (MetalLB operator installed via Helm separately)
+
+## Architecture
+
+```
+┌──────────────────────────────────────┐
+│   Kubernetes LoadBalancer Service    │
+│   (e.g., Traefik, Technitium DNS)    │
+└────────────────┬─────────────────────┘
+                 │
+                 │ Assigns IP from pool
+                 ↓
+┌──────────────────────────────────────┐
+│        MetalLB Controller            │
+│   (IPAddressPool + L2Advertisement)  │
+└────────────────┬─────────────────────┘
+                 │
+                 │ ARP announcements
+                 ↓
+┌──────────────────────────────────────┐
+│          Local Network               │
+│     10.10.201.5, .70-.90             │
+└──────────────────────────────────────┘
+```
+
+## IP Allocation
+
+| IP Address / Range | Assignment | Service |
+|-------------------|------------|---------|
+| 10.10.201.5 | Reserved (VIP) | Technitium DNS |
+| 10.10.201.70-10.10.201.90 | Auto-assigned pool | Traefik, other LoadBalancer services |
+
+**Total Available IPs**: 22 (1 reserved + 21 in pool)
+
+## Files
+
+- `metallb-wind.yaml` - IPAddressPool and L2Advertisement configuration
+- `kustomization.yaml` - Kustomize configuration for Flux
+
+## Prerequisites
+
+MetalLB operator must be installed separately (typically via Helm):
+
+```bash
+helm repo add metallb https://metallb.github.io/metallb
+helm install metallb metallb/metallb -n metallb-system --create-namespace
+```
+
+This repo only manages the **configuration** (IPAddressPool and L2Advertisement), not the MetalLB installation itself.
+
+## Deployment
+
+### GitOps Deployment (Recommended)
+
+This configuration is managed by Flux. Changes are auto-deployed from git:
+
+```bash
+# Edit IP pool configuration
+vim platform/kubernetes/metallb/metallb-wind.yaml
+
+# Example: Add more IPs to the pool
+addresses:
+  - 10.10.201.5/32
+  - 10.10.201.70-10.10.201.100  # Expanded range
+
+# Commit and push
+git add platform/kubernetes/metallb/metallb-wind.yaml
+git commit -m "metallb: expand IP pool to .100"
+git push
+
+# Force Flux to sync immediately (or wait ~10 minutes)
+flux reconcile source git flux-system
+flux reconcile kustomization flux-system
+
+# Verify
+kubectl get ipaddresspool -n metallb-system
+kubectl get l2advertisement -n metallb-system
+```
+
+See [Flux GitOps Overview](../../docs/gitops/flux-overview.md) for more details.
+
+### Manual Deployment (Not Recommended)
+
+If you need to bypass GitOps (changes will be reverted by Flux):
+
+```bash
+kubectl apply -k platform/kubernetes/metallb/
+```
+
+## Making Changes
+
+### Add/Remove IP Addresses
+
+```bash
+# Edit the IP pool
+vim platform/kubernetes/metallb/metallb-wind.yaml
+
+# Modify addresses:
+spec:
+  addresses:
+    - 10.10.201.5/32
+    - 10.10.201.70-10.10.201.100  # Expanded
+
+# Commit and push
+git add platform/kubernetes/metallb/metallb-wind.yaml
+git commit -m "metallb: add more IPs to pool"
+git push
+
+# Force reconciliation
+flux reconcile kustomization flux-system
+```
+
+### Reserve Specific IP for a Service
+
+To assign a specific IP to a LoadBalancer service:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: 10.10.201.75
+spec:
+  type: LoadBalancer
+  # ...
+```
+
+## Verification
+
+### Check IP Pools
+
+```bash
+# View configured IP pools
+kubectl get ipaddresspool -n metallb-system
+
+# View pool details
+kubectl describe ipaddresspool primary -n metallb-system
+```
+
+### Check LoadBalancer Services
+
+```bash
+# List all LoadBalancer services with assigned IPs
+kubectl get svc --all-namespaces -o wide | grep LoadBalancer
+
+# Check MetalLB controller logs
+kubectl logs -n metallb-system -l app.kubernetes.io/component=controller -f
+```
+
+### Check IP Assignments
+
+```bash
+# View which IPs are assigned to which services
+kubectl get svc -A --field-selector spec.type=LoadBalancer \
+  -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,EXTERNAL-IP:.status.loadBalancer.ingress[0].ip
+```
+
+## Troubleshooting
+
+### Service Stuck in `<pending>`
+
+**Symptom**: LoadBalancer service shows `EXTERNAL-IP: <pending>`
+
+**Common Causes**:
+1. IP pool exhausted - check available IPs
+2. MetalLB controller not running - check pod status
+3. IP already assigned elsewhere - check ARP tables
+
+**Check**:
+```bash
+# Check MetalLB controller
+kubectl get pods -n metallb-system
+
+# Check IP pool
+kubectl describe ipaddresspool primary -n metallb-system
+
+# Check controller logs
+kubectl logs -n metallb-system -l app.kubernetes.io/component=controller
+```
+
+### IP Address Conflict
+
+**Symptom**: ARP conflicts or services unreachable
+
+**Solution**: Ensure IP pool doesn't overlap with DHCP range or static IPs used elsewhere on the network.
+
+### L2Advertisement Not Working
+
+**Check**:
+```bash
+# Verify L2Advertisement exists
+kubectl get l2advertisement -n metallb-system
+
+# Check speaker logs
+kubectl logs -n metallb-system -l app.kubernetes.io/component=speaker -f
+```
+
+## Related Documentation
+
+- [MetalLB Official Docs](https://metallb.universe.tf/)
+- [Flux GitOps Overview](../../docs/gitops/flux-overview.md)
+- [Making Changes to GitOps Apps](../../docs/gitops/making-changes.md)
+
+## Services Using MetalLB
+
+Current LoadBalancer services in the cluster:
+
+- **Traefik**: HTTP/HTTPS ingress (typically gets first available IP from pool)
+- **Technitium DNS**: DNS service on 10.10.201.5 (reserved VIP)
+- *Others as deployed*
+
+To see current assignments:
+```bash
+kubectl get svc -A --field-selector spec.type=LoadBalancer
+```
