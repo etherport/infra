@@ -52,9 +52,16 @@ spec:
             # - name: PLEX_CLAIM
             #   value: "claim-XXXXXXXXXXXXXXXXXXXX"
 
-            # Advertise IP (LoadBalancer or Ingress IP)
+            # Advertise IP - The external URL where Plex is accessible
+            # This tells Plex clients how to connect from outside
             - name: ADVERTISE_IP
-              value: "https://plex.wind.etherport.net:443/"
+              value: "https://plex.wind.etherport.net:443"
+
+            # Allowed networks for Plex without authentication
+            # Include pod network, node network, and any trusted networks
+            # This helps Plex understand it's behind a reverse proxy
+            - name: ALLOWED_NETWORKS
+              value: "10.42.0.0/16,10.10.201.0/24,10.10.200.0/24,172.16.0.0/12"
 
             # Plex UID/GID (optional - match your NFS permissions)
             - name: PLEX_UID

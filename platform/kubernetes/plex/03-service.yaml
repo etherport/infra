@@ -6,8 +6,9 @@ metadata:
   labels:
     app: plex
 spec:
-  type: LoadBalancer
-  loadBalancerIP: 10.10.201.74
+  # ClusterIP is correct - traffic flows through Traefik IngressRoute
+  # LoadBalancer is not needed since AWS ALB -> VPN -> Traefik -> this service
+  type: ClusterIP
   ports:
     - name: plex
       port: 32400
