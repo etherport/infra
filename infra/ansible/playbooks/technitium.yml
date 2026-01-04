@@ -6,13 +6,46 @@
   vars:
     technitium_version: "latest"
     cluster_addresses:
-      - "10.10.201.5" # K8s cluster VIP
-      - "10.10.201.6" # Local fallback
-      # Add AWS IP when known
+      - "10.10.201.5"  # K8s cluster VIP
+      - "10.10.201.6"  # Local fallback
+      - "10.10.100.5"  # AWS remote
 
   tasks:
     - name: Gather service facts
       service_facts:
+
+    # Stop existing DNS services that conflict with Technitium
+    - name: Stop and disable Pi-hole FTL
+      systemd:
+        name: pihole-FTL
+        state: stopped
+        enabled: no
+      when: ansible_facts.services['pihole-FTL.service'] is defined
+      ignore_errors: yes
+
+    - name: Stop and disable BIND/named
+      systemd:
+        name: named
+        state: stopped
+        enabled: no
+      when: ansible_facts.services['named.service'] is defined
+      ignore_errors: yes
+
+    - name: Stop and disable unbound
+      systemd:
+        name: unbound
+        state: stopped
+        enabled: no
+      when: ansible_facts.services['unbound.service'] is defined
+      ignore_errors: yes
+
+    - name: Stop and disable systemd-resolved (if using port 53)
+      systemd:
+        name: systemd-resolved
+        state: stopped
+        enabled: no
+      when: ansible_facts.services['systemd-resolved.service'] is defined
+      ignore_errors: yes
 
     - name: Update apt cache
       apt:
@@ -27,29 +60,27 @@
           - apt-transport-https
         state: present
 
-    - name: Create keyrings directory
-      file:
-        path: /etc/apt/keyrings
-        state: directory
+    - name: Download .NET install script
+      get_url:
+        url: https://dot.net/v1/dotnet-install.sh
+        dest: /tmp/dotnet-install.sh
         mode: "0755"
 
-    - name: Download Microsoft GPG key
-      get_url:
-        url: https://packages.microsoft.com/keys/microsoft.asc
-        dest: /etc/apt/keyrings/microsoft.asc
-        mode: "0644"
+    - name: Install .NET 9.0 runtime
+      shell: /tmp/dotnet-install.sh --channel 9.0 --runtime dotnet --install-dir /usr/share/dotnet
+      args:
+        creates: /usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.0
 
-    - name: Add Microsoft package repository
-      apt_repository:
-        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.asc] https://packages.microsoft.com/ubuntu/24.04/prod noble main"
-        state: present
-        filename: microsoft-prod
+    - name: Install ASP.NET Core 9.0 runtime
+      shell: /tmp/dotnet-install.sh --channel 9.0 --runtime aspnetcore --install-dir /usr/share/dotnet
+      args:
+        creates: /usr/share/dotnet/shared/Microsoft.AspNetCore.App/9.0.0
 
-    - name: Install .NET runtime
-      apt:
-        name: aspnetcore-runtime-8.0
-        state: present
-        update_cache: yes
+    - name: Create dotnet symlink
+      file:
+        src: /usr/share/dotnet/dotnet
+        dest: /usr/local/bin/dotnet
+        state: link
 
     - name: Create Technitium install directory
       file:
@@ -82,7 +113,7 @@
           [Service]
           Type=simple
           WorkingDirectory=/opt/technitium
-          ExecStart=/usr/bin/dotnet /opt/technitium/DnsServerApp.dll
+          ExecStart=/usr/share/dotnet/dotnet /opt/technitium/DnsServerApp.dll
           Restart=always
           RestartSec=10
           User=root
