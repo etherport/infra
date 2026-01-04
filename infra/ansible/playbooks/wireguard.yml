@@ -1,0 +1,297 @@
+---
+# WireGuard VPN Configuration Playbook
+# Manages WireGuard on vpn-local and vpn-aws
+#
+# Usage:
+#   # All VPN servers (local + AWS)
+#   ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/wireguard.yml
+#
+#   # Local only
+#   ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-local
+#
+#   # AWS only
+#   ansible-playbook -i inventory/aws/ playbooks/wireguard.yml --limit vpn-aws
+#
+#   # Check mode (dry-run)
+#   ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/wireguard.yml --check --diff
+#
+# IMPORTANT: Private keys are NOT managed by this playbook.
+#   - Keys must already exist on the target hosts in /etc/wireguard/
+#   - This playbook reads existing keys and preserves them in config files
+#   - For new installations, generate keys first:
+#       wg genkey | tee private.key | wg pubkey > public.key
+
+- name: Configure WireGuard VPN
+  hosts: vpn_servers
+  become: true
+
+  vars:
+    # Site-to-site tunnel configuration
+    wg_mtu: 1420
+
+    # vpn-local specific settings
+    vpn_local:
+      tunnel_ip: "10.255.255.2/30"
+      peer_public_key: "kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU="
+      peer_endpoint: "44.240.60.80:51820"
+      peer_allowed_ips: "10.10.100.0/22, 10.255.255.1/32, 10.254.0.0/24"
+      keepalive: 25
+
+    # vpn-aws specific settings
+    vpn_aws:
+      wg0:
+        tunnel_ip: "10.255.255.1/30"
+        listen_port: 51820
+        peer_public_key: "MwsTBFT0FPsZO+Bpe2Exk3y7oeIyv+HDx3j+lRSISTw="
+        peer_allowed_ips: "10.255.255.2/32, 10.10.192.0/19"
+        keepalive: 25
+      wg1:
+        tunnel_ip: "10.254.0.1/24"
+        listen_port: 51821
+        # Remote access peers defined in host_vars or managed separately
+
+    # Remote access peers for wg1 (AWS only)
+    # Add new clients here or in host_vars/vpn-aws.yml
+    wg1_peers:
+      - name: "Graham"
+        public_key: "7FAI4YiWGRtKDl3AaG+jxjf0vDVaTtUisf68nQRFozA="
+        allowed_ips: "10.254.0.10/32"
+
+    # Network ranges for MSS clamping
+    aws_networks: "10.10.100.0/22"
+    local_networks: "10.10.192.0/19"
+
+  tasks:
+    # =========================================================================
+    # Common tasks for all VPN servers
+    # =========================================================================
+    - name: Install WireGuard
+      apt:
+        name:
+          - wireguard
+          - wireguard-tools
+        state: present
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Enable IP forwarding
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: "1"
+        sysctl_file: /etc/sysctl.d/99-wg-forward.conf
+        reload: yes
+        state: present
+
+    - name: Ensure WireGuard directory exists
+      file:
+        path: /etc/wireguard
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    # =========================================================================
+    # Read existing private keys (they must already exist on the hosts)
+    # Key file naming convention:
+    #   vpn-local: /etc/wireguard/local_private.key
+    #   vpn-aws:   /etc/wireguard/local_private.key (wg0)
+    #              /etc/wireguard/aws_wg1_private.key (wg1)
+    # =========================================================================
+    - name: Check if local_private.key exists
+      stat:
+        path: /etc/wireguard/local_private.key
+      register: local_key_exists
+
+    - name: Check if wg1 private key exists (AWS)
+      stat:
+        path: /etc/wireguard/aws_wg1_private.key
+      register: wg1_key_aws
+      when: inventory_hostname == 'vpn-aws'
+
+    - name: Read local_private.key
+      slurp:
+        src: /etc/wireguard/local_private.key
+      register: local_private_key
+      when: local_key_exists.stat.exists
+      no_log: true
+
+    - name: Read wg1 private key (vpn-aws)
+      slurp:
+        src: /etc/wireguard/aws_wg1_private.key
+      register: wg1_private_key_aws
+      when: inventory_hostname == 'vpn-aws' and wg1_key_aws.stat.exists
+      no_log: true
+
+    # =========================================================================
+    # vpn-local configuration
+    # =========================================================================
+    - name: Configure wg0 on vpn-local
+      copy:
+        dest: /etc/wireguard/wg0.conf
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          [Interface]
+          Address = {{ vpn_local.tunnel_ip }}
+          PrivateKey = {{ (local_private_key.content | b64decode | trim) if local_private_key is defined and local_private_key.content is defined else 'GENERATE_KEY_FIRST' }}
+          MTU = {{ wg_mtu }}
+
+          # Peer: AWS hub
+          [Peer]
+          PublicKey = {{ vpn_local.peer_public_key }}
+          Endpoint = {{ vpn_local.peer_endpoint }}
+          AllowedIPs = {{ vpn_local.peer_allowed_ips }}
+          PersistentKeepalive = {{ vpn_local.keepalive }}
+      when: inventory_hostname == 'vpn-local'
+      notify: Restart WireGuard wg0
+
+    # =========================================================================
+    # vpn-aws configuration
+    # =========================================================================
+    - name: Configure wg0 on vpn-aws (site-to-site)
+      copy:
+        dest: /etc/wireguard/wg0.conf
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          [Interface]
+          Address = {{ vpn_aws.wg0.tunnel_ip }}
+          ListenPort = {{ vpn_aws.wg0.listen_port }}
+          PrivateKey = {{ (local_private_key.content | b64decode | trim) if local_private_key is defined and local_private_key.content is defined else 'GENERATE_KEY_FIRST' }}
+          MTU = {{ wg_mtu }}
+
+          # Peer: Local site router
+          [Peer]
+          PublicKey = {{ vpn_aws.wg0.peer_public_key }}
+          AllowedIPs = {{ vpn_aws.wg0.peer_allowed_ips }}
+          PersistentKeepalive = {{ vpn_aws.wg0.keepalive }}
+      when: inventory_hostname == 'vpn-aws'
+      notify: Restart WireGuard wg0
+
+    - name: Configure wg1 on vpn-aws (remote access)
+      copy:
+        dest: /etc/wireguard/wg1.conf
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          [Interface]
+          Address    = {{ vpn_aws.wg1.tunnel_ip }}
+          ListenPort = {{ vpn_aws.wg1.listen_port }}
+          PrivateKey = {{ (wg1_private_key_aws.content | b64decode | trim) if wg1_private_key_aws is defined and wg1_private_key_aws.content is defined else 'GENERATE_KEY_FIRST' }}
+          MTU        = {{ wg_mtu }}
+
+          {% for peer in wg1_peers %}
+          [Peer]
+          # {{ peer.name }}
+          PublicKey  = {{ peer.public_key }}
+          AllowedIPs = {{ peer.allowed_ips }}
+
+          {% endfor %}
+      when: inventory_hostname == 'vpn-aws'
+      notify: Restart WireGuard wg1
+
+    # =========================================================================
+    # MSS Clamping (AWS only) - fixes MTU issues over VPN
+    # =========================================================================
+    - name: Install nftables for MSS clamping
+      apt:
+        name: nftables
+        state: present
+      when: inventory_hostname == 'vpn-aws'
+
+    - name: Configure nftables MSS clamping rules
+      copy:
+        dest: /etc/nftables.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          #!/usr/sbin/nft -f
+
+          flush ruleset
+
+          # MSS Clamping for VPN traffic to handle MTU issues
+          # This ensures TCP connections don't fragment across the tunnel
+          table ip mangle {
+            chain PREROUTING {
+              type filter hook prerouting priority mangle; policy accept;
+            }
+
+            chain INPUT {
+              type filter hook input priority mangle; policy accept;
+            }
+
+            chain FORWARD {
+              type filter hook forward priority mangle; policy accept;
+              # Clamp MSS for traffic from AWS to local homelab
+              ip saddr {{ aws_networks }} ip daddr {{ local_networks }} tcp flags syn / syn,rst counter tcp option maxseg size set rt mtu
+              # Clamp MSS for traffic from local homelab to AWS
+              ip saddr {{ local_networks }} ip daddr {{ aws_networks }} tcp flags syn / syn,rst counter tcp option maxseg size set rt mtu
+            }
+
+            chain OUTPUT {
+              type route hook output priority mangle; policy accept;
+            }
+
+            chain POSTROUTING {
+              type filter hook postrouting priority mangle; policy accept;
+            }
+          }
+
+          # Basic filter table (no rules, just structure)
+          table inet filter {
+            chain input {
+              type filter hook input priority filter; policy accept;
+            }
+            chain forward {
+              type filter hook forward priority filter; policy accept;
+            }
+            chain output {
+              type filter hook output priority filter; policy accept;
+            }
+          }
+      when: inventory_hostname == 'vpn-aws'
+      notify: Apply nftables rules
+
+    - name: Enable nftables service
+      systemd:
+        name: nftables
+        enabled: yes
+        state: started
+      when: inventory_hostname == 'vpn-aws'
+
+    # =========================================================================
+    # Service management
+    # =========================================================================
+    - name: Enable and start WireGuard wg0
+      systemd:
+        name: wg-quick@wg0
+        enabled: yes
+        state: started
+
+    - name: Enable and start WireGuard wg1 (AWS only)
+      systemd:
+        name: wg-quick@wg1
+        enabled: yes
+        state: started
+      when: inventory_hostname == 'vpn-aws'
+
+  # ===========================================================================
+  # Handlers
+  # ===========================================================================
+  handlers:
+    - name: Restart WireGuard wg0
+      systemd:
+        name: wg-quick@wg0
+        state: restarted
+
+    - name: Restart WireGuard wg1
+      systemd:
+        name: wg-quick@wg1
+        state: restarted
+
+    - name: Apply nftables rules
+      command: nft -f /etc/nftables.conf

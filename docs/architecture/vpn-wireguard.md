@@ -225,9 +225,69 @@ ip route
 sudo journalctl -u wg-quick@wg0 -f
 ```
 
+## MSS Clamping (MTU Fix)
+
+To prevent TCP fragmentation issues over the VPN tunnel, vpn-aws runs nftables rules that clamp the MSS (Maximum Segment Size) on forwarded traffic:
+
+```nft
+# /etc/nftables.conf on vpn-aws
+table ip mangle {
+  chain FORWARD {
+    type filter hook forward priority mangle; policy accept;
+    # Clamp MSS for traffic from AWS to local homelab
+    ip saddr 10.10.100.0/22 ip daddr 10.10.192.0/19 tcp flags syn / syn,rst counter tcp option maxseg size set rt mtu
+    # Clamp MSS for traffic from local homelab to AWS
+    ip saddr 10.10.192.0/19 ip daddr 10.10.100.0/22 tcp flags syn / syn,rst counter tcp option maxseg size set rt mtu
+  }
+}
+```
+
+This ensures that TCP connections negotiate an appropriate MSS that accounts for the WireGuard encapsulation overhead, preventing packet fragmentation.
+
+## Key File Locations
+
+| Host | Key File | Purpose |
+|------|----------|---------|
+| vpn-local | /etc/wireguard/local_private.key | wg0 private key |
+| vpn-local | /etc/wireguard/local_public.key | wg0 public key |
+| vpn-aws | /etc/wireguard/local_private.key | wg0 private key |
+| vpn-aws | /etc/wireguard/local_public.key | wg0 public key |
+| vpn-aws | /etc/wireguard/aws_wg1_private.key | wg1 private key |
+| vpn-aws | /etc/wireguard/aws_wg1_public.key | wg1 public key |
+
+## Ansible Management
+
+WireGuard configuration is managed via Ansible:
+
+```bash
+# Deploy WireGuard config to all VPN servers
+cd infra/ansible
+ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/wireguard.yml
+
+# Check mode (dry-run)
+ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/wireguard.yml --check --diff
+
+# Target only vpn-local
+ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-local
+
+# Target only vpn-aws
+ansible-playbook -i inventory/aws/ playbooks/wireguard.yml --limit vpn-aws
+```
+
+The playbook manages:
+- WireGuard package installation
+- IP forwarding (sysctl)
+- wg0.conf and wg1.conf configuration
+- nftables MSS clamping rules (AWS only)
+- systemd service enablement
+
+**Note:** Private keys are NOT managed by Ansible. Keys must already exist on the hosts.
+
 ## Security Notes
 
 - Private keys are stored in separate files with 600 permissions
+- Key files owned by root:root
 - PresharedKey can be added for additional security (post-quantum resistance)
 - AWS Security Groups must allow UDP 51820/51821 from 0.0.0.0/0
 - Local firewall (UDM Pro) must allow UDP 51216 outbound
+- SSH access only via VPN (no public SSH on vpn-aws)

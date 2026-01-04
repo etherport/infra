@@ -1,0 +1,247 @@
+---
+# Base System Configuration Playbook
+# Configures common system settings for all non-K8s hosts
+#
+# Usage:
+#   # All non-K8s hosts (local + AWS)
+#   ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/base.yml --limit 'all:!k8s_cluster'
+#
+#   # Local VMs only
+#   ansible-playbook -i inventory/wind/ playbooks/base.yml --limit 'dns_servers,vpn_servers'
+#
+#   # AWS only
+#   ansible-playbook -i inventory/aws/ playbooks/base.yml
+#
+#   # Check mode
+#   ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/base.yml --check --diff
+#
+# This playbook manages:
+#   - Timezone configuration
+#   - NTP (chrony/systemd-timesyncd)
+#   - Unattended security upgrades
+#   - Common packages
+#   - SSH hardening basics
+
+- name: Base System Configuration
+  hosts: all:!k8s_cluster
+  become: true
+
+  vars:
+    # Timezone - set for US Pacific
+    system_timezone: "America/Los_Angeles"
+
+    # NTP servers - use local NTP if available, fallback to public
+    ntp_servers:
+      - 10.10.200.1  # UDM Pro / local gateway
+      - time.cloudflare.com
+      - time.google.com
+
+    # Base packages to install on all systems
+    base_packages:
+      - curl
+      - wget
+      - vim
+      - htop
+      - jq
+      - unattended-upgrades
+      - apt-listchanges
+      - needrestart
+
+    # Unattended upgrades configuration
+    unattended_upgrades:
+      # Only install security updates by default
+      allowed_origins:
+        - "${distro_id}:${distro_codename}"
+        - "${distro_id}:${distro_codename}-security"
+        - "${distro_id}ESMApps:${distro_codename}-apps-security"
+        - "${distro_id}ESM:${distro_codename}-infra-security"
+      # Don't auto-reboot (we'll handle this separately)
+      automatic_reboot: "false"
+      # Remove unused dependencies
+      remove_unused_deps: "true"
+      # Mail notifications (set to empty to disable)
+      mail_to: ""
+      # Packages to never auto-upgrade
+      blacklist:
+        - wireguard
+        - wireguard-tools
+
+  tasks:
+    # =========================================================================
+    # System time and timezone
+    # =========================================================================
+    - name: Set timezone
+      timezone:
+        name: "{{ system_timezone }}"
+
+    - name: Install chrony for NTP
+      apt:
+        name: chrony
+        state: present
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Configure chrony NTP servers
+      template:
+        src: chrony.conf.j2
+        dest: /etc/chrony/chrony.conf
+        owner: root
+        group: root
+        mode: "0644"
+        backup: yes
+      notify: Restart chrony
+
+    - name: Enable and start chrony
+      systemd:
+        name: chrony
+        enabled: yes
+        state: started
+
+    # =========================================================================
+    # Base packages
+    # =========================================================================
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install base packages
+      apt:
+        name: "{{ base_packages }}"
+        state: present
+
+    # =========================================================================
+    # Unattended upgrades configuration
+    # =========================================================================
+    - name: Configure unattended-upgrades allowed origins
+      copy:
+        dest: /etc/apt/apt.conf.d/50unattended-upgrades
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          // Automatically upgrade packages from these origins
+          Unattended-Upgrade::Allowed-Origins {
+          {% for origin in unattended_upgrades.allowed_origins %}
+              "{{ origin }}";
+          {% endfor %}
+          };
+
+          // Packages to NOT automatically upgrade
+          Unattended-Upgrade::Package-Blacklist {
+          {% for pkg in unattended_upgrades.blacklist %}
+              "{{ pkg }}";
+          {% endfor %}
+          };
+
+          // Automatically reboot if required
+          Unattended-Upgrade::Automatic-Reboot "{{ unattended_upgrades.automatic_reboot }}";
+
+          // Reboot time (if automatic reboot is enabled)
+          Unattended-Upgrade::Automatic-Reboot-Time "02:00";
+
+          // Remove unused automatically installed packages
+          Unattended-Upgrade::Remove-Unused-Dependencies "{{ unattended_upgrades.remove_unused_deps }}";
+
+          // Remove unused kernel packages
+          Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+
+          {% if unattended_upgrades.mail_to %}
+          // Send email notifications
+          Unattended-Upgrade::Mail "{{ unattended_upgrades.mail_to }}";
+          Unattended-Upgrade::MailReport "on-change";
+          {% endif %}
+
+          // Enable logging
+          Unattended-Upgrade::SyslogEnable "true";
+          Unattended-Upgrade::SyslogFacility "daemon";
+      notify: Restart unattended-upgrades
+
+    - name: Configure apt periodic updates
+      copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          APT::Periodic::Download-Upgradeable-Packages "1";
+          APT::Periodic::AutocleanInterval "7";
+
+    - name: Enable unattended-upgrades service
+      systemd:
+        name: unattended-upgrades
+        enabled: yes
+        state: started
+
+    # =========================================================================
+    # SSH hardening (basic settings)
+    # =========================================================================
+    - name: Ensure SSH key-based auth is preferred
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication no"
+        state: present
+      notify: Restart SSH
+
+    - name: Disable root login via SSH
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PermitRootLogin"
+        line: "PermitRootLogin prohibit-password"
+        state: present
+      notify: Restart SSH
+
+    # =========================================================================
+    # System tuning
+    # =========================================================================
+    - name: Configure vm.swappiness
+      sysctl:
+        name: vm.swappiness
+        value: "10"
+        sysctl_file: /etc/sysctl.d/99-tuning.conf
+        reload: yes
+
+    - name: Configure fs.file-max
+      sysctl:
+        name: fs.file-max
+        value: "2097152"
+        sysctl_file: /etc/sysctl.d/99-tuning.conf
+        reload: yes
+
+    # =========================================================================
+    # Clean up
+    # =========================================================================
+    - name: Remove unnecessary packages
+      apt:
+        name:
+          - popularity-contest
+        state: absent
+        purge: yes
+      ignore_errors: yes
+
+    - name: Run apt autoremove
+      apt:
+        autoremove: yes
+        purge: yes
+
+  # ===========================================================================
+  # Handlers
+  # ===========================================================================
+  handlers:
+    - name: Restart chrony
+      systemd:
+        name: chrony
+        state: restarted
+
+    - name: Restart unattended-upgrades
+      systemd:
+        name: unattended-upgrades
+        state: restarted
+
+    - name: Restart SSH
+      systemd:
+        name: ssh
+        state: restarted

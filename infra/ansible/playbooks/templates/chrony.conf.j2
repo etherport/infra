@@ -1,0 +1,37 @@
+# Chrony configuration managed by Ansible
+# See https://chrony.tuxfamily.org/doc/4.0/chrony.conf.html
+
+# NTP servers
+{% for server in ntp_servers %}
+server {{ server }} iburst
+{% endfor %}
+
+# Record the rate at which the system clock gains/losses time
+driftfile /var/lib/chrony/chrony.drift
+
+# Allow the system clock to be stepped in the first three updates
+# if its offset is larger than 1 second
+makestep 1.0 3
+
+# Enable kernel synchronization of the real-time clock (RTC)
+rtcsync
+
+# Enable hardware timestamping on all interfaces that support it
+#hwtimestamp *
+
+# Increase the minimum number of selectable sources required to adjust
+# the system clock
+#minsources 2
+
+# Allow NTP client access from local network (for other hosts if needed)
+#allow 10.10.0.0/16
+
+# Serve time even if not synchronized to a time source
+#local stratum 10
+
+# Log files
+logdir /var/log/chrony
+#log measurements statistics tracking
+
+# Don't allow any client to change the time
+denycommand all
