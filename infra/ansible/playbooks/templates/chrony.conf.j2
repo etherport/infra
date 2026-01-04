@@ -33,5 +33,6 @@ rtcsync
 logdir /var/log/chrony
 #log measurements statistics tracking
 
-# Don't allow any client to change the time
-denycommand all
+# Only allow chronyc commands from localhost
+bindcmdaddress 127.0.0.1
+bindcmdaddress ::1
