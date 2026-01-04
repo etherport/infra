@@ -65,18 +65,10 @@ AWS resources in us-west-2 connected to local homelab via WireGuard VPN. The inf
 
 ## EC2 Instances
 
-### private-infra VPC
-
 | Name | Instance ID | Private IP | Public IP | Type | Purpose |
 |------|-------------|------------|-----------|------|---------|
 | private-infra_vpn | `i-0f81ff99edc6ede03` | 10.10.100.10 | 44.240.60.80 | t4g.nano | WireGuard VPN gateway |
 | private-infra_dns | `i-0c49c3c41bd03d618` | 10.10.100.5 | 52.40.219.113 | t4g.nano | Technitium DNS (failover) |
-
-### public-web VPC
-
-| Name | Instance ID | Private IP | Public IP | Type | Purpose |
-|------|-------------|------------|-----------|------|---------|
-| public-web_wordpress_stopthecastle | `i-0ccff04ab95c0e5ad` | 10.11.0.191 | 54.149.26.169 | t3.micro | WordPress hosting |
 
 ## Security Groups
 
@@ -125,15 +117,6 @@ AWS resources in us-west-2 connected to local homelab via WireGuard VPN. The inf
 | Direction | Protocol | Port | Source/Dest | Description |
 |-----------|----------|------|-------------|-------------|
 | Inbound | TCP | 443 | 0.0.0.0/0 | HTTPS from internet |
-| Outbound | All | All | 0.0.0.0/0 | All outbound |
-
-### CloudFront Access Security Group (`sg-09058a7de637a754d`)
-**Name:** `public-web_cloudfront_sg` (public-web VPC)
-
-| Direction | Protocol | Port | Source/Dest | Description |
-|-----------|----------|------|-------------|-------------|
-| Inbound | TCP | 80 | pl-82a045eb (CloudFront) | HTTP from CloudFront |
-| Inbound | TCP | 443 | pl-82a045eb (CloudFront) | HTTPS from CloudFront |
 | Outbound | All | All | 0.0.0.0/0 | All outbound |
 
 ## Network ACLs
@@ -541,7 +524,6 @@ infra/ansible/inventory/aws/
 
 - Using Graviton (ARM64) instances for ~20% cost savings
 - t4g.nano for VPN and DNS (minimal CPU)
-- t3.micro for WordPress
 - No NAT Gateway (using Internet Gateway + public IP for VPN)
 - DynamoDB on-demand billing for Terraform locks
 - Lambda on ARM64 architecture
