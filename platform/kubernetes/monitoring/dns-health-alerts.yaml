@@ -1,0 +1,41 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: dns-health-alerts
+  namespace: kube-system
+  labels:
+    prometheus: kube-prometheus
+spec:
+  groups:
+  - name: dns
+    interval: 30s
+    rules:
+    - alert: NodeLocalDNSHighErrorRate
+      expr: |
+        rate(coredns_dns_responses_total{job="node-local-dns",rcode="SERVFAIL"}[5m]) > 0.05
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "NodeLocalDNS error rate is high on {{ $labels.instance }}"
+        description: "NodeLocalDNS on {{ $labels.instance }} has {{ $value }} SERVFAIL/sec"
+
+    - alert: NodeLocalDNSTimeout
+      expr: |
+        rate(coredns_forward_responses_total{job="node-local-dns",rcode="TIMEOUT"}[5m]) > 0.01
+      for: 2m
+      labels:
+        severity: warning
+      annotations:
+        summary: "NodeLocalDNS timeouts detected on {{ $labels.instance }}"
+        description: "NodeLocalDNS experiencing timeouts forwarding to CoreDNS"
+
+    - alert: CoreDNSDown
+      expr: |
+        up{job="kube-dns"} == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "CoreDNS is down"
+        description: "CoreDNS pod {{ $labels.pod }} is not responding"

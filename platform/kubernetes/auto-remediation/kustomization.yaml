@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: auto-remediation
+
+resources:
+  - namespace.yaml
+  - rbac.yaml
+  - configmap.yaml
+  - controller-configmap.yaml
+  - deployment.yaml
+  - service.yaml

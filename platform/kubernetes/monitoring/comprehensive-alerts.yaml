@@ -1,0 +1,226 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: comprehensive-service-alerts
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+  # Home Automation
+  - name: home-automation
+    rules:
+    - alert: HomeAssistantDown
+      expr: kube_deployment_status_replicas_available{namespace="home-automation",deployment="home-assistant"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        auto_remediate: "true"
+      annotations:
+        summary: "Home Assistant is down"
+        description: "Home Assistant has no available replicas for 2 minutes"
+    
+    - alert: HomeAssistantPodCrashLooping
+      expr: rate(kube_pod_container_status_restarts_total{namespace="home-automation",pod=~"home-assistant-.*"}[15m]) > 0
+      for: 5m
+      labels:
+        severity: warning
+        auto_remediate: "true"
+      annotations:
+        summary: "Home Assistant pod is crash looping"
+        description: "Home Assistant pod {{ $labels.pod }} is restarting frequently"
+
+  # Monitoring Stack
+  - name: monitoring
+    rules:
+    - alert: GrafanaDown
+      expr: kube_deployment_status_replicas_available{namespace="monitoring",deployment="monitoring-grafana"} == 0
+      for: 2m
+      labels:
+        severity: warning
+        auto_remediate: "true"
+      annotations:
+        summary: "Grafana is down"
+        description: "Grafana has no available replicas"
+    
+    - alert: PrometheusDown
+      expr: kube_statefulset_status_replicas_ready{namespace="monitoring",statefulset="prometheus-monitoring-kube-prometheus-prometheus"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        auto_remediate: "true"
+      annotations:
+        summary: "Prometheus is down"
+        description: "Prometheus has no ready replicas"
+    
+    - alert: AlertmanagerDown
+      expr: kube_statefulset_status_replicas_ready{namespace="monitoring",statefulset="alertmanager-monitoring-kube-prometheus-alertmanager"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        auto_remediate: "true"
+      annotations:
+        summary: "Alertmanager is down"
+        description: "Alertmanager has no ready replicas"
+
+  # Ingress Controller
+  - name: traefik
+    rules:
+    - alert: TraefikDown
+      expr: kube_deployment_status_replicas_available{namespace="traefik",deployment="traefik"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        auto_remediate: "true"
+      annotations:
+        summary: "Traefik ingress controller is down"
+        description: "Traefik has no available replicas - ingress is down!"
+
+  # Cert Manager
+  - name: cert-manager
+    rules:
+    - alert: CertManagerDown
+      expr: kube_deployment_status_replicas_available{namespace="cert-manager",deployment="cert-manager"} == 0
+      for: 3m
+      labels:
+        severity: warning
+        auto_remediate: "true"
+      annotations:
+        summary: "Cert-manager controller is down"
+        description: "Cert-manager has no available replicas"
+    
+    - alert: CertManagerWebhookDown
+      expr: kube_deployment_status_replicas_available{namespace="cert-manager",deployment="cert-manager-webhook"} == 0
+      for: 3m
+      labels:
+        severity: warning
+        auto_remediate: "true"
+      annotations:
+        summary: "Cert-manager webhook is down"
+        description: "Cert-manager webhook has no available replicas"
+
+  # Flux GitOps
+  - name: flux-system
+    rules:
+    - alert: FluxHelmControllerDown
+      expr: kube_deployment_status_replicas_available{namespace="flux-system",deployment="helm-controller"} == 0
+      for: 3m
+      labels:
+        severity: warning
+        auto_remediate: "true"
+      annotations:
+        summary: "Flux Helm Controller is down"
+        description: "Flux Helm Controller has no available replicas"
+    
+    - alert: FluxKustomizeControllerDown
+      expr: kube_deployment_status_replicas_available{namespace="flux-system",deployment="kustomize-controller"} == 0
+      for: 3m
+      labels:
+        severity: warning
+        auto_remediate: "true"
+      annotations:
+        summary: "Flux Kustomize Controller is down"
+        description: "Flux Kustomize Controller has no available replicas"
+    
+    - alert: FluxSourceControllerDown
+      expr: kube_deployment_status_replicas_available{namespace="flux-system",deployment="source-controller"} == 0
+      for: 3m
+      labels:
+        severity: warning
+        auto_remediate: "true"
+      annotations:
+        summary: "Flux Source Controller is down"
+        description: "Flux Source Controller has no available replicas"
+
+  # Backup Services
+  - name: backups
+    rules:
+    - alert: KopiaDown
+      expr: kube_deployment_status_replicas_available{namespace="backups",deployment="kopia"} == 0
+      for: 5m
+      labels:
+        severity: warning
+        auto_remediate: "true"
+      annotations:
+        summary: "Kopia backup service is down"
+        description: "Kopia has no available replicas"
+    
+    - alert: VeleroDown
+      expr: kube_deployment_status_replicas_available{namespace="velero",deployment="velero"} == 0
+      for: 5m
+      labels:
+        severity: warning
+        auto_remediate: "true"
+      annotations:
+        summary: "Velero backup service is down"
+        description: "Velero has no available replicas"
+
+  # DNS Services
+  - name: dns-services
+    rules:
+    - alert: TechnitiumDNSDown
+      expr: kube_statefulset_status_replicas_ready{namespace="dns",statefulset="technitium"} < 2
+      for: 3m
+      labels:
+        severity: critical
+        auto_remediate: "true"
+      annotations:
+        summary: "Technitium DNS is degraded or down"
+        description: "Technitium DNS has {{ $value }} ready replicas (expected 2)"
+
+  # Load Balancer
+  - name: metallb
+    rules:
+    - alert: MetalLBControllerDown
+      expr: kube_deployment_status_replicas_available{namespace="metallb-system",deployment="controller"} == 0
+      for: 3m
+      labels:
+        severity: critical
+        auto_remediate: "true"
+      annotations:
+        summary: "MetalLB controller is down"
+        description: "MetalLB controller has no available replicas - LoadBalancer IPs won't work"
+
+  # Media Services
+  - name: media
+    rules:
+    - alert: PlexDown
+      expr: kube_deployment_status_replicas_available{namespace="plex",deployment="plex"} == 0
+      for: 5m
+      labels:
+        severity: warning
+        auto_remediate: "true"
+      annotations:
+        summary: "Plex media server is down"
+        description: "Plex has no available replicas"
+
+  # Generic Pod Health
+  - name: pod-health
+    rules:
+    - alert: PodCrashLooping
+      expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Pod {{ $labels.pod }} is crash looping"
+        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is restarting frequently"
+    
+    - alert: PodOOMKilled
+      expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+      for: 1m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Pod {{ $labels.pod }} was OOM killed"
+        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} was terminated due to out of memory"
+    
+    - alert: PodNotReady
+      expr: kube_pod_status_ready{condition="false"} == 1
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Pod {{ $labels.pod }} is not ready"
+        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been not ready for 10 minutes"

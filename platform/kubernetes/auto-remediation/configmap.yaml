@@ -1,0 +1,145 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: remediation-rules
+  namespace: auto-remediation
+data:
+  rules.yaml: |
+    # Comprehensive Auto-Remediation Rules
+    # Maps alert names to automated remediation actions
+    rules:
+      # DNS Services
+      NodeLocalDNSHighErrorRate:
+        action: restart_pods
+        namespace: kube-system
+        selector: k8s-app=node-local-dns
+        description: "Restart NodeLocalDNS pods"
+
+      NodeLocalDNSTimeout:
+        action: restart_pods
+        namespace: kube-system
+        selector: k8s-app=node-local-dns
+        description: "Restart NodeLocalDNS pods"
+
+      CoreDNSDown:
+        action: restart_pods
+        namespace: kube-system
+        selector: k8s-app=kube-dns
+        description: "Restart CoreDNS pods"
+
+      TechnitiumDNSDown:
+        action: restart_pods
+        namespace: dns
+        selector: app=technitium
+        description: "Restart Technitium DNS pods"
+
+      # Home Automation
+      HomeAssistantDown:
+        action: restart_pods
+        namespace: home-automation
+        selector: app=home-assistant
+        description: "Restart Home Assistant"
+
+      HomeAssistantPodCrashLooping:
+        action: scale_deployment
+        namespace: home-automation
+        deployment: home-assistant
+        description: "Scale Home Assistant deployment down/up to clear crash loop"
+
+      # Monitoring Stack
+      GrafanaDown:
+        action: restart_pods
+        namespace: monitoring
+        selector: app.kubernetes.io/name=grafana
+        description: "Restart Grafana pods"
+
+      PrometheusDown:
+        action: restart_pods
+        namespace: monitoring
+        selector: app.kubernetes.io/name=prometheus
+        description: "Restart Prometheus pods"
+
+      AlertmanagerDown:
+        action: restart_pods
+        namespace: monitoring
+        selector: app.kubernetes.io/name=alertmanager
+        description: "Restart Alertmanager pods"
+
+      # Ingress Controller
+      TraefikDown:
+        action: restart_pods
+        namespace: traefik
+        selector: app.kubernetes.io/name=traefik
+        description: "Restart Traefik ingress controller"
+
+      # Cert Manager
+      CertManagerDown:
+        action: restart_pods
+        namespace: cert-manager
+        selector: app=cert-manager
+        description: "Restart cert-manager controller"
+
+      CertManagerWebhookDown:
+        action: restart_pods
+        namespace: cert-manager
+        selector: app=webhook
+        description: "Restart cert-manager webhook"
+
+      # Flux GitOps
+      FluxHelmControllerDown:
+        action: restart_pods
+        namespace: flux-system
+        selector: app=helm-controller
+        description: "Restart Flux Helm Controller"
+
+      FluxKustomizeControllerDown:
+        action: restart_pods
+        namespace: flux-system
+        selector: app=kustomize-controller
+        description: "Restart Flux Kustomize Controller"
+
+      FluxSourceControllerDown:
+        action: restart_pods
+        namespace: flux-system
+        selector: app=source-controller
+        description: "Restart Flux Source Controller"
+
+      # Backup Services
+      KopiaDown:
+        action: restart_pods
+        namespace: backups
+        selector: app=kopia
+        description: "Restart Kopia backup service"
+
+      VeleroDown:
+        action: restart_pods
+        namespace: velero
+        selector: app.kubernetes.io/name=velero
+        description: "Restart Velero backup service"
+
+      # Load Balancer
+      MetalLBControllerDown:
+        action: restart_pods
+        namespace: metallb-system
+        selector: component=controller
+        description: "Restart MetalLB controller"
+
+      # Media Services
+      PlexDown:
+        action: restart_pods
+        namespace: plex
+        selector: app=plex
+        description: "Restart Plex media server"
+
+      # Generic Pod Issues
+      PodCrashLooping:
+        action: scale_deployment
+        description: "Scale deployment down and back up to clear crash loop"
+
+      PodOOMKilled:
+        action: restart_pods
+        description: "Restart OOM killed pods"
+
+      PodNotReady:
+        action: restart_pods
+        description: "Restart pods that are not ready"

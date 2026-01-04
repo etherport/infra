@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remediation-controller
+  namespace: auto-remediation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: remediation-controller
+  template:
+    metadata:
+      labels:
+        app: remediation-controller
+    spec:
+      serviceAccountName: remediation-controller
+      containers:
+      - name: controller
+        image: python:3.11-slim
+        command:
+        - /bin/bash
+        - -c
+        - |
+          pip install kubernetes pyyaml
+          python /scripts/remediate.py
+        ports:
+        - containerPort: 8080
+          name: webhook
+        volumeMounts:
+        - name: script
+          mountPath: /scripts
+        - name: rules
+          mountPath: /etc/remediation
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: script
+        configMap:
+          name: remediation-script
+          defaultMode: 0755
+      - name: rules
+        configMap:
+          name: remediation-rules

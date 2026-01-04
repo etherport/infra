@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: remediation-script
+  namespace: auto-remediation
+data:
+  remediate.py: |
+$(cat platform/kubernetes/auto-remediation/controller.py | sed 's/^/    /')
