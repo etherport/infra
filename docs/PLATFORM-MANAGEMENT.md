@@ -49,6 +49,7 @@ Centralized documentation for reporting, monitoring, updates, and management acr
 | Prometheus | Internal (port-forward 9090) | Metrics, alerting |
 | Alertmanager | Internal (port-forward 9093) | Alert routing |
 | Technitium DNS | https://dns.wind.etherport.net:5380 | DNS management |
+| Wiki.js | https://wiki.wind.etherport.net | Documentation wiki |
 
 ### Metrics Collection
 
@@ -212,6 +213,7 @@ flux resume kustomization flux-system
 
 | Release | Namespace | Chart | Values Location |
 |---------|-----------|-------|-----------------|
+| cnpg | cnpg-system | cnpg/cloudnative-pg | `platform/kubernetes/cnpg/operator-values.yaml` |
 | monitoring | monitoring | kube-prometheus-stack | `platform/kubernetes/monitoring/values.yaml` |
 | kured | kube-system | kubereboot/kured | CLI flags |
 | velero | velero | vmware-tanzu/velero | CLI flags |

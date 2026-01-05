@@ -1,0 +1,58 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres-cluster
+  namespace: postgres
+spec:
+  description: "Shared PostgreSQL cluster for homelab applications"
+
+  # Single instance for homelab (increase to 3 for HA)
+  instances: 1
+
+  # PostgreSQL version
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+
+  # Primary update strategy
+  primaryUpdateStrategy: unsupervised
+
+  # Storage configuration
+  storage:
+    size: 10Gi
+    storageClass: ceph-rbd
+
+  # Resource limits
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+
+  # PostgreSQL configuration
+  postgresql:
+    parameters:
+      # Memory settings (tuned for small instance)
+      shared_buffers: "128MB"
+      effective_cache_size: "256MB"
+      work_mem: "8MB"
+      maintenance_work_mem: "64MB"
+
+      # Connection settings
+      max_connections: "100"
+
+      # Logging
+      log_statement: "ddl"
+      log_min_duration_statement: "1000"
+
+  # Bootstrap configuration - creates initial databases
+  bootstrap:
+    initdb:
+      database: wikijs
+      owner: wikijs
+      secret:
+        name: postgres-app-credentials
+
+  # Monitoring
+  monitoring:
+    enablePodMonitor: true

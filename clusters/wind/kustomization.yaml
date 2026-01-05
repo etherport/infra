@@ -6,12 +6,15 @@ resources:
   - ../../platform/kubernetes/metallb
   - ../../platform/kubernetes/traefik
   - ../../platform/kubernetes/technitium
+  # Database (CloudNativePG cluster - operator installed via Helm)
+  - ../../platform/kubernetes/cnpg
   # Applications
   - ../../platform/kubernetes/home-automation
   - ../../platform/kubernetes/plex
   - ../../platform/kubernetes/icloudpd
   - ../../platform/kubernetes/rclone-gdrive
   - ../../platform/kubernetes/apps/kopia
+  - ../../platform/kubernetes/wikijs
   # Utilities
   - ../../platform/kubernetes/route53-ddns/base
   - ../../platform/kubernetes/backups/aws-s3/shares/scans

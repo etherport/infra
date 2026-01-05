@@ -1,0 +1,16 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: wiki-js
+  namespace: wikijs
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`wiki.wind.etherport.net`)
+      kind: Rule
+      services:
+        - name: wiki-js
+          port: 3000
+  tls:
+    certResolver: route53

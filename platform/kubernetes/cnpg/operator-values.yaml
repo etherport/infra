@@ -1,0 +1,22 @@
+# CloudNativePG Operator Helm Values
+# Chart: cnpg/cloudnative-pg
+# Docs: https://cloudnative-pg.io/documentation/
+
+# Operator configuration
+config:
+  # Watch all namespaces (set to false for single-namespace mode)
+  clusterWide: true
+
+# Resource requests/limits for operator
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+# Monitoring
+monitoring:
+  # Enable PodMonitor for Prometheus scraping
+  podMonitorEnabled: true
