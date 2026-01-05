@@ -9,6 +9,8 @@ spec:
   routes:
   - match: Host(`ha.wind.etherport.net`)
     kind: Rule
+    middlewares:
+    - name: home-assistant-headers
     services:
     - name: home-assistant
       port: 8123
