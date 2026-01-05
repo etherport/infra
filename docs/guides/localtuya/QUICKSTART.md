@@ -7,11 +7,27 @@
 - **Better privacy** - No data to Tuya cloud
 
 ## Prerequisites
-- [ ] Tuya/Smart Life app installed and working
-- [ ] All devices working in the app
-- [ ] Python 3 installed on your Mac
+- [x] Tuya/Smart Life app installed and working
+- [x] All devices working in the app
+- [x] Python 3 installed on your Mac
 
-## Step 1: Get Tuya Developer Credentials (10 minutes)
+## Current Status
+
+✅ **COMPLETED:**
+- [x] Tuya IoT Platform account created
+- [x] Cloud project created (p1767568700268edn5pr)
+- [x] API credentials stored in 1Password
+- [x] Smart Life app linked to project
+- [x] Device discovery completed - **9 devices found**
+
+⚠️ **IN PROGRESS:**
+- [ ] Devices currently showing as OFFLINE in Tuya cloud
+- [ ] Local keys not available until devices are online
+- [ ] Need to verify device power and WiFi status
+
+**Next Step**: Check device status in Smart Life app and get devices online
+
+## Step 1: Get Tuya Developer Credentials (COMPLETED ✅)
 
 1. **Create Tuya IoT Account**
    - Visit: https://iot.tuya.com/
@@ -41,41 +57,51 @@
    - Scan the QR code from the website
    - Your devices should now appear in the Tuya IoT dashboard
 
-## Step 2: Run Device Discovery Script
+## Step 2: Run Device Discovery Script (COMPLETED ✅)
 
-1. **Install Required Library**
-   ```bash
-   pip3 install tuya-iot-py-sdk
-   ```
+**Result**: Found 9 devices but all showing as OFFLINE ⚠️
 
-2. **Edit the Discovery Script**
-   ```bash
-   nano /tmp/get_tuya_devices.py
-   ```
-   
-   Replace these two lines with your credentials from Step 1:
-   ```python
-   ACCESS_ID = "your_access_id_here"      # Replace with your Access ID
-   ACCESS_SECRET = "your_access_secret_here"  # Replace with your Access Secret
-   ```
-   
-   Save and exit (Ctrl+X, Y, Enter)
+### Discovered Devices:
+1. Kitchen Strip (ebab6535a9e78c3a3bfv7v) - LED Strip
+2. Window Light (eb97cd9d82225998ecofmi) - LED Strip
+3. **Landscape Lighting** (ebdc1aa3cfd5438376ktom) - 3-Zone Transformer ⭐
+4. Bench light (eb0fbce27fb4f00c30v6ys) - LED Strip
+5. Counter Lights (30000164e09806cb6be9) - Smart Plug
+6. Office Balls (0225833624a160011195) - Smart Plug
+7. Tree Light (81705067c44f33ef458d) - Dimmer Switch
+8. Laundry room dimmer (81705067c44f33e52bcc) - Dimmer Switch
+9. Mantle Lights (6840080140f520f15d90) - Smart Plug
 
-3. **Run the Script**
-   ```bash
-   python3 /tmp/get_tuya_devices.py > /tmp/tuya_devices.txt
-   cat /tmp/tuya_devices.txt
-   ```
+### Check Current Status
 
-4. **Share Results**
-   The output will show all your devices with:
-   - Device Name
-   - Device ID (needed for LocalTuya)
-   - Local Key (needed for LocalTuya)
-   - IP Address (if available)
-   - Functions/capabilities
+Run this anytime to see which devices are online and ready:
+```bash
+cd /Users/grahamsmith/Projects/homelab-infra
+./docs/guides/localtuya/check-device-status.sh
+```
 
-   **IMPORTANT**: The local keys are sensitive. When sharing results, you can redact them if needed.
+This will show:
+- Online vs Offline count
+- Local keys for any online devices
+- IP addresses
+- Which devices are ready for LocalTuya setup
+
+### Troubleshooting Offline Devices
+
+**Why all devices show offline:**
+- Devices may be powered off (check especially Landscape Lighting transformer)
+- WiFi connectivity issues
+- Need to open Smart Life app to trigger sync
+
+**To fix:**
+1. Open Smart Life app on your phone
+2. Check each device - tap to see if it responds
+3. For offline devices, verify power and WiFi
+4. Power cycle if needed
+5. Wait 2-3 minutes for cloud sync
+6. Re-run `check-device-status.sh`
+
+See: `docs/guides/localtuya/TROUBLESHOOTING.md` for detailed help
 
 ## Step 3: Install LocalTuya in Home Assistant
 

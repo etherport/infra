@@ -1,0 +1,44 @@
+---
+# Additional scrape configs for non-K8s hosts
+# This secret is referenced by the kube-prometheus-stack helm release
+apiVersion: v1
+kind: Secret
+metadata:
+  name: prometheus-additional-scrape-configs
+  namespace: monitoring
+stringData:
+  additional-scrape-configs.yaml: |
+    # External hosts running node_exporter
+    - job_name: 'external-nodes'
+      scrape_interval: 30s
+      scrape_timeout: 10s
+      static_configs:
+        - targets:
+            - '10.10.201.6:9100'   # dns-fallback
+            - '10.10.201.15:9100'  # vpn-local
+          labels:
+            location: 'local'
+            environment: 'production'
+        - targets:
+            - '10.10.100.5:9100'   # dns-aws
+            - '10.10.100.10:9100'  # vpn-aws
+          labels:
+            location: 'aws'
+            environment: 'production'
+      relabel_configs:
+        - source_labels: [__address__]
+          regex: '10\.10\.201\.6:.*'
+          target_label: instance
+          replacement: 'dns-fallback'
+        - source_labels: [__address__]
+          regex: '10\.10\.201\.15:.*'
+          target_label: instance
+          replacement: 'vpn-local'
+        - source_labels: [__address__]
+          regex: '10\.10\.100\.5:.*'
+          target_label: instance
+          replacement: 'dns-aws'
+        - source_labels: [__address__]
+          regex: '10\.10\.100\.10:.*'
+          target_label: instance
+          replacement: 'vpn-aws'

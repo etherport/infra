@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Office Balls",
+    "device_id": "0225833624a160011195",
+    "ip": "10.10.204.118",
+    "mac": "24:a1:60:01:11:95"
+  },
+  {
+    "name": "Tree Light",
+    "device_id": "81705067c44f33ef458d",
+    "ip": "10.10.204.126",
+    "mac": "c4:4f:33:ef:45:8d"
+  },
+  {
+    "name": "Counter Lights",
+    "device_id": "30000164e09806cb6be9",
+    "ip": "10.10.204.128",
+    "mac": "e0:98:06:cb:6b:e9"
+  },
+  {
+    "name": "Laundry room dimmer",
+    "device_id": "81705067c44f33e52bcc",
+    "ip": "10.10.204.185",
+    "mac": "c4:4f:33:e5:2b:cc"
+  }
+]

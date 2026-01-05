@@ -1,0 +1,116 @@
+---
+# Alerting rules for external (non-K8s) hosts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: external-hosts
+  namespace: monitoring
+  labels:
+    release: monitoring
+    app: kube-prometheus-stack
+spec:
+  groups:
+    - name: external-hosts.rules
+      rules:
+        # Host availability
+        - alert: ExternalHostDown
+          expr: up{job="external-nodes"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "External host {{ $labels.instance }} is down"
+            description: "{{ $labels.instance }} ({{ $labels.location }}) has been unreachable for more than 2 minutes."
+
+        # High CPU usage
+        - alert: ExternalHostHighCPU
+          expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle",job="external-nodes"}[5m])) * 100) > 80
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High CPU usage on {{ $labels.instance }}"
+            description: "CPU usage on {{ $labels.instance }} is above 80% for more than 10 minutes. Current: {{ $value | printf \"%.1f\" }}%"
+
+        # High memory usage
+        - alert: ExternalHostHighMemory
+          expr: (1 - (node_memory_MemAvailable_bytes{job="external-nodes"} / node_memory_MemTotal_bytes{job="external-nodes"})) * 100 > 85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High memory usage on {{ $labels.instance }}"
+            description: "Memory usage on {{ $labels.instance }} is above 85%. Current: {{ $value | printf \"%.1f\" }}%"
+
+        # Low disk space
+        - alert: ExternalHostLowDisk
+          expr: (1 - (node_filesystem_avail_bytes{job="external-nodes",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{job="external-nodes",fstype!~"tmpfs|overlay"})) * 100 > 80
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Low disk space on {{ $labels.instance }}"
+            description: "Disk {{ $labels.mountpoint }} on {{ $labels.instance }} is {{ $value | printf \"%.1f\" }}% full."
+
+        - alert: ExternalHostCriticalDisk
+          expr: (1 - (node_filesystem_avail_bytes{job="external-nodes",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{job="external-nodes",fstype!~"tmpfs|overlay"})) * 100 > 95
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Critical disk space on {{ $labels.instance }}"
+            description: "Disk {{ $labels.mountpoint }} on {{ $labels.instance }} is {{ $value | printf \"%.1f\" }}% full. Immediate action required!"
+
+        # High load average
+        - alert: ExternalHostHighLoad
+          expr: node_load15{job="external-nodes"} / count without(cpu, mode) (node_cpu_seconds_total{mode="idle",job="external-nodes"}) > 2
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High load average on {{ $labels.instance }}"
+            description: "15-minute load average on {{ $labels.instance }} is over 2x the number of CPUs."
+
+        # Systemd service failures
+        - alert: ExternalHostSystemdFailed
+          expr: node_systemd_unit_state{job="external-nodes",state="failed"} == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Systemd unit failed on {{ $labels.instance }}"
+            description: "Systemd unit {{ $labels.name }} on {{ $labels.instance }} is in failed state."
+
+        # Host rebooted
+        - alert: ExternalHostRebooted
+          expr: time() - node_boot_time_seconds{job="external-nodes"} < 600
+          for: 1m
+          labels:
+            severity: info
+          annotations:
+            summary: "External host {{ $labels.instance }} rebooted"
+            description: "{{ $labels.instance }} was rebooted less than 10 minutes ago."
+
+    # DNS-specific alerts
+    - name: dns-service.rules
+      rules:
+        - alert: TechnitiumDNSDown
+          expr: up{job="external-nodes",instance=~"dns-.*"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Technitium DNS host {{ $labels.instance }} is down"
+            description: "DNS server {{ $labels.instance }} has been unreachable for more than 1 minute. DNS resolution may be affected."
+
+    # VPN-specific alerts
+    - name: vpn-service.rules
+      rules:
+        - alert: VPNGatewayDown
+          expr: up{job="external-nodes",instance=~"vpn-.*"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "VPN gateway {{ $labels.instance }} is down"
+            description: "VPN gateway {{ $labels.instance }} has been unreachable for more than 2 minutes. Site-to-site connectivity may be affected."

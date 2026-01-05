@@ -55,8 +55,8 @@
         - "${distro_id}:${distro_codename}-security"
         - "${distro_id}ESMApps:${distro_codename}-apps-security"
         - "${distro_id}ESM:${distro_codename}-infra-security"
-      # Don't auto-reboot (we'll handle this separately)
-      automatic_reboot: "false"
+      # Auto-reboot when kernel updates require it
+      automatic_reboot: "true"
       # Remove unused dependencies
       remove_unused_deps: "true"
       # Mail notifications (set to empty to disable)
@@ -65,6 +65,19 @@
       blacklist:
         - wireguard
         - wireguard-tools
+
+    # Staggered reboot times to avoid simultaneous outages
+    # Format: "HH:MM" in local timezone
+    reboot_times:
+      dns-fallback: "02:00"
+      dns-aws: "02:30"
+      vpn-local: "03:00"
+      vpn-aws: "03:30"
+      default: "04:00"
+
+    # Node exporter for Prometheus monitoring
+    node_exporter_version: "1.8.2"
+    node_exporter_port: 9100
 
   tasks:
     # =========================================================================
@@ -137,8 +150,8 @@
           // Automatically reboot if required
           Unattended-Upgrade::Automatic-Reboot "{{ unattended_upgrades.automatic_reboot }}";
 
-          // Reboot time (if automatic reboot is enabled)
-          Unattended-Upgrade::Automatic-Reboot-Time "02:00";
+          // Reboot time (staggered per host to avoid simultaneous outages)
+          Unattended-Upgrade::Automatic-Reboot-Time "{{ reboot_times[inventory_hostname] | default(reboot_times.default) }}";
 
           // Remove unused automatically installed packages
           Unattended-Upgrade::Remove-Unused-Dependencies "{{ unattended_upgrades.remove_unused_deps }}";
@@ -212,6 +225,100 @@
         reload: yes
 
     # =========================================================================
+    # Prometheus Node Exporter for monitoring
+    # =========================================================================
+    - name: Check if node_exporter is installed
+      stat:
+        path: /usr/local/bin/node_exporter
+      register: node_exporter_binary
+
+    - name: Get installed node_exporter version
+      command: /usr/local/bin/node_exporter --version
+      register: installed_version
+      changed_when: false
+      failed_when: false
+      when: node_exporter_binary.stat.exists
+
+    - name: Determine system architecture
+      set_fact:
+        node_exporter_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+
+    - name: Download node_exporter
+      get_url:
+        url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-{{ node_exporter_arch }}.tar.gz"
+        dest: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+        mode: "0644"
+      when: not node_exporter_binary.stat.exists or (installed_version.stdout is defined and node_exporter_version not in installed_version.stdout)
+
+    - name: Extract node_exporter
+      unarchive:
+        src: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+        dest: /tmp
+        remote_src: yes
+      when: not node_exporter_binary.stat.exists or (installed_version.stdout is defined and node_exporter_version not in installed_version.stdout)
+
+    - name: Install node_exporter binary
+      copy:
+        src: "/tmp/node_exporter-{{ node_exporter_version }}.linux-{{ node_exporter_arch }}/node_exporter"
+        dest: /usr/local/bin/node_exporter
+        mode: "0755"
+        owner: root
+        group: root
+        remote_src: yes
+      when: not node_exporter_binary.stat.exists or (installed_version.stdout is defined and node_exporter_version not in installed_version.stdout)
+      notify: Restart node_exporter
+
+    - name: Create node_exporter user
+      user:
+        name: node_exporter
+        system: yes
+        shell: /usr/sbin/nologin
+        create_home: no
+
+    - name: Create node_exporter systemd service
+      copy:
+        dest: /etc/systemd/system/node_exporter.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Prometheus Node Exporter
+          Documentation=https://prometheus.io/docs/guides/node-exporter/
+          After=network-online.target
+
+          [Service]
+          User=node_exporter
+          Group=node_exporter
+          Type=simple
+          ExecStart=/usr/local/bin/node_exporter \
+            --web.listen-address=:{{ node_exporter_port }} \
+            --collector.systemd \
+            --collector.processes
+          Restart=on-failure
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart node_exporter
+
+    - name: Enable and start node_exporter
+      systemd:
+        name: node_exporter
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+    - name: Clean up node_exporter download
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+        - "/tmp/node_exporter-{{ node_exporter_version }}.linux-{{ node_exporter_arch }}"
+      ignore_errors: yes
+
+    # =========================================================================
     # Clean up
     # =========================================================================
     - name: Remove unnecessary packages
@@ -245,3 +352,9 @@
       systemd:
         name: ssh
         state: restarted
+
+    - name: Restart node_exporter
+      systemd:
+        name: node_exporter
+        state: restarted
+        daemon_reload: yes
