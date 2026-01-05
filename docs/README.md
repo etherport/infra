@@ -67,6 +67,8 @@ Central documentation index for the homelab infrastructure project.
 
 | Document | Description |
 |----------|-------------|
+| [runbooks/disaster-recovery.md](runbooks/disaster-recovery.md) | **Disaster recovery procedures** |
+| [runbooks/kubernetes-upgrade.md](runbooks/kubernetes-upgrade.md) | **Kubernetes upgrade procedures** |
 | [runbooks/dns-resolution-issues.md](runbooks/dns-resolution-issues.md) | DNS troubleshooting |
 | [runbooks/vlan-interfaces-netplan.md](runbooks/vlan-interfaces-netplan.md) | VLAN interface configuration |
 | [runbooks/auto-remediation/](runbooks/auto-remediation/) | Automated issue resolution system |
