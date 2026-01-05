@@ -226,7 +226,7 @@ spec:
             - name: TECHNITIUM_URL
               value: "http://technitium-0.technitium-headless.dns.svc.cluster.local:5380"
             - name: SECONDARY_URLS
-              value: "http://technitium-1.technitium-headless.dns.svc.cluster.local:5380"
+              value: "http://technitium-1.technitium-headless.dns.svc.cluster.local:5380,http://10.10.201.6:5380,http://10.10.100.5:5380"
             - name: TECHNITIUM_USER
               valueFrom:
                 secretKeyRef:
