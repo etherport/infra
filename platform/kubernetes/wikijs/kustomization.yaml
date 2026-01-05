@@ -6,8 +6,7 @@ namespace: wikijs
 resources:
   - 00-namespace.yaml
   - 01-pvc.yaml
-  # Uncomment after encrypting with SOPS:
-  # - 02-db-secret.sops.yaml
+  - 02-db-secret.sops.yaml
   - 03-deployment.yaml
   - 04-service.yaml
   - 05-ingressroute.yaml

@@ -49,6 +49,9 @@ kubectl get crd | grep cnpg
 
 ### 3. Create and Encrypt Secrets
 
+Secrets are managed with SOPS and age encryption. The `.sops.yaml` in this directory
+configures automatic encryption for `*.sops.yaml` files using the cluster's age key.
+
 ```bash
 cd platform/kubernetes/cnpg
 
@@ -60,9 +63,15 @@ echo "Password: $PASSWORD"
 # Replace PLACEHOLDER_GENERATE_SECURE_PASSWORD with $PASSWORD
 vim 02-credentials.sops.yaml
 
-# Encrypt with SOPS
+# Encrypt with SOPS (must run from this directory to pick up .sops.yaml config)
 sops -e -i 02-credentials.sops.yaml
+
+# To view/edit encrypted secrets later:
+sops 02-credentials.sops.yaml
 ```
+
+**Note:** Flux automatically decrypts SOPS secrets during deployment using the
+`sops-age` secret in the `flux-system` namespace. No manual decryption needed.
 
 ### 4. Deploy PostgreSQL Cluster (Flux)
 

@@ -37,7 +37,8 @@ kubectl get pods -n postgres
 
 ### 2. Create and Encrypt Secrets
 
-The password must match the one used for `postgres-app-credentials` in the cnpg namespace:
+The password must match the one used for `postgres-app-credentials` in the cnpg namespace.
+Secrets are managed with SOPS and age encryption.
 
 ```bash
 cd platform/kubernetes/wikijs
@@ -46,9 +47,15 @@ cd platform/kubernetes/wikijs
 # Replace PLACEHOLDER_MUST_MATCH_POSTGRES_CREDENTIALS with the same password
 vim 02-db-secret.sops.yaml
 
-# Encrypt with SOPS
+# Encrypt with SOPS (must run from this directory to pick up .sops.yaml config)
 sops -e -i 02-db-secret.sops.yaml
+
+# To view/edit encrypted secrets later:
+sops 02-db-secret.sops.yaml
 ```
+
+**Note:** Flux automatically decrypts SOPS secrets during deployment using the
+`sops-age` secret in the `flux-system` namespace. No manual decryption needed.
 
 ### 3. Deploy via Flux
 

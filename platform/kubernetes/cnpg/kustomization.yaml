@@ -4,5 +4,4 @@ kind: Kustomization
 resources:
   - 00-namespace.yaml
   - 01-cluster.yaml
-  # Uncomment after encrypting with SOPS:
-  # - 02-credentials.sops.yaml
+  - 02-credentials.sops.yaml
