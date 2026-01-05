@@ -1,0 +1,12 @@
+# Kubespray sensitive files
+inventory/artifacts/
+inventory/credentials/
+
+# SSH keys
+*.pem
+*.key
+
+# Temporary files
+*.retry
+*.pyc
+__pycache__/

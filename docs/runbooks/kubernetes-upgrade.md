@@ -43,13 +43,13 @@ Low risk, rolling update with zero downtime.
 ### 1.1 Update Kubespray Variables
 
 ```bash
-cd ~/Projects/homelab-infra/kubespray
+cd ~/kubespray
 
 # Check current version
-grep kube_version inventory/mycluster/group_vars/k8s_cluster/k8s-cluster.yml
+grep kube_version inventory/wind/group_vars/k8s_cluster/k8s-cluster.yml
 
 # Update to new patch version
-vim inventory/mycluster/group_vars/k8s_cluster/k8s-cluster.yml
+vim inventory/wind/group_vars/k8s_cluster/k8s-cluster.yml
 # Change: kube_version: v1.33.7
 ```
 
@@ -60,15 +60,15 @@ vim inventory/mycluster/group_vars/k8s_cluster/k8s-cluster.yml
 source venv/bin/activate
 
 # Run upgrade (control plane first, then workers)
-ansible-playbook -i inventory/mycluster/hosts.yaml upgrade-cluster.yml \
+ansible-playbook -i inventory/wind/inventory.ini upgrade-cluster.yml \
   --become --become-user=root
 
 # Or upgrade one node at a time (safer)
-ansible-playbook -i inventory/mycluster/hosts.yaml upgrade-cluster.yml \
+ansible-playbook -i inventory/wind/inventory.ini upgrade-cluster.yml \
   --become --become-user=root \
   --limit k8s-cp1
 
-ansible-playbook -i inventory/mycluster/hosts.yaml upgrade-cluster.yml \
+ansible-playbook -i inventory/wind/inventory.ini upgrade-cluster.yml \
   --become --become-user=root \
   --limit k8s-w1
 
@@ -114,14 +114,14 @@ grep -r "apiVersion: extensions/v1beta1" platform/kubernetes/
 ### 2.2 Update Kubespray
 
 ```bash
-cd ~/Projects/homelab-infra/kubespray
+cd ~/kubespray
 
 # Pull latest kubespray (if needed)
 git fetch upstream
 git checkout release-2.x  # Match your kubespray version
 
 # Update version in inventory
-vim inventory/mycluster/group_vars/k8s_cluster/k8s-cluster.yml
+vim inventory/wind/group_vars/k8s_cluster/k8s-cluster.yml
 # Change: kube_version: v1.34.0
 ```
 
@@ -129,7 +129,7 @@ vim inventory/mycluster/group_vars/k8s_cluster/k8s-cluster.yml
 
 ```bash
 # Upgrade control plane only
-ansible-playbook -i inventory/mycluster/hosts.yaml upgrade-cluster.yml \
+ansible-playbook -i inventory/wind/inventory.ini upgrade-cluster.yml \
   --become --become-user=root \
   --limit kube_control_plane
 
@@ -152,7 +152,7 @@ for node in k8s-w1 k8s-w2 k8s-w3 k8s-gpu1; do
   kubectl drain $node --ignore-daemonsets --delete-emptydir-data
 
   # Run upgrade
-  ansible-playbook -i inventory/mycluster/hosts.yaml upgrade-cluster.yml \
+  ansible-playbook -i inventory/wind/inventory.ini upgrade-cluster.yml \
     --become --become-user=root \
     --limit $node
 
@@ -197,7 +197,7 @@ Usually done as part of K8s upgrade via kubespray.
 kubectl get nodes -o wide | awk '{print $NF}'
 
 # containerd is upgraded via kubespray
-# Set in: inventory/mycluster/group_vars/all/containerd.yml
+# Set in: inventory/wind/group_vars/all/containerd.yml
 ```
 
 ### 3.2 Helm Chart Upgrades
@@ -287,7 +287,7 @@ sudo systemctl restart kubelet
 kubectl get nodes -o wide
 
 # Resume from failed node
-ansible-playbook -i inventory/mycluster/hosts.yaml upgrade-cluster.yml \
+ansible-playbook -i inventory/wind/inventory.ini upgrade-cluster.yml \
   --become --become-user=root \
   --limit <failed-node> \
   --start-at-task="<task-name>"
