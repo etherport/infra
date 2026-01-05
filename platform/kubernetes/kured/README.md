@@ -34,7 +34,7 @@ Automated, safe node reboots for security updates.
 Run Ansible playbook to configure all nodes:
 
 ```bash
-cd ~/Projects/homelab-infra/kubespray
+cd ~/Projects/homelab-infra/infra/kubespray
 ./venv/bin/ansible-playbook \
   -i inventory/mycluster/hosts.yaml \
   ../platform/kubernetes/kured/configure-unattended-upgrades.yml

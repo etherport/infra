@@ -155,7 +155,7 @@ Create Ansible playbook to configure all nodes:
 
 Run with:
 ```bash
-cd ~/Projects/homelab-infra/kubespray
+cd ~/Projects/homelab-infra/infra/kubespray
 ./venv/bin/ansible-playbook -i inventory/mycluster/hosts.yaml playbooks/node-updates.yml
 ```
 

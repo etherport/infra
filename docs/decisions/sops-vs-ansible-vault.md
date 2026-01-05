@@ -8,7 +8,7 @@
 
 ## Current State
 
-**File Requiring Encryption**: `infra/ansible/inventory/wind/group_vars/all/ceph.yml`
+**File Requiring Encryption**: `infra/kubespray/inventory/wind/group_vars/all/ceph.yml`
 
 ```yaml
 # Currently plaintext:
@@ -33,7 +33,7 @@ Ansible-Vault encrypts entire files or specific variables using symmetric encryp
 
 **Encrypt the file**:
 ```bash
-cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible/inventory/wind/group_vars/all/
+cd ~/Projects/homelab-infra/infra/kubespray/inventory/wind/group_vars/all/
 ansible-vault encrypt ceph.yml
 ```
 
@@ -102,7 +102,7 @@ creation_rules:
 
 **Encrypt the Ceph file**:
 ```bash
-cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible/inventory/wind/group_vars/all/
+cd ~/Projects/homelab-infra/infra/kubespray/inventory/wind/group_vars/all/
 
 # Create .sops.yaml in ansible directory (or use global config)
 cat > ../../.sops.yaml <<EOF
@@ -233,7 +233,7 @@ EOF
 
 ### Step 3: Encrypt Ceph credentials
 ```bash
-cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible/inventory/wind/group_vars/all/
+cd ~/Projects/homelab-infra/infra/kubespray/inventory/wind/group_vars/all/
 sops --encrypt --in-place ceph.yml
 ```
 
@@ -265,7 +265,7 @@ chmod 600 ~/.ansible_vault_pass
 
 ### Step 2: Encrypt Ceph key
 ```bash
-cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible/inventory/wind/group_vars/all/
+cd ~/Projects/homelab-infra/infra/kubespray/inventory/wind/group_vars/all/
 
 # Option A: Encrypt entire file
 ansible-vault encrypt ceph.yml

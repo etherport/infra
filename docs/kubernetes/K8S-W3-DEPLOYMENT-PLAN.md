@@ -48,11 +48,10 @@ kubectl get pods --all-namespaces -o wide --field-selector spec.nodeName=k8s-gpu
 ### 1.2 Remove k8s-gpu1 from Cluster
 
 ```bash
-cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible/kubespray
-source .venv/bin/activate
+cd ~/Projects/homelab-infra/infra/kubespray
 
 # Remove the node
-ansible-playbook -i ../inventory/wind/inventory.ini remove-node.yml -e node=k8s-gpu1
+./kubespray.sh remove-node.yml -e node=k8s-gpu1
 
 # Verify removal
 kubectl get nodes
@@ -234,18 +233,17 @@ exit
 ### 4.1 Refresh Ansible Facts
 
 ```bash
-cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible/kubespray
-source .venv/bin/activate
+cd ~/Projects/homelab-infra/infra/kubespray
 
 # Refresh facts for all nodes
-ansible-playbook -i ../inventory/wind/inventory.ini playbooks/facts.yml
+./kubespray.sh kubespray/playbooks/facts.yml
 ```
 
 ### 4.2 Add k8s-w3 to Cluster
 
 ```bash
 # Run scale playbook for new node
-ansible-playbook -i ../inventory/wind/inventory.ini scale.yml --limit=k8s-w3
+./kubespray.sh scale.yml --limit=k8s-w3
 ```
 
 **Expected time**: 30-40 minutes
@@ -254,7 +252,7 @@ ansible-playbook -i ../inventory/wind/inventory.ini scale.yml --limit=k8s-w3
 
 ```bash
 # Run scale playbook for GPU node
-ansible-playbook -i ../inventory/wind/inventory.ini scale.yml --limit=k8s-gpu1
+./kubespray.sh scale.yml --limit=k8s-gpu1
 ```
 
 **Expected time**: 30-40 minutes
@@ -398,19 +396,19 @@ If issues occur after removing k8s-gpu1 but before rejoining:
 
 ```bash
 # Revert Terraform
-cd /Users/grahamsmith/Projects/homelab-infra/infra/terraform/proxmox/k8s-vms
+cd ~/Projects/homelab-infra/infra/terraform/proxmox/k8s-vms
 git checkout main.tf
 
 # Revert inventory
-cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible/inventory/wind
+cd ~/Projects/homelab-infra/infra/kubespray/inventory/wind
 git checkout inventory.ini
 
 # Apply original config
 terraform apply
 
 # Rejoin GPU node with original IP
-cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible/kubespray
-ansible-playbook -i ../inventory/wind/inventory.ini scale.yml --limit=k8s-gpu1
+cd ~/Projects/homelab-infra/infra/kubespray
+./kubespray.sh scale.yml --limit=k8s-gpu1
 ```
 
 ---

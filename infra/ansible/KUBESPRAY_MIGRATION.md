@@ -131,13 +131,10 @@ These components are **NOT managed by Kubespray** and should remain in `platform
 **CRITICAL:** The pre-flight playbook MUST be run before Kubespray to set correct directory ownership for CNI components.
 
 ```bash
-cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible
+cd ~/Projects/homelab-infra/infra/kubespray
 
-# Run pre-flight playbook using Kubespray venv
-kubespray/.venv/bin/ansible-playbook \
-  -i inventory/wind/inventory.ini \
-  inventory/wind/pre-flight.yml \
-  --become
+# Run pre-flight playbook
+./kubespray.sh ../inventory/pre-flight.yml
 ```
 
 This ensures:
@@ -148,16 +145,12 @@ This ensures:
 ### Step 2: Run Kubespray (Enable Add-ons)
 
 ```bash
-cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible
+cd ~/Projects/homelab-infra/infra/kubespray
 
-# IMPORTANT: Use Kubespray venv for correct Ansible version (2.17.x)
 # IMPORTANT: Use inventory.ini not hosts.yml
 # IMPORTANT: Run full playbook without tags to ensure all setup tasks run
 
-kubespray/.venv/bin/ansible-playbook \
-  -i inventory/wind/inventory.ini \
-  kubespray/cluster.yml \
-  --become
+./kubespray.sh cluster.yml
 ```
 
 **Why full playbook without tags:**
@@ -179,20 +172,13 @@ This will:
 **IMPORTANT:** Ceph CSI is not part of Kubespray and must be deployed separately to enable persistent storage.
 
 ```bash
-cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible
+cd ~/Projects/homelab-infra/infra/kubespray
 
-# Deploy Ceph CSI RBD driver
-kubespray/.venv/bin/ansible-playbook \
-  -i inventory/wind/inventory.ini \
-  playbooks/ceph/ceph-k8s.upstream-reference.yml \
-  --become
+# Deploy Ceph CSI RBD driver (uses wrapper script)
+./kubespray.sh ../ansible/playbooks/ceph/ceph-k8s.upstream-reference.yml
 
 # If using ansible-vault encrypted secrets:
-# kubespray/.venv/bin/ansible-playbook \
-#   -i inventory/wind/inventory.ini \
-#   playbooks/ceph/ceph-k8s.upstream-reference.yml \
-#   --become \
-#   --ask-vault-pass
+# ./kubespray.sh ../ansible/playbooks/ceph/ceph-k8s.upstream-reference.yml --ask-vault-pass
 ```
 
 **Verify Ceph CSI deployment:**
@@ -361,21 +347,22 @@ After migration, verify:
 
 ### 1. Encrypt Ceph Credentials with Ansible Vault
 
-**Current State:** Ceph credentials are stored in plaintext in `inventory/wind/group_vars/all/ceph.yml`
+**Current State:** Ceph credentials are stored in plaintext in `infra/kubespray/inventory/wind/group_vars/all/ceph.yml`
 
 **Recommended:** Encrypt with ansible-vault
 
 ```bash
-cd /Users/grahamsmith/Projects/homelab-infra/infra/ansible
+cd ~/Projects/homelab-infra/infra/kubespray
 
-# Encrypt the file
+# Encrypt the file (using venv ansible-vault)
+source kubespray/venv/bin/activate
 ansible-vault encrypt inventory/wind/group_vars/all/ceph.yml
 
 # Future playbook runs will need vault password
-ansible-playbook ... --ask-vault-pass
+./kubespray.sh cluster.yml --ask-vault-pass
 
 # Or use a password file (keep this file secure, not in git!)
-ansible-playbook ... --vault-password-file ~/.ansible-vault-pass
+./kubespray.sh cluster.yml --vault-password-file ~/.ansible-vault-pass
 ```
 
 **Alternative Options:**
@@ -408,7 +395,7 @@ Going forward:
 
 ## References
 
-- Kubespray Multus docs: `infra/ansible/kubespray/docs/CNI/multus.md`
-- Kubespray addons: `inventory/wind/group_vars/k8s_cluster/addons.yml`
+- Kubespray Multus docs: `infra/kubespray/kubespray/docs/CNI/multus.md`
+- Kubespray addons: `infra/kubespray/inventory/wind/group_vars/k8s_cluster/addons.yml`
 - Node VLAN setup: `docs/kubernetes/node-vlan-setup.md`
 - Home Assistant deployment: `platform/kubernetes/home-automation/README.md`

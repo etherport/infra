@@ -247,7 +247,7 @@ helm history <release> -n <namespace>
 | Platform | Tool | Config Location |
 |----------|------|-----------------|
 | Kubernetes apps | Flux/Kustomize | `platform/kubernetes/` |
-| K8s cluster | Kubespray | `kubespray/inventory/` |
+| K8s cluster | Kubespray | `infra/kubespray/inventory/` |
 | Standalone VMs | Ansible | `infra/ansible/` |
 | Proxmox VMs | Terraform | `infra/terraform/proxmox/` |
 | Secrets | SOPS + age | `*.sops.yaml` files |

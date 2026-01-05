@@ -25,8 +25,8 @@ cilium_cni_exclusive: false
 
 Re-run Kubespray:
 ```bash
-cd infra/ansible
-ansible-playbook -i inventory/wind/hosts.yml kubespray/cluster.yml --tags network
+cd ~/Projects/homelab-infra/infra/kubespray
+./kubespray.sh cluster.yml --tags network
 ```
 
 ### Option 2: Manual Installation

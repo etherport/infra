@@ -18,7 +18,7 @@
   - Due:
 
 - [ ] **Encrypt Ceph key**
-  - File: `infra/ansible/inventory/wind/group_vars/all/ceph.yml`
+  - File: `infra/kubespray/inventory/wind/group_vars/all/ceph.yml`
   - Current: Plaintext Ceph authentication key
   - Decision needed: SOPS vs ansible-vault (see comparison below)
   - Assignee:
@@ -198,9 +198,9 @@
   - Add to `[kube_node]` group
   - Configure GPU-specific node labels
   - Configure GPU node taints
-  - File: `infra/ansible/inventory/wind/inventory.ini`
+  - File: `infra/kubespray/inventory/wind/inventory.ini`
   - Completed: 2025-12-31
-  - Host vars: `infra/ansible/inventory/wind/host_vars/k8s-gpu1.yml`
+  - Host vars: `infra/kubespray/inventory/wind/host_vars/k8s-gpu1.yml`
 
 - [x] **Deploy GPU worker via Terraform + Kubespray**
   - `terraform apply` for VM creation
