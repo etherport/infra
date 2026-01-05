@@ -4,27 +4,64 @@ Technitium DNS Server deployment for homelab DNS services, replacing pi-hole + u
 
 ## Architecture
 
-- **Kubernetes StatefulSet**: 2 replicas with anti-affinity (VIP: 10.10.201.5)
-- **Local Fallback VM**: Standalone instance at 10.10.201.6
-- **AWS Instance**: Remote failover (clustered)
+```
+                         ┌─────────────────────────────────────────────┐
+                         │           Technitium DNS Cluster            │
+                         └─────────────────────────────────────────────┘
+
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │                        Kubernetes (Primary)                             │
+   │                                                                         │
+   │   ┌─────────────────────┐       ┌─────────────────────┐                │
+   │   │    technitium-0     │       │    technitium-1     │                │
+   │   │   (cluster primary) │◄─────►│  (cluster secondary)│                │
+   │   │   10.10.201.71      │       │   10.10.201.72      │                │
+   │   └─────────────────────┘       └─────────────────────┘                │
+   │              │                                                          │
+   │              └─────────► LoadBalancer VIP: 10.10.201.5                  │
+   └─────────────────────────────────────────────────────────────────────────┘
+                                        │
+                          Zone Sync (Catalog + AXFR)
+                                        │
+          ┌─────────────────────────────┼─────────────────────────────┐
+          │                             │                             │
+          ▼                             │                             ▼
+   ┌─────────────────┐                  │                  ┌─────────────────┐
+   │  Local Fallback │                  │                  │  AWS Instance   │
+   │  10.10.201.6    │◄─────────────────┴─────────────────►│  10.10.100.5    │
+   │  (secondary)    │                                     │  (secondary)    │
+   └─────────────────┘                                     └─────────────────┘
+```
+
+### Service IPs
+
+| Service | IP | Purpose |
+|---------|-----|---------|
+| Main LoadBalancer | 10.10.201.5 | Primary DNS VIP (clients use this) |
+| technitium-0 | 10.10.201.71 | Cluster primary pod (for clustering) |
+| technitium-1 | 10.10.201.72 | Cluster secondary pod (for clustering) |
+| Local Fallback | 10.10.201.6 | Standalone VM (secondary) |
+| AWS Instance | 10.10.100.5 | Remote failover (secondary) |
 
 ## Deployment
 
 ### 1. Create the Admin Secret
 
 ```bash
-# Copy template and encrypt with SOPS
+# Copy template and edit
 cp 05-secret.sops.yaml.template 05-secret.sops.yaml
 sops 05-secret.sops.yaml
-# Set a secure password, save and exit
-
-# Deploy the secret
-sops -d 05-secret.sops.yaml | kubectl apply -f -
+# Set username and password, save and exit
 ```
 
-### 2. Deploy the Stack
+### 2. Deploy via Flux or kubectl
 
 ```bash
+# Via Flux (recommended)
+git add -A && git commit -m "Deploy Technitium" && git push
+flux reconcile kustomization flux-system
+
+# Or direct apply
 kubectl apply -k platform/kubernetes/technitium/
 ```
 
@@ -33,118 +70,163 @@ kubectl apply -k platform/kubernetes/technitium/
 ```bash
 kubectl get pods -n dns
 kubectl get svc -n dns
+dig @10.10.201.5 google.com
 ```
 
 ### 4. Access Web UI
 
 - **Via Traefik**: https://dns.wind.etherport.net
-- **Direct**: http://10.10.201.5:5380
+- **Direct (primary)**: http://10.10.201.71:5380
+- **Direct (VIP)**: http://10.10.201.5:5380
 
-## DNS Zone Configuration
+## GitOps Zone Management
 
-After deployment, configure the `wind.etherport.net` zone via the web UI:
+DNS records are managed via GitOps. Zone files in `zones/` are synced to Technitium automatically.
 
-### Zone Setup
+### Adding/Modifying DNS Records
 
-1. Go to **Zones** → **Add Zone**
-2. Zone Name: `wind.etherport.net`
-3. Type: **Primary Zone**
+1. Edit the zone file:
+   ```bash
+   vim zones/wind.etherport.net.yaml
+   ```
 
-### DNS Records
+2. Add a record:
+   ```yaml
+   records:
+     - name: myservice
+       type: A
+       value: 10.10.201.100
+       comment: My new service
+   ```
 
-Add the following A records:
+3. Commit and push:
+   ```bash
+   git add -A
+   git commit -m "Add DNS record for myservice"
+   git push
+   ```
 
-| Hostname | IP Address | Notes |
-|----------|------------|-------|
-| `windroute` | 10.10.200.1 | Router |
-| `pve` | 10.10.200.41 | Proxmox (direct access) |
-| `vpn-local` | 10.10.201.15 | Local VPN |
-| `vpn-aws` | 10.10.100.10 | AWS VPN |
-| `print` | 10.10.202.20 | Printer |
-| `gdisplay` | 10.10.202.45 | Google Display |
-| `sequoia` | 10.10.209.10 | NAS/Storage |
-| `protect` | 10.10.212.10 | UniFi Protect |
-| `k8s-cp1` | 10.10.201.50 | K8s Control Plane |
-| `k8s-w1` | 10.10.201.51 | K8s Worker 1 |
-| `k8s-w2` | 10.10.201.52 | K8s Worker 2 |
-| `k8s-gpu1` | 10.10.201.53 | K8s GPU Worker |
+4. The `dns-sync-watcher` deployment detects changes and syncs to all cluster nodes.
 
-### Traefik-Managed Services (all point to 10.10.201.70)
+### Zone File Format
 
-These services are proxied through Traefik for SSL termination:
+```yaml
+zone: wind.etherport.net
+ttl: 3600  # Default TTL
 
-| Hostname | Target | Backend |
-|----------|--------|---------|
-| `traefik` | 10.10.201.70 | Traefik Dashboard |
-| `plex` | 10.10.201.70 | Plex Media Server |
-| `grafana` | 10.10.201.70 | Grafana Monitoring |
-| `kopia` | 10.10.201.70 | Kopia Backup UI |
-| `ha` | 10.10.201.70 | Home Assistant |
-| `prox` | 10.10.201.70 | Proxmox Web UI (via Traefik) |
-| `dns` | 10.10.201.70 | Technitium Web UI |
-| `ups1` | 10.10.201.70 | UPS 1 Management |
-| `ups2` | 10.10.201.70 | UPS 2 Management |
-| `pdu1` | 10.10.201.70 | PDU 1 Management |
-| `pdu2` | 10.10.201.70 | PDU 2 Management |
+records:
+  - name: hostname      # Use @ for apex
+    type: A             # A, AAAA, CNAME, MX, TXT, SRV, CAA
+    value: 10.10.201.x
+    ttl: 3600           # Optional, overrides default
+    comment: Description
+```
 
-### Ad Blocking
+### Supported Record Types
+
+| Type | Value Format | Example |
+|------|--------------|---------|
+| A | IPv4 address | `10.10.201.70` |
+| AAAA | IPv6 address | `2001:db8::1` |
+| CNAME | Hostname | `target.example.com` |
+| MX | `priority exchange` | `10 mail.example.com` |
+| TXT | Text string | `v=spf1 include:...` |
+
+## Clustering
+
+The cluster uses Technitium's catalog zone feature for automatic zone synchronization:
+
+- **Primary**: technitium-0 (10.10.201.71) hosts the primary catalog zone
+- **Secondaries**: All other nodes subscribe to the catalog and receive zone updates
+
+### Cluster Configuration
+
+Clustering is pre-configured. To add a new secondary node:
+
+1. Install Technitium on the new server
+2. Access primary UI at https://dns.wind.etherport.net
+3. Go to **Settings** → **Clustering**
+4. Add the new node's IP to the cluster
+
+### Zone Transfer Settings
+
+Zone transfers use catalog zones. The catalog automatically provisions member zones on secondaries. ACLs are configured to allow:
+- Kubernetes pod network: `10.42.0.0/16`
+- Local fallback: `10.10.201.6`
+- AWS instance: `10.10.100.5`
+
+## DNS Records (wind.etherport.net)
+
+Current records are defined in `zones/wind.etherport.net.yaml`.
+
+### Infrastructure
+
+| Hostname | IP | Description |
+|----------|-----|-------------|
+| k8s-cp1 | 10.10.201.50 | Kubernetes control plane |
+| k8s-w1 | 10.10.201.51 | Kubernetes worker 1 |
+| k8s-w2 | 10.10.201.52 | Kubernetes worker 2 |
+| k8s-w3 | 10.10.201.53 | Kubernetes worker 3 |
+| k8s-gpu1 | 10.10.201.60 | Kubernetes GPU worker |
+| traefik | 10.10.201.70 | Traefik ingress VIP |
+| dns | 10.10.201.70 | DNS web UI (via Traefik) |
+| dns-fallback | 10.10.201.6 | Local DNS fallback |
+| dns-aws | 10.10.100.5 | AWS DNS failover |
+
+### Network Equipment
+
+| Hostname | IP | Description |
+|----------|-----|-------------|
+| windroute | 10.10.200.1 | UDM Pro router |
+| pve | 10.10.200.41 | Proxmox VE hypervisor |
+| sequoia | 10.10.209.10 | NAS/storage |
+
+### Applications (via Traefik at 10.10.201.70)
+
+| Hostname | Description |
+|----------|-------------|
+| grafana | Grafana monitoring |
+| ha | Home Assistant |
+| plex | Plex media server |
+| kopia | Kopia backup UI |
+| prox | Proxmox web UI proxy |
+| wiki | Wiki.js |
+| ups1, ups2 | UPS management |
+| pdu1, pdu2 | PDU management |
+
+### VPN
+
+| Hostname | IP | Description |
+|----------|-----|-------------|
+| vpn-local | 10.10.201.15 | WireGuard local endpoint |
+| vpn-aws | 10.10.100.10 | WireGuard AWS endpoint |
+
+### Devices
+
+| Hostname | IP | Description |
+|----------|-----|-------------|
+| protect | 10.10.212.10 | UniFi Protect NVR |
+| print | 10.10.202.20 | Network printer |
+| gdisplay | 10.10.202.45 | Display/workstation |
+
+## Ad Blocking
 
 1. Go to **Settings** → **Blocking**
 2. Enable blocking
 3. Add blocklists:
-   - Steven Black's hosts: `https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts`
-   - AdGuard DNS filter: `https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt`
-   - Or import existing Pi-hole lists
-
-### Recursive Resolution
-
-Technitium supports recursive resolution out of the box:
-
-1. Go to **Settings** → **Forwarders**
-2. For recursive resolution, leave forwarders empty (Technitium will resolve directly)
-3. Or add upstream forwarders:
-   - Cloudflare: `1.1.1.1`, `1.0.0.1`
-   - Google: `8.8.8.8`, `8.8.4.4`
-   - Quad9: `9.9.9.9`
-
-### DNSSEC
-
-1. Go to **Settings** → **DNSSEC**
-2. Enable DNSSEC validation
-
-## Clustering
-
-After all instances are running:
-
-1. Access primary at http://10.10.201.5:5380
-2. Go to **Settings** → **Clustering**
-3. Enable clustering
-4. Set a cluster secret (save this securely)
-5. Add secondary nodes:
-   - Local fallback: `10.10.201.6`
-   - AWS instance: `<aws-ip>`
-6. Zones will automatically sync across the cluster
-
-## Failover Testing
-
-```bash
-# Test primary
-dig @10.10.201.5 google.com
-
-# Test fallback
-dig @10.10.201.6 google.com
-
-# Test ad blocking
-dig @10.10.201.5 ads.google.com
-# Should return NXDOMAIN or 0.0.0.0
-```
+   - Steven Black: `https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts`
+   - AdGuard: `https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt`
 
 ## Maintenance
 
 ### View Logs
 
 ```bash
+# StatefulSet pods
 kubectl logs -n dns -l app=technitium -f
+
+# GitOps sync watcher
+kubectl logs -n dns deployment/dns-sync-watcher -f
 ```
 
 ### Restart
@@ -153,13 +235,56 @@ kubectl logs -n dns -l app=technitium -f
 kubectl rollout restart statefulset/technitium -n dns
 ```
 
+### Force Zone Sync
+
+```bash
+# Restart the sync watcher to trigger immediate sync
+kubectl rollout restart deployment/dns-sync-watcher -n dns
+```
+
 ### Backup
 
-Zone data is stored in the PVC. Use Velero for backup:
+Zone data is stored in PVCs. Use Velero for backup:
 
 ```bash
 velero backup create technitium-backup --include-namespaces dns
 ```
+
+## Failover Testing
+
+```bash
+# Test all DNS servers
+for ip in 10.10.201.5 10.10.201.71 10.10.201.72 10.10.201.6 10.10.100.5; do
+  echo -n "$ip: "
+  dig @$ip google.com +short | head -1
+done
+
+# Test ad blocking
+dig @10.10.201.5 ads.google.com  # Should return NXDOMAIN or 0.0.0.0
+```
+
+## Troubleshooting
+
+### Zones Not Syncing
+
+1. Check sync watcher logs:
+   ```bash
+   kubectl logs -n dns deployment/dns-sync-watcher
+   ```
+
+2. Manually trigger resync on a secondary:
+   ```bash
+   # Get token
+   curl "http://10.10.201.72:5380/api/user/login?user=<user>&pass=<pass>"
+   # Resync
+   curl "http://10.10.201.72:5380/api/zones/resync?token=<token>&zone=wind.etherport.net"
+   ```
+
+3. Check zone transfer ACLs in primary web UI
+
+### Pod Communication Issues
+
+The K8s secondary (technitium-1) uses the primary's pod IP for zone transfers. If pods restart with new IPs, update the catalog zone's `primaryNameServerAddresses` on the secondary.
 
 ## Files
 
@@ -168,7 +293,10 @@ velero backup create technitium-backup --include-namespaces dns
 | `00-namespace.yaml` | DNS namespace |
 | `01-configmap.yaml` | Technitium configuration |
 | `02-statefulset.yaml` | StatefulSet + headless service |
-| `03-service.yaml` | LoadBalancer service (VIP) |
+| `03-service.yaml` | Main LoadBalancer service (VIP 10.10.201.5) |
 | `04-ingressroute.yaml` | Traefik ingress for web UI |
-| `05-secret.sops.yaml` | SOPS-encrypted admin password |
-| `.sops.yaml` | SOPS encryption config |
+| `05-secret.sops.yaml` | SOPS-encrypted admin credentials |
+| `06-cluster-services.yaml` | Per-pod LoadBalancers for clustering |
+| `07-dns-sync.yaml` | GitOps zone sync watcher |
+| `zones/*.yaml` | DNS zone definitions (GitOps managed) |
+| `kustomization.yaml` | Kustomize configuration |

@@ -28,7 +28,7 @@ spec:
               mountPath: /wiki/data
       containers:
         - name: wiki-js
-          image: ghcr.io/requarks/wiki:2
+          image: ghcr.io/requarks/wiki:2.5
           ports:
             - name: http
               containerPort: 3000
