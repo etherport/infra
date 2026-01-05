@@ -398,7 +398,13 @@ stringData:
 sops -d backups/aws-s3/base/secret.enc.yaml | kubectl apply -f -
 ```
 
-## References
+## Related Documentation
+
+- [1Password CLI Integration](1PASSWORD-CLI.md)
+- [SOPS vs Ansible-Vault Decision](decisions/sops-vs-ansible-vault.md)
+- [GitOps with Flux](gitops/flux-overview.md)
+
+## External References
 
 - [SOPS Documentation](https://github.com/getsops/sops)
 - [age Encryption](https://github.com/FiloSottile/age)

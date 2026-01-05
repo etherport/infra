@@ -32,18 +32,25 @@ nano get_tuya_devices.py
 python3 get_tuya_devices.py > tuya_devices.txt
 ```
 
-## Files
+## Documentation Files
 
-- **QUICKSTART.md** - Quick reference checklist
-- **SETUP.md** - Detailed setup guide
-- **get_tuya_devices.py** - Device discovery script
+| Document | Description |
+|----------|-------------|
+| [QUICKSTART.md](QUICKSTART.md) | Quick reference checklist |
+| [SETUP.md](SETUP.md) | Detailed setup guide |
+| [TUYA-IOT-SETUP.md](TUYA-IOT-SETUP.md) | Tuya IoT Platform configuration |
+| [GETTING-LOCAL-KEYS.md](GETTING-LOCAL-KEYS.md) | Methods to obtain local keys |
+| [NETWORK-SCANNING.md](NETWORK-SCANNING.md) | Network scanning guide |
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Troubleshooting common issues |
+| [OFFICIAL-TUYA-INTEGRATION.md](OFFICIAL-TUYA-INTEGRATION.md) | Alternative official integration setup |
 
-## Current Issue Being Solved
+## Problem Being Solved
 
-Your landscape lighting (Path Lights and Wall Lights) is reverting to default state when changed in Home Assistant. This is caused by:
+Landscape lighting (Path Lights and Wall Lights) reverting to default state when changed in Home Assistant.
 
+**Root Cause:**
 1. Tuya cloud sync latency (500-2000ms)
 2. Cloud polling returning old state before device updates
 3. Race condition causing Home Assistant to revert changes
 
-LocalTuya eliminates this by communicating directly with devices locally.
+**Solution:** LocalTuya eliminates this by communicating directly with devices locally.

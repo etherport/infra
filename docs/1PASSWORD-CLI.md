@@ -183,7 +183,11 @@ eval $(op signin)
 
 Use item IDs instead of names when items contain special characters like parentheses.
 
-## References
+## Related Documentation
+
+- [SOPS Secret Management](SOPS-SETUP.md)
+- [SOPS vs Ansible-Vault Decision](decisions/sops-vs-ansible-vault.md)
+
+## External References
 
 - [1Password CLI Documentation](https://developer.1password.com/docs/cli/)
-- [SOPS Documentation](./SOPS-SETUP.md)

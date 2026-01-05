@@ -71,5 +71,6 @@ This same root cause may affect:
 
 ## Related Documentation
 
-- Auto-Remediation: `docs/runbooks/auto-remediation/`
-- Monitoring Alerts: `platform/kubernetes/monitoring/comprehensive-alerts.yaml`
+- [Auto-Remediation System](auto-remediation/README.md)
+- [Kubernetes Operations](kubernetes-ops.md)
+- [Network Architecture](../architecture/network.md)
