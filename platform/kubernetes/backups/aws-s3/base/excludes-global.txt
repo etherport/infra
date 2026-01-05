@@ -14,6 +14,39 @@
 */.AppleDouble/*
 .AppleDouble/*
 
+# Linux/Samba trash and temporary files
+.Trash-*
+.Trash-*/*
+.smbdelete*
+*/.smbdelete*
+
+# Backup software repositories (stored elsewhere)
+Veeam
+Veeam/*
+*/Veeam/*
+
+# All ISOs and installation media (large, available from vendors)
+ISO
+ISO/*
+*/ISO/*
+
+# Carbon Copy Cloner safety net backups
+_CCC SafetyNet
+_CCC SafetyNet/*
+*/_CCC SafetyNet/*
+
+# Adobe cache and temporary files
+Adobe Bridge Cache.bc
+Adobe Bridge Cache.bct
+**/Adobe Bridge Cache.bc
+**/Adobe Bridge Cache.bct
+*.pkf
+*Auto-Save/*
+*AutoSave/*
+*Adobe*Auto-Save/*
+Adobe*AutoSave/*
+*Adobe*AutoSave/*
+
 # Common large caches / previews
 *.lrdata
 *.lrdata/*
