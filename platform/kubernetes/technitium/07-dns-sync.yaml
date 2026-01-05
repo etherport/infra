@@ -114,7 +114,22 @@ data:
                 added += 1
 
         print(f"\n✅ Sync complete: {added} added, {updated} updated, {unchanged} unchanged")
-        return added + updated  # Return number of changes
+
+        # Trigger resync on secondary servers if changes were made
+        changes = added + updated
+        if changes > 0:
+            secondary_urls = os.environ.get("SECONDARY_URLS", "").split(",")
+            secondary_urls = [u.strip() for u in secondary_urls if u.strip()]
+            for sec_url in secondary_urls:
+                try:
+                    sec_data = api_request(sec_url, "user/login", params={"user": user, "pass": password})
+                    sec_token = sec_data["token"]
+                    api_request(sec_url, "zones/resync", sec_token, {"zone": zone})
+                    print(f"  ↻ Triggered resync on {sec_url}")
+                except Exception as e:
+                    print(f"  ⚠ Failed to resync {sec_url}: {e}")
+
+        return changes
 
     if __name__ == "__main__":
         main()
@@ -210,6 +225,8 @@ spec:
               value: "1"
             - name: TECHNITIUM_URL
               value: "http://technitium-0.technitium-headless.dns.svc.cluster.local:5380"
+            - name: SECONDARY_URLS
+              value: "http://technitium-1.technitium-headless.dns.svc.cluster.local:5380"
             - name: TECHNITIUM_USER
               valueFrom:
                 secretKeyRef:
