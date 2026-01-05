@@ -24,6 +24,12 @@
 Veeam
 Veeam/*
 */Veeam/*
+VMWare
+VMWare/*
+*/VMWare/*
+VMware
+VMware/*
+*/VMware/*
 
 # All ISOs and installation media (large, available from vendors)
 ISO
