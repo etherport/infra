@@ -43,7 +43,7 @@ Low risk, rolling update with zero downtime.
 ### 1.1 Update Kubespray Variables
 
 ```bash
-cd ~/kubespray
+cd ~/Projects/homelab-infra/infra/kubespray
 
 # Check current version
 grep kube_version inventory/wind/group_vars/k8s_cluster/k8s-cluster.yml
@@ -60,15 +60,15 @@ vim inventory/wind/group_vars/k8s_cluster/k8s-cluster.yml
 source venv/bin/activate
 
 # Run upgrade (control plane first, then workers)
-ansible-playbook -i inventory/wind/inventory.ini upgrade-cluster.yml \
+./kubespray.sh upgrade-cluster.yml \
   --become --become-user=root
 
 # Or upgrade one node at a time (safer)
-ansible-playbook -i inventory/wind/inventory.ini upgrade-cluster.yml \
+./kubespray.sh upgrade-cluster.yml \
   --become --become-user=root \
   --limit k8s-cp1
 
-ansible-playbook -i inventory/wind/inventory.ini upgrade-cluster.yml \
+./kubespray.sh upgrade-cluster.yml \
   --become --become-user=root \
   --limit k8s-w1
 
@@ -114,7 +114,7 @@ grep -r "apiVersion: extensions/v1beta1" platform/kubernetes/
 ### 2.2 Update Kubespray
 
 ```bash
-cd ~/kubespray
+cd ~/Projects/homelab-infra/infra/kubespray
 
 # Pull latest kubespray (if needed)
 git fetch upstream
@@ -129,7 +129,7 @@ vim inventory/wind/group_vars/k8s_cluster/k8s-cluster.yml
 
 ```bash
 # Upgrade control plane only
-ansible-playbook -i inventory/wind/inventory.ini upgrade-cluster.yml \
+./kubespray.sh upgrade-cluster.yml \
   --become --become-user=root \
   --limit kube_control_plane
 
@@ -152,7 +152,7 @@ for node in k8s-w1 k8s-w2 k8s-w3 k8s-gpu1; do
   kubectl drain $node --ignore-daemonsets --delete-emptydir-data
 
   # Run upgrade
-  ansible-playbook -i inventory/wind/inventory.ini upgrade-cluster.yml \
+  ./kubespray.sh upgrade-cluster.yml \
     --become --become-user=root \
     --limit $node
 
@@ -287,7 +287,7 @@ sudo systemctl restart kubelet
 kubectl get nodes -o wide
 
 # Resume from failed node
-ansible-playbook -i inventory/wind/inventory.ini upgrade-cluster.yml \
+./kubespray.sh upgrade-cluster.yml \
   --become --become-user=root \
   --limit <failed-node> \
   --start-at-task="<task-name>"

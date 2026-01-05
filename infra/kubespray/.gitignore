@@ -2,6 +2,9 @@
 inventory/artifacts/
 inventory/credentials/
 
+# Python virtual environment (inside submodule)
+kubespray/venv/
+
 # SSH keys
 *.pem
 *.key

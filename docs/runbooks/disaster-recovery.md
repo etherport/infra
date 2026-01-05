@@ -41,8 +41,8 @@ cd ~/Projects/homelab-infra/infra/terraform/proxmox/k8s-cluster
 terraform apply -target=proxmox_virtual_environment_vm.k8s_workers["<node-name>"]
 
 # Re-add to cluster via Kubespray
-cd ~/kubespray
-./venv/bin/ansible-playbook -i inventory/wind/inventory.ini scale.yml --limit=<node-name>
+cd ~/Projects/homelab-infra/infra/kubespray
+./kubespray.sh scale.yml --limit=<node-name>
 ```
 
 ### 1.2 Control Plane Failure
@@ -103,8 +103,8 @@ terraform apply
 sleep 300
 
 # 3. Deploy Kubernetes via Kubespray
-cd ~/kubespray
-./venv/bin/ansible-playbook -i inventory/wind/inventory.ini cluster.yml
+cd ~/Projects/homelab-infra/infra/kubespray
+./kubespray.sh cluster.yml
 
 # 4. Install Velero
 helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
