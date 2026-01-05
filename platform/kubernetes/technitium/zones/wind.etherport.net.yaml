@@ -125,6 +125,11 @@ records:
     value: 10.10.201.70
     comment: Proxmox UI proxy (via Traefik)
 
+  - name: wiki
+    type: A
+    value: 10.10.201.70
+    comment: Wiki.js (via Traefik)
+
   # =============================================================================
   # Infrastructure - Power Management (via Traefik)
   # =============================================================================
