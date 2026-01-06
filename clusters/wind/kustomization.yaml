@@ -15,6 +15,8 @@ resources:
   - ../../platform/kubernetes/rclone-gdrive
   - ../../platform/kubernetes/apps/kopia
   - ../../platform/kubernetes/wikijs
+  # Monitoring
+  - ../../platform/kubernetes/monitoring
   # Utilities
   - ../../platform/kubernetes/route53-ddns/base
   - ../../platform/kubernetes/backups/aws-s3/shares/scans
