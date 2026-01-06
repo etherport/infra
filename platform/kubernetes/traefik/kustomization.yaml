@@ -4,5 +4,6 @@ kind: Kustomization
 namespace: traefik
 
 resources:
+  - route53-credentials.sops.yaml
   - ingressroute-infrastructure.yaml
   - ingressroute-proxmox.yaml
