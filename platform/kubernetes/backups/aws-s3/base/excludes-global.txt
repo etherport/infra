@@ -58,3 +58,7 @@ Adobe*AutoSave/*
 *.lrdata/*
 *Premiere*Preview*
 *Premiere*Preview*/*
+
+# Large video raw formats
+*.braw
+*.braw/*
