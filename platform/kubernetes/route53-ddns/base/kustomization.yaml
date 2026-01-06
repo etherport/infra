@@ -8,4 +8,4 @@ resources:
   - rbac.yaml
   - configmap.yaml
   - cronjob.yaml
-  # - secret.yaml  # Uncomment after creating from template
+  - 01-route53-secret.sops.yaml
