@@ -398,6 +398,141 @@ stringData:
 sops -d backups/aws-s3/base/secret.enc.yaml | kubectl apply -f -
 ```
 
+## Practical Workflows
+
+### Adding Secrets to an Application (e.g., Home Assistant)
+
+This workflow shows how to add credentials to an app that reads a `secrets.yaml` file.
+
+**1. Create the SOPS config in the app directory:**
+
+```bash
+cd platform/kubernetes/home-automation/
+
+cat > .sops.yaml <<'EOF'
+creation_rules:
+  - path_regex: '.*\.sops\.ya?ml$'
+    encrypted_regex: '^(data|stringData)$'
+    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+EOF
+```
+
+**2. Create the secret file:**
+
+```bash
+cat > secrets.sops.yaml <<'EOF'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: home-assistant-secrets
+  namespace: home-automation
+type: Opaque
+stringData:
+  secrets.yaml: |
+    # Home Assistant secrets.yaml content
+    my_password: supersecret123
+    api_key: abc123xyz
+EOF
+```
+
+**3. Encrypt it:**
+
+```bash
+sops -e -i secrets.sops.yaml
+```
+
+**4. Add to kustomization.yaml:**
+
+```yaml
+resources:
+  - secrets.sops.yaml
+```
+
+**5. Mount in deployment:**
+
+```yaml
+volumeMounts:
+  - name: secrets
+    mountPath: /config/secrets.yaml
+    subPath: secrets.yaml
+    readOnly: true
+volumes:
+  - name: secrets
+    secret:
+      secretName: home-assistant-secrets
+```
+
+**6. Reference in app config:**
+
+```yaml
+# configuration.yaml
+light:
+  - platform: decora_wifi
+    username: !secret my_username
+    password: !secret my_password
+```
+
+**7. Commit and push:**
+
+```bash
+git add .sops.yaml secrets.sops.yaml kustomization.yaml
+git commit -m "Add encrypted secrets for home-assistant"
+git push
+flux reconcile source git flux-system
+```
+
+### How Decryption Works
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Git Repo      │     │   Flux          │     │   Kubernetes    │
+│                 │     │                 │     │                 │
+│  secrets.sops   │────►│  Decrypts with  │────►│  Secret object  │
+│  (encrypted)    │     │  age key        │     │  (plaintext)    │
+└─────────────────┘     └─────────────────┘     └────────┬────────┘
+                                                         │
+                                                         ▼
+                                                ┌─────────────────┐
+                                                │   Pod           │
+                                                │                 │
+                                                │  /config/       │
+                                                │  secrets.yaml   │
+                                                │  (plaintext)    │
+                                                └─────────────────┘
+```
+
+**Where secrets are plaintext:**
+- Kubernetes Secret object (stored in etcd, base64-encoded but not encrypted)
+- Mounted file inside the pod container
+
+**Where secrets are encrypted:**
+- Git repository (SOPS encrypted)
+
+This is standard practice. SOPS protects secrets in version control. For etcd encryption at rest, see [Kubernetes Encryption at Rest](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/).
+
+### Editing an Existing Secret
+
+```bash
+# Opens decrypted in your editor, re-encrypts on save
+sops platform/kubernetes/home-automation/secrets.sops.yaml
+
+# After editing, commit and reconcile
+git add secrets.sops.yaml
+git commit -m "Update home-assistant credentials"
+git push
+flux reconcile source git flux-system
+```
+
+### Viewing Decrypted Content
+
+```bash
+# View decrypted secret locally
+sops -d platform/kubernetes/home-automation/secrets.sops.yaml
+
+# View what's actually in the cluster
+kubectl get secret home-assistant-secrets -n home-automation -o jsonpath='{.data.secrets\.yaml}' | base64 -d
+```
+
 ## Related Documentation
 
 - [1Password CLI Integration](1PASSWORD-CLI.md)
