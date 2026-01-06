@@ -1,0 +1,10 @@
+# ServersTransport for Home Assistant
+# Disables HTTP/2 to backend to ensure WebSocket works correctly
+# WebSocket requires HTTP/1.1 upgrade mechanism
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: home-assistant-transport
+  namespace: home-automation
+spec:
+  disableHTTP2: true
