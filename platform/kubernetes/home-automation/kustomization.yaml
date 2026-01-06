@@ -11,6 +11,7 @@ resources:
   - ingressroute.yaml
   - middleware.yaml
   - serverstransport.yaml
+  - secrets.sops.yaml
 
 # ConfigMap generator for configuration.yaml
 # This allows Flux to detect changes and trigger pod restart

@@ -61,6 +61,10 @@ spec:
           mountPath: /config/configuration.yaml
           subPath: configuration.yaml
           readOnly: true
+        - name: secrets
+          mountPath: /config/secrets.yaml
+          subPath: secrets.yaml
+          readOnly: true
         livenessProbe:
           httpGet:
             path: /
@@ -87,3 +91,6 @@ spec:
       - name: config-yaml
         configMap:
           name: home-assistant-config
+      - name: secrets
+        secret:
+          secretName: home-assistant-secrets

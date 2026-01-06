@@ -28,5 +28,12 @@
 !**/*secret-template*.yaml
 !**/*.secret-template.yaml
 !**/*.sops.yaml
+
+# Explicitly ignored secret files
 platform/kubernetes/icloudpd/04-icloud-cookies-secret.yaml
-platform/kubernetes/route53-ddns/base/secret.yaml cat .gitignore
+platform/kubernetes/route53-ddns/base/secret.yaml
+
+# Config files that may contain credentials (prefer SOPS)
+**/alertmanager-config.yaml
+**/credentials.yaml
+!**/*.sops.yaml

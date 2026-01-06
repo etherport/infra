@@ -21,11 +21,11 @@ http:
   cors_allowed_origins:
     - https://ha.wind.etherport.net
 
-# Leviton account
+# Leviton account (credentials in secrets.yaml)
 light:
   - platform: decora_wifi
-    username: grahamsm@gmail.com
-    password: y2wboeu_WuLDBBs9_PvPpbhYhujPNN
+    username: !secret leviton_username
+    password: !secret leviton_password
 
 alexa:
   smart_home:

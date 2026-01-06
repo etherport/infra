@@ -20,10 +20,11 @@ alertmanager:
   enabled: true
 
 grafana:
-  adminUser: admin
-  # Note: password should be changed after first login
-  # or managed via secret
-  adminPassword: ChangeMe123!
+  # Admin credentials managed via Kubernetes Secret (grafana-admin-secret.sops.yaml)
+  admin:
+    existingSecret: grafana-admin-credentials
+    userKey: admin-user
+    passwordKey: admin-password
   enabled: true
   ingress:
     annotations: {}

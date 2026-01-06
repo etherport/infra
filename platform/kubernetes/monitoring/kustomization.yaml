@@ -7,3 +7,4 @@ namespace: monitoring
 resources:
   - 01-external-scrape-config.yaml
   - 02-external-alerts.yaml
+  - grafana-admin-secret.sops.yaml
