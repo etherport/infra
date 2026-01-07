@@ -4,6 +4,7 @@ metadata:
   name: s3-sync-template
   namespace: backups
 spec:
+  suspend: true
   jobTemplate:
     spec:
       template:
