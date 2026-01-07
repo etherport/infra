@@ -13,4 +13,3 @@ spec:
         - name: kopia
           port: 80
   tls:
-    certResolver: route53

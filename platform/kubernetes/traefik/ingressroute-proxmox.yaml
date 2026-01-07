@@ -52,4 +52,3 @@ spec:
           serversTransport: proxmox-transport
           scheme: https
   tls:
-    certResolver: route53

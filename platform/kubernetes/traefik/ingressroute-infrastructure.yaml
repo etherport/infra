@@ -57,7 +57,6 @@ spec:
           serversTransport: insecure-transport
           scheme: https
   tls:
-    certResolver: route53
 ---
 # UPS2
 apiVersion: v1
@@ -100,7 +99,6 @@ spec:
           serversTransport: insecure-transport
           scheme: https
   tls:
-    certResolver: route53
 ---
 # PDU1
 apiVersion: v1
@@ -143,7 +141,6 @@ spec:
           serversTransport: insecure-transport
           scheme: https
   tls:
-    certResolver: route53
 ---
 # PDU2
 apiVersion: v1
@@ -186,4 +183,3 @@ spec:
           serversTransport: insecure-transport
           scheme: https
   tls:
-    certResolver: route53

@@ -16,4 +16,3 @@ spec:
       port: 8123
       serversTransport: home-assistant-transport
   tls:
-    certResolver: route53
