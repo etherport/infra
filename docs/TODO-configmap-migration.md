@@ -16,7 +16,7 @@ Each S3 sync share has its own ConfigMap for exclude patterns, and they must be 
 - `s3-sync-mark-aws-s3-sync-excludes-global`
 - `s3-sync-media-aws-s3-sync-excludes-global`
 - `s3-sync-content-aws-s3-sync-excludes-global`
-- `s3-sync-scans-aws-s3-sync-excludes-global`
+- `s3-sync-scans-aws-s3-sync-excludes-global` (suspended - test data only)
 
 ### What Went Wrong (January 5, 2026)
 1. Updated `platform/kubernetes/backups/aws-s3/base/excludes-global.txt` with new patterns
@@ -130,15 +130,15 @@ for share in graham archive backups mark media content scans; do
 done
 ```
 
-Expected output (as of 2026-01-05):
+Expected output (as of 2026-01-06):
 ```
-graham: 42 patterns
-archive: 42 patterns
-backups: 42 patterns
-mark: 42 patterns
-media: 42 patterns
-content: 42 patterns
-scans: 42 patterns
+graham: 44 patterns
+archive: 44 patterns
+backups: 44 patterns
+mark: 44 patterns
+media: 44 patterns
+content: 44 patterns
+scans: 44 patterns (if re-enabled)
 ```
 
 ### 6. Test with Manual Sync
@@ -153,7 +153,7 @@ kubectl wait --for=condition=complete job/test-excludes-graham -n backups --time
 
 # Check logs
 kubectl logs -n backups job/test-excludes-graham | grep "patterns loaded"
-# Should show: [excludes] Total patterns loaded: 42
+# Should show: [excludes] Total patterns loaded: 44
 
 # Check results
 kubectl logs -n backups job/test-excludes-graham | grep "Files uploaded"
@@ -195,32 +195,38 @@ git push
 # Force Flux to reconcile
 flux reconcile kustomization flux-system -n flux-system
 
-# Or manually update ConfigMaps using the script:
-/tmp/update-all-exclude-configmaps.sh
+# Or manually recreate ConfigMaps from the excludes file:
+EXCLUDES_FILE="platform/kubernetes/backups/aws-s3/base/excludes-global.txt"
+for SHARE in graham archive backups mark media content scans; do
+  kubectl create configmap -n backups "s3-sync-${SHARE}-aws-s3-sync-excludes-global" \
+    --from-file=excludes-global.txt="$EXCLUDES_FILE" \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
 ```
 
-## Current Status (as of 2026-01-05)
+## Current Status (as of 2026-01-06)
 
-- ✅ All share ConfigMaps manually updated to 42 patterns
-- ✅ Validation syncs completed: 0 files uploaded
+- ✅ All share ConfigMaps manually updated to 44 patterns (added `*.braw` exclusion)
+- ✅ Validation syncs completed: 0 files uploaded across all 7 shares
 - ✅ `.smbdelete` files removed from S3
-- ✅ Scheduled cronjobs verified for tonight (1 AM PST)
+- ✅ Scans cronjob suspended (test data only, cleaned up from S3)
+- ✅ Nightly backups running successfully (6 active shares)
 - ⏳ Kustomize migration: **Planned, not yet implemented**
 
 ## Files to Review
 
 - `platform/kubernetes/backups/aws-s3/base/kustomization.yaml` - Add configMapGenerator here
-- `platform/kubernetes/backups/aws-s3/base/excludes-global.txt` - Source file (42 patterns)
+- `platform/kubernetes/backups/aws-s3/base/excludes-global.txt` - Source file (44 patterns)
 
 ## Questions?
 
 If you're unsure about anything, check:
-1. The Git commit from 2026-01-05 that added the 42 exclude patterns
-2. The email failure investigation summary: `/tmp/email-failure-investigation-summary.md`
+1. Git commits from 2026-01-05 and 2026-01-06 that updated exclude patterns
+2. The `excludes-global.txt` file for current patterns (44 as of 2026-01-06)
 3. This TODO document
 
 ---
 
 **Created**: 2026-01-05
-**Last Updated**: 2026-01-05
+**Last Updated**: 2026-01-06
 **Assigned To**: Future Agent / When Time Permits
