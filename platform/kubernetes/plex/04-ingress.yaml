@@ -43,4 +43,4 @@ spec:
     - name: plex
       port: 32400
       passHostHeader: true
-  tls:
+  tls: {}

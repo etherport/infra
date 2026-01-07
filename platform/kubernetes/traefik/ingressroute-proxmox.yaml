@@ -51,4 +51,4 @@ spec:
           port: 8006
           serversTransport: proxmox-transport
           scheme: https
-  tls:
+  tls: {}

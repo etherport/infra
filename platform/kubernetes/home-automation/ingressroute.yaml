@@ -15,4 +15,4 @@ spec:
     - name: home-assistant
       port: 8123
       serversTransport: home-assistant-transport
-  tls:
+  tls: {}
