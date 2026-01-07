@@ -141,9 +141,11 @@ cert_manager_enabled: true
 #     - "1.1.1.1"
 #     - "8.8.8.8"
 
-# cert_manager_controller_extra_args:
-#   - "--dns01-recursive-nameservers-only=true"
-#   - "--dns01-recursive-nameservers=1.1.1.1:53,8.8.8.8:53"
+# Use public DNS for DNS-01 challenge propagation checks
+# Required because local DNS servers (dns*.wind.etherport.net) are unreachable from pods
+cert_manager_controller_extra_args:
+  - "--dns01-recursive-nameservers-only=true"
+  - "--dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53"
 
 # MetalLB deployment
 # Enabled for LoadBalancer service support (Traefik, etc.)
