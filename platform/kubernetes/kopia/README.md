@@ -52,10 +52,10 @@ This application is managed by Flux. To deploy or make changes:
 2. **Changes are auto-deployed from git**:
    ```bash
    # Edit any configuration file
-   vim platform/kubernetes/apps/kopia/05-deployment.yaml
+   vim platform/kubernetes/kopia/05-deployment.yaml
 
    # Commit and push
-   git add platform/kubernetes/apps/kopia/05-deployment.yaml
+   git add platform/kubernetes/kopia/05-deployment.yaml
    git commit -m "kopia: update deployment configuration"
    git push
 
@@ -79,15 +79,15 @@ If you need to bypass GitOps (not recommended for production):
 
 ```bash
 # Deploy via kustomize
-kubectl apply -k platform/kubernetes/apps/kopia/
+kubectl apply -k platform/kubernetes/kopia/
 
 # Or deploy individual files (legacy method):
-kubectl apply -f platform/kubernetes/apps/kopia/01-pvc-repo.yaml
-kubectl apply -f platform/kubernetes/apps/kopia/02-pvc-config.yaml
-kubectl apply -f platform/kubernetes/apps/kopia/04-configmap-entrypoint.yaml
-kubectl apply -f platform/kubernetes/apps/kopia/05-deployment.yaml
-kubectl apply -f platform/kubernetes/apps/kopia/06-service.yaml
-kubectl apply -f platform/kubernetes/apps/kopia/07-ingressroute.yaml
+kubectl apply -f platform/kubernetes/kopia/01-pvc-repo.yaml
+kubectl apply -f platform/kubernetes/kopia/02-pvc-config.yaml
+kubectl apply -f platform/kubernetes/kopia/04-configmap-entrypoint.yaml
+kubectl apply -f platform/kubernetes/kopia/05-deployment.yaml
+kubectl apply -f platform/kubernetes/kopia/06-service.yaml
+kubectl apply -f platform/kubernetes/kopia/07-ingressroute.yaml
 ```
 
 **Note**: Manual changes will be reverted by Flux on the next reconciliation. Always update git for persistent changes.
@@ -105,13 +105,13 @@ Open in your browser:
 
 ```bash
 # Edit deployment
-vim platform/kubernetes/apps/kopia/05-deployment.yaml
+vim platform/kubernetes/kopia/05-deployment.yaml
 
 # Change image tag
 image: kopia/kopia:0.15.0  # Pin to specific version
 
 # Commit and push
-git add platform/kubernetes/apps/kopia/05-deployment.yaml
+git add platform/kubernetes/kopia/05-deployment.yaml
 git commit -m "kopia: pin image to v0.15.0"
 git push
 
@@ -126,12 +126,12 @@ kubectl rollout status deployment/kopia -n backups
 
 ```bash
 # Edit entrypoint script
-vim platform/kubernetes/apps/kopia/04-configmap-entrypoint.yaml
+vim platform/kubernetes/kopia/04-configmap-entrypoint.yaml
 
 # Make your changes
 
 # Commit and push
-git add platform/kubernetes/apps/kopia/04-configmap-entrypoint.yaml
+git add platform/kubernetes/kopia/04-configmap-entrypoint.yaml
 git commit -m "kopia: update entrypoint configuration"
 git push
 
@@ -148,7 +148,7 @@ To upgrade Kopia to a newer version:
 
 ```bash
 # Update image tag in deployment
-vim platform/kubernetes/apps/kopia/05-deployment.yaml
+vim platform/kubernetes/kopia/05-deployment.yaml
 
 # Change:
 # image: kopia/kopia:latest
@@ -156,7 +156,7 @@ vim platform/kubernetes/apps/kopia/05-deployment.yaml
 # image: kopia/kopia:0.16.0
 
 # Commit and push
-git add platform/kubernetes/apps/kopia/05-deployment.yaml
+git add platform/kubernetes/kopia/05-deployment.yaml
 git commit -m "kopia: upgrade to v0.16.0"
 git push
 

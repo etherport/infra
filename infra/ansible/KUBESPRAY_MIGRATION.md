@@ -111,7 +111,7 @@ These components are **NOT managed by Kubespray** and should remain in `platform
 - **Config:** Managed via Ansible in `inventory/wind/group_vars/all/ceph.yml`
 
 ### Application Workloads
-- Kopia Backup (`platform/kubernetes/apps/kopia/`)
+- Kopia Backup (`platform/kubernetes/kopia/`)
 - Plex Media Server (`platform/kubernetes/plex/`)
 - Home Assistant (`platform/kubernetes/home-automation/`)
 - AWS S3 Backups (`platform/kubernetes/backups/aws-s3/`)

@@ -404,8 +404,8 @@ kubectl kustomize path/to/overlay/ | grep -A 20 "kind: CronJob"
 | Simple App | Plex | `platform/kubernetes/plex/` |
 | ConfigMap Generator | Home Automation | `platform/kubernetes/home-automation/` |
 | Base + Overlays | AWS S3 Backups | `platform/kubernetes/backups/aws-s3/` |
-| Excluded Secrets | Kopia | `platform/kubernetes/apps/kopia/` |
-| Shared Namespace | Kopia + S3 | `platform/kubernetes/{apps/kopia,backups/aws-s3}` |
+| Excluded Secrets | Kopia | `platform/kubernetes/kopia/` |
+| Shared Namespace | Kopia + S3 | `platform/kubernetes/{kopia,backups/aws-s3}` |
 | Infrastructure | MetalLB | `platform/kubernetes/metallb/` |
 
 ## Related Documentation

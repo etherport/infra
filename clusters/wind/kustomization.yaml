@@ -13,7 +13,7 @@ resources:
   - ../../platform/kubernetes/plex
   - ../../platform/kubernetes/icloudpd
   - ../../platform/kubernetes/rclone-gdrive
-  - ../../platform/kubernetes/apps/kopia
+  - ../../platform/kubernetes/kopia
   - ../../platform/kubernetes/wikijs
   # Monitoring
   - ../../platform/kubernetes/monitoring
