@@ -3,10 +3,11 @@ kind: Kustomization
 
 namespace: backups
 
-# Note: Assumes namespace and RBAC are already created by share deployments
-# This deploys only the single daily-report CronJob that monitors all shares
+# Defines the backups namespace (shared with shares and kopia)
+# This component is always deployed, so it owns the namespace definition
 
 resources:
+  - namespace.yaml
   - cronjob-email-summary.yaml
 
 configMapGenerator:

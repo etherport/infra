@@ -7,3 +7,7 @@ resources:
   - route53-credentials.sops.yaml
   - ingressroute-infrastructure.yaml
   - ingressroute-proxmox.yaml
+  # cert-manager integration for OCSP stapling
+  - clusterissuer-letsencrypt.yaml
+  - certificate-wildcard.yaml
+  - tlsstore-default.yaml

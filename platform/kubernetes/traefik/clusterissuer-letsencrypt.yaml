@@ -1,0 +1,24 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # Production Let's Encrypt server
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: dervish_guess_0n@icloud.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - dns01:
+          route53:
+            region: us-west-2
+            hostedZoneID: Z03500581XDWV5SKF5PK8
+            accessKeyIDSecretRef:
+              name: route53-credentials
+              key: AWS_ACCESS_KEY_ID
+            secretAccessKeySecretRef:
+              name: route53-credentials
+              key: AWS_SECRET_ACCESS_KEY
+        # Note: cert-manager deployment patched with --dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53
+        # to use public DNS for propagation checks (local DNS servers unreachable from pods)

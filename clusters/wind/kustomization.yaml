@@ -19,11 +19,12 @@ resources:
   - ../../platform/kubernetes/monitoring
   # Utilities
   - ../../platform/kubernetes/route53-ddns/base
-  - ../../platform/kubernetes/backups/aws-s3/shares/scans
+  # Backups - S3 sync shares (all managed by Flux)
+  - ../../platform/kubernetes/backups/aws-s3/shares/archive
+  - ../../platform/kubernetes/backups/aws-s3/shares/backups
+  - ../../platform/kubernetes/backups/aws-s3/shares/content
+  - ../../platform/kubernetes/backups/aws-s3/shares/graham
+  - ../../platform/kubernetes/backups/aws-s3/shares/mark
+  - ../../platform/kubernetes/backups/aws-s3/shares/media
+  - ../../platform/kubernetes/backups/aws-s3/shares/scans  # suspended
   - ../../platform/kubernetes/backups/aws-s3/daily-report
-  # - ../../platform/kubernetes/backups/aws-s3/shares/archive
-  # - ../../platform/kubernetes/backups/aws-s3/shares/backups
-  # - ../../platform/kubernetes/backups/aws-s3/shares/content
-  # - ../../platform/kubernetes/backups/aws-s3/shares/graham
-  # - ../../platform/kubernetes/backups/aws-s3/shares/mark
-  # - ../../platform/kubernetes/backups/aws-s3/shares/media

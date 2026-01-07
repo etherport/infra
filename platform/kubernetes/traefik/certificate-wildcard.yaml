@@ -1,0 +1,18 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-wind-etherport-net
+  namespace: traefik
+spec:
+  secretName: wildcard-wind-etherport-net-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: "*.wind.etherport.net"
+  dnsNames:
+    - "wind.etherport.net"
+    - "*.wind.etherport.net"
+  # Enable OCSP stapling by ensuring the certificate has the required extensions
+  privateKey:
+    algorithm: ECDSA
+    size: 256

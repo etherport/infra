@@ -22,35 +22,13 @@ ingressClass:
   enabled: true
   isDefaultClass: true
 
-additionalArguments:
-#  - "--entrypoints.web.address=:80"
-#  - "--entrypoints.websecure.address=:443"
+# TLS certificates managed by cert-manager (not Traefik's built-in ACME)
+# Certificate: wildcard-wind-etherport-net-tls (in traefik namespace)
+# TLSStore: default (references the cert-manager certificate)
+additionalArguments: []
 
-  - "--entrypoints.websecure.http.tls.certresolver=route53"
-  - "--entrypoints.websecure.http.tls.domains[0].main=wind.etherport.net"
-  - "--entrypoints.websecure.http.tls.domains[0].sans=*.wind.etherport.net"
-
-  - "--certificatesresolvers.route53.acme.dnschallenge=true"
-  - "--certificatesresolvers.route53.acme.dnschallenge.provider=route53"
-  - "--certificatesresolvers.route53.acme.dnschallenge.disablePropagationCheck=true"
-  - "--certificatesresolvers.route53.acme.email=dervish_guess_0n@icloud.com"
-  - "--certificatesresolvers.route53.acme.storage=/data/acme.json"
-
-env:
-  - name: AWS_REGION
-    value: "us-west-2"   # change to your region
-  - name: AWS_ACCESS_KEY_ID
-    valueFrom:
-      secretKeyRef:
-        name: route53-credentials
-        key: AWS_ACCESS_KEY_ID
-  - name: AWS_SECRET_ACCESS_KEY
-    valueFrom:
-      secretKeyRef:
-        name: route53-credentials
-        key: AWS_SECRET_ACCESS_KEY
-  - name: AWS_HOSTED_ZONE_ID
-    value: "Z03500581XDWV5SKF5PK8"
+# AWS env vars no longer needed - cert-manager handles Route53 DNS challenge
+env: []
 
 persistence:
   enabled: true
