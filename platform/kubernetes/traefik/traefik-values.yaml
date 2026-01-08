@@ -25,7 +25,11 @@ ingressClass:
 # TLS certificates managed by cert-manager (not Traefik's built-in ACME)
 # Certificate: wildcard-wind-etherport-net-tls (in traefik namespace)
 # TLSStore: default (references the cert-manager certificate)
-additionalArguments: []
+additionalArguments:
+  # Enable OCSP stapling (when certificates support it)
+  # Note: Let's Encrypt discontinued OCSP in Aug 2025, so this has no effect
+  # for LE certs. Kept enabled for potential future use with other CAs.
+  - "--ocsp=true"
 
 # AWS env vars no longer needed - cert-manager handles Route53 DNS challenge
 env: []
