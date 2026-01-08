@@ -45,11 +45,47 @@ Velero is our Kubernetes backup solution for disaster recovery and data protecti
 - Uses Kopia for deduplication and compression
 - Incremental backups (only changed data)
 
-## Current Backup Schedule
+### PVC Coverage
 
-| Namespace | Schedule | Method | Retention | Size |
-|-----------|----------|--------|-----------|------|
-| home-automation | Daily 2 AM | File-system (Kopia) | 30 days | ~523 MB |
+All namespaces with persistent data are backed up:
+
+| Namespace | PVC | Size | Backed Up |
+|-----------|-----|------|-----------|
+| home-automation | home-assistant-config | 10Gi | ✅ |
+| plex | plex-config | 25Gi | ✅ |
+| dns | data-technitium-0, data-technitium-1 | 5Gi each | ✅ |
+| postgres | postgres-cluster-1 | 10Gi | ✅ |
+| wikijs | wiki-js-data | 5Gi | ✅ |
+| monitoring | grafana, prometheus, alertmanager | 5-10Gi | ✅ |
+| traefik | traefik-ceph-pvc | 5Gi | ✅ |
+| backups | kopia-repo-pvc, kopia-config-pvc | 200Gi, 5Gi | ✅ |
+
+## Current Backup Schedules
+
+All schedules use file-system backup (Kopia) with 30-day retention.
+
+| Schedule | Namespaces | Time (Local) | Purpose |
+|----------|------------|--------------|---------|
+| `critical-apps-daily` | home-automation, plex | 2am | Core applications with user data |
+| `postgres-daily` | postgres | 2am | CloudNativePG database (Wiki.js data) |
+| `traefik-daily` | traefik | 2am | Ingress controller, ACME certs |
+| `technitium-daily` | dns | 3am | DNS server configuration |
+| `plex-daily` | plex | 3am | Media server config/metadata |
+| `wikijs-daily` | wikijs | 3am | Wiki.js application |
+| `kube-system-daily` | kube-system | 3am | Core Kubernetes components |
+| `infrastructure-daily` | backups, route53-ddns, monitoring, traefik, cert-manager, icloudpd, rclone, metallb-system | 4am | Infrastructure services |
+| `monitoring-daily` | monitoring | 4am | Prometheus, Grafana, Alertmanager |
+
+### Schedule Files
+
+GitOps-managed schedules are in `schedules/`:
+- `postgres-daily.yaml` - PostgreSQL database backup
+- `wikijs-daily.yaml` - Wiki.js application backup
+
+Other schedules were created via CLI and can be exported:
+```bash
+kubectl get schedule -n velero -o yaml > all-schedules.yaml
+```
 
 ## Installation
 
