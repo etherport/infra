@@ -7,6 +7,10 @@ spec:
   ttlSecondsAfterFinished: 86400  # Clean up after 24 hours
   backoffLimit: 0
   template:
+    metadata:
+      annotations:
+        # Exclude NFS volumes from Velero file-system backup
+        backup.velero.io/backup-volumes-excludes: "nfs-src,work"
     spec:
       serviceAccountName: s3-sync
       restartPolicy: Never
