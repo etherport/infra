@@ -9,6 +9,9 @@ ports:
   websecure:
     tls:
       enabled: true
+    # HTTP/3 (QUIC) - faster connection establishment, 0-RTT on repeat visits
+    http3:
+      enabled: true
 
 service:
   enabled: true
