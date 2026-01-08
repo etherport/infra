@@ -7,6 +7,9 @@ spec:
     # Production Let's Encrypt server
     server: https://acme-v02.api.letsencrypt.org/directory
     email: dervish_guess_0n@icloud.com
+    # Short-lived certificates (6 days) - no OCSP/CRL checks needed
+    # Requires cert-manager v1.18.0+ and Let's Encrypt ACME profile support
+    profile: shortlived
     privateKeySecretRef:
       name: letsencrypt-prod-account-key
     solvers:
@@ -20,5 +23,5 @@ spec:
             secretAccessKeySecretRef:
               name: route53-credentials
               key: AWS_SECRET_ACCESS_KEY
-        # Note: cert-manager deployment patched with --dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53
-        # to use public DNS for propagation checks (local DNS servers unreachable from pods)
+        # Note: cert-manager uses --dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53
+        # (configured in Helm values) for public DNS propagation checks

@@ -109,9 +109,9 @@ ingress_alb_enabled: false
 # alb_ingress_aws_debug: "false"
 
 # Cert manager deployment
-# Enabled for automated certificate management with Let's Encrypt
-# Used by Traefik for ACME/Route53 DNS challenge
-cert_manager_enabled: true
+# DISABLED - Now managed via Helm for independent upgrades and ACME profile support
+# See: platform/kubernetes/cert-manager/
+cert_manager_enabled: false
 # cert_manager_namespace: "cert-manager"
 # cert_manager_tolerations:
 #   - key: node-role.kubernetes.io/control-plane
@@ -141,11 +141,8 @@ cert_manager_enabled: true
 #     - "1.1.1.1"
 #     - "8.8.8.8"
 
-# Use public DNS for DNS-01 challenge propagation checks
-# Required because local DNS servers (dns*.wind.etherport.net) are unreachable from pods
-cert_manager_controller_extra_args:
-  - "--dns01-recursive-nameservers-only=true"
-  - "--dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53"
+# cert_manager_controller_extra_args now in Helm values
+# See: platform/kubernetes/cert-manager/values.yaml
 
 # MetalLB deployment
 # Enabled for LoadBalancer service support (Traefik, etc.)

@@ -1,0 +1,20 @@
+# cert-manager Helm values
+# Chart: https://charts.jetstack.io/cert-manager
+# Version: v1.19.2
+
+# CRDs managed separately (existing from Kubespray)
+# Will be upgraded manually when needed
+crds:
+  enabled: false
+
+# Use public DNS for DNS-01 challenge propagation checks
+# Required because local DNS servers (dns*.wind.etherport.net) are unreachable from pods
+extraArgs:
+  - "--dns01-recursive-nameservers-only=true"
+  - "--dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53"
+
+# Prometheus metrics
+prometheus:
+  enabled: true
+  servicemonitor:
+    enabled: false
