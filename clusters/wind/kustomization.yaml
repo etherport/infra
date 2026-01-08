@@ -28,3 +28,5 @@ resources:
   - ../../platform/kubernetes/backups/aws-s3/shares/media
   - ../../platform/kubernetes/backups/aws-s3/shares/scans  # suspended
   - ../../platform/kubernetes/backups/aws-s3/daily-report
+  # Velero backup schedules
+  - ../../platform/kubernetes/backups/velero/schedules
