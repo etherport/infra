@@ -156,8 +156,8 @@ records:
 
   - name: prox-ipmi
     type: A
-    value: 10.10.201.70
-    comment: Proxmox IPMI/BMC (via Traefik to 10.10.200.21)
+    value: 10.10.200.21
+    comment: Proxmox IPMI/BMC (direct - Traefik proxy breaks sessions)
 
   # =============================================================================
   # Devices - Direct Access
