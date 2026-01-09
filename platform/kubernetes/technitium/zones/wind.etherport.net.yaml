@@ -156,8 +156,13 @@ records:
 
   - name: prox-ipmi
     type: A
+    value: 10.10.201.70
+    comment: Proxmox IPMI/BMC (via Traefik for valid SSL)
+
+  - name: prox-ipmi-direct
+    type: A
     value: 10.10.200.21
-    comment: Proxmox IPMI/BMC (direct - Traefik proxy breaks sessions)
+    comment: Proxmox IPMI/BMC (direct fallback when k8s is down)
 
   # =============================================================================
   # Devices - Direct Access
