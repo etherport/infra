@@ -154,6 +154,11 @@ records:
     value: 10.10.201.70
     comment: PDU 2 web UI (via Traefik to 10.10.200.16)
 
+  - name: prox-ipmi
+    type: A
+    value: 10.10.201.70
+    comment: Proxmox IPMI/BMC (via Traefik to 10.10.200.21)
+
   # =============================================================================
   # Devices - Direct Access
   # =============================================================================
