@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ollama
+
+resources:
+  - 00-namespace.yaml
+  - 01-pvc.yaml
+  - 02-deployment.yaml
+  - 03-service.yaml
+  - 04-ingressroute.yaml
+  - 05-open-webui-pvc.yaml
+  - 06-open-webui-deployment.yaml
+  - 07-open-webui-service.yaml
+  - 08-open-webui-ingressroute.yaml

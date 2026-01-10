@@ -120,6 +120,16 @@ records:
     value: 10.10.201.70
     comment: Kopia backup UI (via Traefik)
 
+  - name: ollama
+    type: A
+    value: 10.10.201.70
+    comment: Ollama LLM API (via Traefik)
+
+  - name: chat
+    type: A
+    value: 10.10.201.70
+    comment: Open WebUI chat interface (via Traefik)
+
   - name: prox
     type: A
     value: 10.10.201.70
