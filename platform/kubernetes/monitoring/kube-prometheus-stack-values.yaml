@@ -2,6 +2,9 @@
 prometheus:
   enabled: true
   prometheusSpec:
+    # Discover all ServiceMonitors regardless of labels
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
     storageSpec:
       volumeClaimTemplate:
         spec:
@@ -29,6 +32,14 @@ grafana:
   # Admin login (change this later)
   adminUser: admin
   adminPassword: "ChangeMe123!"
+
+  # Enable sidecar for dashboard provisioning from ConfigMaps
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
 
   # Persist Grafana dashboards & config
   persistence:
