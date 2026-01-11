@@ -27,6 +27,9 @@ spec:
         {{end}}
     push:
       branch: main
+      refspec: refs/heads/main:refs/heads/main
+      secretRef:
+        name: flux-image-automation
   update:
     path: ./platform/kubernetes
     strategy: Setters
