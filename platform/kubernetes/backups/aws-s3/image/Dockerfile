@@ -1,4 +1,4 @@
-FROM public.ecr.aws/aws-cli/aws-cli:2.32.16
+FROM public.ecr.aws/aws-cli/aws-cli:2.32.32
 
 # Bake deps into the image so the job doesn't yum install at runtime.
 # (aws-cli image is Amazon Linux; yum should work.)
