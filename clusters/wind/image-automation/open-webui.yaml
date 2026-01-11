@@ -1,0 +1,30 @@
+# Flux Image Automation for Open WebUI
+# Scans for new semver releases and updates deployment automatically
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: open-webui
+  namespace: flux-system
+spec:
+  image: ghcr.io/open-webui/open-webui
+  interval: 1h
+  exclusionList:
+    - "^.*-dev$"
+    - "^.*-rc.*$"
+    - "^main$"
+    - "^latest$"
+    - "^cuda$"
+    - "^ollama$"
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: open-webui
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: open-webui
+  policy:
+    semver:
+      range: ">=0.1.0"

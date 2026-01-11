@@ -1,0 +1,26 @@
+# Flux Image Automation for Ollama
+# Scans for new semver releases and updates deployment automatically
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: ollama
+  namespace: flux-system
+spec:
+  image: ollama/ollama
+  interval: 1h
+  exclusionList:
+    - "^.*-rc.*$"
+    - "^latest$"
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: ollama
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: ollama
+  policy:
+    semver:
+      range: ">=0.1.0"

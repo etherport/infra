@@ -2,6 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ./flux-system
+  - ./image-automation
   # Infrastructure
   - ../../platform/kubernetes/metallb
   - ../../platform/kubernetes/traefik
@@ -30,3 +31,5 @@ resources:
   - ../../platform/kubernetes/backups/aws-s3/daily-report
   # Velero backup schedules
   - ../../platform/kubernetes/backups/velero/schedules
+  # LLM Services
+  - ../../platform/kubernetes/ollama
