@@ -16,7 +16,7 @@ spec:
       serviceAccountName: remediation-controller
       containers:
       - name: controller
-        image: python:3.11-slim
+        image: python:3.14-slim # {"$imagepolicy": "flux-system:python-slim"}
         command:
         - /bin/bash
         - -c

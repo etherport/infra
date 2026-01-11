@@ -16,3 +16,5 @@ resources:
   - kopia.yaml
   - rclone.yaml
   - icloudpd.yaml
+  # Base/Utility Images
+  - base-images.yaml

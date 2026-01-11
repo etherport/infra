@@ -1,0 +1,141 @@
+---
+# Proxmox VE Host Maintenance Playbook
+# Updates OS packages, Proxmox VE components, and optionally reboots
+#
+# Usage:
+#   # Check for updates (dry-run)
+#   ansible-playbook -i inventory/wind/ playbooks/proxmox.yml --check
+#
+#   # Apply updates (no reboot)
+#   ansible-playbook -i inventory/wind/ playbooks/proxmox.yml
+#
+#   # Apply updates and reboot if needed
+#   ansible-playbook -i inventory/wind/ playbooks/proxmox.yml -e "allow_reboot=true"
+#
+# WARNING: This will update your hypervisor. Ensure VMs are backed up first.
+#          Consider migrating VMs to another node if in a cluster.
+
+- name: Proxmox VE Host Maintenance
+  hosts: proxmox_hosts
+  become: true
+  gather_facts: true
+  vars:
+    allow_reboot: false
+    reboot_timeout: 600
+
+  tasks:
+    - name: Verify this is a Proxmox VE host
+      ansible.builtin.stat:
+        path: /usr/bin/pveversion
+      register: pve_check
+      failed_when: not pve_check.stat.exists
+
+    - name: Get current Proxmox VE version
+      ansible.builtin.command: pveversion
+      register: pve_version_before
+      changed_when: false
+
+    - name: Display current version
+      ansible.builtin.debug:
+        msg: "Current: {{ pve_version_before.stdout }}"
+
+    - name: Ensure pve-no-subscription repo is configured (for non-enterprise)
+      ansible.builtin.apt_repository:
+        repo: "deb http://download.proxmox.com/debian/pve {{ ansible_distribution_release }} pve-no-subscription"
+        state: present
+        filename: pve-no-subscription
+      when: not use_enterprise_repo | default(false)
+
+    - name: Disable enterprise repo if not subscribed
+      ansible.builtin.lineinfile:
+        path: /etc/apt/sources.list.d/pve-enterprise.list
+        regexp: '^deb'
+        line: '# deb https://enterprise.proxmox.com/debian/pve {{ ansible_distribution_release }} pve-enterprise'
+        state: present
+        create: false
+      when: not use_enterprise_repo | default(false)
+      ignore_errors: true
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 0
+
+    - name: Check for available updates
+      ansible.builtin.shell: |
+        apt list --upgradable 2>/dev/null | grep -v "Listing..." | wc -l
+      register: updates_available
+      changed_when: false
+
+    - name: Display available updates count
+      ansible.builtin.debug:
+        msg: "{{ updates_available.stdout }} packages can be upgraded"
+
+    - name: List available updates
+      ansible.builtin.shell: |
+        apt list --upgradable 2>/dev/null | grep -v "Listing..."
+      register: updates_list
+      changed_when: false
+      when: updates_available.stdout | int > 0
+
+    - name: Show available updates
+      ansible.builtin.debug:
+        msg: "{{ updates_list.stdout_lines }}"
+      when: updates_available.stdout | int > 0
+
+    - name: Upgrade all packages
+      ansible.builtin.apt:
+        upgrade: dist
+        autoremove: true
+        autoclean: true
+      register: upgrade_result
+      when: updates_available.stdout | int > 0
+
+    - name: Get new Proxmox VE version
+      ansible.builtin.command: pveversion
+      register: pve_version_after
+      changed_when: false
+      when: upgrade_result is changed
+
+    - name: Display upgrade summary
+      ansible.builtin.debug:
+        msg: |
+          Upgrade completed!
+          Before: {{ pve_version_before.stdout }}
+          After: {{ pve_version_after.stdout }}
+      when: upgrade_result is changed
+
+    - name: Check if reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: Display reboot status
+      ansible.builtin.debug:
+        msg: "{{ 'REBOOT REQUIRED - kernel or critical packages updated' if reboot_required.stat.exists else 'No reboot required' }}"
+
+    - name: Reboot if required and allowed
+      ansible.builtin.reboot:
+        msg: "Rebooting for Proxmox updates"
+        reboot_timeout: "{{ reboot_timeout }}"
+      when:
+        - reboot_required.stat.exists
+        - allow_reboot | bool
+
+    - name: Verify Proxmox services after reboot
+      ansible.builtin.command: pvecm status
+      register: cluster_status
+      changed_when: false
+      failed_when: false
+      when:
+        - reboot_required.stat.exists
+        - allow_reboot | bool
+
+    - name: Final status
+      ansible.builtin.debug:
+        msg: |
+          === Proxmox Maintenance Complete ===
+          Host: {{ inventory_hostname }}
+          Packages upgraded: {{ 'Yes' if upgrade_result is changed else 'No (already up to date)' }}
+          Reboot required: {{ 'Yes' if reboot_required.stat.exists else 'No' }}
+          Reboot performed: {{ 'Yes' if (reboot_required.stat.exists and allow_reboot | bool) else 'No' }}

@@ -1,0 +1,109 @@
+# Flux Image Automation for Base/Utility Images
+# These are used in init containers, jobs, and utility scripts
+---
+# Python Alpine (used in technitium dns-sync)
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: python-alpine
+  namespace: flux-system
+spec:
+  image: python
+  interval: 24h
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: python-alpine
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: python-alpine
+  filterTags:
+    pattern: '^3\.(?P<minor>\d+)-alpine$'
+    extract: '$minor'
+  policy:
+    numerical:
+      order: asc
+---
+# Python Slim (used in auto-remediation)
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: python-slim
+  namespace: flux-system
+spec:
+  image: python
+  interval: 24h
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: python-slim
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: python-slim
+  filterTags:
+    pattern: '^3\.(?P<minor>\d+)-slim$'
+    extract: '$minor'
+  policy:
+    numerical:
+      order: asc
+---
+# Busybox (used in init containers)
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: busybox
+  namespace: flux-system
+spec:
+  image: busybox
+  interval: 24h
+  exclusionList:
+    - "^latest$"
+    - "^stable$"
+    - "^unstable$"
+    - "^musl$"
+    - "^glibc$"
+    - "^uclibc$"
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: busybox
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: busybox
+  filterTags:
+    pattern: '^1\.(?P<minor>\d+)\.(?P<patch>\d+)$'
+    extract: '$minor.$patch'
+  policy:
+    numerical:
+      order: asc
+---
+# Velero AWS Plugin
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: velero-plugin-aws
+  namespace: flux-system
+spec:
+  image: velero/velero-plugin-for-aws
+  interval: 12h
+  exclusionList:
+    - "^latest$"
+    - "^main$"
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: velero-plugin-aws
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: velero-plugin-aws
+  policy:
+    semver:
+      range: ">=1.0.0"

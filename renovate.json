@@ -1,0 +1,105 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "docker:enableMajor",
+    ":separateMajorReleases",
+    ":prHourlyLimitNone"
+  ],
+  "timezone": "America/Los_Angeles",
+  "schedule": ["before 6am on monday"],
+  "labels": ["dependencies", "renovate"],
+  "prConcurrentLimit": 5,
+  "packageRules": [
+    {
+      "description": "Helm charts - group minor/patch updates",
+      "matchDatasources": ["helm"],
+      "groupName": "helm-charts",
+      "groupSlug": "helm-charts",
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": false
+    },
+    {
+      "description": "Helm charts - major updates separate PRs",
+      "matchDatasources": ["helm"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "separateMajorMinor": true
+    },
+    {
+      "description": "Container images managed by Flux - disable Renovate",
+      "matchDatasources": ["docker"],
+      "matchPackagePatterns": [
+        "ollama/ollama",
+        "ghcr.io/open-webui/open-webui",
+        "technitium/dns-server",
+        "ghcr.io/requarks/wiki",
+        "plexinc/pms-docker",
+        "kopia/kopia",
+        "rclone/rclone",
+        "icloudpd/icloudpd",
+        "ghcr.io/home-assistant/home-assistant"
+      ],
+      "enabled": false,
+      "description": "Managed by Flux ImageUpdateAutomation"
+    },
+    {
+      "description": "Base images - auto-merge patch updates",
+      "matchDatasources": ["docker"],
+      "matchPackagePatterns": ["python", "busybox"],
+      "matchUpdateTypes": ["patch", "digest"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Velero plugin - track updates",
+      "matchDatasources": ["docker"],
+      "matchPackagePatterns": ["velero/velero-plugin-for-aws"],
+      "automerge": false
+    },
+    {
+      "description": "Custom images on main branch - notify only",
+      "matchDatasources": ["docker"],
+      "matchPackagePatterns": [
+        "ghcr.io/sparked-diamond/route53-ddns",
+        "ghcr.io/sparked-diamond/aws-s3-sync"
+      ],
+      "enabled": false,
+      "description": "Custom built images - updates managed via CI"
+    },
+    {
+      "description": "Flux components",
+      "matchPackagePatterns": ["fluxcd"],
+      "matchDatasources": ["github-releases"],
+      "automerge": false
+    }
+  ],
+  "kubernetes": {
+    "fileMatch": ["\\.yaml$", "\\.yml$"]
+  },
+  "helm-values": {
+    "fileMatch": ["values\\.yaml$", "values\\.yml$"]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Helm chart versions in values files",
+      "fileMatch": ["platform/kubernetes/.*/values\\.yaml$"],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>.*?)\\s+depName=(?<depName>.*?)\\s*\\n.*?:\\s*[\"']?(?<currentValue>[^\"'\\s]+)[\"']?"
+      ],
+      "versioningTemplate": "semver"
+    }
+  ],
+  "regexManagers": [
+    {
+      "description": "Flux gotk-components version",
+      "fileMatch": ["clusters/wind/flux-system/gotk-components\\.yaml$"],
+      "matchStrings": [
+        "# Flux version: (?<currentValue>v[0-9.]+)"
+      ],
+      "depNameTemplate": "fluxcd/flux2",
+      "datasourceTemplate": "github-releases"
+    }
+  ]
+}
