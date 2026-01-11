@@ -4,7 +4,7 @@
     "config:recommended"
   ],
   "timezone": "America/Los_Angeles",
-  "schedule": ["before 6am on monday"],
+  "schedule": ["at any time"],
   "labels": ["dependencies", "renovate"],
   "prConcurrentLimit": 5,
   "packageRules": [
