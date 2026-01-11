@@ -23,7 +23,11 @@ spec:
             - name: OLLAMA_BASE_URL
               value: "http://ollama.ollama.svc.cluster.local:11434"
             - name: WEBUI_AUTH
-              value: "false"
+              value: "true"
+            # First user to sign up becomes admin
+            # Admin can manage users and disable signup later if needed
+            - name: ENABLE_SIGNUP
+              value: "true"
           resources:
             requests:
               memory: "512Mi"
