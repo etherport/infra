@@ -40,8 +40,7 @@
         "icloudpd/icloudpd",
         "ghcr.io/home-assistant/home-assistant"
       ],
-      "enabled": false,
-      "description": "Managed by Flux ImageUpdateAutomation"
+      "enabled": false
     },
     {
       "description": "Base images - auto-merge patch updates",
@@ -58,14 +57,13 @@
       "automerge": false
     },
     {
-      "description": "Custom images on main branch - notify only",
+      "description": "Custom images - disable (managed via CI)",
       "matchDatasources": ["docker"],
       "matchPackagePatterns": [
         "ghcr.io/sparked-diamond/route53-ddns",
         "ghcr.io/sparked-diamond/aws-s3-sync"
       ],
-      "enabled": false,
-      "description": "Custom built images - updates managed via CI"
+      "enabled": false
     },
     {
       "description": "Flux components",
@@ -89,10 +87,9 @@
         "#\\s*renovate:\\s*datasource=(?<datasource>.*?)\\s+depName=(?<depName>.*?)\\s*\\n.*?:\\s*[\"']?(?<currentValue>[^\"'\\s]+)[\"']?"
       ],
       "versioningTemplate": "semver"
-    }
-  ],
-  "regexManagers": [
+    },
     {
+      "customType": "regex",
       "description": "Flux gotk-components version",
       "fileMatch": ["clusters/wind/flux-system/gotk-components\\.yaml$"],
       "matchStrings": [
