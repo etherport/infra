@@ -1,0 +1,24 @@
+# Flux Image Automation for iCloud Photos Downloader
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: icloudpd
+  namespace: flux-system
+spec:
+  image: icloudpd/icloudpd
+  interval: 1h
+  exclusionList:
+    - "^latest$"
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: icloudpd
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: icloudpd
+  policy:
+    semver:
+      range: ">=1.0.0"

@@ -1,0 +1,28 @@
+# Flux Image Automation for Kopia Backup
+# Kopia uses date-based versioning: YYYYMMDD.X.BUILD
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: kopia
+  namespace: flux-system
+spec:
+  image: kopia/kopia
+  interval: 1h
+  exclusionList:
+    - "^latest$"
+    - "^testing$"
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: kopia
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: kopia
+  filterTags:
+    pattern: '^[0-9]{8}\.[0-9]+\.[0-9]+$'
+  policy:
+    alphabetical:
+      order: asc

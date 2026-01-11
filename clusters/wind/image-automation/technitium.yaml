@@ -1,0 +1,25 @@
+# Flux Image Automation for Technitium DNS Server
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: technitium
+  namespace: flux-system
+spec:
+  image: technitium/dns-server
+  interval: 1h
+  exclusionList:
+    - "^.*-rc.*$"
+    - "^latest$"
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: technitium
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: technitium
+  policy:
+    semver:
+      range: ">=10.0.0"

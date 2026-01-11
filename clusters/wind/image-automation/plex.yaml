@@ -1,0 +1,31 @@
+# Flux Image Automation for Plex Media Server
+# Plex uses non-standard version format: X.Y.Z.BUILD-HASH
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: plex
+  namespace: flux-system
+spec:
+  image: plexinc/pms-docker
+  interval: 1h
+  exclusionList:
+    - "^latest$"
+    - "^public$"
+    - "^plexpass$"
+    - "^beta$"
+    - "^.*-test.*$"
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: plex
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: plex
+  filterTags:
+    pattern: '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+-[a-f0-9]+$'
+  policy:
+    alphabetical:
+      order: asc

@@ -1,0 +1,25 @@
+# Flux Image Automation for Rclone
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: rclone
+  namespace: flux-system
+spec:
+  image: rclone/rclone
+  interval: 1h
+  exclusionList:
+    - "^latest$"
+    - "^beta$"
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: rclone
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: rclone
+  policy:
+    semver:
+      range: ">=1.60.0"

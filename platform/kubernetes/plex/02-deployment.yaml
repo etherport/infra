@@ -29,7 +29,7 @@ spec:
 
       containers:
         - name: plex
-          image: plexinc/pms-docker:latest
+          image: plexinc/pms-docker:1.9.7.4460-a39b25852 # {"$imagepolicy": "flux-system:plex"}
 
           # GPU resource request for hardware transcoding
           resources:

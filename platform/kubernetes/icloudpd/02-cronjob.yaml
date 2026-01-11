@@ -20,7 +20,7 @@ spec:
           restartPolicy: Never
           containers:
           - name: icloudpd
-            image: icloudpd/icloudpd:latest
+            image: icloudpd/icloudpd:1.32.2 # {"$imagepolicy": "flux-system:icloudpd"}
             command:
               - /bin/sh
               - /scripts/sync-and-report.sh

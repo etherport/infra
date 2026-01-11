@@ -1,0 +1,28 @@
+# Flux Image Automation for Home Assistant
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: home-assistant
+  namespace: flux-system
+spec:
+  image: ghcr.io/home-assistant/home-assistant
+  interval: 1h
+  exclusionList:
+    - "^stable$"
+    - "^latest$"
+    - "^dev$"
+    - "^beta$"
+    - "^rc$"
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: home-assistant
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: home-assistant
+  policy:
+    semver:
+      range: ">=2024.0.0"
