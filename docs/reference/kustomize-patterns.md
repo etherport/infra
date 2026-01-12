@@ -410,7 +410,7 @@ kubectl kustomize path/to/overlay/ | grep -A 20 "kind: CronJob"
 
 ## Related Documentation
 
-- [Flux GitOps Overview](../gitops/flux-overview.md)
-- [Making Changes to GitOps Apps](../gitops/making-changes.md)
+- [Flux GitOps Overview](../setup/gitops/flux-overview.md)
+- [Making Changes to GitOps Apps](../setup/gitops/making-changes.md)
 - [Kustomize Official Docs](https://kubectl.docs.kubernetes.io/references/kustomize/)
 - [Kustomize Best Practices](https://kubectl.docs.kubernetes.io/guides/config_management/components/)

@@ -307,4 +307,4 @@ Document ansible-vault usage in `docs/runbooks/secrets-management.md`
 - [SOPS Documentation](https://github.com/mozilla/sops)
 - [Ansible-Vault Documentation](https://docs.ansible.com/ansible/latest/user_guide/vault.html)
 - [AWS KMS Best Practices](https://docs.aws.amazon.com/kms/latest/developerguide/best-practices.html)
-- [Existing .sops.yaml config](../../platform/kubernetes/backups/aws-s3/.sops.yaml)
+- [Existing .sops.yaml config](../../platform/kubernetes/backups/aws-s3/base/.sops.yaml)
