@@ -536,8 +536,8 @@ kubectl get secret home-assistant-secrets -n home-automation -o jsonpath='{.data
 ## Related Documentation
 
 - [1Password CLI Integration](1PASSWORD-CLI.md)
-- [SOPS vs Ansible-Vault Decision](decisions/sops-vs-ansible-vault.md)
-- [GitOps with Flux](gitops/flux-overview.md)
+- [SOPS vs Ansible-Vault Decision](../../planning/sops-vs-ansible-vault.md)
+- [GitOps with Flux](../gitops/flux-overview.md)
 
 ## External References
 

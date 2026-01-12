@@ -60,5 +60,5 @@ git commit -m "fix stuff"
 
 ## Related Documentation
 
-- [GitOps with Flux](../gitops/flux-overview.md)
-- [Making Changes](../gitops/making-changes.md)
+- [GitOps with Flux](./flux-overview.md)
+- [Making Changes](./making-changes.md)

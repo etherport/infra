@@ -80,26 +80,26 @@ ssh graham@10.10.201.15 "sudo wg show"
 ### Operations
 | Topic | Document |
 |-------|----------|
-| **Updates & Maintenance** | [runbooks/UPDATE-PROCEDURES.md](runbooks/UPDATE-PROCEDURES.md) |
-| Command Reference | [runbooks/operations-guide.md](runbooks/operations-guide.md) |
-| Kubernetes Upgrade | [runbooks/kubernetes-upgrade.md](runbooks/kubernetes-upgrade.md) |
-| Disaster Recovery | [runbooks/disaster-recovery.md](runbooks/disaster-recovery.md) |
-| DNS Issues | [runbooks/dns-resolution-issues.md](runbooks/dns-resolution-issues.md) |
+| **Updates & Maintenance** | [UPDATE-PROCEDURES.md](UPDATE-PROCEDURES.md) |
+| Command Reference | [operations-guide.md](operations-guide.md) |
+| Kubernetes Upgrade | [kubernetes-upgrade.md](kubernetes-upgrade.md) |
+| Disaster Recovery | [disaster-recovery.md](disaster-recovery.md) |
+| DNS Issues | [dns-resolution-issues.md](dns-resolution-issues.md) |
 
 ### Architecture
 | Topic | Document |
 |-------|----------|
-| Overview | [architecture/overview.md](architecture/overview.md) |
-| Network | [architecture/network.md](architecture/network.md) |
-| VPN | [architecture/vpn-wireguard.md](architecture/vpn-wireguard.md) |
-| AWS | [architecture/aws-infrastructure.md](architecture/aws-infrastructure.md) |
+| Overview | [../architecture/overview.md](../architecture/overview.md) |
+| Network | [../architecture/network.md](../architecture/network.md) |
+| VPN | [../architecture/vpn-wireguard.md](../architecture/vpn-wireguard.md) |
+| AWS | [../architecture/aws-infrastructure.md](../architecture/aws-infrastructure.md) |
 
 ### GitOps & Deployment
 | Topic | Document |
 |-------|----------|
-| Flux Overview | [gitops/flux-overview.md](gitops/flux-overview.md) |
-| Making Changes | [gitops/making-changes.md](gitops/making-changes.md) |
-| Secrets (SOPS) | [SOPS-SETUP.md](SOPS-SETUP.md) |
+| Flux Overview | [../setup/gitops/flux-overview.md](../setup/gitops/flux-overview.md) |
+| Making Changes | [../setup/gitops/making-changes.md](../setup/gitops/making-changes.md) |
+| Secrets (SOPS) | [../setup/secrets/SOPS-SETUP.md](../setup/secrets/SOPS-SETUP.md) |
 
 ---
 
@@ -151,4 +151,4 @@ The infrastructure is designed to self-heal:
 - [ ] Audit secrets and rotate if needed
 - [ ] Test disaster recovery procedures
 
-**Detailed update procedures:** [runbooks/UPDATE-PROCEDURES.md](runbooks/UPDATE-PROCEDURES.md)
+**Detailed update procedures:** [UPDATE-PROCEDURES.md](UPDATE-PROCEDURES.md)

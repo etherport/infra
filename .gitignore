@@ -27,6 +27,7 @@
 
 # Secrets (commit templates only)
 **/secrets/*
+!docs/setup/secrets/*
 **/*secret*.yaml
 !**/*secret-template*.yaml
 !**/*.secret-template.yaml

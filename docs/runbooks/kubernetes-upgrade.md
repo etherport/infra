@@ -386,5 +386,5 @@ curl -k https://grafana.wind.etherport.net
 
 - [UPDATE-PROCEDURES.md](UPDATE-PROCEDURES.md) - All update procedures and schedules
 - [disaster-recovery.md](disaster-recovery.md) - Recovery procedures
-- [PLATFORM-MANAGEMENT.md](../PLATFORM-MANAGEMENT.md) - Overall platform operations
+- [PLATFORM-MANAGEMENT.md](PLATFORM-MANAGEMENT.md) - Overall platform operations
 - [operations-guide.md](operations-guide.md) - Command quick reference

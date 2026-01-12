@@ -252,7 +252,7 @@ kubectl logs -n flux-system deploy/notification-controller -f
 
 1. The app must have a `kustomization.yaml` file in its directory
 2. All resources must be valid Kubernetes manifests
-3. Secrets should use SOPS encryption (see [SOPS Setup](../SOPS-SETUP.md))
+3. Secrets should use SOPS encryption (see [SOPS Setup](../secrets/SOPS-SETUP.md))
 
 ### Process
 
@@ -316,7 +316,7 @@ kubectl logs -n flux-system deploy/notification-controller -f
 
 ## SOPS Integration for Secrets
 
-Flux integrates with SOPS to decrypt secrets automatically. See the full guide: [SOPS Setup](../SOPS-SETUP.md)
+Flux integrates with SOPS to decrypt secrets automatically. See the full guide: [SOPS Setup](../secrets/SOPS-SETUP.md)
 
 **Quick overview**:
 1. Secrets are encrypted with SOPS using age keys
@@ -382,8 +382,8 @@ flux reconcile kustomization flux-system
 ## Related Documentation
 
 - [Making Changes to GitOps Apps](./making-changes.md) - Step-by-step guide
-- [Kustomize Patterns](../kubernetes/kustomize-patterns.md) - Common patterns used in this repo
-- [SOPS Setup](../SOPS-SETUP.md) - Secret encryption setup
+- [Kustomize Patterns](../../reference/kustomize-patterns.md) - Common patterns used in this repo
+- [SOPS Setup](../secrets/SOPS-SETUP.md) - Secret encryption setup
 - [Flux Official Docs](https://fluxcd.io/flux/) - Upstream documentation
 
 ## Support

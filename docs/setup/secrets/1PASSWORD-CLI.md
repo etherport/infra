@@ -186,7 +186,7 @@ Use item IDs instead of names when items contain special characters like parenth
 ## Related Documentation
 
 - [SOPS Secret Management](SOPS-SETUP.md)
-- [SOPS vs Ansible-Vault Decision](decisions/sops-vs-ansible-vault.md)
+- [SOPS vs Ansible-Vault Decision](../../planning/sops-vs-ansible-vault.md)
 
 ## External References
 

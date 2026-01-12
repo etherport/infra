@@ -488,8 +488,8 @@ If you need to make emergency manual changes, see [Emergency Manual Rollback](#o
 ## Related Documentation
 
 - [Flux GitOps Overview](./flux-overview.md) - Conceptual overview
-- [Kustomize Patterns](../kubernetes/kustomize-patterns.md) - Common patterns used
-- [SOPS Setup](../SOPS-SETUP.md) - Managing secrets
+- [Kustomize Patterns](../../reference/kustomize-patterns.md) - Common patterns used
+- [SOPS Setup](../secrets/SOPS-SETUP.md) - Managing secrets
 
 ## Quick Reference Commands
 

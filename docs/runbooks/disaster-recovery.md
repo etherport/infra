@@ -366,6 +366,6 @@ kubectl delete namespace dr-test
 
 ## Related Documentation
 
-- [PLATFORM-MANAGEMENT.md](../PLATFORM-MANAGEMENT.md) - Overall platform operations
+- [PLATFORM-MANAGEMENT.md](PLATFORM-MANAGEMENT.md) - Overall platform operations
 - [operations-guide.md](operations-guide.md) - Command quick reference
 - [UPDATE-PROCEDURES.md](UPDATE-PROCEDURES.md) - Update procedures and schedules
