@@ -6,7 +6,7 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: Recreate  # Ensures PVC is unmounted before new pod starts
+    type: Recreate # Ensures PVC is unmounted before new pod starts
   selector:
     matchLabels:
       app: home-assistant
@@ -39,7 +39,7 @@ spec:
     spec:
       containers:
       - name: home-assistant
-        image: ghcr.io/home-assistant/home-assistant:2026.1.0 # {"$imagepolicy": "flux-system:home-assistant"}
+        image: ghcr.io/home-assistant/home-assistant:2026.1.1 # {"$imagepolicy": "flux-system:home-assistant"}
         ports:
         - name: http
           containerPort: 8123
@@ -83,7 +83,7 @@ spec:
           periodSeconds: 5
           timeoutSeconds: 3
         securityContext:
-          privileged: true  # Required for device access
+          privileged: true # Required for device access
       volumes:
       - name: config
         persistentVolumeClaim:
