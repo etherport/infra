@@ -346,7 +346,8 @@
 ## 🔗 Related Documentation
 
 - [Architecture Overview](./architecture/overview.md)
-- [Kubernetes Ops Runbook](./runbooks/kubernetes-ops.md)
+- [Operations Guide](./runbooks/operations-guide.md)
+- [Update Procedures](./runbooks/UPDATE-PROCEDURES.md)
 - [AWS S3 Backup System](../platform/kubernetes/backups/aws-s3/README.md)
 - [Terraform Proxmox VMs](./terraform/proxmox-k8s-vms.md)
 

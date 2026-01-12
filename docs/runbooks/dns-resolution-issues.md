@@ -72,5 +72,5 @@ This same root cause may affect:
 ## Related Documentation
 
 - [Auto-Remediation System](auto-remediation/README.md)
-- [Kubernetes Operations](kubernetes-ops.md)
+- [Operations Guide](operations-guide.md)
 - [Network Architecture](../architecture/network.md)
