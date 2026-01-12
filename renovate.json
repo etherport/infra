@@ -4,35 +4,44 @@
     "config:recommended"
   ],
   "timezone": "America/Los_Angeles",
-  "schedule": ["at any time"],
-  "labels": ["dependencies", "renovate"],
+  "schedule": [
+    "at any time"
+  ],
+  "labels": [
+    "dependencies",
+    "renovate"
+  ],
   "prConcurrentLimit": 5,
   "packageRules": [
     {
       "description": "Container images managed by Flux - disable Renovate",
-      "matchDatasources": ["docker"],
-      "matchPackagePatterns": [
-        "ollama/ollama",
-        "open-webui/open-webui",
-        "technitium/dns-server",
-        "requarks/wiki",
-        "plexinc/pms-docker",
-        "kopia/kopia",
-        "rclone/rclone",
-        "icloudpd/icloudpd",
-        "home-assistant/home-assistant",
-        "^python$",
-        "^busybox$"
+      "matchDatasources": [
+        "docker"
       ],
-      "enabled": false
+      "enabled": false,
+      "matchPackageNames": [
+        "/ollama/ollama/",
+        "/open-webui/open-webui/",
+        "/technitium/dns-server/",
+        "/requarks/wiki/",
+        "/plexinc/pms-docker/",
+        "/kopia/kopia/",
+        "/rclone/rclone/",
+        "/icloudpd/icloudpd/",
+        "/home-assistant/home-assistant/",
+        "/^python$/",
+        "/^busybox$/"
+      ]
     },
     {
       "description": "Custom images - disable",
-      "matchDatasources": ["docker"],
-      "matchPackagePatterns": [
-        "sparked-diamond"
+      "matchDatasources": [
+        "docker"
       ],
-      "enabled": false
+      "enabled": false,
+      "matchPackageNames": [
+        "/sparked-diamond/"
+      ]
     }
   ]
 }
