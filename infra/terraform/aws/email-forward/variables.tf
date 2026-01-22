@@ -1,0 +1,47 @@
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+  default     = "us-west-2"
+}
+
+variable "s3_bucket_name" {
+  description = "S3 bucket name for email storage"
+  type        = string
+  default     = "email-fwd.grahamsmith.net"
+}
+
+variable "email_retention_days" {
+  description = "Number of days to retain emails in S3"
+  type        = number
+  default     = 30
+}
+
+variable "verified_sender" {
+  description = "Verified SES sender email address"
+  type        = string
+  default     = "g@grahamsmith.net"
+}
+
+variable "graham_forward_to" {
+  description = "Email address to forward graham's emails to"
+  type        = string
+  default     = "grahamsm@gmail.com"
+}
+
+variable "mark_forward_to" {
+  description = "Email address to forward mark's emails to"
+  type        = string
+  default     = "mgoodwin.us@gmail.com"
+}
+
+variable "ses_rule_set_name" {
+  description = "Name of the SES receipt rule set"
+  type        = string
+  default     = "INBOUND_MAIL"
+}
+
+variable "ses_receipt_rule_name" {
+  description = "Name of the SES receipt rule"
+  type        = string
+  default     = "FORWARDING"
+}
