@@ -26,8 +26,9 @@
         "logs:UntagResource"
       ],
       "Resource": [
-        "arn:aws:logs:us-west-2:830881980142:log-group:/aws/lambda/ddns-*",
-        "arn:aws:logs:us-west-2:830881980142:log-group:/aws/apigateway/ddns-*"
+        "arn:aws:logs:us-west-2:830881980142:log-group:/aws/lambda/*",
+        "arn:aws:logs:us-west-2:830881980142:log-group:/aws/apigateway/*",
+        "arn:aws:logs:us-east-1:830881980142:log-group:/aws/lambda/*"
       ]
     }
   ]

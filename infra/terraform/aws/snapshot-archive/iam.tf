@@ -39,7 +39,7 @@ resource "aws_iam_role_policy" "ec2" {
           "ec2:DeleteSnapshot",
           "ec2:CreateTags",
         ]
-        Resource = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:snapshot/*"
+        Resource = "arn:aws:ec2:${var.aws_region}:*:snapshot/*"
       }
     ]
   })
@@ -58,10 +58,7 @@ resource "aws_iam_role_policy" "ses" {
         Action = [
           "ses:SendEmail",
         ]
-        Resource = [
-          "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${var.ses_sender}",
-          "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${split("@", var.ses_sender)[1]}",
-        ]
+        Resource = "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/*"
       }
     ]
   })
