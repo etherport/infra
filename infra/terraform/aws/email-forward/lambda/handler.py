@@ -62,8 +62,16 @@ def lambda_handler(event, context):
     original_from = msg.get('From')
 
     # Remove headers that might cause SES to reject the message
-    for header in ['From', 'Sender', 'Return-Path']:
-        if header in msg:
+    # Including DKIM signatures (SES will add its own) and other problematic headers
+    headers_to_remove = [
+        'From', 'Sender', 'Return-Path',
+        'DKIM-Signature', 'X-SES-DKIM-SIGNATURE',
+        'X-Google-DKIM-Signature', 'ARC-Seal', 'ARC-Message-Signature',
+        'ARC-Authentication-Results'
+    ]
+    for header in headers_to_remove:
+        # Remove all instances of each header (some may appear multiple times)
+        while header in msg:
             del msg[header]
 
     # Set the From header to the verified sender and add a Reply-To header
