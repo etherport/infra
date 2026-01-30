@@ -4,11 +4,11 @@ metadata:
   name: gdrive-sync
   namespace: rclone
 spec:
-  schedule: "0 0 * * *"  # Daily at midnight Pacific time
-  timeZone: "America/Los_Angeles"  # Automatically handles PST/PDT
+  schedule: "0 0 * * *" # Daily at midnight Pacific time
+  timeZone: "America/Los_Angeles" # Automatically handles PST/PDT
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
-  concurrencyPolicy: Forbid  # Don't allow overlapping syncs
+  concurrencyPolicy: Forbid # Don't allow overlapping syncs
   jobTemplate:
     spec:
       backoffLimit: 1
@@ -20,10 +20,10 @@ spec:
           restartPolicy: Never
           containers:
           - name: rclone
-            image: rclone/rclone:1.72.0 # {"$imagepolicy": "flux-system:rclone"}
+            image: rclone/rclone:1.73.0 # {"$imagepolicy": "flux-system:rclone"}
             command:
-              - /bin/sh
-              - /scripts/sync-and-report.sh
+            - /bin/sh
+            - /scripts/sync-and-report.sh
             volumeMounts:
             - name: rclone-config
               mountPath: /config/rclone
