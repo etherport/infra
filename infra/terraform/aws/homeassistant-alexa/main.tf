@@ -46,6 +46,7 @@ resource "aws_secretsmanager_secret_version" "ha_token" {
 resource "aws_lambda_function" "homeassistant_alexa" {
   filename         = data.archive_file.lambda.output_path
   function_name    = "homeassistant-alexa"
+  description      = "Alexa Smart Home skill proxy for Home Assistant"
   role             = aws_iam_role.lambda.arn
   handler          = "handler.lambda_handler"
   source_code_hash = data.archive_file.lambda.output_base64sha256

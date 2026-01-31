@@ -31,6 +31,7 @@ data "archive_file" "lambda" {
 resource "aws_lambda_function" "snapshot_archive" {
   filename         = data.archive_file.lambda.output_path
   function_name    = "snapshot-archive"
+  description      = "Manages EC2 snapshot lifecycle and sends daily status emails"
   role             = aws_iam_role.lambda.arn
   handler          = "handler.lambda_handler"
   source_code_hash = data.archive_file.lambda.output_base64sha256

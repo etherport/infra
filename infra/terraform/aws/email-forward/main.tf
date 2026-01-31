@@ -53,6 +53,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "email" {
 resource "aws_lambda_function" "email_forward" {
   filename         = data.archive_file.lambda.output_path
   function_name    = "email-forward"
+  description      = "Forwards incoming SES emails from S3 to personal addresses"
   role             = aws_iam_role.lambda.arn
   handler          = "handler.lambda_handler"
   source_code_hash = data.archive_file.lambda.output_base64sha256
