@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: kopia
-          image: kopia/kopia:20260203.0.60448 # {"$imagepolicy": "flux-system:kopia"}
+          image: kopia/kopia:20260203.0.72124 # {"$imagepolicy": "flux-system:kopia"}
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 51515
