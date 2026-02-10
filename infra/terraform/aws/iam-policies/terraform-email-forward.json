@@ -39,7 +39,10 @@
         "iam:UntagRole",
         "iam:ListInstanceProfilesForRole"
       ],
-      "Resource": "arn:aws:iam::830881980142:role/email-forward-*"
+      "Resource": [
+        "arn:aws:iam::830881980142:role/email-forward-*",
+        "arn:aws:iam::830881980142:role/ses_put_s3*"
+      ]
     },
     {
       "Sid": "CloudWatchLogs",
@@ -65,6 +68,42 @@
         "arn:aws:s3:::email-fwd.grahamsmith.net",
         "arn:aws:s3:::email-fwd.grahamsmith.net/*"
       ]
+    },
+    {
+      "Sid": "SESIdentities",
+      "Effect": "Allow",
+      "Action": [
+        "ses:GetIdentityVerificationAttributes",
+        "ses:GetIdentityDkimAttributes",
+        "ses:GetIdentityMailFromDomainAttributes",
+        "ses:GetIdentityNotificationAttributes",
+        "ses:VerifyDomainIdentity",
+        "ses:VerifyEmailIdentity",
+        "ses:DeleteIdentity",
+        "ses:SetIdentityDkimEnabled",
+        "ses:SetIdentityFeedbackForwardingEnabled",
+        "ses:SetIdentityNotificationTopic",
+        "ses:ListIdentities"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SESReceiptRules",
+      "Effect": "Allow",
+      "Action": [
+        "ses:CreateReceiptRule",
+        "ses:CreateReceiptRuleSet",
+        "ses:DeleteReceiptRule",
+        "ses:DeleteReceiptRuleSet",
+        "ses:DescribeActiveReceiptRuleSet",
+        "ses:DescribeReceiptRule",
+        "ses:DescribeReceiptRuleSet",
+        "ses:ListReceiptRuleSets",
+        "ses:ReorderReceiptRuleSet",
+        "ses:SetActiveReceiptRuleSet",
+        "ses:UpdateReceiptRule"
+      ],
+      "Resource": "*"
     }
   ]
 }

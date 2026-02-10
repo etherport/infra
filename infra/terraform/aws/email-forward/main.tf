@@ -107,11 +107,119 @@ resource "aws_lambda_permission" "s3" {
 }
 
 # Allow SES to invoke Lambda (for receipt rules)
-resource "aws_lambda_permission" "ses" {
-  statement_id  = "AllowSESInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.email_forward.function_name
-  principal     = "ses.amazonaws.com"
-  source_arn    = "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:receipt-rule-set/${var.ses_rule_set_name}:receipt-rule/${var.ses_receipt_rule_name}"
+resource "aws_lambda_permission" "ses_graham" {
+  statement_id   = "AllowSESInvokeGraham"
+  action         = "lambda:InvokeFunction"
+  function_name  = aws_lambda_function.email_forward.function_name
+  principal      = "ses.amazonaws.com"
+  source_arn     = aws_ses_receipt_rule.fwd_graham.arn
   source_account = data.aws_caller_identity.current.account_id
+}
+
+resource "aws_lambda_permission" "ses_mark" {
+  statement_id   = "AllowSESInvokeMark"
+  action         = "lambda:InvokeFunction"
+  function_name  = aws_lambda_function.email_forward.function_name
+  principal      = "ses.amazonaws.com"
+  source_arn     = aws_ses_receipt_rule.fwd_mark.arn
+  source_account = data.aws_caller_identity.current.account_id
+}
+
+# =============================================================================
+# SES Domain Identities
+# =============================================================================
+
+resource "aws_ses_domain_identity" "etherport" {
+  domain = "etherport.net"
+}
+
+resource "aws_ses_domain_identity" "grahamsmith" {
+  domain = "grahamsmith.net"
+}
+
+resource "aws_ses_domain_identity" "stopthecastle" {
+  domain = "stopthecastle.com"
+}
+
+resource "aws_ses_domain_identity" "smithforsb" {
+  domain = "smithforsb.com"
+}
+
+# =============================================================================
+# SES Email Identities
+# =============================================================================
+
+resource "aws_ses_email_identity" "g_grahamsmith" {
+  email = "g@grahamsmith.net"
+}
+
+resource "aws_ses_email_identity" "grahamsm_gmail" {
+  email = "grahamsm@gmail.com"
+}
+
+resource "aws_ses_email_identity" "mgoodwin_gmail" {
+  email = "mgoodwin.us@gmail.com"
+}
+
+resource "aws_ses_email_identity" "graham_icloud" {
+  email = "graham.m.smith@me.com"
+}
+
+# =============================================================================
+# SES Receipt Rule Set
+# =============================================================================
+
+resource "aws_ses_receipt_rule_set" "inbound" {
+  rule_set_name = "INBOUND_MAIL"
+}
+
+resource "aws_ses_active_receipt_rule_set" "main" {
+  rule_set_name = aws_ses_receipt_rule_set.inbound.rule_set_name
+}
+
+# =============================================================================
+# SES Receipt Rules
+# =============================================================================
+
+resource "aws_ses_receipt_rule" "fwd_graham" {
+  name          = "fwd_graham"
+  rule_set_name = aws_ses_receipt_rule_set.inbound.rule_set_name
+  enabled       = true
+  scan_enabled  = true
+
+  recipients = [
+    "g@grahamsmith.net",
+    "graham@grahamsmith.net",
+    "graham@smithforsb.com",
+    "info@smithforsb.com",
+    "me@grahamsmith.net",
+    "windtryst@grahamsmith.net",
+    "workroom@grahamsmith.net",
+  ]
+
+  s3_action {
+    bucket_name       = aws_s3_bucket.email.id
+    object_key_prefix = "emails/graham/"
+    iam_role_arn      = aws_iam_role.ses_s3_graham.arn
+    position          = 1
+  }
+}
+
+resource "aws_ses_receipt_rule" "fwd_mark" {
+  name          = "fwd_mark"
+  rule_set_name = aws_ses_receipt_rule_set.inbound.rule_set_name
+  enabled       = true
+  scan_enabled  = true
+
+  recipients = [
+    "info@stopthecastle.com",
+    "mark@smithforsb.com",
+  ]
+
+  s3_action {
+    bucket_name       = aws_s3_bucket.email.id
+    object_key_prefix = "emails/mark/"
+    iam_role_arn      = aws_iam_role.ses_s3_mark.arn
+    position          = 1
+  }
 }

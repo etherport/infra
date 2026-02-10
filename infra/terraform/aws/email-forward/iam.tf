@@ -73,3 +73,93 @@ resource "aws_iam_role_policy" "logs" {
     ]
   })
 }
+
+# =============================================================================
+# IAM Roles for SES to write to S3
+# =============================================================================
+
+# IAM role for SES to write graham's emails to S3
+resource "aws_iam_role" "ses_s3_graham" {
+  name = "ses_put_s3_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "stmt1739498092716"
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ses.amazonaws.com"
+        }
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn"     = "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:receipt-rule-set/INBOUND_MAIL:receipt-rule/fwd_graham"
+            "AWS:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "ses_s3_graham" {
+  name = "s3_put_email"
+  role = aws_iam_role.ses_s3_graham.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+        ]
+        Resource = "${aws_s3_bucket.email.arn}/*"
+      }
+    ]
+  })
+}
+
+# IAM role for SES to write mark's emails to S3
+resource "aws_iam_role" "ses_s3_mark" {
+  name = "ses_put_s3_mark_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "stmt1739498360916"
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ses.amazonaws.com"
+        }
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn"     = "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:receipt-rule-set/INBOUND_MAIL:receipt-rule/fwd_mark"
+            "AWS:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "ses_s3_mark" {
+  name = "ses_put_s3_mark_role"
+  role = aws_iam_role.ses_s3_mark.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+        ]
+        Resource = "${aws_s3_bucket.email.arn}/*"
+      }
+    ]
+  })
+}

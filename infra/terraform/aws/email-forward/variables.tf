@@ -34,14 +34,3 @@ variable "mark_forward_to" {
   default     = "mgoodwin.us@gmail.com"
 }
 
-variable "ses_rule_set_name" {
-  description = "Name of the SES receipt rule set"
-  type        = string
-  default     = "INBOUND_MAIL"
-}
-
-variable "ses_receipt_rule_name" {
-  description = "Name of the SES receipt rule"
-  type        = string
-  default     = "FORWARDING"
-}
