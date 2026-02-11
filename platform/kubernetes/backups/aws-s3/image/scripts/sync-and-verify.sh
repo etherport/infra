@@ -153,6 +153,78 @@ aws_retry() {
   done
 }
 
+# Run aws s3 sync with retry logic for transient failures
+# Usage: run_sync_with_retry <output_file> <dryrun_flag> <exclude_args...>
+# Returns: exit code of final attempt, output written to <output_file>
+run_sync_with_retry() {
+  local output_file="$1"
+  local dryrun_flag="$2"
+  shift 2
+  local exclude_args=("$@")
+
+  local attempt=1
+  local delay="${SYNC_RETRY_DELAY_SECONDS}"
+  local max_attempts=$((SYNC_MAX_RETRIES + 1))  # +1 because first attempt isn't a "retry"
+  local sync_rc=0
+  local tmp_output
+  tmp_output="$(mktemp)"
+
+  while [[ ${attempt} -le ${max_attempts} ]]; do
+    # Build the sync command
+    local sync_cmd=(aws s3 sync "${SRC_PATH}" "${DEST_URI}"
+      --delete
+      --checksum-algorithm SHA256
+      --size-only
+      --no-progress
+    )
+
+    if [[ "${dryrun_flag}" == "true" ]]; then
+      sync_cmd+=(--dryrun)
+    fi
+
+    sync_cmd+=("${exclude_args[@]}")
+
+    # Run sync and capture output
+    set +e
+    "${sync_cmd[@]}" 2>&1 | tee "${tmp_output}"
+    sync_rc=${PIPESTATUS[0]}
+    set -e
+
+    if [[ ${sync_rc} -eq 0 ]]; then
+      # Success - copy output and return
+      cat "${tmp_output}" > "${output_file}"
+      rm -f "${tmp_output}"
+      return 0
+    fi
+
+    # Check if this looks like a transient network error worth retrying
+    if grep -qiE "(Could not connect|Connection reset|Connection timed out|Network is unreachable|Temporary failure|timeout|SSL|socket)" "${tmp_output}" 2>/dev/null; then
+      if [[ ${attempt} -lt ${max_attempts} ]]; then
+        echo "[sync-retry] Attempt ${attempt}/${max_attempts} failed with transient error (rc=${sync_rc}), retrying in ${delay}s..." >&2
+        sleep "${delay}"
+        delay=$((delay * SYNC_RETRY_BACKOFF_MULTIPLIER))
+        ((attempt++)) || true
+        continue
+      fi
+    fi
+
+    # Non-transient error or max retries reached - copy output and return error
+    cat "${tmp_output}" > "${output_file}"
+    rm -f "${tmp_output}"
+
+    if [[ ${attempt} -gt 1 ]]; then
+      echo "[sync-retry] All ${max_attempts} attempts failed (rc=${sync_rc})" >&2
+    fi
+
+    return ${sync_rc}
+  done
+
+  # Should not reach here, but just in case
+  cat "${tmp_output}" > "${output_file}"
+  rm -f "${tmp_output}"
+  return ${sync_rc}
+}
+
 # Files produced by this run
 TRANSFER_LIST_FILE="${LOG_DIR}/transfers.csv"          # per uploaded/copied object
 ERROR_FILE="${LOG_DIR}/errors.txt"                    # any stderr/diagnostics we capture
@@ -168,6 +240,12 @@ VERIFY_LOG_JSONL="${LOG_DIR}/verification.jsonl"    # per-object verification re
 WAIT_FOR_BATCH="${WAIT_FOR_BATCH:-false}"
 BATCH_POLL_INTERVAL_SECONDS="${BATCH_POLL_INTERVAL_SECONDS:-30}"
 BATCH_MAX_WAIT_SECONDS="${BATCH_MAX_WAIT_SECONDS:-3600}"
+
+# Retry configuration for transient network failures
+# These settings apply to the main aws s3 sync commands
+SYNC_MAX_RETRIES="${SYNC_MAX_RETRIES:-3}"
+SYNC_RETRY_DELAY_SECONDS="${SYNC_RETRY_DELAY_SECONDS:-30}"
+SYNC_RETRY_BACKOFF_MULTIPLIER="${SYNC_RETRY_BACKOFF_MULTIPLIER:-2}"
 
 
 # Helper: treat common truthy strings as true (true/1/yes/y)
@@ -499,17 +577,9 @@ acquire_lock
 
 echo "=== [$RUN_ID] Dry-run to detect uploads/updates ==="
 # Dry-run is informational only; we build the manifest from the REAL sync output.
-set +e
-aws s3 sync "${SRC_PATH}" "${DEST_URI}" \
-  --delete \
-  --checksum-algorithm SHA256 \
-  --size-only \
-  --no-progress \
-  --dryrun \
-  "${EXCLUDE_ARGS[@]}" \
-  2>&1 | tee "${DRYRUN_OUT}"
-DRYRUN_RC=${PIPESTATUS[0]}
-set -e
+# Uses retry logic for transient network failures (configured via SYNC_MAX_RETRIES)
+run_sync_with_retry "${DRYRUN_OUT}" "true" "${EXCLUDE_ARGS[@]}"
+DRYRUN_RC=$?
 
 if [[ ${DRYRUN_RC} -ne 0 ]]; then
   echo "Dry-run failed with exit code ${DRYRUN_RC}" | tee -a "${ERROR_FILE}"
@@ -520,16 +590,9 @@ echo "=== [$RUN_ID] Real sync ==="
 # aws s3 sync output lines look like:
 #   upload: /src/file to s3://bucket/prefix/file
 #   copy: s3://bucket/src to s3://bucket/dst
-set +e
-aws s3 sync "${SRC_PATH}" "${DEST_URI}" \
-  --delete \
-  --checksum-algorithm SHA256 \
-  --size-only \
-  --no-progress \
-  "${EXCLUDE_ARGS[@]}" \
-  2>&1 | tee "${SYNC_OUT}"
-SYNC_RC=${PIPESTATUS[0]}
-set -e
+# Uses retry logic for transient network failures (configured via SYNC_MAX_RETRIES)
+run_sync_with_retry "${SYNC_OUT}" "false" "${EXCLUDE_ARGS[@]}"
+SYNC_RC=$?
 
 if [[ ${SYNC_RC} -ne 0 ]]; then
   echo "Real sync failed with exit code ${SYNC_RC}" | tee -a "${ERROR_FILE}"

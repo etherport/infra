@@ -9,7 +9,8 @@ configuration:
     - provider: aws
       config:
         region: us-west-2
-  features: EnableCSI
+  # CSI snapshots disabled - using Kopia file-system backups instead
+  # features: EnableCSI
 
 credentials:
   existingSecret: cloud-credentials
