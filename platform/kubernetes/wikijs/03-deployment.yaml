@@ -28,7 +28,7 @@ spec:
               mountPath: /wiki/data
       containers:
         - name: wiki-js
-          image: ghcr.io/requarks/wiki:2.5.311 # {"$imagepolicy": "flux-system:wikijs"}
+          image: ghcr.io/requarks/wiki:2.5.312 # {"$imagepolicy": "flux-system:wikijs"}
           ports:
             - name: http
               containerPort: 3000
@@ -50,15 +50,12 @@ spec:
                 secretKeyRef:
                   name: wiki-js-db-credentials
                   key: DB_PASS
-
             # SSL not required for internal cluster traffic
             - name: DB_SSL
               value: "false"
-
           volumeMounts:
             - name: data
               mountPath: /wiki/data
-
           resources:
             requests:
               cpu: 100m
@@ -66,7 +63,6 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
-
           livenessProbe:
             httpGet:
               path: /healthz
@@ -74,14 +70,12 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 10
-
           readinessProbe:
             httpGet:
               path: /healthz
               port: 3000
             initialDelaySeconds: 10
             periodSeconds: 10
-
       volumes:
         - name: data
           persistentVolumeClaim:
