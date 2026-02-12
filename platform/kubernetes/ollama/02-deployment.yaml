@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: ollama
-          image: ollama/ollama:0.15.6 # {"$imagepolicy": "flux-system:ollama"}
+          image: ollama/ollama:0.16.0 # {"$imagepolicy": "flux-system:ollama"}
           ports:
             - containerPort: 11434
               name: http
