@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: open-webui
-          image: ghcr.io/open-webui/open-webui:v0.8.0 # {"$imagepolicy": "flux-system:open-webui"}
+          image: ghcr.io/open-webui/open-webui:v0.8.1 # {"$imagepolicy": "flux-system:open-webui"}
           ports:
             - containerPort: 8080
               name: http
