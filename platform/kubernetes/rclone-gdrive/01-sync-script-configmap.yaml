@@ -12,6 +12,10 @@ data:
     JOB_NAME="rclone_gdrive_sync"
     INSTANCE="google-drive"
 
+    # Copy config from read-only secret mount to writable location
+    # This allows rclone to update OAuth tokens without errors
+    cp /config/rclone-secret/rclone.conf /config/rclone/rclone.conf
+
     # Run rclone and capture output and exit code
     START_TIME=$(date +%s)
     OUTPUT_FILE="/tmp/rclone-output.txt"
@@ -48,6 +52,7 @@ data:
       else print 0;
     }' || echo 0)
     ERROR_COUNT=$(grep -c "ERROR" "$OUTPUT_FILE" || echo 0)
+    NOTICE_COUNT=$(grep -c "NOTICE" "$OUTPUT_FILE" || echo 0)
 
     # Push metrics to Prometheus PushGateway (BusyBox-compatible)
     METRICS_FILE="/tmp/metrics.txt"
@@ -61,6 +66,7 @@ data:
       "rclone_sync_files_checked{source=\"gdrive\",destination=\"nfs\"} ${CHECKED_FILES}" \
       "rclone_sync_bytes_transferred{source=\"gdrive\",destination=\"nfs\"} ${TRANSFERRED_BYTES}" \
       "rclone_sync_errors_total{source=\"gdrive\",destination=\"nfs\"} ${ERROR_COUNT}" \
+      "rclone_sync_notices_total{source=\"gdrive\",destination=\"nfs\"} ${NOTICE_COUNT}" \
       "rclone_sync_last_run_timestamp{source=\"gdrive\",destination=\"nfs\"} ${END_TIME}" \
       > "$METRICS_FILE"
 

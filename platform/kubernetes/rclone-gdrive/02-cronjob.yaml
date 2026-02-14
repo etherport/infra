@@ -26,8 +26,10 @@ spec:
             - /scripts/sync-and-report.sh
             volumeMounts:
             - name: rclone-config
-              mountPath: /config/rclone
+              mountPath: /config/rclone-secret
               readOnly: true
+            - name: rclone-config-writable
+              mountPath: /config/rclone
             - name: backup-nfs
               mountPath: /backup
             - name: sync-script
@@ -44,6 +46,8 @@ spec:
           - name: rclone-config
             secret:
               secretName: rclone-config
+          - name: rclone-config-writable
+            emptyDir: {}
           - name: backup-nfs
             nfs:
               server: sequoia.wind.etherport.net

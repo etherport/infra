@@ -5,6 +5,10 @@ metadata:
   namespace: backups
 spec:
   replicas: 1
+  # Recreate strategy required for RWO PVCs - can't have two pods
+  # trying to mount the same volume simultaneously
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: kopia
