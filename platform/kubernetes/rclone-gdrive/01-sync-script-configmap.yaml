@@ -50,10 +50,10 @@ data:
     CHECKED_FILES="${CHECKED_FILES:-0}"
     TRANSFERRED_BYTES=$(grep "Transferred:" "$OUTPUT_FILE" | grep -E 'KiB|MiB|GiB|B' | head -1 | awk '{
       val=$2; unit=$3;
-      if (unit=="KiB") print val*1024;
-      else if (unit=="MiB") print val*1024*1024;
-      else if (unit=="GiB") print val*1024*1024*1024;
-      else if (unit=="B") print val;
+      if (unit=="KiB") printf "%.0f", val*1024;
+      else if (unit=="MiB") printf "%.0f", val*1024*1024;
+      else if (unit=="GiB") printf "%.0f", val*1024*1024*1024;
+      else if (unit=="B") printf "%.0f", val;
       else print 0;
     }' || true)
     TRANSFERRED_BYTES="${TRANSFERRED_BYTES:-0}"
