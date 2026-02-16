@@ -6,7 +6,7 @@ terraform {
     region = "us-west-2"
 
     # DynamoDB table for state locking
-    use_lockfile = true
+    use_lockfile   = true
     dynamodb_table = "homelab-terraform-locks"
 
     # Encryption

@@ -11,17 +11,17 @@ terraform {
 
 provider "proxmox" {
   # base URL of your Proxmox API
-  endpoint  = "https://pve.wind.etherport.net:8006/api2/json"
+  endpoint = "https://pve.wind.etherport.net:8006/api2/json"
 
   # bpg/proxmox expects a single api_token string in the form:
   #   <TOKEN_ID>=<TOKEN_SECRET>
   api_token = "${var.proxmox_token_id}=${var.proxmox_token_secret}"
 
-  insecure  = true
+  insecure = true
 }
 
 locals {
-  node_name    = "pve"        # Proxmox node short name (as seen in UI)
+  node_name    = "pve" # Proxmox node short name (as seen in UI)
   storage_name = "local-zfs"
   bridge_name  = "vmbr0"
   vlan_tag     = 201
@@ -30,7 +30,7 @@ locals {
   # IMPORTANT: Use a modern CPU type for Kubernetes nodes.
   # `qemu64` can hide CPU flags and break some containers (e.g., glibc x86-64-v2 requirement).
   # Recommended by the provider docs: "x86-64-v2-AES". Using "host" is fine for single-node labs.
-  cpu_type    = "host"
+  cpu_type = "host"
 
   k8s_nodes = {
     k8s-cp1 = {
@@ -103,19 +103,19 @@ resource "proxmox_virtual_environment_vm" "k8s_nodes" {
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
-    vlan_id = 202  # Client VLAN
+    vlan_id = 202 # Client VLAN
   }
 
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
-    vlan_id = 204  # IoT devices VLAN
+    vlan_id = 204 # IoT devices VLAN
   }
 
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
-    vlan_id = 205  # Security VLAN
+    vlan_id = 205 # Security VLAN
   }
 
   # cloud-init: static IPs for each node
@@ -153,7 +153,7 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
     datastore_id      = local.storage_name
     file_format       = "raw"
     type              = "4m"
-    pre_enrolled_keys = false  # Disable Secure Boot for NVIDIA driver compatibility
+    pre_enrolled_keys = false # Disable Secure Boot for NVIDIA driver compatibility
   }
 
   # Clone from your existing Ubuntu 24.04 cloud-init template (VM 9000)
@@ -168,7 +168,7 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
   }
 
   memory {
-    dedicated = 24576  # 24GB RAM
+    dedicated = 24576 # 24GB RAM
   }
 
   disk {
@@ -191,19 +191,19 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
-    vlan_id = 202  # Client VLAN
+    vlan_id = 202 # Client VLAN
   }
 
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
-    vlan_id = 204  # IoT devices VLAN
+    vlan_id = 204 # IoT devices VLAN
   }
 
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
-    vlan_id = 205  # Security VLAN
+    vlan_id = 205 # Security VLAN
   }
 
   # GPU passthrough - Tesla P40
@@ -215,7 +215,7 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
   # 5. Create resource mapping in Proxmox UI (Datacenter > Resource Mappings)
   hostpci {
     device  = "hostpci0"
-    mapping = "gpu-tesla-p40"  # Resource mapping name in Proxmox
+    mapping = "gpu-tesla-p40" # Resource mapping name in Proxmox
     pcie    = true
     rombar  = true
   }

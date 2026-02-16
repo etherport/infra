@@ -64,9 +64,9 @@ resource "aws_lambda_function" "email_forward" {
 
   environment {
     variables = {
-      VERIFIED_SENDER    = var.verified_sender
-      GRAHAM_FORWARD_TO  = var.graham_forward_to
-      MARK_FORWARD_TO    = var.mark_forward_to
+      VERIFIED_SENDER   = var.verified_sender
+      GRAHAM_FORWARD_TO = var.graham_forward_to
+      MARK_FORWARD_TO   = var.mark_forward_to
     }
   }
 
@@ -98,11 +98,11 @@ resource "aws_s3_bucket_notification" "email" {
 
 # Allow S3 to invoke Lambda
 resource "aws_lambda_permission" "s3" {
-  statement_id  = "AllowS3Invoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.email_forward.function_name
-  principal     = "s3.amazonaws.com"
-  source_arn    = aws_s3_bucket.email.arn
+  statement_id   = "AllowS3Invoke"
+  action         = "lambda:InvokeFunction"
+  function_name  = aws_lambda_function.email_forward.function_name
+  principal      = "s3.amazonaws.com"
+  source_arn     = aws_s3_bucket.email.arn
   source_account = data.aws_caller_identity.current.account_id
 }
 
