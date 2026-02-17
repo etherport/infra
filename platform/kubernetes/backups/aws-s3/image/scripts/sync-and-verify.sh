@@ -929,7 +929,27 @@ VERIFY_SCRIPT
   export TRANSFER_LOG_JSONL VERIFICATION_RESULTS_JSONL FILE_AUDIT_JSONL
 
   python3 - <<'PYAUDIT' || record_warning "Failed to create file audit log"
-import json, os, sys, base64
+import json, os, sys, base64, hashlib
+
+def calculate_composite_checksum(file_path, part_size_mb=8):
+    """Calculate S3-compatible composite checksum for multipart upload."""
+    part_size = part_size_mb * 1024 * 1024
+    part_hashes = []
+
+    with open(file_path, 'rb') as f:
+        while True:
+            chunk = f.read(part_size)
+            if not chunk:
+                break
+            part_hash = hashlib.sha256(chunk).digest()
+            part_hashes.append(part_hash)
+
+    if len(part_hashes) <= 1:
+        # Single part - return simple hash
+        return None
+
+    composite_hash = hashlib.sha256(b''.join(part_hashes)).digest()
+    return composite_hash.hex()
 
 transfers_path = os.environ.get('TRANSFER_LOG_JSONL', '')
 verify_path = os.environ.get('VERIFICATION_RESULTS_JSONL', '')
@@ -972,24 +992,47 @@ with open(output_path, 'w') as out:
 
                     # Compare source checksum to S3 checksum for data integrity validation
                     source_sha256 = transfer.get('source_sha256', '')
+                    local_path = transfer.get('local_path', '')
                     s3_sha256_b64 = verify.get('checksum_sha256', '')
                     checksum_match = None
                     checksum_mismatch_details = ''
+                    is_composite = False
 
-                    # Convert S3 checksum from base64 to hex for comparison
+                    # Check if S3 checksum is composite (ends with -N for N parts)
                     s3_sha256 = ''
                     if s3_sha256_b64:
-                        try:
-                            s3_sha256 = base64.b64decode(s3_sha256_b64).hex()
-                        except Exception as e:
-                            print(f"WARN: Failed to decode base64 checksum for {s3_key}: {e}", file=sys.stderr)
-                            s3_sha256 = s3_sha256_b64  # Fall back to original if decode fails
+                        if '-' in s3_sha256_b64:
+                            # Composite checksum from multipart upload
+                            is_composite = True
+                            checksum_b64, part_count = s3_sha256_b64.rsplit('-', 1)
+                            try:
+                                s3_sha256 = base64.b64decode(checksum_b64).hex()
+                            except Exception as e:
+                                print(f"WARN: Failed to decode composite checksum for {s3_key}: {e}", file=sys.stderr)
+                        else:
+                            # Simple checksum
+                            try:
+                                s3_sha256 = base64.b64decode(s3_sha256_b64).hex()
+                            except Exception as e:
+                                print(f"WARN: Failed to decode base64 checksum for {s3_key}: {e}", file=sys.stderr)
+                                s3_sha256 = s3_sha256_b64  # Fall back to original if decode fails
 
                     if source_sha256 and s3_sha256:
-                        # Both checksums available - compare them (both in hex format now)
-                        checksum_match = (source_sha256 == s3_sha256)
-                        if not checksum_match:
-                            checksum_mismatch_details = f"Source: {source_sha256}, S3: {s3_sha256}"
+                        if is_composite and local_path and os.path.exists(local_path):
+                            # For composite checksums, calculate matching composite from source
+                            composite_source = calculate_composite_checksum(local_path)
+                            if composite_source:
+                                checksum_match = (composite_source == s3_sha256)
+                                if not checksum_match:
+                                    checksum_mismatch_details = f"Source(composite): {composite_source}, S3: {s3_sha256}"
+                            else:
+                                # File too small for multipart - skip comparison
+                                checksum_match = None
+                        else:
+                            # Simple checksum comparison
+                            checksum_match = (source_sha256 == s3_sha256)
+                            if not checksum_match:
+                                checksum_mismatch_details = f"Source: {source_sha256}, S3: {s3_sha256}"
                     elif source_sha256:
                         checksum_match = None  # S3 checksum unavailable
                     elif s3_sha256:
