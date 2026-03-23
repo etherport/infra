@@ -20,7 +20,7 @@ spec:
           restartPolicy: Never
           containers:
           - name: rclone
-            image: rclone/rclone:1.73.2 # {"$imagepolicy": "flux-system:rclone"}
+            image: rclone/rclone:1.73.3 # {"$imagepolicy": "flux-system:rclone"}
             command:
             - /bin/sh
             - /scripts/sync-and-report.sh
