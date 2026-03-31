@@ -47,20 +47,23 @@ NOW_EPOCH=$(date +%s)
 LOOKBACK_SECONDS=$((LOOKBACK_HOURS * 3600))
 START_EPOCH=$((NOW_EPOCH - LOOKBACK_SECONDS))
 
+# Create temp files first (before environment gets large)
+REPORT_FILE=$(mktemp)
+METRICS_FILE=$(mktemp)
+JOBS_FILE=$(mktemp)
+trap 'rm -f "$REPORT_FILE" "$METRICS_FILE" "$JOBS_FILE"' EXIT
+
 # Query Prometheus for backup metrics
 # We want the latest metrics for each share that were updated in the last 24 hours
 PROM_QUERY='homelab_backup_last_run_timestamp_seconds'
 
-METRICS_JSON=$(curl -sS "${PROM_URL}/api/v1/query?query=${PROM_QUERY}" | jq -c '.data.result')
+curl -sS "${PROM_URL}/api/v1/query?query=${PROM_QUERY}" | jq -c '.data.result' > "$METRICS_FILE"
 
 # Get all Jobs from Kubernetes in backups namespace
-JOBS_JSON=$(kubectl -n backups get jobs -o json | jq -c '.items')
+kubectl -n backups get jobs -o json | jq -c '.items' > "$JOBS_FILE"
 
-# Generate HTML report using Python
-export NOW_EPOCH START_EPOCH LOOKBACK_HOURS METRICS_JSON JOBS_JSON PROM_URL METADATA_BUCKET
-
-REPORT_FILE=$(mktemp)
-trap 'rm -f "$REPORT_FILE"' EXIT
+# Generate HTML report using Python (pass large data via files, not env vars)
+export NOW_EPOCH START_EPOCH LOOKBACK_HOURS PROM_URL METADATA_BUCKET METRICS_FILE JOBS_FILE
 
 python3 - > "${REPORT_FILE}" <<'PYTHON'
 import os, json, sys
@@ -75,8 +78,11 @@ start_epoch = int(os.environ['START_EPOCH'])
 lookback_hours = int(os.environ['LOOKBACK_HOURS'])
 prom_url = os.environ['PROM_URL']
 
-metrics_json = json.loads(os.environ['METRICS_JSON'])
-jobs_json = json.loads(os.environ['JOBS_JSON'])
+# Read large JSON data from files instead of environment variables
+with open(os.environ['METRICS_FILE']) as f:
+    metrics_json = json.load(f)
+with open(os.environ['JOBS_FILE']) as f:
+    jobs_json = json.load(f)
 
 now = datetime.fromtimestamp(now_epoch, tz=timezone.utc)
 start = datetime.fromtimestamp(start_epoch, tz=timezone.utc)
