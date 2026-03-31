@@ -286,6 +286,56 @@ dig @10.10.201.5 ads.google.com  # Should return NXDOMAIN or 0.0.0.0
 
 The K8s secondary (technitium-1) uses the primary's pod IP for zone transfers. If pods restart with new IPs, update the catalog zone's `primaryNameServerAddresses` on the secondary.
 
+### Zone Transfer Failures / Expired Zones
+
+If secondary zones show `isExpired: true` or `syncFailed: true`:
+
+1. **Check dns-cluster zone records** on the primary:
+   ```bash
+   # Verify dns1.dns-cluster.wind.etherport.net has an A record
+   dig @10.10.201.71 dns1.dns-cluster.wind.etherport.net
+   # Should return 10.10.201.71 (technitium-0 VIP)
+   ```
+
+2. **If dns1 has no A record**, add it via API:
+   ```bash
+   # Login and add record
+   TOKEN=$(curl -s "http://10.10.201.71:5380/api/user/login?user=<user>&pass=<pass>" | jq -r .token)
+   curl "http://10.10.201.71:5380/api/zones/records/add?token=$TOKEN&zone=dns-cluster.wind.etherport.net&domain=dns1.dns-cluster.wind.etherport.net&type=A&ipAddress=10.10.201.71"
+   ```
+
+3. **Trigger resync** on all secondaries:
+   ```bash
+   for ip in 10.10.201.72 10.10.201.6 10.10.100.5; do
+     TOKEN=$(curl -s "http://$ip:5380/api/user/login?user=<user>&pass=<pass>" | jq -r .token)
+     curl "http://$ip:5380/api/zones/resync?token=$TOKEN&zone=wind.etherport.net"
+   done
+   ```
+
+**Critical DNS Records (dns-cluster.wind.etherport.net zone):**
+
+| Record | IP | Purpose |
+|--------|-----|---------|
+| dns1 | 10.10.201.71 | Primary DNS server VIP (technitium-0) |
+| dns2 | 10.10.201.72 | Secondary in K8s (technitium-1) |
+| dns-fallback | 10.10.201.6 | Local fallback VM |
+| dns-aws | 10.10.100.5 | AWS remote failover |
+
+> **Important**: The `dns-cluster.wind.etherport.net` zone is managed directly by Technitium (not GitOps) and is used for cluster coordination. The dns1 A record is critical - without it, secondaries cannot perform zone transfers.
+
+### Belt-and-Suspenders: Direct Sync
+
+The `dns-sync-watcher` deployment syncs records directly to ALL Technitium instances (not just the primary), bypassing zone transfer dependencies. This ensures records stay current even if zone transfers fail.
+
+## External Monitoring
+
+AWS Route53 health checks monitor critical endpoints from outside the infrastructure:
+- Home Assistant, Grafana, Traefik, Plex, Kopia
+- Alerts via SNS email when endpoints become unreachable
+- Operates independently of homelab DNS/VPN
+
+Configuration: `infra/terraform/aws/external-monitoring/`
+
 ## Files
 
 | File | Purpose |

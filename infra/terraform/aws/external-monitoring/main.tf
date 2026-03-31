@@ -13,7 +13,8 @@ terraform {
 }
 
 provider "aws" {
-  region = var.aws_region
+  region  = var.aws_region
+  profile = "homelab"
 
   default_tags {
     tags = var.tags
@@ -22,8 +23,9 @@ provider "aws" {
 
 # CloudWatch alarms must be in us-east-1 for Route53 health checks
 provider "aws" {
-  alias  = "us_east_1"
-  region = "us-east-1"
+  alias   = "us_east_1"
+  region  = "us-east-1"
+  profile = "homelab"
 
   default_tags {
     tags = var.tags

@@ -40,6 +40,7 @@ IAM policies for the `terraform-homelab` user, organized into groups for AWS's 1
 | Policy | Description |
 |--------|-------------|
 | terraform-eventbridge | EventBridge rule management for scheduled tasks |
+| terraform-external-monitoring | Route53 health checks, SNS topics, CloudWatch alarms for external monitoring |
 
 ## Files
 
