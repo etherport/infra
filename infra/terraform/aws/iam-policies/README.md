@@ -42,6 +42,23 @@ IAM policies for the `terraform-homelab` user, organized into groups for AWS's 1
 | terraform-eventbridge | EventBridge rule management for scheduled tasks |
 | terraform-external-monitoring | Route53 health checks, SNS topics, CloudWatch alarms for external monitoring |
 
+## Adding New Policies
+
+To add a new policy to an IAM group:
+```bash
+# Via AWS Console
+# 1. Go to IAM → Groups → terraform-integration
+# 2. Permissions → Add permissions → Create inline policy
+# 3. JSON tab → paste policy content
+# 4. Name: terraform-<policy-name>
+
+# Or via CLI (requires admin access)
+aws iam put-group-policy \
+  --group-name terraform-integration \
+  --policy-name terraform-external-monitoring \
+  --policy-document file://terraform-external-monitoring.json
+```
+
 ## Files
 
 Each `.json` file contains the IAM policy document matching the AWS policy of the same name (without `.json` extension).
