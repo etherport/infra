@@ -42,36 +42,30 @@ data:
             return rdata.get("text", "")
         return ""
 
-    def main():
-        base_url = os.environ["TECHNITIUM_URL"]
-        user = os.environ["TECHNITIUM_USER"]
-        password = os.environ["TECHNITIUM_PASS"]
-        zone_file = os.environ.get("ZONE_FILE", "/zones/zone.yaml")
-
-        # Login
-        data = api_request(base_url, "user/login", params={"user": user, "pass": password})
-        token = data["token"]
-        print(f"✓ Authenticated to {base_url}")
-
-        # Load zone file
-        with open(zone_file) as f:
-            zone_data = yaml.safe_load(f)
-
-        zone = zone_data["zone"]
-        default_ttl = zone_data.get("ttl", 3600)
-        desired = zone_data.get("records", [])
-        print(f"✓ Loaded {len(desired)} desired records for {zone}")
+    def sync_to_server(base_url, user, password, zone, default_ttl, desired):
+        """Sync records to a single Technitium server."""
+        try:
+            data = api_request(base_url, "user/login", params={"user": user, "pass": password})
+            token = data["token"]
+            print(f"✓ Authenticated to {base_url}")
+        except Exception as e:
+            print(f"✗ Failed to authenticate to {base_url}: {e}")
+            return 0
 
         # Get current records
-        current_data = api_request(base_url, "zones/records/get", token, {
-            "domain": zone, "zone": zone, "listZone": "true"
-        })
+        try:
+            current_data = api_request(base_url, "zones/records/get", token, {
+                "domain": zone, "zone": zone, "listZone": "true"
+            })
+        except Exception as e:
+            print(f"✗ Failed to get records from {base_url}: {e}")
+            return 0
+
         current = {
             (r["name"], r["type"]): get_record_value(r)
             for r in current_data.get("response", {}).get("records", [])
             if r["type"] not in ("SOA", "NS")
         }
-        print(f"✓ Found {len(current)} current records")
 
         # Sync records
         added, updated, unchanged = 0, 0, 0
@@ -106,30 +100,43 @@ data:
                 unchanged += 1
             elif key in current:
                 api_request(base_url, "zones/records/add", token, params)
-                print(f"  ~ Updated: {domain} {rec['type']} -> {rec['value']}")
                 updated += 1
             else:
                 api_request(base_url, "zones/records/add", token, params)
-                print(f"  + Added: {domain} {rec['type']} -> {rec['value']}")
                 added += 1
 
-        print(f"\n✅ Sync complete: {added} added, {updated} updated, {unchanged} unchanged")
+        print(f"  → {added} added, {updated} updated, {unchanged} unchanged")
+        return added + updated
 
-        # Trigger resync on secondary servers if changes were made
-        changes = added + updated
-        if changes > 0:
-            secondary_urls = os.environ.get("SECONDARY_URLS", "").split(",")
-            secondary_urls = [u.strip() for u in secondary_urls if u.strip()]
-            for sec_url in secondary_urls:
-                try:
-                    sec_data = api_request(sec_url, "user/login", params={"user": user, "pass": password})
-                    sec_token = sec_data["token"]
-                    api_request(sec_url, "zones/resync", sec_token, {"zone": zone})
-                    print(f"  ↻ Triggered resync on {sec_url}")
-                except Exception as e:
-                    print(f"  ⚠ Failed to resync {sec_url}: {e}")
+    def main():
+        # Get all server URLs to sync to
+        primary_url = os.environ["TECHNITIUM_URL"]
+        secondary_urls = os.environ.get("SECONDARY_URLS", "").split(",")
+        secondary_urls = [u.strip() for u in secondary_urls if u.strip()]
+        all_urls = [primary_url] + secondary_urls
 
-        return changes
+        user = os.environ["TECHNITIUM_USER"]
+        password = os.environ["TECHNITIUM_PASS"]
+        zone_file = os.environ.get("ZONE_FILE", "/zones/zone.yaml")
+
+        # Load zone file
+        with open(zone_file) as f:
+            zone_data = yaml.safe_load(f)
+
+        zone = zone_data["zone"]
+        default_ttl = zone_data.get("ttl", 3600)
+        desired = zone_data.get("records", [])
+        print(f"✓ Loaded {len(desired)} desired records for {zone}")
+
+        # Sync to ALL Technitium servers directly
+        total_changes = 0
+        for url in all_urls:
+            print(f"\n--- Syncing to {url} ---")
+            changes = sync_to_server(url, user, password, zone, default_ttl, desired)
+            total_changes += changes
+
+        print(f"\n✅ Sync complete to {len(all_urls)} servers, {total_changes} total changes")
+        return total_changes
 
     if __name__ == "__main__":
         main()
