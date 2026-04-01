@@ -25,7 +25,10 @@ spec:
   imageRepositoryRef:
     name: plex
   filterTags:
-    pattern: '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+-[a-f0-9]+$'
+    # Match Plex version format: X.Y.Z.BUILD-HASH
+    # Extract just the version part for semver comparison
+    pattern: '^(?P<version>[0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+-[a-f0-9]+$'
+    extract: '$version'
   policy:
-    alphabetical:
-      order: asc
+    semver:
+      range: '>=1.0.0'
