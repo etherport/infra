@@ -2,6 +2,38 @@
 
 IAM policies for the `terraform-homelab` user, organized into groups for AWS's 10-policy-per-user limit.
 
+## Administrative Users
+
+### claude-admin
+
+Administrative user for Claude Code to manage IAM policies. Access can be disabled when not in use.
+
+**Policy:** `claude-admin-policy.json`
+
+**Permissions:**
+- Create/update/delete customer managed policies (scoped to `terraform-*` names)
+- Manage group policy attachments (scoped to `terraform-*` groups)
+- Read-only access to list users, groups, and policies
+
+**Setup:**
+1. IAM → Users → Create user → Name: `claude-admin` (no console access)
+2. IAM → Policies → Create policy → JSON → paste `claude-admin-policy.json`
+   - Name: `claude-admin-policy`
+   - Description: "Administrative access for Claude Code to manage terraform IAM policies"
+3. Attach `claude-admin-policy` to the `claude-admin` user
+4. Create access key: User → Security credentials → Create access key → CLI
+5. Configure locally:
+   ```bash
+   aws configure --profile claude-admin
+   # Access Key ID: <from step 4>
+   # Secret Access Key: <from step 4>
+   # Region: us-west-2
+   # Output format: json
+   ```
+
+**Security:** Deactivate access key when not in use:
+- IAM → Users → claude-admin → Security credentials → Access keys → Deactivate
+
 ## IAM Groups
 
 | Group | Purpose |
@@ -37,10 +69,12 @@ IAM policies for the `terraform-homelab` user, organized into groups for AWS's 1
 | terraform-state | Terraform state backend (S3 bucket and DynamoDB) |
 
 ### terraform-integration
-| Policy | Description |
-|--------|-------------|
-| terraform-eventbridge | EventBridge rule management for scheduled tasks |
-| terraform-external-monitoring | Route53 health checks, SNS topics, CloudWatch alarms for external monitoring |
+| Policy | Type | Description |
+|--------|------|-------------|
+| terraform-eventbridge | Managed | EventBridge rule management for scheduled tasks |
+| terraform-external-monitoring | Managed | Route53 health checks, SNS topics, CloudWatch alarms for external monitoring |
+
+Note: All policies are now customer managed (no inline policies).
 
 ## Adding New Policies
 
@@ -61,4 +95,7 @@ aws iam put-group-policy \
 
 ## Files
 
-Each `.json` file contains the IAM policy document matching the AWS policy of the same name (without `.json` extension).
+| File | Description |
+|------|-------------|
+| `claude-admin-policy.json` | Administrative policy for Claude Code IAM management |
+| `terraform-*.json` | Policies for terraform-homelab user (matches AWS policy names) |

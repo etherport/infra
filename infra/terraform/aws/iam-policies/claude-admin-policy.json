@@ -1,0 +1,60 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "IAMPolicyManagement",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreatePolicy",
+        "iam:DeletePolicy",
+        "iam:GetPolicy",
+        "iam:GetPolicyVersion",
+        "iam:ListPolicies",
+        "iam:ListPolicyVersions",
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicyVersion",
+        "iam:SetDefaultPolicyVersion"
+      ],
+      "Resource": "arn:aws:iam::830881980142:policy/terraform-*"
+    },
+    {
+      "Sid": "IAMGroupManagement",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetGroup",
+        "iam:ListGroups",
+        "iam:ListAttachedGroupPolicies",
+        "iam:ListGroupPolicies",
+        "iam:AttachGroupPolicy",
+        "iam:DetachGroupPolicy",
+        "iam:PutGroupPolicy",
+        "iam:DeleteGroupPolicy",
+        "iam:GetGroupPolicy"
+      ],
+      "Resource": "arn:aws:iam::830881980142:group/terraform-*"
+    },
+    {
+      "Sid": "IAMReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "iam:ListUsers",
+        "iam:ListGroups",
+        "iam:ListPolicies",
+        "iam:GetUser",
+        "iam:ListGroupsForUser",
+        "iam:ListAttachedUserPolicies",
+        "iam:ListUserPolicies"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "IAMPolicyTagging",
+      "Effect": "Allow",
+      "Action": [
+        "iam:TagPolicy",
+        "iam:UntagPolicy"
+      ],
+      "Resource": "arn:aws:iam::830881980142:policy/terraform-*"
+    }
+  ]
+}
