@@ -1,0 +1,13 @@
+# CSIDriver registration for Ceph RBD
+# This object is required for kubelet to attach RBD volumes
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: rbd.csi.ceph.com
+spec:
+  attachRequired: true
+  podInfoOnMount: false
+  fsGroupPolicy: File
+  volumeLifecycleModes:
+    - Persistent
+    - Ephemeral

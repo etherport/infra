@@ -13,7 +13,27 @@ Administrative user for Claude Code to manage IAM policies. Access can be disabl
 **Permissions:**
 - Create/update/delete customer managed policies (scoped to `terraform-*` names)
 - Manage group policy attachments (scoped to `terraform-*` groups)
-- Read-only access to list users, groups, and policies
+- Read-only access to list users, groups, roles, and policies
+- **Resource discovery** - Read-only access to inventory AWS resources:
+  - EC2 (instances, VPCs, security groups, subnets, etc.)
+  - Route53 (zones, records, health checks)
+  - Lambda (functions, configurations)
+  - S3 (bucket listing and metadata, not object contents)
+  - SNS (topics, subscriptions)
+  - CloudWatch (alarms, log groups, metrics)
+  - API Gateway (APIs, stages, resources)
+  - Secrets Manager (list/describe only, not secret values)
+  - ELB/ALB (load balancers, target groups, listeners)
+  - EventBridge (rules, targets)
+  - SES (identities, send statistics)
+  - DynamoDB (tables)
+  - ACM (certificates)
+  - WAFv2 (web ACLs)
+  - CloudFront (distributions)
+  - KMS (keys, aliases)
+  - DataSync (tasks, locations, agents)
+  - Cost Explorer and Budgets (cost/usage data)
+  - Resource tagging
 
 **Setup:**
 1. IAM → Users → Create user → Name: `claude-admin` (no console access)
