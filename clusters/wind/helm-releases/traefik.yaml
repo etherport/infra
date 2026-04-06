@@ -10,6 +10,7 @@ metadata:
   name: traefik
   namespace: flux-system
 spec:
+  releaseName: traefik
   interval: 1h
   chart:
     spec:

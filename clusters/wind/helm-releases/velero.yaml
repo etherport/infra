@@ -10,6 +10,7 @@ metadata:
   name: velero
   namespace: flux-system
 spec:
+  releaseName: velero
   interval: 1h
   chart:
     spec:

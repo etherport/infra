@@ -10,6 +10,7 @@ metadata:
   name: cnpg
   namespace: flux-system
 spec:
+  releaseName: cnpg
   interval: 1h
   chart:
     spec:

@@ -10,6 +10,7 @@ metadata:
   name: gpu-operator
   namespace: flux-system
 spec:
+  releaseName: gpu-operator
   interval: 1h
   chart:
     spec:

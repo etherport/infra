@@ -5,6 +5,7 @@ metadata:
   name: kured
   namespace: flux-system
 spec:
+  releaseName: kured
   interval: 1h
   chart:
     spec:

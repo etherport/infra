@@ -5,6 +5,7 @@ metadata:
   name: pushgateway
   namespace: flux-system
 spec:
+  releaseName: pushgateway
   interval: 1h
   chart:
     spec:
