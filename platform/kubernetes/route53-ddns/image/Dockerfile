@@ -1,4 +1,4 @@
-FROM public.ecr.aws/aws-cli/aws-cli:2.33.8
+FROM public.ecr.aws/aws-cli/aws-cli:2.34.25
 
 # Install additional utilities
 # Note: curl is already installed (curl-minimal) in the base image
