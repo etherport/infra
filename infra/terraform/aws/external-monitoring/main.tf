@@ -38,11 +38,68 @@ resource "aws_sns_topic" "alerts" {
   name     = "homelab-external-monitoring-alerts"
 }
 
+# Policy to allow CloudWatch alarms to publish to SNS
+resource "aws_sns_topic_policy" "alerts" {
+  provider = aws.us_east_1
+  arn      = aws_sns_topic.alerts.arn
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowCloudWatchAlarms"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudwatch.amazonaws.com"
+        }
+        Action   = "sns:Publish"
+        Resource = aws_sns_topic.alerts.arn
+        Condition = {
+          ArnLike = {
+            "aws:SourceArn" = "arn:aws:cloudwatch:us-east-1:830881980142:alarm:homelab-*"
+          }
+        }
+      },
+      {
+        Sid    = "DefaultPolicy"
+        Effect = "Allow"
+        Principal = {
+          AWS = "*"
+        }
+        Action = [
+          "sns:GetTopicAttributes",
+          "sns:SetTopicAttributes",
+          "sns:AddPermission",
+          "sns:RemovePermission",
+          "sns:DeleteTopic",
+          "sns:Subscribe",
+          "sns:ListSubscriptionsByTopic",
+          "sns:Publish"
+        ]
+        Resource = aws_sns_topic.alerts.arn
+        Condition = {
+          StringEquals = {
+            "AWS:SourceOwner" = "830881980142"
+          }
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_sns_topic_subscription" "email" {
   provider  = aws.us_east_1
   topic_arn = aws_sns_topic.alerts.arn
   protocol  = "email"
   endpoint  = var.alert_email
+}
+
+resource "aws_sns_topic_subscription" "email_backup" {
+  count     = var.alert_email_backup != "" ? 1 : 0
+  provider  = aws.us_east_1
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email_backup
 }
 
 # Route53 Health Checks

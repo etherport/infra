@@ -7,6 +7,8 @@ resources:
   - ../../platform/kubernetes/metallb
   - ../../platform/kubernetes/traefik
   - ../../platform/kubernetes/technitium
+  # Storage
+  - ../../platform/kubernetes/storage/ceph-csi
   # Database (CloudNativePG cluster - operator installed via Helm)
   - ../../platform/kubernetes/cnpg
   # Applications

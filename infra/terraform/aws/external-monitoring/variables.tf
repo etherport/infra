@@ -12,6 +12,12 @@ variable "alert_email" {
   type        = string
 }
 
+variable "alert_email_backup" {
+  description = "Backup email address for alerts"
+  type        = string
+  default     = ""
+}
+
 variable "homelab_domain" {
   description = "Primary homelab domain"
   type        = string
