@@ -535,12 +535,65 @@ infra/ansible/inventory/aws/
 - Technitium zones synced via GitOps from YAML files
 - EC2 snapshots managed by DLM policy and snapshot_archive Lambda
 
+## External Monitoring
+
+### Route53 Health Checks
+
+External monitoring from AWS edge locations to detect homelab outages.
+
+| Endpoint | FQDN | Health Check Path | Status |
+|----------|------|-------------------|--------|
+| Home Assistant | ha.wind.etherport.net | / | Enabled |
+| Plex | plex.wind.etherport.net | /identity | Enabled |
+| Chat (Open WebUI) | chat.wind.etherport.net | / | Enabled |
+| Grafana | grafana.wind.etherport.net | /api/health | Disabled (ALB issue) |
+| Traefik | traefik.wind.etherport.net | /ping | Disabled (ALB issue) |
+| Kopia | kopia.wind.etherport.net | / | Disabled (ALB issue) |
+
+**Configuration:**
+- Checks from 3 regions: us-west-2, us-east-1, eu-west-1
+- Failure threshold: 2-3 consecutive failures
+- Check interval: 30 seconds
+
+### CloudWatch Alarms
+
+Each health check has a corresponding CloudWatch alarm in us-east-1:
+- Individual alarms: `homelab-<endpoint>-unhealthy`
+- Composite alarm: `homelab-any-endpoint-unhealthy`
+
+### SNS Notifications
+
+**Topic:** `arn:aws:sns:us-east-1:830881980142:homelab-external-monitoring-alerts`
+
+**Subscriptions:**
+- graham.m.smith@me.com (primary)
+- grahamsm@gmail.com (backup)
+
+**Note:** The SNS topic policy explicitly allows CloudWatch to publish alarm notifications.
+
+### Terraform Management
+
+External monitoring is managed via Terraform:
+```
+infra/terraform/aws/external-monitoring/
+├── main.tf           # Health checks, alarms, SNS
+├── variables.tf      # Endpoint configuration schema
+├── terraform.tfvars  # Endpoint definitions
+└── outputs.tf        # Health check IDs
+```
+
 ## AWS CLI Access
 
-The `homelab-review` IAM user has read-only permissions for infrastructure auditing.
+### IAM Users
 
-**Current status (as of 2026-01-04):**
+| User | Purpose | Profile |
+|------|---------|---------|
+| terraform-homelab | Terraform operations | homelab |
+| homelab-review | Read-only infrastructure audit | homelab-review |
+| claude-admin | AI assistant infrastructure access | homelab |
+
+**Current status (as of 2026-04-05):**
 ```
-aws --profile homelab-review sts get-caller-identity
+aws --profile homelab sts get-caller-identity
 Account: 830881980142
 ```
