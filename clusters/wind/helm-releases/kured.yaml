@@ -1,0 +1,62 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kured
+  namespace: flux-system
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: kured
+      version: "5.10.x"
+      sourceRef:
+        kind: HelmRepository
+        name: kubereboot
+  targetNamespace: kube-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    configuration:
+      concurrency: 1
+      startTime: "2:00"
+      endTime: "6:00"
+      timeZone: America/Los_Angeles
+      rebootDays:
+        - sun
+        - mon
+        - tue
+        - wed
+        - thu
+        - fri
+        - sat
+      period: 5m
+      rebootCommand: /usr/bin/systemctl reboot
+      lockReleaseDelay: 0
+      lockTtl: 0
+      metricsHost: 0.0.0.0
+      metricsPort: 8080
+      notifyUrl: ""
+      messageTemplateDrain: "Node {{.NodeName}} will reboot to apply updates"
+      messageTemplateReboot: "Node {{.NodeName}} is rebooting"
+    tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/control-plane
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 100m
+        memory: 64Mi
+    podDisruptionBudget:
+      create: true
+      minAvailable: 1
+    serviceMonitor:
+      create: true

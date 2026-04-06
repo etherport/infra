@@ -1,0 +1,57 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: velero
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: velero
+  namespace: flux-system
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: velero
+      version: "11.x"
+      sourceRef:
+        kind: HelmRepository
+        name: vmware-tanzu
+  targetNamespace: velero
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    configuration:
+      backupStorageLocation:
+        - provider: aws
+          bucket: velero.wind.etherport.net
+          default: true
+          config:
+            region: us-west-2
+      volumeSnapshotLocation:
+        - provider: aws
+          config:
+            region: us-west-2
+    credentials:
+      existingSecret: cloud-credentials
+    initContainers:
+      - name: velero-plugin-for-aws
+        image: velero/velero-plugin-for-aws:v1.13.2
+        volumeMounts:
+          - name: plugins
+            mountPath: /target
+    deployNodeAgent: true
+    snapshotsEnabled: true
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: false
+    kubectl:
+      image:
+        tag: "1.33"

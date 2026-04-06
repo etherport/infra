@@ -3,6 +3,8 @@ kind: Kustomization
 resources:
   - ./flux-system
   - ./image-automation
+  # Helm releases (managed by Flux)
+  - ./helm-releases
   # Infrastructure
   - ../../platform/kubernetes/metallb
   - ../../platform/kubernetes/traefik

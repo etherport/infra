@@ -1,0 +1,38 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cert-manager
+  namespace: flux-system
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: cert-manager
+      version: "v1.19.x"
+      sourceRef:
+        kind: HelmRepository
+        name: jetstack
+  targetNamespace: cert-manager
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    crds:
+      enabled: false
+    extraArgs:
+      - --dns01-recursive-nameservers-only=true
+      - --dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53
+    prometheus:
+      enabled: true
+      servicemonitor:
+        enabled: false

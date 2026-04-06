@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - repositories.yaml
+  - cert-manager.yaml
+  - cnpg.yaml
+  - gpu-operator.yaml
+  - kured.yaml
+  - monitoring.yaml
+  - pushgateway.yaml
+  - traefik.yaml
+  - velero.yaml
+  # Note: cilium is managed by kubespray, not Flux

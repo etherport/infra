@@ -1,0 +1,30 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: pushgateway
+  namespace: flux-system
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: prometheus-pushgateway
+      version: "3.6.x"
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+  targetNamespace: monitoring
+  dependsOn:
+    - name: monitoring
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    fullnameOverride: pushgateway
+    serviceMonitor:
+      enabled: true
+      additionalLabels:
+        release: monitoring
