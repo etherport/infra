@@ -9,6 +9,8 @@ resources:
   - ../../platform/kubernetes/technitium
   # Storage
   - ../../platform/kubernetes/storage/ceph-csi
+  # Cluster utilities
+  - ../../platform/kubernetes/auto-remediation
   # Database (CloudNativePG cluster - operator installed via Helm)
   - ../../platform/kubernetes/cnpg
   # Applications
