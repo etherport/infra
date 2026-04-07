@@ -1,5 +1,6 @@
 # Flux Image Automation for Plex Media Server
 # Plex uses non-standard version format: X.Y.Z.BUILD-HASH
+# Solution: Extract as semver prerelease (X.Y.Z-BUILD) for correct comparison
 ---
 apiVersion: image.toolkit.fluxcd.io/v1beta2
 kind: ImageRepository
@@ -15,6 +16,10 @@ spec:
     - "^plexpass$"
     - "^beta$"
     - "^.*-test.*$"
+    # Exclude architecture-specific tags (we want multi-arch manifest)
+    - ".*-arm64$"
+    - ".*-amd64$"
+    - ".*-armhf$"
 ---
 apiVersion: image.toolkit.fluxcd.io/v1beta2
 kind: ImagePolicy
@@ -25,10 +30,11 @@ spec:
   imageRepositoryRef:
     name: plex
   filterTags:
-    # Match Plex version format: X.Y.Z.BUILD-HASH
-    # Extract just the version part for semver comparison
-    pattern: '^(?P<version>[0-9]+\.[0-9]+\.[0-9]+)\.[0-9]+-[a-f0-9]+$'
-    extract: '$version'
+    # Match Plex version format: X.Y.Z.BUILD-HASH (excluding arch-specific tags)
+    # Extract as semver prerelease: X.Y.Z-BUILD (e.g., 1.43.0-10492)
+    # Semver compares prereleases numerically, so 10492 > 10467
+    pattern: '^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)\.(?P<build>\d+)-[0-9a-f]+$'
+    extract: '$major.$minor.$patch-$build'
   policy:
     semver:
-      range: '>=1.0.0'
+      range: '>=1.0.0-0'
