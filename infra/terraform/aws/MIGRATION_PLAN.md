@@ -2,7 +2,11 @@
 
 ## Overview
 
-This document outlines the plan to migrate existing AWS resources into Terraform management.
+This document outlines the plan to migrate existing homelab AWS resources into Terraform management.
+
+**Scope:** Homelab infrastructure only (`private-infra` VPC and related resources).
+
+**Out of Scope:** Public web hosting infrastructure (`public-web` VPC, stopthecastle.com, smithforsb.com). These resources are documented separately in `docs/planning/public-web-infrastructure.md` for future migration to a dedicated repository.
 
 ## Current State
 
@@ -24,14 +28,11 @@ This document outlines the plan to migrate existing AWS resources into Terraform
 | Resource | Name/ID | Notes |
 |----------|---------|-------|
 | VPC | `private-infra-vpc` (10.10.100.0/22) | Homelab - migrate |
-| VPC | `public-web-vpc` (10.11.0.0/20) | Homelab - migrate |
-| VPC | `default` (172.31.0.0/16) | AWS default - skip |
 | Subnets | `private-infra-subnet-*` (4 subnets) | Migrate with VPC |
-| Subnets | `public-web-subnet-*` (4 subnets) | Migrate with VPC |
 | IGW | `private-infra-igw` | Migrate with VPC |
-| IGW | `public-web-igw` | Migrate with VPC |
 | Route Tables | `private-infra-rtb-*` (4 tables) | Migrate with VPC |
-| Route Tables | `public-web-rtb-*` (4 tables) | Migrate with VPC |
+| VPC | `public-web-vpc` (10.11.0.0/20) | **Out of scope** - see public-web-infrastructure.md |
+| VPC | `default` (172.31.0.0/16) | AWS default - skip |
 
 #### EC2 Instances
 
@@ -39,7 +40,7 @@ This document outlines the plan to migrate existing AWS resources into Terraform
 |----------|------|-----|-------|
 | `private-infra_vpn` | t4g.nano | private-infra | WireGuard VPN - migrate |
 | `private-infra_dns` | t4g.nano | private-infra | DNS server - migrate |
-| `public-web_wordpress_stopthecastle` | t3.micro | public-web | WordPress site - migrate |
+| `public-web_wordpress_stopthecastle` | t3.micro | public-web | **Out of scope** - see public-web-infrastructure.md |
 
 #### Elastic IPs
 
@@ -47,7 +48,7 @@ This document outlines the plan to migrate existing AWS resources into Terraform
 |----|------|-------------|-------|
 | 44.240.60.80 | `private-infra_vpn_ip` | VPN instance | Migrate |
 | 52.40.219.113 | `private-infra_dns_ip` | DNS instance | Migrate |
-| 54.149.26.169 | `public-web_wordpresss_castle_ip` | WordPress | Migrate |
+| 54.149.26.169 | `public-web_wordpresss_castle_ip` | WordPress | **Out of scope** - see public-web-infrastructure.md |
 | 35.163.174.186 | (unnamed) | Unattached | Review - possibly unused |
 | 52.37.121.19 | (unnamed) | Unattached | Review - possibly unused |
 
@@ -60,8 +61,8 @@ This document outlines the plan to migrate existing AWS resources into Terraform
 | `private-infra_alb-public-443` | private-infra | Migrate |
 | `allow-ssh_sg` | private-infra | Migrate |
 | `dns-server_sg` | private-infra | Migrate |
-| `public-web_cloudfront_sg` | public-web | Migrate |
-| `public-web_allow-ssh_sg` | public-web | Migrate |
+| `public-web_cloudfront_sg` | public-web | **Out of scope** |
+| `public-web_allow-ssh_sg` | public-web | **Out of scope** |
 
 #### Load Balancers
 
@@ -77,14 +78,14 @@ This document outlines the plan to migrate existing AWS resources into Terraform
 | `terraform.wind.etherport.net` | Terraform state | Already used - document only |
 | `velero.wind.etherport.net` | Kubernetes backups | Homelab - migrate |
 | `archive.wind.etherport.net` | Snapshot archives | Homelab - migrate |
-| `archive-test.wind.etherport.net` | Test bucket | Homelab - migrate or delete |
+| `archive-test.wind.etherport.net` | Test bucket | Review - migrate or delete |
 | `logs.archive.wind.etherport.net` | Archive logs | Homelab - migrate |
 | `email-fwd.grahamsmith.net` | Email forwarding | Homelab - migrate |
-| `backup.grahamsmith.net` | Backups | Review purpose |
-| `cflogs.grahamsmith.net` | CloudFront logs | Migrate |
-| `logs.grahamsmith.net` | General logs | Migrate |
-| `smithforsb.com` | Static website | Campaign site - migrate |
-| `static.stopthecastle.com` | Static assets | WordPress assets - migrate |
+| `backup.grahamsmith.net` | Backups | Review purpose - likely homelab |
+| `logs.grahamsmith.net` | General logs | Homelab - migrate |
+| `cflogs.grahamsmith.net` | CloudFront logs | **Out of scope** - campaign CDN logs |
+| `smithforsb.com` | Static website | **Out of scope** - campaign site |
+| `static.stopthecastle.com` | Static assets | **Out of scope** - campaign assets |
 
 #### Route53 Hosted Zones
 
@@ -92,15 +93,15 @@ This document outlines the plan to migrate existing AWS resources into Terraform
 |------|------|-------|
 | `etherport.net` | Public | Primary homelab domain - migrate |
 | `grahamsmith.net` | Public | Personal domain - migrate |
-| `stopthecastle.com` | Public | Campaign site - migrate |
-| `smithforsb.com` | Public | Campaign site - migrate |
+| `stopthecastle.com` | Public | **Out of scope** - campaign site |
+| `smithforsb.com` | Public | **Out of scope** - campaign site |
 
 #### CloudFront Distributions
 
 | ID | Origin | Notes |
 |----|--------|-------|
-| `E1877NKA6OHGR2` | smithforsb.com S3 | Campaign site - migrate |
-| `EGLD2S71PI0A` | static.stopthecastle.com S3 | WordPress assets - migrate |
+| `E1877NKA6OHGR2` | smithforsb.com S3 | **Out of scope** - campaign site |
+| `EGLD2S71PI0A` | static.stopthecastle.com S3 | **Out of scope** - campaign assets |
 
 #### ACM Certificates
 
@@ -117,9 +118,9 @@ This document outlines the plan to migrate existing AWS resources into Terraform
 **us-east-1 (CloudFront):**
 | Domain | Notes |
 |--------|-------|
-| `smithforsb.com` | Campaign - migrate |
-| `stopthecastle.com` | Campaign - migrate |
-| `smith4sb.com` | Alternate domain - migrate |
+| `smithforsb.com` | **Out of scope** - campaign |
+| `stopthecastle.com` | **Out of scope** - campaign |
+| `smith4sb.com` | **Out of scope** - campaign |
 | `ha.wind.gmsmeg.net` | Legacy? - review |
 
 #### IAM Roles (Lambda)
@@ -192,14 +193,14 @@ This document outlines the plan to migrate existing AWS resources into Terraform
 
 | Identity | Type | Notes |
 |----------|------|-------|
-| `etherport.net` | Domain | Email - migrate |
-| `grahamsmith.net` | Domain | Email - migrate |
-| `stopthecastle.com` | Domain | Email - migrate |
-| `smithforsb.com` | Domain | Email - migrate |
+| `etherport.net` | Domain | Homelab email - migrate |
+| `grahamsmith.net` | Domain | Personal email - migrate |
 | `g@grahamsmith.net` | Email | Personal - migrate |
 | `grahamsm@gmail.com` | Email | Personal - migrate |
-| `mgoodwin.us@gmail.com` | Email | Contact - migrate |
 | `graham.m.smith@me.com` | Email | Personal - migrate |
+| `stopthecastle.com` | Domain | **Out of scope** - campaign |
+| `smithforsb.com` | Domain | **Out of scope** - campaign |
+| `mgoodwin.us@gmail.com` | Email | **Out of scope** - campaign contact |
 
 #### WAF
 
@@ -219,44 +220,58 @@ This document outlines the plan to migrate existing AWS resources into Terraform
 
 ### Phase 1: Foundation (VPCs & Networking)
 1. Create `networking` module
-2. Import VPCs: `private-infra-vpc`, `public-web-vpc`
-3. Import subnets, route tables, internet gateways
-4. Import security groups
+2. Import `private-infra-vpc` (10.10.100.0/22)
+3. Import subnets (4), route tables, internet gateway
+4. Import security groups (5 in private-infra VPC)
 
 ### Phase 2: Compute
 1. Create `ec2` module
-2. Import EC2 instances (VPN, DNS, WordPress)
-3. Import Elastic IPs
-4. Import CloudWatch alarms for EC2
+2. Import EC2 instances: `private-infra_vpn`, `private-infra_dns`
+3. Import Elastic IPs (2 attached + review 2 unattached)
+4. Import CloudWatch alarms for EC2 memory/swap
 
 ### Phase 3: Load Balancing
 1. Create `alb` module
-2. Import ALB, listeners, target groups
-3. Import WAF WebACL
+2. Import `private-infra-alb`, listeners, target groups
+3. Import WAF WebACL (review if needed)
 
 ### Phase 4: DNS & Certificates
 1. Create `route53` module
-2. Import hosted zones
+2. Import hosted zones: `etherport.net`, `grahamsmith.net`
 3. Import DNS records
 4. Create `acm` module
-5. Import certificates
+5. Import us-west-2 certificates (homelab wildcards)
 
-### Phase 5: Storage
+### Phase 5: Storage & Email
 1. Create `s3` module
-2. Import S3 buckets
+2. Import homelab S3 buckets (velero, archive, email-fwd, logs)
 3. Configure lifecycle policies
+4. Import SES domain identities (etherport.net, grahamsmith.net)
+5. Import SES email identities
 
-### Phase 6: CDN
-1. Create `cloudfront` module
-2. Import distributions
-
-### Phase 7: Cleanup
-1. Review legacy/orphaned resources
-2. Clean up unused EIPs
+### Phase 6: Cleanup
+1. Review legacy/orphaned IAM roles
+2. Review unused EIPs (2 unattached)
 3. Remove duplicate EventBridge rules
-4. Delete legacy log groups
+4. Delete legacy CloudWatch log groups
+5. Review legacy ACM certificates (gmsmeg.net)
 
 ---
+
+## Out of Scope (Public Web Infrastructure)
+
+The following resources are for the stopthecastle.com/smithforsb.com campaign sites and will be managed in a separate repository. See `docs/planning/public-web-infrastructure.md` for full documentation.
+
+- `public-web-vpc` and all associated networking
+- `public-web_wordpress_stopthecastle` EC2 instance
+- `public-web_wordpresss_castle_ip` Elastic IP
+- `public-web_*` security groups
+- `stopthecastle.com` and `smithforsb.com` Route53 hosted zones
+- `smithforsb.com` and `static.stopthecastle.com` S3 buckets
+- `cflogs.grahamsmith.net` S3 bucket (campaign CDN logs)
+- Both CloudFront distributions
+- Campaign-related ACM certificates (us-east-1)
+- Campaign SES identities (stopthecastle.com, smithforsb.com)
 
 ## Resources to Skip
 
@@ -270,20 +285,19 @@ This document outlines the plan to migrate existing AWS resources into Terraform
 ## Import Commands Reference
 
 ```bash
-# VPC import example
+# Phase 1: Networking
 terraform import aws_vpc.private_infra vpc-0cf7cb3b71fc48958
-
-# EC2 import example
-terraform import aws_instance.vpn i-0f81ff99edc6ede03
-
-# Security group import example
 terraform import aws_security_group.vpn_server sg-08323ff8e98ecb563
 
-# S3 bucket import example
-terraform import aws_s3_bucket.velero velero.wind.etherport.net
+# Phase 2: Compute
+terraform import aws_instance.vpn i-0f81ff99edc6ede03
+terraform import aws_eip.vpn eipalloc-XXXXX
 
-# Route53 zone import example
+# Phase 4: DNS
 terraform import aws_route53_zone.etherport Z03500581XDWV5SKF5PK8
+
+# Phase 5: Storage
+terraform import aws_s3_bucket.velero velero.wind.etherport.net
 ```
 
 ---
