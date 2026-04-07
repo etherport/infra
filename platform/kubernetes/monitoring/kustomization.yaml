@@ -8,5 +8,7 @@ resources:
   - 01-external-scrape-config.yaml
   - 02-external-alerts.yaml
   - 03-alertmanager-config.yaml
+  - comprehensive-alerts.yaml
+  - dns-health-alerts.yaml
   - grafana-admin-secret.sops.yaml
   - alertmanager-secret.sops.yaml
