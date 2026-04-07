@@ -218,11 +218,15 @@ This document outlines the plan to migrate existing homelab AWS resources into T
 
 ## Migration Priority
 
-### Phase 1: Foundation (VPCs & Networking)
-1. Create `networking` module
-2. Import `private-infra-vpc` (10.10.100.0/22)
-3. Import subnets (4), route tables, internet gateway
-4. Import security groups (5 in private-infra VPC)
+### Phase 1: Foundation (VPCs & Networking) ✅ COMPLETE
+1. ✅ Create `networking` module
+2. ✅ Import `private-infra-vpc` (10.10.100.0/22) with IPv6
+3. ✅ Import subnets (4), route tables (4), internet gateway, S3 VPC endpoint
+4. ✅ Import security groups (6) and all security group rules (22)
+5. ✅ Import default NACL with custom rules
+
+**Module:** `infra/terraform/aws/networking/`
+**State:** `terraform.wind.etherport.net/aws/networking/terraform.tfstate`
 
 ### Phase 2: Compute
 1. Create `ec2` module
