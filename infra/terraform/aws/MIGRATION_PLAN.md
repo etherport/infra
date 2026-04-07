@@ -228,23 +228,36 @@ This document outlines the plan to migrate existing homelab AWS resources into T
 **Module:** `infra/terraform/aws/networking/`
 **State:** `terraform.wind.etherport.net/aws/networking/terraform.tfstate`
 
-### Phase 2: Compute
-1. Create `ec2` module
-2. Import EC2 instances: `private-infra_vpn`, `private-infra_dns`
-3. Import Elastic IPs (2 attached + review 2 unattached)
-4. Import CloudWatch alarms for EC2 memory/swap
+### Phase 2: Compute ✅ COMPLETE
+1. ✅ Create `compute` module
+2. ✅ Import EC2 instances: `private-infra_vpn`, `private-infra_dns`
+3. ✅ Import Elastic IPs (2 attached)
+4. ✅ Import CloudWatch alarms for EC2 memory/swap
+5. ✅ Import IAM role/instance profile, SNS topic
 
-### Phase 3: Load Balancing
-1. Create `alb` module
-2. Import `private-infra-alb`, listeners, target groups
-3. Import WAF WebACL (review if needed)
+**Module:** `infra/terraform/aws/compute/`
+**State:** `terraform.wind.etherport.net/aws/compute/terraform.tfstate`
+**Note:** DLM policy managed outside Terraform (SIMPLIFIED format)
 
-### Phase 4: DNS & Certificates
-1. Create `route53` module
-2. Import hosted zones: `etherport.net`, `grahamsmith.net`
-3. Import DNS records
-4. Create `acm` module
-5. Import us-west-2 certificates (homelab wildcards)
+### Phase 3: Load Balancing ✅ COMPLETE
+1. ✅ Create `load-balancing` module
+2. ✅ Import `private-infra-alb`, listeners, target groups
+3. ✅ Import listener certificates (SNI)
+4. ✅ Clean up deprecated gmsmeg.net certificates
+
+**Module:** `infra/terraform/aws/load-balancing/`
+**State:** `terraform.wind.etherport.net/aws/load-balancing/terraform.tfstate`
+
+### Phase 4: DNS & Certificates ✅ COMPLETE
+1. ✅ Create `route53` module
+2. ✅ Import hosted zones: `etherport.net`, `grahamsmith.net`
+3. ✅ Import DNS records (static infrastructure and email records)
+4. ✅ Create `acm` module
+5. ✅ Import us-west-2 certificates (4 homelab wildcards)
+
+**Modules:** `infra/terraform/aws/route53/`, `infra/terraform/aws/acm/`
+**State:** `terraform.wind.etherport.net/aws/route53/terraform.tfstate`, `terraform.wind.etherport.net/aws/acm/terraform.tfstate`
+**Note:** DDNS records (wan1, wan2, wind) managed by ddns-lambda, not Terraform
 
 ### Phase 5: Storage & Email
 1. Create `s3` module
