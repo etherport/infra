@@ -43,9 +43,10 @@ spec:
     mig:
       strategy: none
     driver:
-      # Use pre-installed driver on the host instead of deploying one
-      # The host already has a working NVIDIA driver that ollama/plex use
-      enabled: false
+      enabled: true
+      # Disable auto-upgrade to prevent driver reinstall loop when GPU pods are running
+      upgradePolicy:
+        autoUpgrade: false
     toolkit:
       enabled: true
     devicePlugin:
