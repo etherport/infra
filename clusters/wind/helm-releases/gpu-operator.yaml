@@ -43,8 +43,9 @@ spec:
     mig:
       strategy: none
     driver:
-      enabled: true
-      use_precompiled: true
+      # Use pre-installed driver on the host instead of deploying one
+      # The host already has a working NVIDIA driver that ollama/plex use
+      enabled: false
     toolkit:
       enabled: true
     devicePlugin:
