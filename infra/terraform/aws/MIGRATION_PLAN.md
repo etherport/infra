@@ -78,7 +78,7 @@ This document outlines the plan to migrate existing homelab AWS resources into T
 | `terraform.wind.etherport.net` | Terraform state | Already used - document only |
 | `velero.wind.etherport.net` | Kubernetes backups | Homelab - migrate |
 | `archive.wind.etherport.net` | Snapshot archives | Homelab - migrate |
-| `archive-test.wind.etherport.net` | Test bucket | Review - migrate or delete |
+| `archive-test.wind.etherport.net` | Test bucket | ✅ Deleted (empty, Phase 6) |
 | `logs.archive.wind.etherport.net` | Archive logs | Homelab - migrate |
 | `email-fwd.grahamsmith.net` | Email forwarding | Homelab - migrate |
 | `backup.grahamsmith.net` | Backups | Review purpose - likely homelab |
@@ -271,12 +271,19 @@ This document outlines the plan to migrate existing homelab AWS resources into T
 **State:** `terraform.wind.etherport.net/aws/s3/terraform.tfstate`, `terraform.wind.etherport.net/aws/ses/terraform.tfstate`
 **Note:** archive-test.wind.etherport.net bucket skipped (empty, review in Phase 6)
 
-### Phase 6: Cleanup
-1. Review legacy/orphaned IAM roles
-2. Review unused EIPs (2 unattached)
-3. Remove duplicate EventBridge rules
-4. Delete legacy CloudWatch log groups
-5. Review legacy ACM certificates (gmsmeg.net)
+### Phase 6: Cleanup ✅ COMPLETE
+1. ✅ EIPs reviewed - both "unattached" EIPs are ALB-managed (ServiceManaged: alb)
+2. ✅ Deleted duplicate EventBridge rule: `DNS_SG_update_5-min`
+3. ✅ Deleted legacy CloudWatch log groups (3):
+   - `/aws/lambda/dns_restrict_ip`
+   - `/aws/lambda/email-fwd_grahamsmith`
+   - `/aws/lambda/snapshot_archive`
+4. ✅ Deleted orphaned IAM roles (3):
+   - `datasync_status_email-role-8my4csrd`
+   - `email-fwd_grahamsmith-role-dm8wvl0h`
+   - `snapshot_archive-role-jktpa8nv`
+5. ✅ Deleted empty S3 bucket: `archive-test.wind.etherport.net`
+6. ✅ Legacy ACM certificates (gmsmeg.net) already cleaned up in Phase 3
 
 ---
 
@@ -300,15 +307,22 @@ The following resources are for the stopthecastle.com/smithforsb.com campaign si
 - Default VPC and subnets (AWS default)
 - Terraform state bucket (already in use, document only)
 
-## Resources to Delete (Cleanup)
+## Resources Cleaned Up (Phase 6)
 
-| Resource | Type | Reason |
+| Resource | Type | Status |
 |----------|------|--------|
-| `homelab-terraform-locks` | DynamoDB | Redundant - using S3 native locking |
-| `DataSyncStatus` | DynamoDB | Deprecated - replaced by custom S3 sync |
-| `/aws/lambda/datasync_status_email` | CloudWatch Logs | DataSync deprecated |
-| `/aws/datasync` | CloudWatch Logs | DataSync deprecated |
-| `TargetTracking-table/DataSyncStatus-*` | CloudWatch Alarms | Will auto-delete with table |
+| `homelab-terraform-locks` | DynamoDB | ✅ Deleted (pre-Phase 6) |
+| `DataSyncStatus` | DynamoDB | ✅ Deleted (pre-Phase 6) |
+| `/aws/lambda/datasync_status_email` | CloudWatch Logs | ✅ Deleted (pre-Phase 6) |
+| `/aws/datasync` | CloudWatch Logs | ✅ Deleted (pre-Phase 6) |
+| `DNS_SG_update_5-min` | EventBridge Rule | ✅ Deleted |
+| `/aws/lambda/dns_restrict_ip` | CloudWatch Logs | ✅ Deleted |
+| `/aws/lambda/email-fwd_grahamsmith` | CloudWatch Logs | ✅ Deleted |
+| `/aws/lambda/snapshot_archive` | CloudWatch Logs | ✅ Deleted |
+| `datasync_status_email-role-*` | IAM Role | ✅ Deleted |
+| `email-fwd_grahamsmith-role-*` | IAM Role | ✅ Deleted |
+| `snapshot_archive-role-*` | IAM Role | ✅ Deleted |
+| `archive-test.wind.etherport.net` | S3 Bucket | ✅ Deleted |
 
 ---
 
@@ -337,3 +351,41 @@ terraform import aws_s3_bucket.velero velero.wind.etherport.net
 - All resources are in `us-west-2` unless noted otherwise
 - CloudFront and some ACM certificates are in `us-east-1` (required by CloudFront)
 - Route53 is global but health checks require `us-east-1` for CloudWatch alarms
+
+---
+
+## Migration Complete
+
+All phases of the AWS infrastructure Terraform migration have been completed successfully:
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | Foundation (VPCs & Networking) | ✅ Complete |
+| 2 | Compute | ✅ Complete |
+| 3 | Load Balancing | ✅ Complete |
+| 4 | DNS & Certificates | ✅ Complete |
+| 5 | Storage & Email | ✅ Complete |
+| 6 | Cleanup | ✅ Complete |
+
+### Terraform Modules Created
+
+| Module | State File | Resources |
+|--------|------------|-----------|
+| `networking/` | `aws/networking/terraform.tfstate` | VPC, subnets, route tables, IGW, security groups, NACLs |
+| `compute/` | `aws/compute/terraform.tfstate` | EC2 instances, EIPs, IAM roles, CloudWatch alarms, SNS |
+| `load-balancing/` | `aws/load-balancing/terraform.tfstate` | ALB, listeners, target groups, certificates |
+| `route53/` | `aws/route53/terraform.tfstate` | Hosted zones, DNS records |
+| `acm/` | `aws/acm/terraform.tfstate` | SSL/TLS certificates |
+| `s3/` | `aws/s3/terraform.tfstate` | S3 buckets, lifecycle policies |
+| `ses/` | `aws/ses/terraform.tfstate` | SES domain/email identities, DKIM |
+
+### Pre-existing Lambda Modules
+
+| Module | Description |
+|--------|-------------|
+| `ddns-lambda/` | Dynamic DNS updater |
+| `dns-restrict-ip/` | DNS security group restrictions |
+| `email-forward/` | Email forwarding |
+| `homeassistant-alexa/` | Home Assistant Alexa integration |
+| `snapshot-archive/` | EBS snapshot archival |
+| `external-monitoring/` | Route53 health checks and alerting |

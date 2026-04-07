@@ -13,6 +13,7 @@
                 "iam:DetachRolePolicy",
                 "iam:ListAttachedRolePolicies",
                 "iam:ListRolePolicies",
+                "iam:DeleteRolePolicy",
                 "iam:PassRole"
             ],
             "Resource": "*"
@@ -74,6 +75,19 @@
             "Action": [
                 "acm:DeleteCertificate",
                 "acm:DescribeCertificate"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "Phase6Cleanup",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:ReleaseAddress",
+                "events:DeleteRule",
+                "events:RemoveTargets",
+                "events:ListTargetsByRule",
+                "logs:DeleteLogGroup",
+                "s3:DeleteBucket"
             ],
             "Resource": "*"
         }
