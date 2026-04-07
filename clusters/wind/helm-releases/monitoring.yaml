@@ -36,6 +36,9 @@ spec:
           matchLabels:
             alertmanagerConfig: main
         alertmanagerConfigNamespaceSelector: {}
+        # Apply routes to all alerts, not just those from the monitoring namespace
+        alertmanagerConfigMatcherStrategy:
+          type: None
         storage:
           volumeClaimTemplate:
             spec:
