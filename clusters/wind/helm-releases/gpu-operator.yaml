@@ -44,9 +44,19 @@ spec:
       strategy: none
     driver:
       enabled: true
-      # Disable auto-upgrade to prevent driver reinstall loop when GPU pods are running
       upgradePolicy:
+        # Disable auto-upgrade to prevent driver reinstall loop
         autoUpgrade: false
+        # Don't drain/evict GPU pods during upgrade (they'll be restarted after)
+        podDeletion:
+          deleteEmptyDir: true
+          force: true
+          timeoutSeconds: 300
+        drain:
+          enable: false
+          deleteEmptyDir: true
+          force: true
+          timeoutSeconds: 300
     toolkit:
       enabled: true
     devicePlugin:
