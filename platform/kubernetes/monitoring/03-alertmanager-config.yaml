@@ -1,5 +1,5 @@
 ---
-apiVersion: monitoring.coreos.com/v1alpha1
+apiVersion: monitoring.coreos.com/v1beta1
 kind: AlertmanagerConfig
 metadata:
   name: email-notifications
@@ -17,17 +17,20 @@ spec:
       # Don't send Watchdog alerts (it's a canary)
       - matchers:
           - name: alertname
+            matchType: "="
             value: Watchdog
         receiver: 'null'
       # Send critical alerts immediately
       - matchers:
           - name: severity
+            matchType: "="
             value: critical
         receiver: email-alerts
         repeatInterval: 1h
       # Send warning alerts
       - matchers:
           - name: severity
+            matchType: "="
             value: warning
         receiver: email-alerts
         repeatInterval: 4h
@@ -39,19 +42,21 @@ spec:
           from: alerts@etherport.net
           smarthost: email-smtp.us-west-2.amazonaws.com:587
           authUsername:
-            name: alertmanager-smtp-config
             key: smtp_auth_username
-          authPassword:
             name: alertmanager-smtp-config
+          authPassword:
             key: smtp_auth_password
+            name: alertmanager-smtp-config
           requireTLS: true
           sendResolved: true
   inhibitRules:
     # Inhibit lower severity if critical is firing
     - sourceMatch:
         - name: severity
+          matchType: "="
           value: critical
       targetMatch:
         - name: severity
+          matchType: "="
           value: warning
       equal: ['alertname', 'namespace']
