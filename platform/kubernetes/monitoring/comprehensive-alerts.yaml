@@ -195,6 +195,73 @@ spec:
         summary: "Plex media server is down"
         description: "Plex has no available replicas"
 
+  # GPU Workloads
+  - name: gpu-workloads
+    rules:
+    - alert: OllamaDown
+      expr: kube_deployment_status_replicas_available{namespace="ollama",deployment="ollama"} == 0
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Ollama LLM service is down"
+        description: "Ollama has no available replicas"
+
+    - alert: GPUWorkloadCrashLooping
+      expr: |
+        rate(kube_pod_container_status_restarts_total{namespace=~"plex|ollama"}[15m]) > 0.5
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: "GPU workload {{ $labels.pod }} is crash looping"
+        description: "GPU workload {{ $labels.pod }} in namespace {{ $labels.namespace }} is restarting frequently - possible driver issue"
+
+    - alert: GPUWorkloadFailedAfterDriverUpdate
+      expr: |
+        (
+          kube_deployment_status_replicas_available{namespace=~"plex|ollama"} == 0
+        ) and on() (
+          time() - kube_pod_start_time{namespace="gpu-operator-system", pod=~"nvidia-driver-daemonset-.*"} < 1800
+        )
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "GPU workload down after recent driver update"
+        description: "{{ $labels.deployment }} is down and GPU driver was updated within the last 30 minutes - possible driver compatibility issue"
+
+  # GPU Operator Health
+  - name: gpu-operator
+    rules:
+    - alert: GPUDriverDaemonsetNotReady
+      expr: kube_daemonset_status_number_ready{namespace="gpu-operator-system",daemonset="nvidia-driver-daemonset"} == 0
+      for: 10m
+      labels:
+        severity: critical
+      annotations:
+        summary: "NVIDIA GPU driver daemonset is not ready"
+        description: "GPU driver has no ready pods - GPU workloads will fail"
+
+    - alert: GPUDevicePluginNotReady
+      expr: kube_daemonset_status_number_ready{namespace="gpu-operator-system",daemonset="nvidia-device-plugin-daemonset"} == 0
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "NVIDIA device plugin is not ready"
+        description: "GPU device plugin has no ready pods - pods cannot request GPU resources"
+
+    - alert: GPUOperatorClusterPolicyNotReady
+      expr: |
+        kube_customresource_clusterpolicy_status{status="notReady"} == 1
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: "GPU Operator ClusterPolicy is not ready"
+        description: "GPU Operator ClusterPolicy has been in notReady state for 15 minutes"
+
   # Generic Pod Health
   - name: pod-health
     rules:
