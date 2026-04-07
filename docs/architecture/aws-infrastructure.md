@@ -228,91 +228,64 @@ AWS resources in us-west-2 connected to local homelab via WireGuard VPN. The inf
 
 ## Lambda Functions
 
-### dns_restrict_ip (Dynamic DNS Security Group Updater)
+All Lambda functions are managed via Terraform modules in `infra/terraform/aws/`.
+
+### dns-restrict-ip
 
 | Property | Value |
 |----------|-------|
-| ARN | `arn:aws:lambda:us-west-2:830881980142:function:dns_restrict_ip` |
+| Function Name | `dns-restrict-ip` |
 | Runtime | Python 3.13 |
 | Architecture | arm64 |
 | Memory | 128 MB |
 | Timeout | 3 seconds |
-| Last Modified | 2026-01-03 |
+| Terraform Module | `infra/terraform/aws/dns-restrict-ip/` |
 
 **Purpose:** Updates the DNS server security group to allow access only from the current dynamic IP of the homelab, determined by resolving `wind.etherport.net`.
 
-**Environment Variables:**
-
-| Variable | Value |
-|----------|-------|
-| HOSTED_ZONE_ID | Z03500581XDWV5SKF5PK8 |
-| RECORD_NAME | wind.etherport.net. |
-| SECURITY_GROUP_ID | sg-08d12e417159c18d2 |
-
 **Flow:**
-1. Triggered on schedule (EventBridge)
+1. Triggered every 5 minutes (EventBridge)
 2. Resolves `wind.etherport.net` to get current homelab public IP
 3. Updates security group `sg-08d12e417159c18d2` to allow DNS access from that IP
 
-### snapshot_archive
+### ddns-updater
 
 | Property | Value |
 |----------|-------|
-| ARN | `arn:aws:lambda:us-west-2:830881980142:function:snapshot_archive` |
+| Function Name | `ddns-updater` |
 | Runtime | Python 3.13 |
 | Architecture | arm64 |
 | Memory | 128 MB |
 | Timeout | 10 seconds |
+| Terraform Module | `infra/terraform/aws/ddns-lambda/` |
 
-**Purpose:** Archives EC2 snapshots and sends summary emails via SES.
+**Purpose:** Updates Route53 DNS records with current public IP. Called via API Gateway from Ubiquiti UDM-Pro DDNS client.
 
-### datasync_status_email
-
-| Property | Value |
-|----------|-------|
-| ARN | `arn:aws:lambda:us-west-2:830881980142:function:datasync_status_email` |
-| Runtime | Python 3.13 |
-| Architecture | arm64 |
-| Memory | 256 MB |
-| Timeout | 60 seconds |
-
-**Purpose:** Sends daily DataSync status update emails via SES.
-
-### email-fwd_grahamsmith
+### snapshot-archive
 
 | Property | Value |
 |----------|-------|
-| ARN | `arn:aws:lambda:us-west-2:830881980142:function:email-fwd_grahamsmith` |
+| Function Name | `snapshot-archive` |
 | Runtime | Python 3.13 |
 | Architecture | arm64 |
 | Memory | 128 MB |
-| Timeout | 3 seconds |
+| Timeout | 10 seconds |
+| Terraform Module | `infra/terraform/aws/snapshot-archive/` |
 
-**Purpose:** Forwards emails received by SES to personal email addresses.
+**Purpose:** Archives EC2 snapshots older than 7 days to S3 Deep Archive and sends daily summary emails via SES.
 
-## DynamoDB Tables
-
-### homelab-terraform-locks
-
-| Property | Value |
-|----------|-------|
-| ARN | `arn:aws:dynamodb:us-west-2:830881980142:table/homelab-terraform-locks` |
-| Billing Mode | PAY_PER_REQUEST (on-demand) |
-| Primary Key | LockID (String) |
-| Status | ACTIVE |
-
-**Purpose:** Terraform state locking for concurrent operations.
-
-### DataSyncStatus
+### email-forward
 
 | Property | Value |
 |----------|-------|
-| ARN | `arn:aws:dynamodb:us-west-2:830881980142:table/DataSyncStatus` |
-| Billing Mode | Provisioned (1 RCU / 1 WCU) |
-| Primary Key | TaskID (String) |
-| Status | ACTIVE |
+| Function Name | `email-forward` |
+| Runtime | Python 3.13 |
+| Architecture | arm64 |
+| Memory | 128 MB |
+| Timeout | 30 seconds |
+| Terraform Module | `infra/terraform/aws/email-forward/` |
 
-**Purpose:** Tracks DataSync task status for the datasync_status_email Lambda.
+**Purpose:** Forwards emails received by SES to personal email addresses. Supports forwarding from grahamsmith.net, etherport.net, and campaign domains.
 
 ## VPC Route Table
 
@@ -329,9 +302,9 @@ AWS resources in us-west-2 connected to local homelab via WireGuard VPN. The inf
 ### EC2 Instance Profile
 
 Both vpn-aws and dns-aws use the IAM instance profile:
-- `arn:aws:iam::830881980142:instance-profile/EC2-role_udpate_route53_gmsmeg.net`
+- `arn:aws:iam::830881980142:instance-profile/ec2-cloudwatch-agent`
 
-This allows Route53 updates for dynamic DNS.
+This allows the CloudWatch agent to publish metrics and logs.
 
 ### Required IAM Policy for Infrastructure Review
 
@@ -582,6 +555,40 @@ infra/terraform/aws/external-monitoring/
 └── outputs.tf        # Health check IDs
 ```
 
+## Terraform Infrastructure Modules
+
+All AWS infrastructure is now managed via Terraform. See `infra/terraform/aws/MIGRATION_PLAN.md` for full details.
+
+### Module Overview
+
+| Module | State File | Resources Managed |
+|--------|------------|-------------------|
+| `networking/` | `aws/networking/terraform.tfstate` | VPC, subnets, route tables, IGW, security groups, NACLs |
+| `compute/` | `aws/compute/terraform.tfstate` | EC2 instances, EIPs, IAM roles, CloudWatch alarms, SNS |
+| `load-balancing/` | `aws/load-balancing/terraform.tfstate` | ALB, listeners, target groups, certificates |
+| `route53/` | `aws/route53/terraform.tfstate` | Hosted zones (etherport.net, grahamsmith.net), DNS records |
+| `acm/` | `aws/acm/terraform.tfstate` | SSL/TLS certificates (us-west-2) |
+| `s3/` | `aws/s3/terraform.tfstate` | S3 buckets (velero, archive, logs, email-fwd) |
+| `ses/` | `aws/ses/terraform.tfstate` | SES domain/email identities, DKIM |
+
+### Lambda Modules
+
+| Module | State File | Purpose |
+|--------|------------|---------|
+| `ddns-lambda/` | `aws/ddns-lambda/terraform.tfstate` | Dynamic DNS updater (API Gateway + Lambda) |
+| `dns-restrict-ip/` | `aws/dns-restrict-ip/terraform.tfstate` | DNS security group IP updater |
+| `email-forward/` | `aws/email-forward/terraform.tfstate` | SES email forwarding |
+| `snapshot-archive/` | `aws/snapshot-archive/terraform.tfstate` | EC2 snapshot archival |
+| `homeassistant-alexa/` | `aws/homeassistant-alexa/terraform.tfstate` | Home Assistant Alexa integration |
+| `external-monitoring/` | `aws/external-monitoring/terraform.tfstate` | Route53 health checks and alerting |
+
+### State Backend
+
+All Terraform state is stored in S3 with native S3 locking:
+- **Bucket:** `terraform.wind.etherport.net`
+- **Region:** us-west-2
+- **Path:** `aws/<module>/terraform.tfstate`
+
 ## AWS CLI Access
 
 ### IAM Users
@@ -592,8 +599,26 @@ infra/terraform/aws/external-monitoring/
 | homelab-review | Read-only infrastructure audit | homelab-review |
 | claude-admin | AI assistant infrastructure access | homelab |
 
-**Current status (as of 2026-04-05):**
+**Current status (as of 2026-04-07):**
 ```
 aws --profile homelab sts get-caller-identity
 Account: 830881980142
 ```
+
+## Resources Not in Terraform
+
+The following resources exist but are managed manually or by other means:
+
+- **WAF WebACL:** `CreatedByALB-private-infra-alb` - Auto-created by ALB, managed via AWS Console
+- **DLM Policy:** EBS snapshot lifecycle - Uses AWS DLM SIMPLIFIED format (not TF-compatible)
+- **Key Pairs:** `GS-EC2`, `Wordpress-key` - Created manually, private keys in 1Password
+- **EBS Snapshots:** Managed by DLM policy and snapshot-archive Lambda
+
+## Out of Scope (Public Web Infrastructure)
+
+The following resources are for the stopthecastle.com/smithforsb.com campaign sites and are documented separately in `docs/planning/public-web-infrastructure.md`:
+
+- `public-web-vpc` and all associated networking
+- `public-web_wordpress_stopthecastle` EC2 instance
+- CloudFront distributions
+- Campaign S3 buckets and ACM certificates (us-east-1)

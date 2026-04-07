@@ -746,6 +746,7 @@ terraform plan
 ## Implementation Details
 
 **Implemented**: 2025-12-31
+**Updated**: 2026-04-07
 
 **Resources Created**:
 - **S3 Bucket**: `terraform.wind.etherport.net`
@@ -753,21 +754,29 @@ terraform plan
   - Versioning: Enabled
   - Encryption: AES-256
   - Lifecycle: Expire noncurrent versions after 30 days
-- **DynamoDB Table**: `homelab-terraform-locks`
-  - Region: us-west-2
-  - Billing: Pay-per-request
-  - Primary Key: LockID (String)
+- ~~**DynamoDB Table**: `homelab-terraform-locks`~~ **DEPRECATED** - Deleted 2026-04
+  - Replaced with S3 native locking (`use_lockfile = true`)
+  - DynamoDB no longer needed for state locking with AWS provider >= 5.x
 - **IAM User**: `terraform-homelab`
   - Access: Programmatic only
-  - Policy: TerraformStateAccess (S3 + DynamoDB permissions)
+  - Policies: Multiple module-specific policies (see `iam-policies/` directory)
 - **AWS Profile**: `homelab`
 
-**Terraform Configuration**:
-- Backend file: `infra/terraform/proxmox/k8s-vms/backend.tf`
-- State path: `s3://terraform.wind.etherport.net/proxmox/k8s-vms/terraform.tfstate`
-- Local state backup: `~/.terraform-state-backups/k8s-vms-migration-20251231-134435/`
+**Current State Paths** (all modules use S3-native locking):
+
+| Module | State Path |
+|--------|------------|
+| Proxmox VMs | `proxmox/k8s-vms/terraform.tfstate` |
+| AWS Networking | `aws/networking/terraform.tfstate` |
+| AWS Compute | `aws/compute/terraform.tfstate` |
+| AWS Load Balancing | `aws/load-balancing/terraform.tfstate` |
+| AWS Route53 | `aws/route53/terraform.tfstate` |
+| AWS ACM | `aws/acm/terraform.tfstate` |
+| AWS S3 | `aws/s3/terraform.tfstate` |
+| AWS SES | `aws/ses/terraform.tfstate` |
+| Lambda Modules | `aws/<module>/terraform.tfstate` |
 
 ---
 
-**Last Updated**: 2025-12-31
-**Status**: ✅ Implemented and verified
+**Last Updated**: 2026-04-07
+**Status**: ✅ Implemented and verified (S3-native locking)

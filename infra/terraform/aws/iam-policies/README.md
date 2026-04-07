@@ -119,7 +119,16 @@ SMTP user for Alertmanager to send email notifications via AWS SES.
 | Policy | Description |
 |--------|-------------|
 | terraform-ddns-state | Terraform state access for DDNS module |
-| terraform-state | Terraform state backend (S3 bucket and DynamoDB) |
+| terraform-state | Terraform state backend (S3 bucket with native locking) |
+| terraform-storage | S3 bucket and SES identity management |
+
+### terraform-network
+| Policy | Description |
+|--------|-------------|
+| terraform-networking | VPC, subnets, route tables, security groups, NACLs |
+| terraform-compute | EC2 instances, EIPs, CloudWatch alarms, SNS topics |
+| terraform-loadbalancing | ALB, listeners, target groups, certificates |
+| terraform-dns | Route53 hosted zones and DNS records |
 
 ### terraform-integration
 | Policy | Type | Description |
