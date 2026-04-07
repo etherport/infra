@@ -15,17 +15,20 @@ spec:
     receiver: email-alerts
     routes:
       # Don't send Watchdog alerts (it's a canary)
-      - match:
-          alertname: Watchdog
+      - matchers:
+          - name: alertname
+            value: Watchdog
         receiver: 'null'
       # Send critical alerts immediately
-      - match:
-          severity: critical
+      - matchers:
+          - name: severity
+            value: critical
         receiver: email-alerts
         repeatInterval: 1h
       # Send warning alerts
-      - match:
-          severity: warning
+      - matchers:
+          - name: severity
+            value: warning
         receiver: email-alerts
         repeatInterval: 4h
   receivers:
