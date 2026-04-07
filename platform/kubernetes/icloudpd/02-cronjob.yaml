@@ -4,6 +4,7 @@ metadata:
   name: icloud-photos-sync
   namespace: icloudpd
 spec:
+  suspend: true  # Disabled - Apple session expired, no reliable re-auth path
   schedule: "0 0 * * *"  # Daily at midnight Pacific time
   timeZone: "America/Los_Angeles"
   successfulJobsHistoryLimit: 3
