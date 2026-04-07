@@ -44,22 +44,26 @@ spec:
       strategy: none
     driver:
       enabled: true
-      # Pin to exact version to prevent upgrade attempts
-      version: "580.105.08"
       upgradePolicy:
-        # Disable auto-upgrade completely
-        autoUpgrade: false
-        # Allow deletion of pods with emptyDir during any driver operations
+        # Enable automatic driver upgrades when new versions are available
+        autoUpgrade: true
+        # Drain GPU pods gracefully before upgrading
+        drain:
+          enable: true
+          # Allow evicting pods with emptyDir volumes (plex uses these)
+          deleteEmptyDir: true
+          # Force eviction if pods don't terminate gracefully
+          force: true
+          # Wait up to 5 minutes for pods to terminate
+          timeoutSeconds: 300
+        # Fallback pod deletion settings
         podDeletion:
           deleteEmptyDir: true
           force: true
           timeoutSeconds: 300
-        # Disable node drain (GPU pods will be force-deleted instead)
-        drain:
-          enable: false
-          deleteEmptyDir: true
-          force: true
-          timeoutSeconds: 300
+        # Wait for driver to be fully ready before uncordoning
+        waitForCompletion:
+          timeoutSeconds: 600
     toolkit:
       enabled: true
     devicePlugin:
