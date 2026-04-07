@@ -44,14 +44,17 @@ spec:
       strategy: none
     driver:
       enabled: true
+      # Pin to exact version to prevent upgrade attempts
+      version: "580.105.08"
       upgradePolicy:
-        # Disable auto-upgrade to prevent driver reinstall loop
+        # Disable auto-upgrade completely
         autoUpgrade: false
-        # Don't drain/evict GPU pods during upgrade (they'll be restarted after)
+        # Allow deletion of pods with emptyDir during any driver operations
         podDeletion:
           deleteEmptyDir: true
           force: true
           timeoutSeconds: 300
+        # Disable node drain (GPU pods will be force-deleted instead)
         drain:
           enable: false
           deleteEmptyDir: true
