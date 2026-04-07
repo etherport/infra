@@ -2,6 +2,17 @@
 
 Automated daily sync of iCloud Photos to local NFS backup storage using [icloudpd](https://github.com/icloud-photos-downloader/icloud-photos-downloader).
 
+> **Status: SUSPENDED** (as of April 2026)
+>
+> The CronJob is currently suspended because Apple session cookies expired and Apple does not provide a reliable re-authentication path for server-side iCloud access. Cookie-based auth requires manual 2FA and Apple's rate limiting makes automated re-auth impractical.
+>
+> **Alternative**: Using Ubiquiti NAS integrated photo/video backup via their identity app (requires phone with app open, less ideal than server-side but functional).
+>
+> To re-enable if Apple improves their authentication:
+> ```bash
+> kubectl patch cronjob icloud-photos-sync -n icloudpd -p '{"spec":{"suspend":false}}'
+> ```
+
 ## Overview
 
 This CronJob runs daily at midnight (Pacific time) to download the most recent photos from iCloud Photos to a local backup directory. It uses cookie-based authentication to avoid having to re-authenticate frequently.

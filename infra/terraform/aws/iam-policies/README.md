@@ -54,6 +54,38 @@ Administrative user for Claude Code to manage IAM policies. Access can be disabl
 **Security:** Deactivate access key when not in use:
 - IAM → Users → claude-admin → Security credentials → Access keys → Deactivate
 
+### alertmanager-ses-smtp
+
+SMTP user for Alertmanager to send email notifications via AWS SES.
+
+**Policy:** AmazonSesSendingAccess (AWS Managed)
+
+**Permissions:**
+- `ses:SendRawEmail` - Send emails via SES SMTP
+
+**Setup:**
+1. IAM → Users → Create user → Name: `alertmanager-ses-smtp` (no console access)
+2. Attach AWS managed policy: `AmazonSesSendingAccess`
+3. Create SMTP credentials: User → Security credentials → Create SMTP credentials
+   - Note: SMTP credentials are different from regular access keys
+   - AWS generates the SMTP password from the secret access key
+4. Store credentials in Kubernetes:
+   ```bash
+   # Edit the SOPS-encrypted secret
+   sops platform/kubernetes/monitoring/alertmanager-secret.sops.yaml
+
+   # Add the SMTP username and password from step 3
+   ```
+
+**Usage:**
+- SMTP Server: `email-smtp.us-west-2.amazonaws.com:587`
+- From Address: Must be a verified SES identity (e.g., `alerts@etherport.net`)
+- Used by: AlertmanagerConfig CR in `platform/kubernetes/monitoring/03-alertmanager-config.yaml`
+
+**Related Files:**
+- `platform/kubernetes/monitoring/alertmanager-secret.sops.yaml` - SMTP credentials (SOPS encrypted)
+- `platform/kubernetes/monitoring/03-alertmanager-config.yaml` - AlertmanagerConfig CR
+
 ## IAM Groups
 
 | Group | Purpose |

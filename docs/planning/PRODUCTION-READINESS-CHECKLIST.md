@@ -134,14 +134,14 @@
 
 ### Operational Runbooks
 
-- [ ] **Monitoring & alerting runbook**
+- [x] **Monitoring & alerting runbook**
   - Common alert meanings and severity levels
   - Response procedures per alert type
   - Escalation paths
   - Silence/acknowledge procedures
-  - File: `docs/runbooks/monitoring-alerting.md`
-  - Assignee:
-  - Due:
+  - File: `docs/setup/kubernetes/monitoring-kube-prometheus-stack.md`
+  - Completed: 2026-04-06
+  - Note: Email alerts via AWS SES, AlertmanagerConfig CR deployed
 
 - [ ] **Kubernetes upgrade procedures**
   - Version upgrade planning (compatibility checks)
@@ -252,6 +252,14 @@
   - Assignee:
   - Due:
 
+- [x] **GPU monitoring alerts**
+  - ✅ Alerts for GPU workload failures (OllamaDown, PlexDown)
+  - ✅ GPU crash loop detection (GPUWorkloadCrashLooping)
+  - ✅ Driver update correlation (GPUWorkloadFailedAfterDriverUpdate)
+  - ✅ GPU operator health (GPUDriverDaemonsetNotReady, GPUDevicePluginNotReady)
+  - File: `platform/kubernetes/monitoring/comprehensive-alerts.yaml`
+  - Completed: 2026-04-06
+
 - [x] **Create GPU workload examples**
   - ✅ Plex deployment with GPU hardware transcoding
   - ✅ Complete manifests: namespace, PVC, deployment, service, ingress
@@ -313,18 +321,18 @@
 
 ### Summary Statistics
 
-- **Total Items**: 40
-- **Completed**: 6 (15%)
+- **Total Items**: 41
+- **Completed**: 8 (20%)
 - **In Progress**: 0 (0%)
-- **Not Started**: 34 (85%)
+- **Not Started**: 33 (80%)
 
 ### By Priority
 
 | Priority | Total | Completed | Remaining |
 |----------|-------|-----------|-----------|
 | P1 (Critical Security) | 3 | 1 | 2 |
-| P2 (Infrastructure Stability) | 19 | 5 | 14 |
-| P3 (Documentation) | 14 | 0 | 14 |
+| P2 (Infrastructure Stability) | 20 | 6 | 14 |
+| P3 (Documentation) | 14 | 1 | 13 |
 | P4 (Continuous Improvement) | 4 | 0 | 4 |
 
 ---
@@ -353,5 +361,5 @@
 
 ---
 
-**Last Updated**: 2025-12-31
+**Last Updated**: 2026-04-06
 **Next Review**: TBD

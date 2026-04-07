@@ -419,6 +419,120 @@ kubectl describe kustomization <name> -n flux-system
 flux get source git flux-system
 ```
 
+## Monitoring & Alerting
+
+### Grafana Access
+
+- **URL**: https://grafana.wind.etherport.net
+- **Credentials**: See `platform/kubernetes/monitoring/grafana-admin-secret.sops.yaml`
+
+### Check Alert Status
+
+```bash
+# Get active alerts from Alertmanager
+kubectl exec -n monitoring alertmanager-monitoring-kube-prometheus-alertmanager-0 \
+  -c alertmanager -- wget -q -O- http://localhost:9093/api/v2/alerts | python3 -m json.tool
+
+# Check Prometheus rules are loaded
+kubectl get prometheusrule -n monitoring
+
+# View PrometheusRule details
+kubectl describe prometheusrule comprehensive-service-alerts -n monitoring
+```
+
+### Email Notifications
+
+Alerts are sent via AWS SES to `graham.m.smith@me.com`. Configuration:
+
+- **AlertmanagerConfig**: `platform/kubernetes/monitoring/03-alertmanager-config.yaml`
+- **SMTP Secret**: `platform/kubernetes/monitoring/alertmanager-secret.sops.yaml`
+- **IAM User**: `alertmanager-ses-smtp` (SES SMTP credentials)
+
+```bash
+# Test email alert
+kubectl exec -n monitoring alertmanager-monitoring-kube-prometheus-alertmanager-0 \
+  -c alertmanager -- wget -q -O- \
+  --header='Content-Type: application/json' \
+  --post-data='[{"labels":{"alertname":"TestAlert","severity":"warning","namespace":"monitoring"},"annotations":{"summary":"Test alert"}}]' \
+  http://localhost:9093/api/v2/alerts
+
+# Check Alertmanager logs
+kubectl logs -n monitoring alertmanager-monitoring-kube-prometheus-alertmanager-0 -c alertmanager --tail=50
+
+# Verify SMTP secret
+kubectl get secret alertmanager-smtp-config -n monitoring
+```
+
+### Force Reconcile Monitoring
+
+```bash
+flux reconcile helmrelease monitoring -n flux-system
+flux reconcile kustomization flux-system
+```
+
+## GPU Operations
+
+### Check GPU Status
+
+```bash
+# Verify GPU node
+kubectl get nodes -l nvidia.com/gpu=true
+
+# Check GPU resources available
+kubectl describe node k8s-gpu1 | grep -A 10 "Allocated resources"
+
+# Check GPU operator pods
+kubectl get pods -n gpu-operator-system
+
+# Check device plugin is advertising GPUs
+kubectl get node k8s-gpu1 -o jsonpath='{.status.allocatable}' | python3 -m json.tool
+```
+
+### GPU Workload Management
+
+```bash
+# Check GPU workloads
+kubectl get pods -n plex
+kubectl get pods -n ollama
+
+# Scale GPU workloads (e.g., for maintenance)
+kubectl scale deployment plex -n plex --replicas=0
+kubectl scale deployment ollama -n ollama --replicas=0
+
+# Restore GPU workloads
+kubectl scale deployment plex -n plex --replicas=1
+kubectl scale deployment ollama -n ollama --replicas=1
+```
+
+### GPU Driver Updates
+
+The GPU Operator is configured for automatic driver upgrades with drain settings:
+
+```bash
+# Check driver daemonset status
+kubectl get daemonset nvidia-driver-daemonset -n gpu-operator-system
+
+# Check driver pod logs
+kubectl logs -n gpu-operator-system -l app=nvidia-driver-daemonset --tail=50
+
+# Force driver reinstall (if needed)
+kubectl rollout restart daemonset nvidia-driver-daemonset -n gpu-operator-system
+```
+
+### GPU Troubleshooting
+
+```bash
+# If GPU workloads fail after driver update
+kubectl get events -n plex --sort-by=.metadata.creationTimestamp | tail -20
+kubectl describe pod -n plex -l app=plex
+
+# Check if driver is ready
+kubectl exec -n gpu-operator-system -l app=nvidia-driver-daemonset -- nvidia-smi
+
+# Restart GPU operator
+flux reconcile helmrelease gpu-operator -n flux-system
+```
+
 ## Emergency Procedures
 
 ### Cluster Recovery
