@@ -139,8 +139,8 @@ This document outlines the plan to migrate existing homelab AWS resources into T
 
 | Table | Purpose | Notes |
 |-------|---------|-------|
-| `homelab-terraform-locks` | Terraform locking | Document only |
-| `DataSyncStatus` | DataSync tracking | Migrate |
+| `homelab-terraform-locks` | Terraform locking | **Delete** - redundant, using S3 native locking |
+| `DataSyncStatus` | DataSync tracking | **Delete** - DataSync deprecated, replaced by custom S3 sync |
 
 #### EventBridge Rules
 
@@ -162,8 +162,8 @@ This document outlines the plan to migrate existing homelab AWS resources into T
 | `/aws/lambda/dns_restrict_ip` | 7 days | Legacy - review |
 | `/aws/lambda/email-fwd_grahamsmith` | 30 days | Legacy - review |
 | `/aws/lambda/snapshot_archive` | 30 days | Legacy - review |
-| `/aws/lambda/datasync_status_email` | 30 days | Not in TF - migrate |
-| `/aws/datasync` | 90 days | DataSync logs - migrate |
+| `/aws/lambda/datasync_status_email` | 30 days | **Delete** - DataSync deprecated |
+| `/aws/datasync` | 90 days | **Delete** - DataSync deprecated |
 | `aws-waf-logs-alb` | 30 days | WAF logs - migrate |
 
 #### CloudWatch Alarms
@@ -175,7 +175,7 @@ This document outlines the plan to migrate existing homelab AWS resources into T
 | `High-Memory-Utilization-VPN` | mem_used_percent | EC2 - migrate |
 | `High-Swap-Utilization-DNS` | swap_used_percent | EC2 - migrate |
 | `High-Swap-Utilization-VPN` | swap_used_percent | EC2 - migrate |
-| `TargetTracking-table/DataSyncStatus-*` | DynamoDB autoscaling | Auto-created - skip |
+| `TargetTracking-table/DataSyncStatus-*` | DynamoDB autoscaling | **Delete** - will be removed with DataSyncStatus table |
 
 **us-east-1:**
 | Alarm | Notes |
@@ -276,9 +276,17 @@ The following resources are for the stopthecastle.com/smithforsb.com campaign si
 ## Resources to Skip
 
 - Default VPC and subnets (AWS default)
-- DynamoDB autoscaling alarms (auto-managed)
 - Terraform state bucket (already in use, document only)
-- Terraform locks table (already in use, document only)
+
+## Resources to Delete (Cleanup)
+
+| Resource | Type | Reason |
+|----------|------|--------|
+| `homelab-terraform-locks` | DynamoDB | Redundant - using S3 native locking |
+| `DataSyncStatus` | DynamoDB | Deprecated - replaced by custom S3 sync |
+| `/aws/lambda/datasync_status_email` | CloudWatch Logs | DataSync deprecated |
+| `/aws/datasync` | CloudWatch Logs | DataSync deprecated |
+| `TargetTracking-table/DataSyncStatus-*` | CloudWatch Alarms | Will auto-delete with table |
 
 ---
 
