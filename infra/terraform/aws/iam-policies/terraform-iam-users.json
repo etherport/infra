@@ -1,0 +1,56 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "IAMUserManagement",
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreateUser",
+                "iam:DeleteUser",
+                "iam:GetUser",
+                "iam:ListUsers",
+                "iam:TagUser",
+                "iam:UntagUser",
+                "iam:UpdateUser"
+            ],
+            "Resource": "arn:aws:iam::830881980142:user/*"
+        },
+        {
+            "Sid": "IAMUserPolicyManagement",
+            "Effect": "Allow",
+            "Action": [
+                "iam:PutUserPolicy",
+                "iam:DeleteUserPolicy",
+                "iam:GetUserPolicy",
+                "iam:ListUserPolicies",
+                "iam:AttachUserPolicy",
+                "iam:DetachUserPolicy",
+                "iam:ListAttachedUserPolicies"
+            ],
+            "Resource": "arn:aws:iam::830881980142:user/*"
+        },
+        {
+            "Sid": "IAMAccessKeyManagement",
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreateAccessKey",
+                "iam:DeleteAccessKey",
+                "iam:ListAccessKeys",
+                "iam:GetAccessKeyLastUsed",
+                "iam:UpdateAccessKey"
+            ],
+            "Resource": "arn:aws:iam::830881980142:user/*"
+        },
+        {
+            "Sid": "IAMPolicyRead",
+            "Effect": "Allow",
+            "Action": [
+                "iam:GetPolicy",
+                "iam:GetPolicyVersion",
+                "iam:ListPolicies",
+                "iam:ListPolicyVersions"
+            ],
+            "Resource": "*"
+        }
+    ]
+}

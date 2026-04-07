@@ -31,6 +31,11 @@ spec:
     alertmanager:
       enabled: true
       alertmanagerSpec:
+        # Select AlertmanagerConfig CRs from monitoring namespace
+        alertmanagerConfigSelector:
+          matchLabels:
+            alertmanagerConfig: main
+        alertmanagerConfigNamespaceSelector: {}
         storage:
           volumeClaimTemplate:
             spec:

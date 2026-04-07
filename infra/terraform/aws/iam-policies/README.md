@@ -70,6 +70,7 @@ Administrative user for Claude Code to manage IAM policies. Access can be disabl
 |--------|-------------|
 | terraform-ddns-secrets-iam | Secrets Manager and IAM role management for DDNS Lambda |
 | terraform-ddns-logs | CloudWatch log group management for DDNS Lambda |
+| terraform-iam-users | IAM user lifecycle management (create users, access keys, policies) |
 
 ### terraform-compute
 | Policy | Description |
