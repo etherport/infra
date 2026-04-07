@@ -1,0 +1,81 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "IAMRoleManagement",
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreateRole",
+                "iam:DeleteRole",
+                "iam:GetRole",
+                "iam:ListRoles",
+                "iam:AttachRolePolicy",
+                "iam:DetachRolePolicy",
+                "iam:ListAttachedRolePolicies",
+                "iam:ListRolePolicies",
+                "iam:PassRole"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "IAMInstanceProfileManagement",
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreateInstanceProfile",
+                "iam:DeleteInstanceProfile",
+                "iam:GetInstanceProfile",
+                "iam:ListInstanceProfiles",
+                "iam:AddRoleToInstanceProfile",
+                "iam:RemoveRoleFromInstanceProfile"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "IAMPolicyManagement",
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreatePolicy",
+                "iam:GetPolicy",
+                "iam:GetPolicyVersion",
+                "iam:DeletePolicy",
+                "iam:ListPolicies",
+                "iam:ListPolicyVersions",
+                "iam:DeletePolicyVersion",
+                "iam:CreatePolicyVersion"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "IAMUserPolicyManagement",
+            "Effect": "Allow",
+            "Action": [
+                "iam:AttachUserPolicy",
+                "iam:DetachUserPolicy",
+                "iam:ListAttachedUserPolicies",
+                "iam:ListUserPolicies",
+                "iam:GetUserPolicy",
+                "iam:PutUserPolicy",
+                "iam:DeleteUserPolicy"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "EC2InstanceProfileAssociation",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DescribeIamInstanceProfileAssociations",
+                "ec2:ReplaceIamInstanceProfileAssociation"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "ACMCertificateCleanup",
+            "Effect": "Allow",
+            "Action": [
+                "acm:DeleteCertificate",
+                "acm:DescribeCertificate"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
