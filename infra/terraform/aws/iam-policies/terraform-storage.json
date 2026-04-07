@@ -1,0 +1,60 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "S3BucketManagement",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketLocation",
+        "s3:GetBucketPolicy",
+        "s3:GetBucketPolicyStatus",
+        "s3:GetBucketAcl",
+        "s3:GetBucketCORS",
+        "s3:GetBucketWebsite",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketLogging",
+        "s3:GetBucketNotification",
+        "s3:GetBucketTagging",
+        "s3:GetLifecycleConfiguration",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:GetBucketOwnershipControls",
+        "s3:GetEncryptionConfiguration",
+        "s3:GetReplicationConfiguration",
+        "s3:GetAccelerateConfiguration",
+        "s3:GetBucketRequestPayment",
+        "s3:GetObjectLockConfiguration",
+        "s3:GetBucketObjectLockConfiguration",
+        "s3:ListBucket",
+        "s3:ListAllMyBuckets",
+        "s3:PutBucketTagging",
+        "s3:PutBucketVersioning",
+        "s3:PutBucketLogging",
+        "s3:PutLifecycleConfiguration",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutBucketOwnershipControls",
+        "s3:PutEncryptionConfiguration",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SESManagement",
+      "Effect": "Allow",
+      "Action": [
+        "ses:GetIdentityVerificationAttributes",
+        "ses:GetIdentityNotificationAttributes",
+        "ses:GetIdentityDkimAttributes",
+        "ses:GetIdentityMailFromDomainAttributes",
+        "ses:ListIdentities",
+        "ses:DescribeActiveReceiptRuleSet",
+        "ses:DescribeReceiptRule",
+        "ses:DescribeReceiptRuleSet",
+        "ses:ListReceiptRuleSets",
+        "ses:GetIdentityPolicies",
+        "ses:ListIdentityPolicies"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

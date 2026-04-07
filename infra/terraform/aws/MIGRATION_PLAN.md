@@ -259,12 +259,17 @@ This document outlines the plan to migrate existing homelab AWS resources into T
 **State:** `terraform.wind.etherport.net/aws/route53/terraform.tfstate`, `terraform.wind.etherport.net/aws/acm/terraform.tfstate`
 **Note:** DDNS records (wan1, wan2, wind) managed by ddns-lambda, not Terraform
 
-### Phase 5: Storage & Email
-1. Create `s3` module
-2. Import homelab S3 buckets (velero, archive, email-fwd, logs)
-3. Configure lifecycle policies
-4. Import SES domain identities (etherport.net, grahamsmith.net)
-5. Import SES email identities
+### Phase 5: Storage & Email ✅ COMPLETE
+1. ✅ Create `s3` module
+2. ✅ Import homelab S3 buckets (velero, archive, logs.archive, email-fwd, logs)
+3. ✅ Configure lifecycle policies (versioning, deep archive, expiration)
+4. ✅ Create `ses` module
+5. ✅ Import SES domain identities (etherport.net, grahamsmith.net) with DKIM
+6. ✅ Import SES email identities (3 personal emails)
+
+**Modules:** `infra/terraform/aws/s3/`, `infra/terraform/aws/ses/`
+**State:** `terraform.wind.etherport.net/aws/s3/terraform.tfstate`, `terraform.wind.etherport.net/aws/ses/terraform.tfstate`
+**Note:** archive-test.wind.etherport.net bucket skipped (empty, review in Phase 6)
 
 ### Phase 6: Cleanup
 1. Review legacy/orphaned IAM roles
