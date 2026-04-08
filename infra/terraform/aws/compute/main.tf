@@ -156,6 +156,7 @@ resource "aws_instance" "dns" {
   key_name             = aws_key_pair.gs_ec2.key_name
   iam_instance_profile = aws_iam_instance_profile.ec2_cloudwatch_agent.name
   subnet_id            = data.aws_subnet.public1.id
+  private_ip           = "10.10.100.5"
 
   vpc_security_group_ids = [
     data.aws_security_group.dns_server.id,
