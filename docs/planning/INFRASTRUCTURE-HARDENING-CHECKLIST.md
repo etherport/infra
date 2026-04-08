@@ -10,8 +10,9 @@
 ### 1. EBS Volume Encryption
 - [x] Enable encryption on VPN instance root volume (`compute/main.tf:130`)
 - [x] Enable encryption on DNS instance root volume (`compute/main.tf:182`)
-- [ ] Run `terraform plan` to verify changes
-- [ ] **Note:** Applying requires instance replacement - schedule maintenance window
+- [x] DNS instance migrated (i-050de21bdad2603bb with encrypted EBS vol-026780e14ed50f851)
+- [ ] VPN instance migration pending
+- [ ] **Note:** VPN migration requires WireGuard key restoration
 
 ### 2. Grafana Admin Password
 - [x] Remove hardcoded password from `clusters/wind/helm-releases/monitoring.yaml:67`
@@ -112,6 +113,7 @@
 
 | Date | Item | Notes |
 |------|------|-------|
+| 2026-04-07 | DNS instance EBS encryption | Migrated to i-050de21bdad2603bb with encrypted EBS |
 | 2026-04-07 | Deleted orphaned IAM roles (4) | DataSync, dns_restrict_ip, SESEmailForwarder |
 | 2026-04-07 | Deleted orphaned IAM policies (12) | AWSLambdaBasicExecutionRole-*, misc |
 | 2026-04-07 | Cleaned up us-east-1 log groups (2) | Legacy empty log groups |
