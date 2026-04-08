@@ -16,11 +16,11 @@
 ### 2. Grafana Admin Password
 - [x] Remove hardcoded password from `clusters/wind/helm-releases/monitoring.yaml:67`
 - [x] Reference existing SOPS secret `platform/kubernetes/monitoring/grafana-admin-secret.sops.yaml`
-- [ ] Verify Flux reconciliation
+- [x] Verify Flux reconciliation
 
 ### 3. Homeassistant-Alexa Deprecation Fix
 - [x] Change `data.aws_region.current.name` to `.id` in `homeassistant-alexa/iam.tf:52`
-- [ ] Run `terraform plan` to verify no changes (just warning removal)
+- [x] Run `terraform plan` to verify no changes (just warning removal)
 
 ### 4. Pod Disruption Budgets
 - [ ] **Blocked:** Requires replica count increase (#12) to be meaningful
@@ -35,8 +35,8 @@
 - [x] Add data source to reference bucket from s3 module
 - [x] Update all references to use data source
 - [x] Remove unused `email_retention_days` variable (lifecycle managed by s3 module)
-- [ ] Remove bucket from email-forward state: `terraform state rm aws_s3_bucket.email aws_s3_bucket_lifecycle_configuration.email`
-- [ ] Run `terraform plan` to verify no changes
+- [x] Remove bucket from email-forward state: `terraform state rm aws_s3_bucket.email aws_s3_bucket_lifecycle_configuration.email`
+- [x] Run `terraform plan` to verify no changes
 
 ---
 
