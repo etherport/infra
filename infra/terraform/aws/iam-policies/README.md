@@ -126,7 +126,7 @@ SMTP user for Alertmanager to send email notifications via AWS SES.
 | Policy | Description |
 |--------|-------------|
 | terraform-networking | VPC, subnets, route tables, security groups, NACLs |
-| terraform-compute | EC2 instances, EIPs, CloudWatch alarms, SNS topics |
+| terraform-compute | EC2 instances, EIPs, snapshots, CloudWatch alarms, SNS topics |
 | terraform-loadbalancing | ALB, listeners, target groups, certificates |
 | terraform-dns | Route53 hosted zones and DNS records |
 

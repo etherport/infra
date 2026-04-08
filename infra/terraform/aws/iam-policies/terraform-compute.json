@@ -29,6 +29,19 @@
       "Resource": "*"
     },
     {
+      "Sid": "EC2SnapshotManagement",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateSnapshot",
+        "ec2:DeleteSnapshot",
+        "ec2:DescribeSnapshots",
+        "ec2:DescribeSnapshotAttribute",
+        "ec2:ModifySnapshotAttribute",
+        "ec2:CopySnapshot"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "EC2ElasticIPManagement",
       "Effect": "Allow",
       "Action": [
