@@ -41,3 +41,4 @@ platform/kubernetes/route53-ddns/base/secret.yaml
 **/alertmanager-config.yaml
 **/credentials.yaml
 !**/*.sops.yaml
+backups/
