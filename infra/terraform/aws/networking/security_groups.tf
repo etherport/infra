@@ -161,11 +161,20 @@ resource "aws_security_group" "allow_ssh" {
 
 resource "aws_vpc_security_group_ingress_rule" "ssh_restricted" {
   security_group_id = aws_security_group.allow_ssh.id
-  description       = "Allow SSH access to restricted IP"
+  description       = "Allow SSH access from homelab WAN"
   ip_protocol       = "tcp"
   from_port         = 22
   to_port           = 22
   cidr_ipv4         = var.ssh_allowed_ip
+}
+
+resource "aws_vpc_security_group_ingress_rule" "ssh_remote" {
+  security_group_id = aws_security_group.allow_ssh.id
+  description       = "Allow SSH access from remote location"
+  ip_protocol       = "tcp"
+  from_port         = 22
+  to_port           = 22
+  cidr_ipv4         = "47.34.215.233/32"
 }
 
 resource "aws_vpc_security_group_egress_rule" "ssh_all_ipv4" {

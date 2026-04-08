@@ -7,12 +7,13 @@
 
 ## Quick Wins (In Progress)
 
-### 1. EBS Volume Encryption
+### 1. EBS Volume Encryption ✅
 - [x] Enable encryption on VPN instance root volume (`compute/main.tf:130`)
 - [x] Enable encryption on DNS instance root volume (`compute/main.tf:182`)
-- [x] DNS instance migrated (i-050de21bdad2603bb with encrypted EBS vol-026780e14ed50f851)
-- [ ] VPN instance migration pending
-- [ ] **Note:** VPN migration requires WireGuard key restoration
+- [x] DNS instance migrated (i-050de21bdad2603bb with encrypted EBS)
+- [x] VPN instance migrated (i-011086cefc7ab3cc1 with encrypted EBS)
+- [x] WireGuard keys restored, tunnel reconnected
+- [x] nftables MSS clamping configured
 
 ### 2. Grafana Admin Password
 - [x] Remove hardcoded password from `clusters/wind/helm-releases/monitoring.yaml:67`
@@ -113,18 +114,34 @@
 
 | Date | Item | Notes |
 |------|------|-------|
+| 2026-04-07 | VPN instance EBS encryption | Migrated to i-011086cefc7ab3cc1 with encrypted EBS, WireGuard restored |
 | 2026-04-07 | DNS instance EBS encryption | Migrated to i-050de21bdad2603bb with encrypted EBS |
 | 2026-04-07 | Deleted orphaned IAM roles (4) | DataSync, dns_restrict_ip, SESEmailForwarder |
 | 2026-04-07 | Deleted orphaned IAM policies (12) | AWSLambdaBasicExecutionRole-*, misc |
 | 2026-04-07 | Cleaned up us-east-1 log groups (2) | Legacy empty log groups |
 | 2026-04-07 | Updated AWS documentation | aws-infrastructure.md, remote-state-backend.md |
 | 2026-04-07 | Completed Phase 6 cleanup | EventBridge, log groups, IAM roles, S3 bucket |
+| 2026-04-07 | WireGuard keys in SOPS | Server keys stored in `platform/wireguard/servers/*.sops.yaml` |
+| 2026-04-07 | WireGuard playbook refactored | Uses community.sops to deploy keys from encrypted files |
+| 2026-04-07 | Client configs in SOPS | Remote access and S2S configs in `platform/wireguard/clients/*.sops.yaml` |
+| 2026-04-07 | vpn-local in Terraform | Proxmox VM (ID 1002) managed by standalone-vms module |
+| 2026-04-07 | Full IaC deployment tested | vpn-local recreated from scratch via Terraform+Ansible |
+| 2026-04-07 | Migration runbook created | `docs/runbooks/instance-migration.md` for all VPN/DNS instances |
+| 2026-04-07 | Technitium playbook updated | Added backup restoration capability |
 
 ---
 
 ## Notes
 
-- **EBS Encryption:** Changing encryption requires instance replacement. Both VPN and DNS instances will need to be recreated. Ensure WireGuard keys and Technitium config are backed up or can be restored from Ansible.
+- **EBS Encryption:** ✅ Completed. Both VPN and DNS instances migrated to encrypted EBS. WireGuard keys now stored in SOPS and deployed via Ansible.
+
+- **WireGuard IaC:** All WireGuard configuration is now fully IaC-managed:
+  - Server keys: `platform/wireguard/servers/{vpn-aws,vpn-local}.sops.yaml`
+  - Client configs: `platform/wireguard/clients/*.sops.yaml`
+  - Ansible playbook: `infra/ansible/playbooks/wireguard.yml` (uses community.sops)
+  - Requires: `export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt`
+
+- **Proxmox Standalone VMs:** vpn-local (1002) and dns-fallback (1001) managed by `infra/terraform/proxmox/standalone-vms/`
 
 - **Email-Forward Bucket:** The `email-fwd.grahamsmith.net` bucket is managed by both `s3` module (with tags) and `email-forward` module (without tags). Resolution: email-forward should use a data source to reference the bucket owned by s3 module.
 

@@ -1,0 +1,32 @@
+# WireGuard Server Keys - vpn-aws
+# Used by Ansible to deploy keys during instance provisioning
+#
+# Encrypt with: sops -e -i vpn-aws.sops.yaml
+# Decrypt with: sops -d vpn-aws.sops.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+    name: wireguard-server-vpn-aws
+type: Opaque
+stringData:
+    #ENC[AES256_GCM,data:+gqMj+p0ZHZM3FBYinCB/B0P+TWQ9ERcWY8=,iv:A/2QHq+VRIDDmkZrS5R5O98KNOkF2NpJVDG1TmC8qts=,tag:XzHlbxwHhpW752ovG1VDRg==,type:comment]
+    wg0_private_key: ENC[AES256_GCM,data:CXav9xV2pvV06eKerQt2ziVE337403k5OE11bzoE3OTYnWjVx09khjrUXe4=,iv:b2dqCvno+m+vCm8XYcm0EoNSHNnPXgOpHi1Shdkv+Hs=,tag:F7LoQnMzDyYBGsLkGDZM2Q==,type:str]
+    wg0_public_key: ENC[AES256_GCM,data:cSHAcq6hFaAuOsZ2LSVby3nR/lBQUpxhyBgZFETl6+9BfR5KzADHDrMuWh4=,iv:XYsQZx7Y1B8O4ZxHaVW4fUWlEX+dabWpwgmYJS8Br+4=,tag:KnOSHSR1LTBU45CHRoKqFQ==,type:str]
+    #ENC[AES256_GCM,data:ChLoBDNopc0Oa2YIA2jTlWFU7YN/T4Q1UTSf,iv:LVhPR6IjdiNjMrh0Z4/leZOAisw2eaHq735CyoYWUxg=,tag:ZMTcRdbtCflyTGY3qDyUBQ==,type:comment]
+    wg1_private_key: ENC[AES256_GCM,data:Re5R+f1WVSrVf/d7XUSPIrZ01B2Wk1/LWTyKT+WIcYG5iyiBoakH0xVPkyU=,iv:y7SKfcnummVXVfeGUmPnwdkfIEyOkDvi+++nATzcMuM=,tag:BEuI0XnVO2U5+aDdvMn/Dg==,type:str]
+    wg1_public_key: ENC[AES256_GCM,data:jrXPFNf0SrrN/5qwgUvEzjzfxJVeTQg4fMn47ulVhNOYQuUIouJKdsG6FMo=,iv:eGFyYOrqhf5ym6Eyix967276RX/8fAfRwJBJT9qyfUY=,tag:AoOU6Bau53FyuIKw+CiU0w==,type:str]
+sops:
+    age:
+        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBDSWdxTndVZFZyZmJmZ1ph
+            bWszNm5QVjdtRDliRmc0aHhBc2NURWF2aFFFCkx2WnRiTWovc0tsWkJsYVZsOXFL
+            SnRYMG5RdGlObTdmeHNOSElEYWljc3MKLS0tIFVlWk43WnlSQ0RaUFFkaVRGV2F2
+            SGlsRFRBN1lTSVdkSFdJVFBmYVNiREkKL3uLya129Ro1T4zA+NIofoyjwtBjm0d4
+            bkMZV/wPN9FaBUb4XWecqoJ2lBQborI+VJxD3N47pxZQJEF64wS61A==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-04-08T02:01:02Z"
+    mac: ENC[AES256_GCM,data:bPn1qcDnBGGOl3rppaNwQWhAbsr7t3r5Hd32xEYqPvhZTnoCxhHGAlXe3kEi6mzsJyLOm37FxaDung78KWcN0Ud53m1qM06OEP2rxh69qkuQfzSUPsbjuBH7iejbKAvD8BNG0nlxbF6i4pK6Ij38+UMveVJdaPeXBKpb77B7PJA=,iv:xEk42BrPf0EPxndd4TP1/SCXHLW/aIIAtxZxswXSeeM=,tag:HRw5Kx6Jq4NeOEMJJRfHgg==,type:str]
+    encrypted_regex: ^(data|stringData)$
+    version: 3.11.0

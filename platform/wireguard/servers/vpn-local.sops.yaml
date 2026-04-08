@@ -1,0 +1,29 @@
+# WireGuard Server Keys - vpn-local
+# Used by Ansible to deploy keys during instance provisioning
+#
+# Encrypt with: sops -e -i vpn-local.sops.yaml
+# Decrypt with: sops -d vpn-local.sops.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+    name: wireguard-server-vpn-local
+type: Opaque
+stringData:
+    #ENC[AES256_GCM,data:56+Jz6zPOmVYK6u4I6unBpV7QqSzsRX+bbgteFqb980IiwtFt/2muDhpz3jsA0uT,iv:Dt3mOe44elbdpwDUHuBhmnI/GkSlnS3I8jd21yErAuQ=,tag:iHmcptbL3kuPlYFV5eAV3w==,type:comment]
+    wg0_private_key: ENC[AES256_GCM,data:zDgAwOQgk+gIsvy/FYKvpiYv80Cgg3MQEX83ilAI8zXG1LjhV/P2Klsc2h8=,iv:IaV1sHOV5TuYYzkUkoy9EEazDheJwqdP+TivrUXVXhs=,tag:nIvYV5jXTuCCinN/sr+rxQ==,type:str]
+    wg0_public_key: ENC[AES256_GCM,data:ptFPbQk//xJGu0EwCTzntUjGyNRcrlWgzwJRl8HTytRYTaf9GItzbN2zgII=,iv:69HVzLmsPt/WMya/a2wqeq8CLQQO8HsKX7SfzROp0go=,tag:FmWde8Uj2MxrfHON6qeoBQ==,type:str]
+sops:
+    age:
+        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB3bk5NNjYvWXhlQ2JCMUdj
+            WmNMMVEycDFtZk8yQVA3TjQ3Q2drNnJKRndnCmRuZzROOHpIVWpLQXhXUWFrNzJl
+            OWx5ZmdEcVc5V3ZjdVFJdWJiV2laam8KLS0tIERsSDFhLzhCNU1TU1lmaVlGNjFH
+            ZThpc0Z4SEtiUmFENU5UM2tQWmRTUm8KHJG/3+nLfw07vlrW8D9v/DVqLoyzEC0H
+            bSAkhhka4aiBUXUMRO9TZIzxdbIXkCu+T3jS6/+T/EVRWj4pU4fKKw==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-04-08T02:01:02Z"
+    mac: ENC[AES256_GCM,data:swj7oNyLOzk5wxS9UO1E4fSgimrLhGIFEoSH1Sbv50BdHMDY1+GjfEkhZhIsQVyNOqH2aY1fV25lwlwSDBmn2OO+zIZX9b7wumgCdF+rzjxXv46PooMyT2y5WTH7vyWUSaXssZVrFFGMC2YTQWMKzwMK82ZsmyhCmP3z4RXLxAI=,iv:fzI83WrHtoRKPoHLE6nkNWgPbA3wYfpocAlOGF6QM50=,tag:oGdMWzFPsuVrhTl6BVC8lA==,type:str]
+    encrypted_regex: ^(data|stringData)$
+    version: 3.11.0

@@ -154,6 +154,49 @@
         delay: 5
         timeout: 60
 
+    # =========================================================================
+    # Optional: Restore from backup
+    # =========================================================================
+    # To restore from a backup, set technitium_restore_backup to the local path
+    # of the backup tarball. Example:
+    #   ansible-playbook playbooks/technitium.yml -e "technitium_restore_backup=/path/to/backup.tar.gz"
+
+    - name: Check if restore backup is specified
+      set_fact:
+        restore_backup: "{{ technitium_restore_backup | default('') }}"
+
+    - name: Copy backup to server
+      copy:
+        src: "{{ restore_backup }}"
+        dest: /tmp/technitium-backup.tar.gz
+        mode: "0644"
+      when: restore_backup | length > 0
+
+    - name: Stop Technitium for restore
+      systemd:
+        name: technitium
+        state: stopped
+      when: restore_backup | length > 0
+
+    - name: Remove existing config
+      file:
+        path: /opt/technitium/config
+        state: absent
+      when: restore_backup | length > 0
+
+    - name: Restore config from backup
+      unarchive:
+        src: /tmp/technitium-backup.tar.gz
+        dest: /opt/technitium/
+        remote_src: yes
+      when: restore_backup | length > 0
+
+    - name: Start Technitium after restore
+      systemd:
+        name: technitium
+        state: started
+      when: restore_backup | length > 0
+
     - name: Display access information
       debug:
         msg: |
@@ -161,7 +204,14 @@
           Web UI: http://{{ ansible_host }}:5380
           DNS: {{ ansible_host }}:53
 
+          {% if restore_backup | length > 0 %}
+          Configuration restored from backup.
+          {% else %}
           Next steps:
           1. Access the web UI and set admin password
           2. Configure clustering with other Technitium instances
           3. Import zones and blocklists
+
+          Or restore from backup:
+            ansible-playbook playbooks/technitium.yml -e "technitium_restore_backup=/path/to/backup.tar.gz"
+          {% endif %}

@@ -25,25 +25,46 @@ locals {
 
   # Standalone VMs - services outside of Kubernetes
   # VM IDs: 1000-1099 reserved for standalone services
+  #
+  # VMs are split into two categories:
+  # - standalone_vms: Created fresh from cloud-init template
+  # - imported_vms: Pre-existing VMs imported into Terraform (no clone block)
+
   standalone_vms = {
     dns-fallback = {
-      vm_id     = 1001
-      ip        = "10.10.201.6"
-      vcpus     = 1
-      memory_mb = 1024
-      disk_gb   = 20
+      vm_id       = 1001
+      ip          = "10.10.201.6"
+      vcpus       = 1
+      memory_mb   = 1024
+      disk_gb     = 20
+      description = "Technitium DNS fallback server"
+      tags        = ["terraform", "dns", "standalone"]
+    }
+    vpn-local = {
+      vm_id       = 1002
+      ip          = "10.10.201.15"
+      vcpus       = 1
+      memory_mb   = 512
+      disk_gb     = 10
+      description = "WireGuard VPN gateway - local site S2S endpoint"
+      tags        = ["terraform", "vpn", "standalone"]
     }
   }
+
+  # Imported VMs - pre-existing VMs adopted into Terraform (no clone block)
+  # Currently empty - vpn-local moved to standalone_vms for fresh deployment
+  imported_vms = {}
 }
 
+# VMs created fresh from cloud-init template
 resource "proxmox_virtual_environment_vm" "standalone" {
   for_each = local.standalone_vms
 
   node_name   = local.node_name
   vm_id       = each.value.vm_id
   name        = each.key
-  description = "Managed by Terraform (standalone service)"
-  tags        = ["terraform", "dns", "standalone"]
+  description = each.value.description
+  tags        = each.value.tags
 
   clone {
     vm_id = 9000 # Ubuntu 24.04 cloud-init template
@@ -68,7 +89,6 @@ resource "proxmox_virtual_environment_vm" "standalone" {
     ssd          = true
   }
 
-  # Single network interface (VLAN 201 - management only)
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
@@ -83,8 +103,6 @@ resource "proxmox_virtual_environment_vm" "standalone" {
         gateway = local.gateway_201
       }
     }
-    # Use K8s Technitium VIP for initial DNS (before this VM is running)
-    # Falls back to Cloudflare if VIP is unavailable
     dns {
       servers = ["10.10.201.5", "1.1.1.1"]
     }
@@ -92,4 +110,57 @@ resource "proxmox_virtual_environment_vm" "standalone" {
 
   started = true
   on_boot = true
+}
+
+# Imported VMs - pre-existing VMs adopted into Terraform
+# No clone block to prevent forced replacement
+resource "proxmox_virtual_environment_vm" "imported" {
+  for_each = local.imported_vms
+
+  node_name   = local.node_name
+  vm_id       = each.value.vm_id
+  name        = each.key
+  description = each.value.description
+  tags        = each.value.tags
+
+  cpu {
+    cores = each.value.vcpus
+    type  = local.cpu_type
+  }
+
+  memory {
+    dedicated = each.value.memory_mb
+  }
+
+  disk {
+    datastore_id = local.storage_name
+    interface    = "scsi0"
+    size         = each.value.disk_gb
+    file_format  = "raw"
+  }
+
+  network_device {
+    bridge  = local.bridge_name
+    model   = "virtio"
+    vlan_id = local.vlan_tag
+  }
+
+  agent {
+    enabled = true
+  }
+
+  started = true
+  on_boot = true
+
+  # Ignore changes to attributes that can't be changed on existing VMs
+  lifecycle {
+    ignore_changes = [
+      bios,
+      disk,
+      efi_disk,
+      initialization,
+      operating_system,
+      scsi_hardware,
+    ]
+  }
 }

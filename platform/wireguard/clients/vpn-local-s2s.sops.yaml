@@ -1,0 +1,32 @@
+# WireGuard S2S Client Configuration - vpn-local
+# Site-to-site tunnel from local site to AWS
+#
+# Note: This config is also deployed via Ansible playbook, but stored here
+# for reference and disaster recovery purposes.
+#
+# Encrypt with: sops -e -i vpn-local-s2s.sops.yaml
+# Decrypt with: sops -d vpn-local-s2s.sops.yaml
+# Export to file: sops -d vpn-local-s2s.sops.yaml | yq '.stringData.config' > wg0.conf
+apiVersion: v1
+kind: Secret
+metadata:
+    name: wireguard-client-vpn-local-s2s
+    namespace: wireguard
+type: Opaque
+stringData:
+    config: ENC[AES256_GCM,data:p/TjibeEQ5dxlV1uZiRvg2NPf3wxGwVFjMFgI3/NvwA2ckCbL+GID6WqR2YlgZeZHZyU+xdA+jPFIE5ScTDqjXJZ/QdjHdLDVqJQMmj+CksVQyvMmcP+4/cxzBcNx62nIHBQBDNZhdLKPJUXpckKML8oi34k1+Iu8UnElpiNMtTw5q4Hggc2Ndj3JPEHy10WjHd63hG7+jrgxQ3WxBiKp7z0SKz9DAVkAUIzgvQ7QM/FN+qeaPyPkoD20PRnw2SqZJfWijVp1mky120sakum7yZeO4EZ76d8YD+rskFZx6d87Dury7o3ZxY54RlVAyCqVlBBBPagECN8RBspgggin51OpJ5YwZ84MAFxbltPY9h3nSEUS1qTk1Iy3aLCsQgarU1w7lY5bd9frAiq9UEpUoAQFXmewPUsyQ==,iv:hQAjPaSdR5tWxCLI3+aPqOLmg8aPe00RJZDVO9pVG3k=,tag:Am2wUXUrE/+bIGQ9tQWs1w==,type:str]
+sops:
+    age:
+        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBBRG16ZTJwRnAwTENSZk80
+            Lyt5KzV5WCtoOXhpZlUyampzU29FaDVlVWhFClk0VmdHSFJkOGNIdVpEY1ZzeFc4
+            WHZkeGpqaFVhcmZWWmpwdFpybEZkMVkKLS0tIDd2UExNZDR0dzRmamVxZzh1MGFp
+            U2tESUFnQ0lEcFBHNzdLUUN3c0FuTG8K3TsbXnQoOB5JeIMUFthpakCG90PTih53
+            b057csN5nLy8qxIoE8Pd7+NjslVrCWdSu1CI5LYLXA1PI9oWGw3k6Q==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-04-08T02:03:43Z"
+    mac: ENC[AES256_GCM,data:UBgMIARJELhgYFGqy6TscCadcNjnkiwZEQqiufD0AMOKBnFP0ap8naWkXn+4uO6x9KbcEXjn2HxeolSBdFIVynC5mTYbpYLFTWXaEkRRfjNB9F1ShwmQo8siLRwKmnooeKbr0395XgEZe3O3MxFrRJWS4HkjT1l9oLqr1UxuMaY=,iv:FkpvpUSlRBUP15Hk6yza6WRIwwGcePESfMbfGVWlXv8=,tag:5iw82Jg70lyTPbjV9j1row==,type:str]
+    encrypted_regex: ^(data|stringData)$
+    version: 3.11.0

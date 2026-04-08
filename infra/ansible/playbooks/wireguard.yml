@@ -15,17 +15,27 @@
 #   # Check mode (dry-run)
 #   ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/wireguard.yml --check --diff
 #
-# IMPORTANT: Private keys are NOT managed by this playbook.
-#   - Keys must already exist on the target hosts in /etc/wireguard/
-#   - This playbook reads existing keys and preserves them in config files
-#   - For new installations, generate keys first:
-#       wg genkey | tee private.key | wg pubkey > public.key
+# KEYS MANAGEMENT:
+#   Server private keys are stored encrypted with SOPS in:
+#     platform/wireguard/servers/vpn-aws.sops.yaml
+#     platform/wireguard/servers/vpn-local.sops.yaml
+#
+#   Client configs are stored encrypted in:
+#     platform/wireguard/clients/<name>.sops.yaml
+#
+#   To add a new server or rotate keys:
+#     1. Generate new keys: wg genkey | tee private.key | wg pubkey > public.key
+#     2. Update the corresponding SOPS file
+#     3. Run this playbook
 
 - name: Configure WireGuard VPN
   hosts: vpn_servers
   become: true
 
   vars:
+    # Path to SOPS-encrypted server keys (relative to repo root)
+    sops_keys_path: "{{ playbook_dir }}/../../../platform/wireguard/servers"
+
     # Site-to-site tunnel configuration
     wg_mtu: 1420
 
@@ -48,10 +58,8 @@
       wg1:
         tunnel_ip: "10.254.0.1/24"
         listen_port: 51821
-        # Remote access peers defined in host_vars or managed separately
 
     # Remote access peers for wg1 (AWS only)
-    # Add new clients here or in host_vars/vpn-aws.yml
     wg1_peers:
       - name: "Graham"
         public_key: "7FAI4YiWGRtKDl3AaG+jxjf0vDVaTtUisf68nQRFozA="
@@ -61,7 +69,45 @@
     aws_networks: "10.10.100.0/22"
     local_networks: "10.10.192.0/19"
 
+    # =========================================================================
+    # Client Config Template (for reference)
+    # =========================================================================
+    # Store actual configs encrypted with SOPS in:
+    #   platform/wireguard/clients/<name>.sops.yaml
+    #
+    # Template:
+    #   [Interface]
+    #   PrivateKey = <client_private_key>
+    #   Address = 10.254.0.X/32
+    #   DNS = 10.10.201.5, 10.10.201.6, 10.10.100.5, 1.1.1.1
+    #
+    #   [Peer]
+    #   PublicKey = Aav0cNl4osaEEISQLyKLt88foAPwdVYaeTuyLF/PNTo=
+    #   AllowedIPs = 10.10.100.0/22, 10.10.192.0/19, 10.254.0.0/24, 10.255.255.0/30
+    #   Endpoint = vpn.etherport.net:51821
+    #   PersistentKeepalive = 25
+    # =========================================================================
+
   tasks:
+    # =========================================================================
+    # Load private keys from SOPS-encrypted files
+    # =========================================================================
+    - name: Load vpn-aws keys from SOPS
+      community.sops.load_vars:
+        file: "{{ sops_keys_path }}/vpn-aws.sops.yaml"
+        name: vpn_aws_keys
+      delegate_to: localhost
+      become: false
+      when: inventory_hostname == 'vpn-aws'
+
+    - name: Load vpn-local keys from SOPS
+      community.sops.load_vars:
+        file: "{{ sops_keys_path }}/vpn-local.sops.yaml"
+        name: vpn_local_keys
+      delegate_to: localhost
+      become: false
+      when: inventory_hostname == 'vpn-local'
+
     # =========================================================================
     # Common tasks for all VPN servers
     # =========================================================================
@@ -91,35 +137,36 @@
         mode: "0700"
 
     # =========================================================================
-    # Read existing private keys (they must already exist on the hosts)
-    # Key file naming convention:
-    #   vpn-local: /etc/wireguard/local_private.key
-    #   vpn-aws:   /etc/wireguard/local_private.key (wg0)
-    #              /etc/wireguard/aws_wg1_private.key (wg1)
+    # Deploy private keys from SOPS
     # =========================================================================
-    - name: Check if local_private.key exists
-      stat:
-        path: /etc/wireguard/local_private.key
-      register: local_key_exists
-
-    - name: Check if wg1 private key exists (AWS)
-      stat:
-        path: /etc/wireguard/aws_wg1_private.key
-      register: wg1_key_aws
+    - name: Deploy wg0 private key (vpn-aws)
+      copy:
+        dest: /etc/wireguard/local_private.key
+        content: "{{ vpn_aws_keys.stringData.wg0_private_key }}"
+        owner: root
+        group: root
+        mode: "0600"
       when: inventory_hostname == 'vpn-aws'
-
-    - name: Read local_private.key
-      slurp:
-        src: /etc/wireguard/local_private.key
-      register: local_private_key
-      when: local_key_exists.stat.exists
       no_log: true
 
-    - name: Read wg1 private key (vpn-aws)
-      slurp:
-        src: /etc/wireguard/aws_wg1_private.key
-      register: wg1_private_key_aws
-      when: inventory_hostname == 'vpn-aws' and wg1_key_aws.stat.exists
+    - name: Deploy wg1 private key (vpn-aws)
+      copy:
+        dest: /etc/wireguard/aws_wg1_private.key
+        content: "{{ vpn_aws_keys.stringData.wg1_private_key }}"
+        owner: root
+        group: root
+        mode: "0600"
+      when: inventory_hostname == 'vpn-aws'
+      no_log: true
+
+    - name: Deploy wg0 private key (vpn-local)
+      copy:
+        dest: /etc/wireguard/local_private.key
+        content: "{{ vpn_local_keys.stringData.wg0_private_key }}"
+        owner: root
+        group: root
+        mode: "0600"
+      when: inventory_hostname == 'vpn-local'
       no_log: true
 
     # =========================================================================
@@ -134,7 +181,7 @@
         content: |
           [Interface]
           Address = {{ vpn_local.tunnel_ip }}
-          PrivateKey = {{ (local_private_key.content | b64decode | trim) if local_private_key is defined and local_private_key.content is defined else 'GENERATE_KEY_FIRST' }}
+          PrivateKey = {{ vpn_local_keys.stringData.wg0_private_key }}
           MTU = {{ wg_mtu }}
 
           # Peer: AWS hub
@@ -144,6 +191,7 @@
           AllowedIPs = {{ vpn_local.peer_allowed_ips }}
           PersistentKeepalive = {{ vpn_local.keepalive }}
       when: inventory_hostname == 'vpn-local'
+      no_log: true
       notify: Restart WireGuard wg0
 
     # =========================================================================
@@ -159,7 +207,7 @@
           [Interface]
           Address = {{ vpn_aws.wg0.tunnel_ip }}
           ListenPort = {{ vpn_aws.wg0.listen_port }}
-          PrivateKey = {{ (local_private_key.content | b64decode | trim) if local_private_key is defined and local_private_key.content is defined else 'GENERATE_KEY_FIRST' }}
+          PrivateKey = {{ vpn_aws_keys.stringData.wg0_private_key }}
           MTU = {{ wg_mtu }}
 
           # Peer: Local site router
@@ -168,6 +216,7 @@
           AllowedIPs = {{ vpn_aws.wg0.peer_allowed_ips }}
           PersistentKeepalive = {{ vpn_aws.wg0.keepalive }}
       when: inventory_hostname == 'vpn-aws'
+      no_log: true
       notify: Restart WireGuard wg0
 
     - name: Configure wg1 on vpn-aws (remote access)
@@ -180,7 +229,7 @@
           [Interface]
           Address    = {{ vpn_aws.wg1.tunnel_ip }}
           ListenPort = {{ vpn_aws.wg1.listen_port }}
-          PrivateKey = {{ (wg1_private_key_aws.content | b64decode | trim) if wg1_private_key_aws is defined and wg1_private_key_aws.content is defined else 'GENERATE_KEY_FIRST' }}
+          PrivateKey = {{ vpn_aws_keys.stringData.wg1_private_key }}
           MTU        = {{ wg_mtu }}
 
           {% for peer in wg1_peers %}
@@ -191,6 +240,7 @@
 
           {% endfor %}
       when: inventory_hostname == 'vpn-aws'
+      no_log: true
       notify: Restart WireGuard wg1
 
     # =========================================================================

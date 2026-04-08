@@ -1,0 +1,31 @@
+# WireGuard Client Configuration - Graham
+# Encrypt with: sops -e -i graham.sops.yaml
+# Decrypt with: sops -d graham.sops.yaml
+# Export to file: sops -d graham.sops.yaml | yq '.stringData.config' > wg-graham.conf
+#
+# To use on a new device:
+#   1. Decrypt and extract: sops -d graham.sops.yaml | yq '.stringData.config' > /etc/wireguard/wg0.conf
+#   2. Or import to WireGuard app directly
+apiVersion: v1
+kind: Secret
+metadata:
+    name: wireguard-client-graham
+    namespace: wireguard
+type: Opaque
+stringData:
+    config: ENC[AES256_GCM,data:WiFNMpoEhyIW9j9bQUKPZJ+vdaTxjhLYaLwVtNStkeNacwyzllwjZRqK8Gyuhl09WMwQD98JH2Cj8/5hXE3GMw8VwXFmDE8ovv0Uf99WPr6TS1Fl4jVEPEHG6ZXHsf/bW/Ievfd5rAMw+x0yQlSiCoutl/Wb4CBkEfHZRP30TJFUvXbeEZGTBoUj5AF3BZKls9e3PtfpIadpd8AOcPg2HspcwFWpOzqysniQSyc9qyYUZuwIy4hLqrARIYTUZGwe5dq76GUIoYPaJw9uMbz1tScPvKLg2NK5xDk1BE0Bj3kng6uUYA7RbE3Too2pTEdbEQYOvFYAZtCNxwjqDHclJqyvAIMvl040vzsCNQeLGrh+njpUSJsgqMadU5t8xK5MGGgUNqkq0iK/U4g3UW15fOdojYwoC2mK/wRiD9SawAWUsLE66dICKJRxtYQWXEoQX4nVAhx2Y9RcIQ1PuA==,iv:NC0grJp3/de/5By5+EyU6Dv9TJasaWrzeSAs9Jmr4cA=,tag:nPcyxWHjoqaIg3fwbRapcA==,type:str]
+sops:
+    age:
+        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBRb09nbWRiY3RmWlBDNUFD
+            RDB0Q2R5V0dMZWpSNStGUVRBL2o3bU9TbWdnCjhmcTF3SHFKbDNKY3g0cC9KZm5B
+            T085ZUtPSUF0UGcvTkVESlFpUm1yU1EKLS0tIHJSWHFnM2RXbzVNN0RiTXdhcXNa
+            WW9HNzh4UG1GRC9hQWtrOTRJUi95a1UKWCdpNqTpyw7KNnMvhA7VEDBW/tAiyn4n
+            TZgND0y6BfMQ4T1NbPBVPnork59AjwTbm+igl3oiupFX30X3cwpc2w==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-04-08T01:57:30Z"
+    mac: ENC[AES256_GCM,data:G1YmZxFcpQYLxnrQQmH7CMpZkfQu1ZpxGMlWSPPd5TAjhMJ25N3PsZ8WCaqKDNHvJizB7WgP5kG7Tnsv7zxmk9qeVWUXxP3x8eAjUFB7/5iYKlUsf7DuRSXLkuiEfImXfNH7bBkFt6kJQreLt3/IFB8uoPwuGAL7p+n3190iCMo=,iv:yW6kqAz0e5aJuAMw79a3SluPJdJveaeFRZtQk7JaNrI=,tag:maAZho85RKzrLXR+celdsg==,type:str]
+    encrypted_regex: ^(data|stringData)$
+    version: 3.11.0

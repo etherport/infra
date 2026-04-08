@@ -5,9 +5,9 @@
 #------------------------------------------------------------------------------
 
 # VPN instance network interface ID - hardcoded until Phase 2 (EC2 module)
-# Instance: i-0f81ff99edc6ede03 (private-infra_vpn)
+# Instance: i-011086cefc7ab3cc1 (private-infra_vpn)
 locals {
-  vpn_network_interface_id = "eni-076e0f855091d42a4"
+  vpn_network_interface_id = "eni-0979054c909a044f4"
 }
 
 #------------------------------------------------------------------------------
