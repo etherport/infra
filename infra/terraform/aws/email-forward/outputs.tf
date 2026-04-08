@@ -10,12 +10,12 @@ output "lambda_function_name" {
 
 output "s3_bucket_name" {
   description = "Name of the S3 bucket for email storage"
-  value       = aws_s3_bucket.email.id
+  value       = data.aws_s3_bucket.email.id
 }
 
 output "s3_bucket_arn" {
   description = "ARN of the S3 bucket"
-  value       = aws_s3_bucket.email.arn
+  value       = data.aws_s3_bucket.email.arn
 }
 
 output "ses_rule_set_name" {

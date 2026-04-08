@@ -10,12 +10,6 @@ variable "s3_bucket_name" {
   default     = "email-fwd.grahamsmith.net"
 }
 
-variable "email_retention_days" {
-  description = "Number of days to retain emails in S3"
-  type        = number
-  default     = 30
-}
-
 variable "verified_sender" {
   description = "Verified SES sender email address"
   type        = string

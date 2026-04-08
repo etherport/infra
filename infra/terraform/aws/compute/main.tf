@@ -127,7 +127,7 @@ resource "aws_instance" "vpn" {
     iops                  = 3000
     throughput            = 125
     delete_on_termination = true
-    encrypted             = false
+    encrypted             = true
 
     tags = merge(local.common_tags, {
       Name = "private-infra_vpn_vol"
@@ -179,7 +179,7 @@ resource "aws_instance" "dns" {
     iops                  = 3000
     throughput            = 125
     delete_on_termination = true
-    encrypted             = false
+    encrypted             = true
 
     tags = merge(local.common_tags, {
       Name = "private-infra_dns_vol"

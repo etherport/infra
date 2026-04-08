@@ -29,7 +29,7 @@ resource "aws_iam_role_policy" "s3" {
         Action = [
           "s3:GetObject",
         ]
-        Resource = "${aws_s3_bucket.email.arn}/*"
+        Resource = "${data.aws_s3_bucket.email.arn}/*"
       }
     ]
   })
@@ -115,7 +115,7 @@ resource "aws_iam_role_policy" "ses_s3_graham" {
         Action = [
           "s3:PutObject",
         ]
-        Resource = "${aws_s3_bucket.email.arn}/*"
+        Resource = "${data.aws_s3_bucket.email.arn}/*"
       }
     ]
   })
@@ -158,7 +158,7 @@ resource "aws_iam_role_policy" "ses_s3_mark" {
         Action = [
           "s3:PutObject",
         ]
-        Resource = "${aws_s3_bucket.email.arn}/*"
+        Resource = "${data.aws_s3_bucket.email.arn}/*"
       }
     ]
   })

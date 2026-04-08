@@ -63,8 +63,10 @@ spec:
                   storage: 10Gi
     grafana:
       enabled: true
-      adminUser: admin
-      adminPassword: ChangeMe123!
+      admin:
+        existingSecret: grafana-admin-credentials
+        userKey: admin-user
+        passwordKey: admin-password
       persistence:
         enabled: true
         storageClassName: ceph-rbd

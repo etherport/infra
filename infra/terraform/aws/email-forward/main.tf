@@ -27,26 +27,9 @@ data "archive_file" "lambda" {
   output_path = "${path.module}/lambda/handler.zip"
 }
 
-# S3 bucket for email storage
-resource "aws_s3_bucket" "email" {
+# S3 bucket for email storage (managed by s3 module)
+data "aws_s3_bucket" "email" {
   bucket = var.s3_bucket_name
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "email" {
-  bucket = aws_s3_bucket.email.id
-
-  rule {
-    id     = "expire-old-emails"
-    status = "Enabled"
-
-    expiration {
-      days = var.email_retention_days
-    }
-
-    filter {
-      prefix = "emails/"
-    }
-  }
 }
 
 # Lambda function
@@ -85,7 +68,7 @@ resource "aws_cloudwatch_log_group" "lambda" {
 
 # S3 bucket notification to trigger Lambda
 resource "aws_s3_bucket_notification" "email" {
-  bucket = aws_s3_bucket.email.id
+  bucket = data.aws_s3_bucket.email.id
 
   lambda_function {
     lambda_function_arn = aws_lambda_function.email_forward.arn
@@ -102,7 +85,7 @@ resource "aws_lambda_permission" "s3" {
   action         = "lambda:InvokeFunction"
   function_name  = aws_lambda_function.email_forward.function_name
   principal      = "s3.amazonaws.com"
-  source_arn     = aws_s3_bucket.email.arn
+  source_arn     = data.aws_s3_bucket.email.arn
   source_account = data.aws_caller_identity.current.account_id
 }
 
@@ -198,7 +181,7 @@ resource "aws_ses_receipt_rule" "fwd_graham" {
   ]
 
   s3_action {
-    bucket_name       = aws_s3_bucket.email.id
+    bucket_name       = data.aws_s3_bucket.email.id
     object_key_prefix = "emails/graham/"
     iam_role_arn      = aws_iam_role.ses_s3_graham.arn
     position          = 1
@@ -217,7 +200,7 @@ resource "aws_ses_receipt_rule" "fwd_mark" {
   ]
 
   s3_action {
-    bucket_name       = aws_s3_bucket.email.id
+    bucket_name       = data.aws_s3_bucket.email.id
     object_key_prefix = "emails/mark/"
     iam_role_arn      = aws_iam_role.ses_s3_mark.arn
     position          = 1
