@@ -67,8 +67,8 @@ AWS resources in us-west-2 connected to local homelab via WireGuard VPN. The inf
 
 | Name | Instance ID | Private IP | Public IP | Type | Purpose |
 |------|-------------|------------|-----------|------|---------|
-| private-infra_vpn | `i-0f81ff99edc6ede03` | 10.10.100.10 | 44.240.60.80 | t4g.nano | WireGuard VPN gateway |
-| private-infra_dns | `i-0c49c3c41bd03d618` | 10.10.100.5 | 52.40.219.113 | t4g.nano | Technitium DNS (failover) |
+| private-infra_vpn | `i-011086cefc7ab3cc1` | 10.10.100.10 | 44.240.60.80 | t4g.nano | WireGuard VPN gateway |
+| private-infra_dns | `i-050de21bdad2603bb` | 10.10.100.5 | 52.40.219.113 | t4g.nano | Technitium DNS (failover) |
 
 ## Security Groups
 
@@ -599,7 +599,7 @@ All Terraform state is stored in S3 with native S3 locking:
 | homelab-review | Read-only infrastructure audit | homelab-review |
 | claude-admin | AI assistant infrastructure access | homelab |
 
-**Current status (as of 2026-04-07):**
+**Current status (as of 2026-04-10):**
 ```
 aws --profile homelab sts get-caller-identity
 Account: 830881980142
