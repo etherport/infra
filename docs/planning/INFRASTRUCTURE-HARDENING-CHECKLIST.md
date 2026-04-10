@@ -40,6 +40,14 @@
 - [x] Remove bucket from email-forward state: `terraform state rm aws_s3_bucket.email aws_s3_bucket_lifecycle_configuration.email`
 - [x] Run `terraform plan` to verify no changes
 
+### 6. CloudWatch Agent on EC2 Instances
+- [ ] Create Ansible playbook for CloudWatch agent installation
+- [ ] Configure agent for memory and swap metrics
+- [ ] Deploy to VPN instance (i-011086cefc7ab3cc1)
+- [ ] Deploy to DNS instance (i-050de21bdad2603bb)
+- [ ] Verify CloudWatch alarms transition from INSUFFICIENT_DATA to OK
+- **Note:** Current alarms (High-Memory/Swap-Utilization-VPN/DNS) show INSUFFICIENT_DATA because agent is not installed.
+
 ---
 
 ## Critical Issues
@@ -122,6 +130,11 @@
 | 2026-04-07 | Updated AWS documentation | aws-infrastructure.md, remote-state-backend.md |
 | 2026-04-07 | Completed Phase 6 cleanup | EventBridge, log groups, IAM roles, S3 bucket |
 | 2026-04-07 | WireGuard keys in SOPS | Server keys stored in `platform/wireguard/servers/*.sops.yaml` |
+| 2026-04-10 | Fixed IAM permission gap | Added secretsmanager:GetResourcePolicy to terraform-ddns-secrets-iam |
+| 2026-04-10 | Reconciled external-monitoring SNS | Recreated backup email subscription (grahamsm@gmail.com) |
+| 2026-04-10 | Deleted orphaned SES IAM roles (4) | ses_put_s3_mark_role, ses_put_s3_role, ses_s3_put_role, ses_send_forward |
+| 2026-04-10 | Fixed aws-websites Terraform | S3 native locking, Route53 data source fix |
+| 2026-04-10 | Moved WordPress to public-web-vpc | Instance i-01d0fc79138b2dc9e now in proper VPC |
 | 2026-04-07 | WireGuard playbook refactored | Uses community.sops to deploy keys from encrypted files |
 | 2026-04-07 | Client configs in SOPS | Remote access and S2S configs in `platform/wireguard/clients/*.sops.yaml` |
 | 2026-04-07 | vpn-local in Terraform | Proxmox VM (ID 1002) managed by standalone-vms module |
