@@ -29,10 +29,9 @@ spec:
   values:
     # Operator configuration
     operatorConfig:
-      # Enable the operator to act as a subnet router
+      # Tag for the operator itself - subnet-router tag is on the Connector resource
       defaultTags:
         - "tag:k8s-operator"
-        - "tag:subnet-router"
     # Subnet router configuration - expose on-prem network
     # This is configured via ProxyClass CRD after operator is installed
     # See platform/kubernetes/tailscale/subnet-router.yaml
