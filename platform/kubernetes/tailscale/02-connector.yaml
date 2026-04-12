@@ -1,0 +1,33 @@
+# Tailscale Connector - Subnet Router
+#
+# This configures the Tailscale operator to advertise on-prem routes
+# to all Tailscale clients, enabling direct mesh connections.
+#
+# After deployment, approve the routes in Tailscale admin console:
+# https://login.tailscale.com/admin/machines
+#
+apiVersion: tailscale.com/v1alpha1
+kind: Connector
+metadata:
+  name: homelab-subnet-router
+  namespace: tailscale
+spec:
+  # Hostname shown in Tailscale admin console
+  hostname: k8s-homelab-router
+  # Subnet router configuration
+  subnetRouter:
+    advertiseRoutes:
+      # On-prem homelab network (wind)
+      - "10.10.192.0/19"
+      # Include all VLANs:
+      #   10.10.192.0/24 - Management (VLAN 192)
+      #   10.10.200.0/24 - Servers (VLAN 200)
+      #   10.10.201.0/24 - Kubernetes (VLAN 201)
+      #   10.10.202.0/24 - Client (VLAN 202)
+      #   10.10.203.0/24 - Guest (VLAN 203)
+      #   10.10.204.0/24 - IoT (VLAN 204)
+      #   10.10.205.0/24 - Security (VLAN 205)
+  # Tags applied to this connector (must match ACL tags in Tailscale)
+  tags:
+    - "tag:subnet-router"
+    - "tag:homelab"

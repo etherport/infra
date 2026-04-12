@@ -1,0 +1,21 @@
+# WireGuard over TCP (via wstunnel)
+# Use this profile when on NordVPN or restrictive networks
+#
+# IMPORTANT: Start wstunnel-connect.sh BEFORE enabling this profile!
+#
+# Setup:
+#   1. Copy this file and fill in your PrivateKey
+#   2. Import into WireGuard app as "AWS-VPN-TCP"
+#   3. When needed: run wstunnel-connect.sh, then enable this profile
+
+[Interface]
+PrivateKey = <YOUR_PRIVATE_KEY_HERE>
+Address = 10.254.0.10/32
+DNS = 10.10.201.5, 10.10.201.6, 10.10.100.5, 1.1.1.1
+
+[Peer]
+PublicKey = Aav0cNl4osaEEISQLyKLt88foAPwdVYaeTuyLF/PNTo=
+# Points to local wstunnel client (NOT the remote server)
+Endpoint = 127.0.0.1:51821
+AllowedIPs = 10.10.100.0/22, 10.10.192.0/19, 10.254.0.0/24, 10.255.255.0/30
+PersistentKeepalive = 25

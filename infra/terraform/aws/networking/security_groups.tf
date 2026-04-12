@@ -38,10 +38,19 @@ resource "aws_security_group" "vpn_server" {
 
 resource "aws_vpc_security_group_ingress_rule" "vpn_wireguard" {
   security_group_id = aws_security_group.vpn_server.id
-  description       = "Public WireGurard VPN access"
+  description       = "Public WireGuard VPN access"
   ip_protocol       = "udp"
   from_port         = 51820
   to_port           = 51821
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "vpn_wstunnel" {
+  security_group_id = aws_security_group.vpn_server.id
+  description       = "wstunnel WSS for WireGuard over TCP (restrictive networks)"
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
   cidr_ipv4         = "0.0.0.0/0"
 }
 

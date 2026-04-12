@@ -303,6 +303,15 @@
               type filter hook output priority filter; policy accept;
             }
           }
+
+          # NAT table for WireGuard alternate port (restricted networks)
+          # Redirects UDP 443 to 51821 for use behind restrictive firewalls
+          table ip nat {
+            chain PREROUTING {
+              type nat hook prerouting priority dstnat; policy accept;
+              udp dport 443 redirect to :51821
+            }
+          }
       when: inventory_hostname == 'vpn-aws'
       notify: Apply nftables rules
 

@@ -39,3 +39,5 @@ resources:
   - ../../platform/kubernetes/backups/velero/schedules
   # LLM Services
   - ../../platform/kubernetes/ollama
+  # VPN / Remote Access
+  - ../../platform/kubernetes/tailscale

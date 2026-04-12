@@ -1,0 +1,43 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tailscale
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: tailscale-operator
+  namespace: flux-system
+spec:
+  releaseName: tailscale-operator
+  interval: 1h
+  chart:
+    spec:
+      chart: tailscale-operator
+      version: "1.x"
+      sourceRef:
+        kind: HelmRepository
+        name: tailscale
+  targetNamespace: tailscale
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  valuesFrom:
+    - kind: Secret
+      name: tailscale-operator-oauth
+      valuesKey: values.yaml
+  values:
+    # Operator configuration
+    operatorConfig:
+      # Enable the operator to act as a subnet router
+      defaultTags:
+        - "tag:k8s-operator"
+        - "tag:subnet-router"
+    # Subnet router configuration - expose on-prem network
+    # This is configured via ProxyClass CRD after operator is installed
+    # See platform/kubernetes/tailscale/subnet-router.yaml
