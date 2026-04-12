@@ -5,4 +5,3 @@ namespace: tailscale
 
 resources:
   - connector.yaml
-  - dns-config.yaml
