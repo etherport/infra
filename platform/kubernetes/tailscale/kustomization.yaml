@@ -1,8 +1,16 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: tailscale
-
 resources:
   - 00-namespace.yaml
   - 01-oauth-secret.sops.yaml
+
+# Override secret namespace to flux-system for HelmRelease valuesFrom
+patches:
+  - target:
+      kind: Secret
+      name: tailscale-operator-oauth
+    patch: |
+      - op: replace
+        path: /metadata/namespace
+        value: flux-system
