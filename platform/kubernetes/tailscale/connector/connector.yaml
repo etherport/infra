@@ -30,4 +30,3 @@ spec:
   # Tags applied to this connector (must match ACL tags in Tailscale)
   tags:
     - "tag:subnet-router"
-    - "tag:homelab"
