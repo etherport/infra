@@ -19,6 +19,8 @@ spec:
     advertiseRoutes:
       # On-prem homelab network (wind)
       - "10.10.192.0/19"
+      # AWS VPC (routed via WireGuard tunnel)
+      - "10.10.100.0/22"
       # Include all VLANs:
       #   10.10.192.0/24 - Management (VLAN 192)
       #   10.10.200.0/24 - Servers (VLAN 200)
