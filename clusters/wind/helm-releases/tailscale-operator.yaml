@@ -25,6 +25,7 @@ spec:
   valuesFrom:
     - kind: Secret
       name: tailscale-operator-oauth
+      targetNamespace: tailscale
       valuesKey: values.yaml
   values:
     # Operator configuration

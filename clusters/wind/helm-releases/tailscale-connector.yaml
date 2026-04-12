@@ -1,14 +1,14 @@
 ---
 # Tailscale Connector - deployed after operator installs CRDs
-# This Kustomization depends on the operator HelmRelease being ready
+# Retries until the CRD exists from the operator HelmRelease
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: tailscale-connector
   namespace: flux-system
 spec:
-  interval: 1h
-  retryInterval: 2m
+  interval: 10m
+  retryInterval: 1m
   timeout: 5m
   sourceRef:
     kind: GitRepository
@@ -16,9 +16,11 @@ spec:
   path: ./platform/kubernetes/tailscale/connector
   prune: true
   wait: true
-  dependsOn:
-    - name: tailscale-operator
-      namespace: flux-system
+  # Health check ensures the Connector CRD exists before applying
+  healthChecks:
+    - apiVersion: apiextensions.k8s.io/v1
+      kind: CustomResourceDefinition
+      name: connectors.tailscale.com
   decryption:
     provider: sops
     secretRef:
