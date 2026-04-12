@@ -4,5 +4,4 @@ kind: Kustomization
 namespace: tailscale
 
 resources:
-  - 00-namespace.yaml
-  - 01-oauth-secret.sops.yaml
+  - connector.yaml
