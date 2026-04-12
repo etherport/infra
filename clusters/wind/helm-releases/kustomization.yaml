@@ -10,4 +10,6 @@ resources:
   - pushgateway.yaml
   - traefik.yaml
   - velero.yaml
+  - tailscale-operator.yaml
+  - tailscale-connector.yaml
   # Note: cilium is managed by kubespray, not Flux
