@@ -186,15 +186,6 @@ resource "aws_vpc_security_group_ingress_rule" "ssh_remote" {
   cidr_ipv4         = "47.34.215.233/32"
 }
 
-resource "aws_vpc_security_group_ingress_rule" "ssh_travel" {
-  security_group_id = aws_security_group.allow_ssh.id
-  description       = "Allow SSH access from travel location"
-  ip_protocol       = "tcp"
-  from_port         = 22
-  to_port           = 22
-  cidr_ipv4         = "86.98.93.115/32"
-}
-
 resource "aws_vpc_security_group_egress_rule" "ssh_all_ipv4" {
   security_group_id = aws_security_group.allow_ssh.id
   ip_protocol       = "-1"

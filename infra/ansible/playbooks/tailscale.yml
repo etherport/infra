@@ -24,7 +24,6 @@
     # Default Tailscale settings (can be overridden per-host)
     tailscale_hostname: "{{ inventory_hostname }}"
     tailscale_tags: "tag:subnet-router"
-    tailscale_accept_routes: true
 
     # Auth key (pass via -e or define in host_vars for new installations)
     # tailscale_auth_key: ""
@@ -32,6 +31,12 @@
     # Subnet routes per host (override in host_vars or inventory)
     tailscale_advertise_routes:
       vpn-aws: "10.10.100.0/22"
+
+    # Accept routes from other Tailscale nodes (per-host)
+    # IMPORTANT: Set to false for hosts with existing VPN routes (e.g., WireGuard)
+    # to prevent Tailscale from overriding those routes
+    tailscale_host_accept_routes:
+      vpn-aws: false  # Has WireGuard S2S tunnel - don't accept Tailscale routes
 
   tasks:
     # =========================================================================
@@ -105,6 +110,7 @@
     - name: Get routes for this host
       ansible.builtin.set_fact:
         host_routes: "{{ tailscale_advertise_routes[inventory_hostname] | default('') }}"
+        host_accept_routes: "{{ tailscale_host_accept_routes[inventory_hostname] | default(false) }}"
 
     - name: Authenticate Tailscale (if not already and auth key provided)
       ansible.builtin.command: >
@@ -113,7 +119,7 @@
         --hostname={{ tailscale_hostname }}
         --advertise-tags={{ tailscale_tags }}
         {% if host_routes %}--advertise-routes={{ host_routes }}{% endif %}
-        {% if tailscale_accept_routes %}--accept-routes{% endif %}
+        {% if host_accept_routes %}--accept-routes{% endif %}
       when:
         - not tailscale_logged_in
         - tailscale_auth_key is defined
@@ -136,7 +142,7 @@
         tailscale set
         --hostname={{ tailscale_hostname }}
         {% if host_routes %}--advertise-routes={{ host_routes }}{% endif %}
-        {% if tailscale_accept_routes %}--accept-routes{% endif %}
+        --accept-routes={{ host_accept_routes | lower }}
       when: tailscale_logged_in
       register: tailscale_set_result
       changed_when: tailscale_set_result.rc == 0
