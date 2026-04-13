@@ -2,7 +2,11 @@
 
 ## Overview
 
-Site-to-site VPN connecting local homelab to AWS, plus remote access for mobile clients.
+Site-to-site VPN connecting local homelab to AWS. This is the **production traffic path** for ALB-routed services.
+
+**Note:** For remote client access, [Tailscale](vpn-tailscale.md) is now the recommended solution.
+
+> **DEPRECATED:** WireGuard wg1 (remote access) is deprecated and will be removed once Tailscale is fully hardened. New remote clients should use Tailscale instead.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -37,8 +41,8 @@ Site-to-site VPN connecting local homelab to AWS, plus remote access for mobile 
 │                                           ┌────────┴────────┐               │
 │                                           │  wg1 (remote)   │               │
 │                                           │  10.254.0.0/24  │               │
-│                                           │                 │               │
-│                                           │  Mobile clients │               │
+│                                           │  [DEPRECATED]   │               │
+│                                           │  Use Tailscale  │               │
 │                                           └─────────────────┘               │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -124,7 +128,9 @@ AllowedIPs = 10.255.255.2/32, 10.10.192.0/19
 PersistentKeepalive = 25
 ```
 
-### vpn-aws: /etc/wireguard/wg1.conf
+### vpn-aws: /etc/wireguard/wg1.conf (DEPRECATED)
+
+> **DEPRECATED:** wg1 remote access is deprecated. Use [Tailscale](vpn-tailscale.md) for new remote clients.
 
 ```ini
 [Interface]
@@ -184,7 +190,9 @@ sudo wg show
 sudo systemctl restart wg-quick@wg0
 ```
 
-## Adding a New Remote Client
+## Adding a New Remote Client (DEPRECATED)
+
+> **DEPRECATED:** For new remote clients, use [Tailscale](vpn-tailscale.md) instead. The instructions below are retained for reference only.
 
 1. Generate keys on client:
    ```bash

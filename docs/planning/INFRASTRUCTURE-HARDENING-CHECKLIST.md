@@ -41,12 +41,14 @@
 - [x] Run `terraform plan` to verify no changes
 
 ### 6. CloudWatch Agent on EC2 Instances
-- [ ] Create Ansible playbook for CloudWatch agent installation
-- [ ] Configure agent for memory and swap metrics
-- [ ] Deploy to VPN instance (i-011086cefc7ab3cc1)
-- [ ] Deploy to DNS instance (i-050de21bdad2603bb)
+- [x] Create Ansible playbook for CloudWatch agent installation (`infra/ansible/playbooks/cloudwatch-agent.yml`)
+- [x] Create swap file playbook for memory-constrained instances (`infra/ansible/playbooks/swap.yml`)
+- [ ] Deploy swap.yml to VPN instance (prevents OOM)
+- [ ] Deploy swap.yml to DNS instance (prevents OOM)
+- [ ] Deploy cloudwatch-agent.yml to VPN instance
+- [ ] Deploy cloudwatch-agent.yml to DNS instance
 - [ ] Verify CloudWatch alarms transition from INSUFFICIENT_DATA to OK
-- **Note:** Current alarms (High-Memory/Swap-Utilization-VPN/DNS) show INSUFFICIENT_DATA because agent is not installed.
+- **Note:** t4g.nano instances (512MB RAM) require swap file to prevent OOM crashes, especially when running Technitium (uses .NET runtime).
 
 ---
 
@@ -141,6 +143,10 @@
 | 2026-04-07 | Full IaC deployment tested | vpn-local recreated from scratch via Terraform+Ansible |
 | 2026-04-07 | Migration runbook created | `docs/runbooks/instance-migration.md` for all VPN/DNS instances |
 | 2026-04-07 | Technitium playbook updated | Added backup restoration capability |
+| 2026-04-13 | Tailscale mesh VPN deployed | K8s operator + AWS subnet router, split DNS configured |
+| 2026-04-13 | CloudWatch agent playbook created | `infra/ansible/playbooks/cloudwatch-agent.yml` |
+| 2026-04-13 | Swap file playbook created | `infra/ansible/playbooks/swap.yml` for t4g.nano instances |
+| 2026-04-13 | Tailscale documentation | `docs/architecture/vpn-tailscale.md` |
 
 ---
 

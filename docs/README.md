@@ -52,7 +52,8 @@ docs/
 | [overview.md](architecture/overview.md) | High-level infrastructure design |
 | [network.md](architecture/network.md) | Network topology and VLANs |
 | [firewall-zones.md](architecture/firewall-zones.md) | Zone-based firewall configuration |
-| [vpn-wireguard.md](architecture/vpn-wireguard.md) | Site-to-site VPN configuration |
+| [vpn-wireguard.md](architecture/vpn-wireguard.md) | Site-to-site VPN (production traffic) |
+| [vpn-tailscale.md](architecture/vpn-tailscale.md) | Tailscale mesh VPN (remote access) |
 | [aws-infrastructure.md](architecture/aws-infrastructure.md) | AWS hybrid cloud components |
 
 ## Setup Guides
