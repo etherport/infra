@@ -1,0 +1,185 @@
+---
+# CloudWatch Agent Configuration Playbook
+# Installs and configures Amazon CloudWatch agent for memory/swap metrics
+#
+# Usage:
+#   # All AWS hosts
+#   ansible-playbook -i inventory/aws/ playbooks/cloudwatch-agent.yml
+#
+#   # Specific host
+#   ansible-playbook -i inventory/aws/ playbooks/cloudwatch-agent.yml --limit dns-aws
+#
+#   # Check mode
+#   ansible-playbook -i inventory/aws/ playbooks/cloudwatch-agent.yml --check --diff
+#
+# PREREQUISITES:
+#   - EC2 instance must have IAM instance profile with CloudWatchAgentServerPolicy
+#   - This is configured in terraform/aws/compute/main.tf
+#
+# This playbook configures CloudWatch agent to report:
+#   - Memory utilization (mem_used_percent)
+#   - Swap utilization (swap_used_percent)
+#   - Disk utilization
+# These metrics are used by CloudWatch alarms defined in terraform/aws/compute/monitoring.tf
+
+- name: Configure CloudWatch Agent
+  hosts: all
+  become: true
+
+  vars:
+    # CloudWatch agent config file location
+    cwagent_config_path: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+
+    # Metrics collection interval (seconds)
+    metrics_collection_interval: 60
+
+    # Aggregation interval for detailed metrics
+    metrics_aggregation_interval: 60
+
+  tasks:
+    # =========================================================================
+    # Install CloudWatch Agent
+    # =========================================================================
+    - name: Check if CloudWatch agent is already installed
+      ansible.builtin.stat:
+        path: /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl
+      register: cwagent_installed
+
+    - name: Download CloudWatch agent (ARM64)
+      ansible.builtin.get_url:
+        url: https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/arm64/latest/amazon-cloudwatch-agent.deb
+        dest: /tmp/amazon-cloudwatch-agent.deb
+        mode: "0644"
+      when:
+        - not cwagent_installed.stat.exists
+        - ansible_architecture == "aarch64"
+
+    - name: Download CloudWatch agent (AMD64)
+      ansible.builtin.get_url:
+        url: https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
+        dest: /tmp/amazon-cloudwatch-agent.deb
+        mode: "0644"
+      when:
+        - not cwagent_installed.stat.exists
+        - ansible_architecture == "x86_64"
+
+    - name: Install CloudWatch agent
+      ansible.builtin.apt:
+        deb: /tmp/amazon-cloudwatch-agent.deb
+        state: present
+      when: not cwagent_installed.stat.exists
+
+    - name: Clean up installer
+      ansible.builtin.file:
+        path: /tmp/amazon-cloudwatch-agent.deb
+        state: absent
+      when: not cwagent_installed.stat.exists
+
+    # =========================================================================
+    # Configure CloudWatch Agent
+    # =========================================================================
+    - name: Create CloudWatch agent configuration
+      ansible.builtin.copy:
+        dest: "{{ cwagent_config_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          {
+            "agent": {
+              "metrics_collection_interval": {{ metrics_collection_interval }},
+              "run_as_user": "root",
+              "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log"
+            },
+            "metrics": {
+              "namespace": "CWAgent",
+              "metrics_collected": {
+                "mem": {
+                  "measurement": [
+                    "mem_used_percent",
+                    "mem_available_percent",
+                    "mem_used",
+                    "mem_total"
+                  ],
+                  "metrics_collection_interval": {{ metrics_collection_interval }}
+                },
+                "swap": {
+                  "measurement": [
+                    "swap_used_percent",
+                    "swap_used",
+                    "swap_free"
+                  ],
+                  "metrics_collection_interval": {{ metrics_collection_interval }}
+                },
+                "disk": {
+                  "measurement": [
+                    "disk_used_percent",
+                    "disk_free",
+                    "disk_used"
+                  ],
+                  "resources": [
+                    "/"
+                  ],
+                  "metrics_collection_interval": {{ metrics_collection_interval }}
+                },
+                "cpu": {
+                  "measurement": [
+                    "cpu_usage_idle",
+                    "cpu_usage_user",
+                    "cpu_usage_system"
+                  ],
+                  "totalcpu": true,
+                  "metrics_collection_interval": {{ metrics_collection_interval }}
+                },
+                "netstat": {
+                  "measurement": [
+                    "tcp_established",
+                    "tcp_time_wait"
+                  ],
+                  "metrics_collection_interval": {{ metrics_collection_interval }}
+                }
+              },
+              "append_dimensions": {
+                "InstanceId": "${aws:InstanceId}",
+                "InstanceType": "${aws:InstanceType}",
+                "ImageId": "${aws:ImageId}"
+              },
+              "aggregation_dimensions": [
+                ["InstanceId"]
+              ]
+            }
+          }
+      notify: Restart CloudWatch agent
+
+    # =========================================================================
+    # Start CloudWatch Agent
+    # =========================================================================
+    - name: Start CloudWatch agent with config
+      ansible.builtin.command: >
+        /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl
+        -a fetch-config
+        -m ec2
+        -c file:{{ cwagent_config_path }}
+        -s
+      register: cwagent_start
+      changed_when: "'Successfully fetched the config' in cwagent_start.stdout"
+
+    - name: Verify CloudWatch agent is running
+      ansible.builtin.command: >
+        /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl
+        -a status
+      register: cwagent_status
+      changed_when: false
+
+    - name: Display CloudWatch agent status
+      ansible.builtin.debug:
+        msg: "{{ cwagent_status.stdout }}"
+
+  handlers:
+    - name: Restart CloudWatch agent
+      ansible.builtin.command: >
+        /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl
+        -a fetch-config
+        -m ec2
+        -c file:{{ cwagent_config_path }}
+        -s

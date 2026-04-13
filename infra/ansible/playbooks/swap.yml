@@ -1,0 +1,133 @@
+---
+# Swap File Configuration Playbook
+# Creates and configures swap file for memory-constrained instances
+#
+# Usage:
+#   # All non-K8s hosts
+#   ansible-playbook -i inventory/aws/ playbooks/swap.yml
+#
+#   # Specific host
+#   ansible-playbook -i inventory/aws/ playbooks/swap.yml --limit dns-aws
+#
+#   # Check mode
+#   ansible-playbook -i inventory/aws/ playbooks/swap.yml --check --diff
+#
+# IMPORTANT: For instances with limited RAM (t4g.nano = 512MB), swap is
+# essential to prevent OOM crashes, especially when running .NET apps
+# like Technitium DNS or memory-intensive services.
+
+- name: Configure Swap File
+  hosts: all:!k8s_cluster:!proxmox_hosts
+  become: true
+
+  vars:
+    # Swap file path
+    swap_file_path: /swapfile
+
+    # Swap size per host (override in host_vars or inventory)
+    # Default: 1GB for most hosts
+    swap_sizes:
+      dns-aws: "1G"      # t4g.nano - 512MB RAM, needs swap for Technitium
+      vpn-aws: "512M"    # t4g.nano - 512MB RAM, lighter workload
+      dns-fallback: "1G"
+      vpn-local: "512M"
+      default: "1G"
+
+    # Swappiness - how aggressively to use swap (0-100)
+    # Lower values prefer RAM, higher values use swap more freely
+    # 10 is good for servers - only swap when necessary
+    swap_swappiness: 10
+
+  tasks:
+    - name: Get swap size for this host
+      ansible.builtin.set_fact:
+        swap_size: "{{ swap_sizes[inventory_hostname] | default(swap_sizes.default) }}"
+
+    - name: Check if swap file already exists
+      ansible.builtin.stat:
+        path: "{{ swap_file_path }}"
+      register: swap_file
+
+    - name: Check current swap status
+      ansible.builtin.command: swapon --show
+      register: swap_status
+      changed_when: false
+      failed_when: false
+
+    - name: Display current swap status
+      ansible.builtin.debug:
+        msg: "Current swap: {{ swap_status.stdout if swap_status.stdout else 'None configured' }}"
+
+    # =========================================================================
+    # Create swap file if it doesn't exist
+    # =========================================================================
+    - name: Create swap file
+      ansible.builtin.command: "fallocate -l {{ swap_size }} {{ swap_file_path }}"
+      when: not swap_file.stat.exists
+      register: swap_created
+
+    - name: Set swap file permissions
+      ansible.builtin.file:
+        path: "{{ swap_file_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      when: swap_file.stat.exists or swap_created is changed
+
+    - name: Format swap file
+      ansible.builtin.command: "mkswap {{ swap_file_path }}"
+      when: swap_created is changed
+
+    - name: Enable swap file
+      ansible.builtin.command: "swapon {{ swap_file_path }}"
+      when: swap_created is changed
+      register: swap_enabled
+
+    # =========================================================================
+    # Ensure swap is in fstab for persistence
+    # =========================================================================
+    - name: Add swap to fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        line: "{{ swap_file_path }} none swap sw 0 0"
+        regexp: "^{{ swap_file_path }}"
+        state: present
+        backup: yes
+
+    # =========================================================================
+    # Configure swappiness
+    # =========================================================================
+    - name: Configure vm.swappiness
+      ansible.posix.sysctl:
+        name: vm.swappiness
+        value: "{{ swap_swappiness }}"
+        sysctl_file: /etc/sysctl.d/99-swap.conf
+        reload: yes
+        state: present
+
+    - name: Configure vm.vfs_cache_pressure
+      ansible.posix.sysctl:
+        name: vm.vfs_cache_pressure
+        value: "50"
+        sysctl_file: /etc/sysctl.d/99-swap.conf
+        reload: yes
+        state: present
+
+    # =========================================================================
+    # Verify configuration
+    # =========================================================================
+    - name: Verify swap is active
+      ansible.builtin.command: swapon --show
+      register: final_swap_status
+      changed_when: false
+
+    - name: Display final swap status
+      ansible.builtin.debug:
+        msg: |
+          Swap configuration complete!
+          {{ final_swap_status.stdout }}
+
+          Memory status:
+          {{ ansible_memory_mb.real.total }}MB total RAM
+          Swap file: {{ swap_file_path }} ({{ swap_size }})
+          Swappiness: {{ swap_swappiness }}
