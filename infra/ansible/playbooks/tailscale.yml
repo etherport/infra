@@ -1,0 +1,154 @@
+---
+# Tailscale VPN Configuration Playbook
+# Installs and configures Tailscale on servers as subnet routers
+#
+# Usage:
+#   # AWS VPN server
+#   ansible-playbook -i inventory/aws/ playbooks/tailscale.yml --limit vpn-aws
+#
+#   # With auth key for new installations
+#   ansible-playbook -i inventory/aws/ playbooks/tailscale.yml -e "tailscale_auth_key=tskey-..."
+#
+#   # Check mode (dry-run)
+#   ansible-playbook -i inventory/aws/ playbooks/tailscale.yml --check --diff
+#
+# SUBNET ROUTING:
+#   Each host can advertise different subnets. Configure in host_vars or
+#   pass via extra-vars: -e "tailscale_routes=10.10.100.0/22"
+
+- name: Configure Tailscale VPN
+  hosts: tailscale_nodes
+  become: true
+
+  vars:
+    # Default Tailscale settings (can be overridden per-host)
+    tailscale_hostname: "{{ inventory_hostname }}"
+    tailscale_tags: "tag:subnet-router"
+    tailscale_accept_routes: true
+
+    # Auth key (pass via -e or define in host_vars for new installations)
+    # tailscale_auth_key: ""
+
+    # Subnet routes per host (override in host_vars or inventory)
+    tailscale_advertise_routes:
+      vpn-aws: "10.10.100.0/22"
+
+  tasks:
+    # =========================================================================
+    # Install Tailscale
+    # =========================================================================
+    - name: Add Tailscale GPG key
+      ansible.builtin.get_url:
+        url: https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg
+        dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+        mode: '0644'
+
+    - name: Add Tailscale repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu noble main"
+        state: present
+        filename: tailscale
+
+    - name: Install Tailscale
+      ansible.builtin.apt:
+        name: tailscale
+        state: present
+        update_cache: yes
+
+    - name: Enable tailscaled service
+      ansible.builtin.systemd:
+        name: tailscaled
+        enabled: yes
+        state: started
+
+    # =========================================================================
+    # Configure IP forwarding (required for subnet routing)
+    # =========================================================================
+    - name: Enable IPv4 forwarding
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: "1"
+        sysctl_file: /etc/sysctl.d/99-tailscale.conf
+        reload: yes
+        state: present
+
+    - name: Enable IPv6 forwarding
+      ansible.posix.sysctl:
+        name: net.ipv6.conf.all.forwarding
+        value: "1"
+        sysctl_file: /etc/sysctl.d/99-tailscale.conf
+        reload: yes
+        state: present
+
+    # =========================================================================
+    # Check Tailscale status
+    # =========================================================================
+    - name: Check if Tailscale is already authenticated
+      ansible.builtin.command: tailscale status --json
+      register: tailscale_status
+      changed_when: false
+      failed_when: false
+
+    - name: Parse Tailscale status
+      ansible.builtin.set_fact:
+        tailscale_logged_in: "{{ (tailscale_status.stdout | from_json).BackendState | default('') == 'Running' }}"
+      when: tailscale_status.rc == 0
+
+    - name: Set logged in false if status check failed
+      ansible.builtin.set_fact:
+        tailscale_logged_in: false
+      when: tailscale_status.rc != 0
+
+    # =========================================================================
+    # Authenticate and configure Tailscale
+    # =========================================================================
+    - name: Get routes for this host
+      ansible.builtin.set_fact:
+        host_routes: "{{ tailscale_advertise_routes[inventory_hostname] | default('') }}"
+
+    - name: Authenticate Tailscale (if not already and auth key provided)
+      ansible.builtin.command: >
+        tailscale up
+        --authkey={{ tailscale_auth_key }}
+        --hostname={{ tailscale_hostname }}
+        --advertise-tags={{ tailscale_tags }}
+        {% if host_routes %}--advertise-routes={{ host_routes }}{% endif %}
+        {% if tailscale_accept_routes %}--accept-routes{% endif %}
+      when:
+        - not tailscale_logged_in
+        - tailscale_auth_key is defined
+        - tailscale_auth_key | length > 0
+      no_log: true
+      register: tailscale_up_result
+      changed_when: tailscale_up_result.rc == 0
+
+    - name: Fail if not authenticated and no auth key
+      ansible.builtin.fail:
+        msg: |
+          Tailscale is not authenticated and no auth key was provided.
+          Please run with: -e "tailscale_auth_key=tskey-..."
+      when:
+        - not tailscale_logged_in
+        - tailscale_auth_key is not defined or tailscale_auth_key | length == 0
+
+    - name: Update Tailscale configuration (if already authenticated)
+      ansible.builtin.command: >
+        tailscale set
+        --hostname={{ tailscale_hostname }}
+        {% if host_routes %}--advertise-routes={{ host_routes }}{% endif %}
+        {% if tailscale_accept_routes %}--accept-routes{% endif %}
+      when: tailscale_logged_in
+      register: tailscale_set_result
+      changed_when: tailscale_set_result.rc == 0
+
+    # =========================================================================
+    # Verify configuration
+    # =========================================================================
+    - name: Verify Tailscale status
+      ansible.builtin.command: tailscale status
+      register: final_status
+      changed_when: false
+
+    - name: Display Tailscale status
+      ansible.builtin.debug:
+        var: final_status.stdout_lines
