@@ -14,6 +14,8 @@ metadata:
 spec:
   # Hostname shown in Tailscale admin console
   hostname: k8s-homelab-router
+  # Enable exit node to allow routing all traffic through homelab
+  exitNode: true
   # Subnet router configuration
   subnetRouter:
     advertiseRoutes:

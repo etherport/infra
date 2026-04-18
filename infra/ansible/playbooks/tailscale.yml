@@ -38,6 +38,11 @@
     tailscale_host_accept_routes:
       vpn-aws: false  # Has WireGuard S2S tunnel - don't accept Tailscale routes
 
+    # Exit node configuration (per-host)
+    # Allows routing ALL traffic through this node (must be approved in Tailscale admin)
+    tailscale_advertise_exit_node:
+      vpn-aws: true
+
   tasks:
     # =========================================================================
     # Install Tailscale
@@ -111,6 +116,7 @@
       ansible.builtin.set_fact:
         host_routes: "{{ tailscale_advertise_routes[inventory_hostname] | default('') }}"
         host_accept_routes: "{{ tailscale_host_accept_routes[inventory_hostname] | default(false) }}"
+        host_exit_node: "{{ tailscale_advertise_exit_node[inventory_hostname] | default(false) }}"
 
     - name: Authenticate Tailscale (if not already and auth key provided)
       ansible.builtin.command: >
@@ -120,6 +126,7 @@
         --advertise-tags={{ tailscale_tags }}
         {% if host_routes %}--advertise-routes={{ host_routes }}{% endif %}
         {% if host_accept_routes %}--accept-routes{% endif %}
+        {% if host_exit_node %}--advertise-exit-node{% endif %}
       when:
         - not tailscale_logged_in
         - tailscale_auth_key is defined
@@ -143,6 +150,7 @@
         --hostname={{ tailscale_hostname }}
         {% if host_routes %}--advertise-routes={{ host_routes }}{% endif %}
         --accept-routes={{ host_accept_routes | lower }}
+        --advertise-exit-node={{ host_exit_node | lower }}
       when: tailscale_logged_in
       register: tailscale_set_result
       changed_when: tailscale_set_result.rc == 0
