@@ -45,6 +45,12 @@ docs/
 | [vlan-interfaces-netplan.md](runbooks/vlan-interfaces-netplan.md) | VLAN interface configuration |
 | [auto-remediation/](runbooks/auto-remediation/) | Automated issue resolution system |
 
+## Operations
+
+| Document | Description |
+|----------|-------------|
+| [terminal-setup.md](operations/terminal-setup.md) | Terminal setup & disaster recovery for workstations |
+
 ## Architecture
 
 | Document | Description |

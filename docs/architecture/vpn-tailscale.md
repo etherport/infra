@@ -8,6 +8,7 @@ Tailscale provides mesh VPN connectivity for remote client access as a supplemen
 - Easy client onboarding without manual key exchange
 - MagicDNS for automatic name resolution
 - Split DNS for internal domain resolution
+- Exit nodes for routing all traffic through homelab or AWS
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -102,6 +103,7 @@ metadata:
   namespace: tailscale
 spec:
   hostname: k8s-homelab-router
+  exitNode: true  # Allow routing all traffic through homelab
   subnetRouter:
     advertiseRoutes:
       - "10.10.192.0/19"  # On-prem homelab
@@ -118,8 +120,73 @@ Advertises AWS subnet to the Tailnet:
 tailscale up \
   --hostname=vpn-aws \
   --advertise-routes=10.10.100.0/22 \
-  --advertise-tags=tag:subnet-router
+  --advertise-tags=tag:subnet-router \
+  --advertise-exit-node
 ```
+
+## Exit Nodes
+
+Exit nodes allow routing **all** traffic through a Tailscale node, not just private subnet traffic. This provides privacy when traveling or access to geo-restricted content.
+
+### Available Exit Nodes
+
+| Node | Tailscale IP | Exit Location | Use Case |
+|------|--------------|---------------|----------|
+| vpn-aws | 100.117.87.10 | AWS us-west-2 | Privacy, US exit |
+| k8s-homelab-router | 100.117.63.43 | Home ISP | Appear at home |
+
+### Usage
+
+```bash
+# Route ALL traffic through AWS (privacy mode)
+tailscale set --exit-node=100.117.87.10
+
+# Route ALL traffic through homelab (appear at home)
+tailscale set --exit-node=100.117.63.43
+
+# Disable exit node (split tunnel - only private traffic via Tailscale)
+tailscale set --exit-node=
+```
+
+### Shell Aliases
+
+Add to `~/.zshrc` for convenience:
+
+```bash
+alias ts-split='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node='
+alias ts-aws='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node=100.117.87.10'
+alias ts-home='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node=100.117.63.43'
+alias ts-status='/Applications/Tailscale.app/Contents/MacOS/Tailscale status'
+```
+
+## DERP Relay Behavior
+
+When direct WireGuard connections can't be established, Tailscale falls back to DERP (Designated Encrypted Relay for Packets).
+
+### When DERP is Used
+
+| Network Type | Connection | Expected Speed |
+|--------------|------------|----------------|
+| Home network | Direct | Full symmetric |
+| Office/coworking | Usually direct | Full symmetric |
+| Hotel/airport | DERP relay | ~30-50 Mbps down, ~1-5 Mbps up |
+| Cellular/CGNAT | DERP relay | Variable |
+
+### Checking Connection Type
+
+```bash
+# Shows "direct" or "relay" for each peer
+tailscale status
+
+# Detailed ping showing DERP relay if used
+tailscale ping 100.117.87.10
+# Direct: "pong from vpn-aws (100.117.87.10) in 45ms"
+# Relay:  "pong from vpn-aws (100.117.87.10) via DERP(dbi) in 270ms"
+```
+
+### DERP Limitations
+
+DERP relays are shared infrastructure with soft bandwidth limits (~1-5 Mbps per connection). For large uploads on restrictive networks, consider using [WireGuard wg1](vpn-wireguard.md#when-to-use-wireguard-vs-tailscale) as a backup.
 
 ## Split DNS Configuration
 
@@ -174,6 +241,9 @@ tailscale_advertise_routes:
 
 tailscale_host_accept_routes:
   vpn-aws: false  # Critical: prevents WireGuard route override
+
+tailscale_advertise_exit_node:
+  vpn-aws: true   # Allow using vpn-aws as exit node
 ```
 
 ## Comparison: WireGuard wg1 vs Tailscale
@@ -186,6 +256,10 @@ tailscale_host_accept_routes:
 | DNS | Manual configuration | MagicDNS + Split DNS |
 | ACLs | Firewall rules | Tailscale ACL policies |
 | Multi-device per user | Separate keys each | Single identity |
+| Exit node support | No (subnet routing only) | Yes (route all traffic) |
+| Restrictive network speed | Direct connection (fast) | DERP relay (may be slow) |
+
+**Recommendation:** Use Tailscale as primary. Retain WireGuard wg1 as backup for large uploads on restrictive networks where DERP is slow.
 
 ## Verifying Configuration
 

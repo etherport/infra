@@ -4,9 +4,9 @@
 
 Site-to-site VPN connecting local homelab to AWS. This is the **production traffic path** for ALB-routed services.
 
-**Note:** For remote client access, [Tailscale](vpn-tailscale.md) is now the recommended solution.
+**Note:** For remote client access, [Tailscale](vpn-tailscale.md) is the primary solution.
 
-> **DEPRECATED:** WireGuard wg1 (remote access) is deprecated and will be removed once Tailscale is fully hardened. New remote clients should use Tailscale instead.
+> **BACKUP:** WireGuard wg1 (remote access) is retained as a backup for restrictive networks where Tailscale's DERP relay performance is insufficient. See [When to Use WireGuard vs Tailscale](#when-to-use-wireguard-vs-tailscale) below.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -41,8 +41,8 @@ Site-to-site VPN connecting local homelab to AWS. This is the **production traff
 │                                           ┌────────┴────────┐               │
 │                                           │  wg1 (remote)   │               │
 │                                           │  10.254.0.0/24  │               │
-│                                           │  [DEPRECATED]   │               │
-│                                           │  Use Tailscale  │               │
+│                                           │  [BACKUP]       │               │
+│                                           │  For slow DERP  │               │
 │                                           └─────────────────┘               │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -128,9 +128,9 @@ AllowedIPs = 10.255.255.2/32, 10.10.192.0/19
 PersistentKeepalive = 25
 ```
 
-### vpn-aws: /etc/wireguard/wg1.conf (DEPRECATED)
+### vpn-aws: /etc/wireguard/wg1.conf (BACKUP)
 
-> **DEPRECATED:** wg1 remote access is deprecated. Use [Tailscale](vpn-tailscale.md) for new remote clients.
+> **BACKUP:** wg1 is retained for restrictive networks. Use [Tailscale](vpn-tailscale.md) as the primary solution.
 
 ```ini
 [Interface]
@@ -190,9 +190,25 @@ sudo wg show
 sudo systemctl restart wg-quick@wg0
 ```
 
-## Adding a New Remote Client (DEPRECATED)
+## When to Use WireGuard vs Tailscale
 
-> **DEPRECATED:** For new remote clients, use [Tailscale](vpn-tailscale.md) instead. The instructions below are retained for reference only.
+| Scenario | Recommended | Reason |
+|----------|-------------|--------|
+| Home network | Tailscale | Direct peer connections, full speed |
+| Office/coworking | Tailscale | NAT hole-punching usually works |
+| Hotel/airport | **Try Tailscale first**, fallback to WireGuard | DERP may be slow (~1 Mbps) |
+| Cellular/mobile | Tailscale | DERP handles CGNAT well |
+| Large uploads (restrictive network) | WireGuard wg1 | Direct connection, no relay overhead |
+
+**Why DERP can be slow:**
+
+Tailscale uses DERP (Designated Encrypted Relay for Packets) when direct WireGuard connections can't be established. DERP relays are shared infrastructure with bandwidth limits (~1-5 Mbps per connection). Networks that block UDP or use aggressive NAT force all traffic through DERP, resulting in asymmetric speeds (fast download, slow upload).
+
+WireGuard wg1 connects directly to vpn-aws's public IP (44.240.60.80:51821), bypassing DERP entirely.
+
+## Adding a New Remote Client
+
+> **Note:** Use [Tailscale](vpn-tailscale.md) as the primary solution. WireGuard wg1 is for backup/restrictive networks.
 
 1. Generate keys on client:
    ```bash
