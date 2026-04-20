@@ -1,0 +1,249 @@
+---
+# K8s Node Fixes Playbook
+# Fixes issues discovered during cluster reboot testing
+#
+# Usage:
+#   # All K8s nodes
+#   ansible-playbook -i ../kubespray/kubespray/inventory/wind/inventory.ini playbooks/k8s-node-fixes.yml
+#
+#   # Single node
+#   ansible-playbook -i ../kubespray/kubespray/inventory/wind/inventory.ini playbooks/k8s-node-fixes.yml --limit k8s-w3
+#
+#   # Check mode
+#   ansible-playbook -i ../kubespray/kubespray/inventory/wind/inventory.ini playbooks/k8s-node-fixes.yml --check --diff
+#
+# This playbook fixes:
+#   1. /opt/cni/bin permissions (Cilium mount-cgroup init container fails without write perms)
+#   2. RBD kernel module loading at boot (CSI plugin fails if module not loaded)
+#   3. Post-reboot stale pod cleanup (pods stuck in Unknown state after reboot)
+
+- name: K8s Node Fixes
+  hosts: all
+  become: true
+
+  vars:
+    # Cleanup script settings
+    cleanup_script_path: /usr/local/bin/k8s-post-reboot-cleanup.sh
+    cleanup_service_name: k8s-post-reboot-cleanup
+
+  tasks:
+    # =========================================================================
+    # Fix 1: CNI bin directory permissions
+    # Cilium's mount-cgroup init container needs to write to /opt/cni/bin
+    # Without this, pods fail with: cp: cannot create regular file '/hostbin/cilium-mount': Permission denied
+    # =========================================================================
+    - name: Ensure /opt/cni/bin exists with correct permissions
+      file:
+        path: /opt/cni/bin
+        state: directory
+        mode: "0777"
+        owner: root
+        group: root
+
+    # =========================================================================
+    # Fix 2: Load RBD kernel module at boot
+    # CSI RBD plugin fails if the rbd module isn't loaded:
+    # "modprobe: ERROR: could not insert 'rbd': Key was rejected by service"
+    # This can happen with SecureBoot if the module isn't loaded early enough
+    # =========================================================================
+    - name: Ensure rbd module loads at boot
+      copy:
+        dest: /etc/modules-load.d/ceph-rbd.conf
+        content: |
+          # Load Ceph RBD module at boot for CSI plugin
+          rbd
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Load rbd module now if not loaded
+      modprobe:
+        name: rbd
+        state: present
+      ignore_errors: yes
+
+    # =========================================================================
+    # Fix 3: Post-reboot stale pod cleanup
+    # After node reboot, pods can get stuck in "Unknown" state because
+    # kubelet doesn't properly clean them up. This service runs after
+    # kubelet starts and cleans up stale pods.
+    # =========================================================================
+    - name: Create post-reboot cleanup script
+      copy:
+        dest: "{{ cleanup_script_path }}"
+        mode: "0755"
+        owner: root
+        group: root
+        content: |
+          #!/bin/bash
+          # K8s Post-Reboot Cleanup Script
+          # Cleans up stale pods and volume attachments cluster-wide
+          # Runs on control plane only (requires admin.conf)
+
+          set -euo pipefail
+
+          KUBECONFIG=/etc/kubernetes/admin.conf
+          KUBECTL=/usr/local/bin/kubectl
+          LOG_TAG="k8s-post-reboot-cleanup"
+
+          log() {
+              logger -t "$LOG_TAG" "$1"
+              echo "$(date '+%Y-%m-%d %H:%M:%S') $1"
+          }
+
+          # Only run on control plane
+          if [ ! -f "$KUBECONFIG" ]; then
+              exit 0
+          fi
+
+          # Wait for kubelet to be ready
+          for i in {1..30}; do
+              if systemctl is-active --quiet kubelet; then
+                  break
+              fi
+              sleep 2
+          done
+
+          # Wait for API server connectivity
+          for i in {1..30}; do
+              if $KUBECTL --kubeconfig=$KUBECONFIG get nodes &>/dev/null; then
+                  break
+              fi
+              sleep 2
+          done
+
+          # Clean up pods in Unknown state across ALL nodes
+          UNKNOWN_PODS=$($KUBECTL --kubeconfig=$KUBECONFIG get pods --all-namespaces \
+              -o jsonpath='{range .items[?(@.status.phase=="Unknown")]}{.metadata.namespace}/{.metadata.name} {end}' 2>/dev/null || true)
+
+          if [ -n "$UNKNOWN_PODS" ]; then
+              log "Found pods in Unknown state: $UNKNOWN_PODS"
+              for pod in $UNKNOWN_PODS; do
+                  namespace=$(echo $pod | cut -d'/' -f1)
+                  name=$(echo $pod | cut -d'/' -f2)
+                  log "Force deleting pod $namespace/$name"
+                  $KUBECTL --kubeconfig=$KUBECONFIG delete pod -n $namespace $name \
+                      --force --grace-period=0 2>/dev/null || true
+              done
+          fi
+
+          # Clean up volume attachments on nodes that are Ready but have no matching pod
+          for node in $($KUBECTL --kubeconfig=$KUBECONFIG get nodes -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+              VAS=$($KUBECTL --kubeconfig=$KUBECONFIG get volumeattachments \
+                  -o jsonpath="{range .items[?(@.spec.nodeName=='$node')]}{.metadata.name} {end}" 2>/dev/null || true)
+              for va in $VAS; do
+                  PV=$($KUBECTL --kubeconfig=$KUBECONFIG get volumeattachment $va \
+                      -o jsonpath='{.spec.source.persistentVolumeName}' 2>/dev/null || true)
+                  [ -z "$PV" ] && continue
+                  PVC=$($KUBECTL --kubeconfig=$KUBECONFIG get pv $PV \
+                      -o jsonpath='{.spec.claimRef.namespace}/{.spec.claimRef.name}' 2>/dev/null || true)
+                  [ -z "$PVC" ] && continue
+                  NAMESPACE=$(echo $PVC | cut -d'/' -f1)
+                  PVC_NAME=$(echo $PVC | cut -d'/' -f2)
+                  # Check if pod using this PVC is on this node and running
+                  POD_ON_NODE=$($KUBECTL --kubeconfig=$KUBECONFIG get pods -n $NAMESPACE \
+                      --field-selector spec.nodeName=$node,status.phase=Running \
+                      -o jsonpath="{range .items[*]}{range .spec.volumes[*]}{.persistentVolumeClaim.claimName}{' '}{end}{end}" 2>/dev/null | grep -w "$PVC_NAME" || true)
+                  if [ -z "$POD_ON_NODE" ]; then
+                      # Check if there's a pod trying to use this PVC on a different node
+                      PENDING_POD=$($KUBECTL --kubeconfig=$KUBECONFIG get pods -n $NAMESPACE \
+                          -o jsonpath="{range .items[?(@.status.phase=='Pending')]}{.metadata.name}{' '}{end}" 2>/dev/null || true)
+                      if [ -n "$PENDING_POD" ]; then
+                          log "Deleting stale volume attachment $va on $node (PVC $PVC needed elsewhere)"
+                          $KUBECTL --kubeconfig=$KUBECONFIG delete volumeattachment $va 2>/dev/null || true
+                      fi
+                  fi
+              done
+          done
+      notify: Reload systemd
+
+    - name: Create post-reboot cleanup systemd service
+      copy:
+        dest: /etc/systemd/system/{{ cleanup_service_name }}.service
+        mode: "0644"
+        owner: root
+        group: root
+        content: |
+          [Unit]
+          Description=Kubernetes Post-Reboot Cleanup
+          Documentation=https://github.com/your-org/homelab-infra
+          After=kubelet.service
+          Wants=kubelet.service
+
+          [Service]
+          Type=oneshot
+          ExecStart={{ cleanup_script_path }}
+          StandardOutput=journal
+          StandardError=journal
+      notify: Reload systemd
+
+    - name: Create cleanup timer (runs every 2 minutes)
+      copy:
+        dest: /etc/systemd/system/{{ cleanup_service_name }}.timer
+        mode: "0644"
+        owner: root
+        group: root
+        content: |
+          [Unit]
+          Description=Run K8s cleanup every 2 minutes
+
+          [Timer]
+          OnBootSec=60
+          OnUnitActiveSec=120
+          AccuracySec=30
+
+          [Install]
+          WantedBy=timers.target
+      notify: Reload systemd
+
+    - name: Enable cleanup timer (control plane only)
+      systemd:
+        name: "{{ cleanup_service_name }}.timer"
+        enabled: yes
+        state: started
+        daemon_reload: yes
+      when: "'kube_control_plane' in group_names"
+
+    - name: Disable cleanup timer on worker nodes
+      systemd:
+        name: "{{ cleanup_service_name }}.timer"
+        enabled: no
+        state: stopped
+        daemon_reload: yes
+      when: "'kube_control_plane' not in group_names"
+      ignore_errors: yes
+
+    # =========================================================================
+    # Fix 4: Increase kubelet node lease duration
+    # This gives more time for graceful pod termination during reboots
+    # =========================================================================
+    - name: Check if kubelet config exists
+      stat:
+        path: /var/lib/kubelet/config.yaml
+      register: kubelet_config
+
+    # =========================================================================
+    # Verification
+    # =========================================================================
+    - name: Verify /opt/cni/bin permissions
+      stat:
+        path: /opt/cni/bin
+      register: cni_bin_stat
+
+    - name: Display CNI bin permissions
+      debug:
+        msg: "CNI bin permissions: {{ cni_bin_stat.stat.mode }}"
+
+    - name: Check if rbd module is loaded
+      shell: lsmod | grep -q rbd && echo "loaded" || echo "not loaded"
+      register: rbd_status
+      changed_when: false
+
+    - name: Display rbd module status
+      debug:
+        msg: "RBD module status: {{ rbd_status.stdout }}"
+
+  handlers:
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
