@@ -127,6 +127,21 @@
               done
           fi
 
+          # Clean up pods with UnexpectedAdmissionError (can happen after node reboots)
+          ERROR_PODS=$($KUBECTL --kubeconfig=$KUBECONFIG get pods --all-namespaces \
+              -o jsonpath='{range .items[?(@.status.reason=="UnexpectedAdmissionError")]}{.metadata.namespace}/{.metadata.name} {end}' 2>/dev/null || true)
+
+          if [ -n "$ERROR_PODS" ]; then
+              log "Found pods with UnexpectedAdmissionError: $ERROR_PODS"
+              for pod in $ERROR_PODS; do
+                  namespace=$(echo $pod | cut -d'/' -f1)
+                  name=$(echo $pod | cut -d'/' -f2)
+                  log "Force deleting pod $namespace/$name"
+                  $KUBECTL --kubeconfig=$KUBECONFIG delete pod -n $namespace $name \
+                      --force --grace-period=0 2>/dev/null || true
+              done
+          fi
+
           # Clean up volume attachments on nodes that are Ready but have no matching pod
           for node in $($KUBECTL --kubeconfig=$KUBECONFIG get nodes -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
               VAS=$($KUBECTL --kubeconfig=$KUBECONFIG get volumeattachments \
