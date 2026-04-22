@@ -1,0 +1,263 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wireguard
+  namespace: wireguard
+  labels:
+    app: wireguard
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # Never run two pods simultaneously (VIP conflict)
+  selector:
+    matchLabels:
+      app: wireguard
+  template:
+    metadata:
+      labels:
+        app: wireguard
+      annotations:
+        kubectl.kubernetes.io/default-container: wireguard
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      terminationGracePeriodSeconds: 30
+      # Prefer k8s-w1 but allow scheduling on other workers if w1 is down
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - k8s-w1
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      tolerations:
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 30
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 30
+      containers:
+        - name: wireguard
+          image: ubuntu:24.04
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+                - SYS_MODULE
+            privileged: false
+          ports:
+            - name: wg0
+              containerPort: 51820
+              protocol: UDP
+              hostPort: 51820
+            - name: wg1
+              containerPort: 51821
+              protocol: UDP
+              hostPort: 51821
+          volumeMounts:
+            - name: wireguard-keys
+              mountPath: /secrets
+              readOnly: true
+            - name: lib-modules
+              mountPath: /lib/modules
+              readOnly: true
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+
+              echo "Installing WireGuard tools..."
+              apt-get update && apt-get install -y wireguard-tools iproute2 iptables
+
+              echo "Setting up WireGuard interfaces..."
+              mkdir -p /etc/wireguard
+
+              # Create wg0 config with private key
+              cat > /etc/wireguard/wg0.conf <<EOF
+              [Interface]
+              Address = 10.255.255.2/30
+              ListenPort = 51820
+              PrivateKey = $(cat /secrets/wg0-private.key)
+              MTU = 1420
+
+              [Peer]
+              PublicKey = kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU=
+              Endpoint = 44.240.60.80:51820
+              AllowedIPs = 10.10.100.0/22, 10.255.255.1/32, 10.254.0.0/24
+              PersistentKeepalive = 25
+              EOF
+
+              # Create wg1 config with private key
+              cat > /etc/wireguard/wg1.conf <<EOF
+              [Interface]
+              Address = 10.254.0.1/24
+              ListenPort = 51821
+              PrivateKey = $(cat /secrets/wg1-private.key)
+              MTU = 1420
+
+              [Peer]
+              PublicKey = 7FAI4YiWGRtKDl3AaG+jxjf0vDVaTtUisf68nQRFozA=
+              AllowedIPs = 10.254.0.10/32
+              EOF
+
+              chmod 600 /etc/wireguard/*.conf
+
+              echo "Bringing up wg0..."
+              wg-quick up wg0
+
+              echo "Bringing up wg1..."
+              wg-quick up wg1
+
+              echo "WireGuard interfaces active:"
+              wg show
+
+              # Keep container running and monitor interfaces
+              while true; do
+                if ! ip link show wg0 > /dev/null 2>&1; then
+                  echo "WARNING: wg0 down, restarting..."
+                  wg-quick up wg0 || true
+                fi
+                if ! ip link show wg1 > /dev/null 2>&1; then
+                  echo "WARNING: wg1 down, restarting..."
+                  wg-quick up wg1 || true
+                fi
+                sleep 30
+              done
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - "wg-quick down wg0 || true; wg-quick down wg1 || true"
+          livenessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - "ip link show wg0 && ip link show wg1"
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - "wg show wg0 && wg show wg1"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+        - name: keepalived
+          image: ubuntu:24.04
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+                - NET_BROADCAST
+                - NET_RAW
+            privileged: false
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+
+              echo "Installing keepalived..."
+              apt-get update && apt-get install -y keepalived iproute2
+
+              # Detect primary network interface (first non-lo interface with an IP)
+              PRIMARY_IF=$(ip -o -4 addr show | grep -v '127.0.0.1' | head -1 | awk '{print $2}')
+              echo "Detected primary interface: $PRIMARY_IF"
+
+              # Create keepalived config
+              cat > /etc/keepalived/keepalived.conf <<EOF
+              global_defs {
+                script_user root
+                enable_script_security
+              }
+
+              vrrp_script check_wg {
+                script "/usr/local/bin/check-wireguard.sh"
+                interval 2
+                weight -50
+                fall 3
+                rise 2
+              }
+
+              vrrp_instance WG_VIP {
+                state MASTER
+                interface $PRIMARY_IF
+                virtual_router_id 51
+                priority 150
+                advert_int 1
+
+                authentication {
+                  auth_type PASS
+                  auth_pass wgvrrp51
+                }
+
+                virtual_ipaddress {
+                  10.10.201.20/24
+                }
+
+                track_script {
+                  check_wg
+                }
+              }
+              EOF
+
+              # Create health check script
+              cat > /usr/local/bin/check-wireguard.sh <<'SCRIPT'
+              #!/bin/bash
+              # Check wg0 interface exists
+              if ! ip link show wg0 > /dev/null 2>&1; then
+                exit 1
+              fi
+              # Check wg1 interface exists
+              if ! ip link show wg1 > /dev/null 2>&1; then
+                exit 1
+              fi
+              exit 0
+              SCRIPT
+              chmod +x /usr/local/bin/check-wireguard.sh
+
+              echo "Starting keepalived..."
+              keepalived -n -l --dont-fork
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "64Mi"
+              cpu: "50m"
+      volumes:
+        - name: wireguard-keys
+          secret:
+            secretName: wireguard-keys
+            defaultMode: 0600
+        - name: lib-modules
+          hostPath:
+            path: /lib/modules
+            type: Directory

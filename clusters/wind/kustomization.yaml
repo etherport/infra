@@ -41,3 +41,4 @@ resources:
   - ../../platform/kubernetes/ollama
   # VPN / Remote Access
   - ../../platform/kubernetes/tailscale
+  - ../../platform/kubernetes/wireguard

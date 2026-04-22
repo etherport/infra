@@ -41,11 +41,19 @@
 
     # vpn-local specific settings
     vpn_local:
-      tunnel_ip: "10.255.255.2/30"
-      peer_public_key: "kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU="
-      peer_endpoint: "44.240.60.80:51820"
-      peer_allowed_ips: "10.10.100.0/22, 10.255.255.1/32, 10.254.0.0/24"
-      keepalive: 25
+      wg0:
+        tunnel_ip: "10.255.255.2/30"
+        peer_public_key: "kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU="
+        peer_endpoint: "44.240.60.80:51820"
+        peer_allowed_ips: "10.10.100.0/22, 10.255.255.1/32, 10.254.0.0/24"
+        keepalive: 25
+      wg1:
+        tunnel_ip: "10.254.0.1/24"
+        listen_port: 51821
+      # Keepalived VIP for WireGuard failover (backup to K8s WG pod)
+      vip: "10.10.201.20"
+      vip_interface: "ens18"
+      vrrp_priority: 100  # K8s pod has priority 150
 
     # vpn-aws specific settings
     vpn_aws:
@@ -59,7 +67,7 @@
         tunnel_ip: "10.254.0.1/24"
         listen_port: 51821
 
-    # Remote access peers for wg1 (AWS only)
+    # Remote access peers for wg1 (AWS and local when wg1 is configured)
     wg1_peers:
       - name: "Graham"
         public_key: "7FAI4YiWGRtKDl3AaG+jxjf0vDVaTtUisf68nQRFozA="
@@ -180,19 +188,43 @@
         mode: "0600"
         content: |
           [Interface]
-          Address = {{ vpn_local.tunnel_ip }}
+          Address = {{ vpn_local.wg0.tunnel_ip }}
           PrivateKey = {{ vpn_local_keys.stringData.wg0_private_key }}
           MTU = {{ wg_mtu }}
 
           # Peer: AWS hub
           [Peer]
-          PublicKey = {{ vpn_local.peer_public_key }}
-          Endpoint = {{ vpn_local.peer_endpoint }}
-          AllowedIPs = {{ vpn_local.peer_allowed_ips }}
-          PersistentKeepalive = {{ vpn_local.keepalive }}
+          PublicKey = {{ vpn_local.wg0.peer_public_key }}
+          Endpoint = {{ vpn_local.wg0.peer_endpoint }}
+          AllowedIPs = {{ vpn_local.wg0.peer_allowed_ips }}
+          PersistentKeepalive = {{ vpn_local.wg0.keepalive }}
       when: inventory_hostname == 'vpn-local'
       no_log: true
       notify: Restart WireGuard wg0
+
+    - name: Configure wg1 on vpn-local (remote access)
+      copy:
+        dest: /etc/wireguard/wg1.conf
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          [Interface]
+          Address    = {{ vpn_local.wg1.tunnel_ip }}
+          ListenPort = {{ vpn_local.wg1.listen_port }}
+          PrivateKey = {{ vpn_local_keys.stringData.wg1_private_key }}
+          MTU        = {{ wg_mtu }}
+
+          {% for peer in wg1_peers %}
+          [Peer]
+          # {{ peer.name }}
+          PublicKey  = {{ peer.public_key }}
+          AllowedIPs = {{ peer.allowed_ips }}
+
+          {% endfor %}
+      when: inventory_hostname == 'vpn-local' and vpn_local_keys.stringData.wg1_private_key is defined
+      no_log: true
+      notify: Restart WireGuard wg1
 
     # =========================================================================
     # vpn-aws configuration
@@ -323,6 +355,93 @@
       when: inventory_hostname == 'vpn-aws'
 
     # =========================================================================
+    # Keepalived for VIP failover (vpn-local only)
+    # vpn-local acts as backup to the K8s WireGuard pod
+    # =========================================================================
+    - name: Install Keepalived
+      apt:
+        name: keepalived
+        state: present
+      when: inventory_hostname == 'vpn-local'
+
+    - name: Create WireGuard health check script
+      copy:
+        dest: /usr/local/bin/check-wireguard.sh
+        owner: root
+        group: root
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          # Health check for WireGuard interfaces
+          # Returns 0 if healthy, 1 if unhealthy
+
+          # Check wg0 interface exists
+          if ! ip link show wg0 > /dev/null 2>&1; then
+            exit 1
+          fi
+
+          # Check wg1 interface exists (if configured)
+          if [ -f /etc/wireguard/wg1.conf ]; then
+            if ! ip link show wg1 > /dev/null 2>&1; then
+              exit 1
+            fi
+          fi
+
+          exit 0
+      when: inventory_hostname == 'vpn-local'
+
+    - name: Configure Keepalived for WireGuard VIP
+      copy:
+        dest: /etc/keepalived/keepalived.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          global_defs {
+            script_user root
+            enable_script_security
+          }
+
+          vrrp_script check_wg {
+            script "/usr/local/bin/check-wireguard.sh"
+            interval 2
+            weight -50
+            fall 3
+            rise 2
+          }
+
+          vrrp_instance WG_VIP {
+            state BACKUP
+            interface {{ vpn_local.vip_interface }}
+            virtual_router_id 51
+            priority {{ vpn_local.vrrp_priority }}
+            advert_int 1
+
+            authentication {
+              auth_type PASS
+              auth_pass wgvrrp51
+            }
+
+            virtual_ipaddress {
+              {{ vpn_local.vip }}/24
+            }
+
+            track_script {
+              check_wg
+            }
+          }
+      when: inventory_hostname == 'vpn-local'
+      notify: Restart Keepalived
+
+    - name: Enable and start Keepalived
+      systemd:
+        name: keepalived
+        enabled: yes
+        state: started
+        daemon_reload: yes
+      when: inventory_hostname == 'vpn-local'
+
+    # =========================================================================
     # Service management
     # =========================================================================
     - name: Enable and start WireGuard wg0
@@ -331,12 +450,19 @@
         enabled: yes
         state: started
 
-    - name: Enable and start WireGuard wg1 (AWS only)
+    - name: Enable and start WireGuard wg1 (vpn-aws)
       systemd:
         name: wg-quick@wg1
         enabled: yes
         state: started
       when: inventory_hostname == 'vpn-aws'
+
+    - name: Enable and start WireGuard wg1 (vpn-local when configured)
+      systemd:
+        name: wg-quick@wg1
+        enabled: yes
+        state: started
+      when: inventory_hostname == 'vpn-local' and vpn_local_keys.stringData.wg1_private_key is defined
 
   # ===========================================================================
   # Handlers
@@ -354,3 +480,8 @@
 
     - name: Apply nftables rules
       command: nft -f /etc/nftables.conf
+
+    - name: Restart Keepalived
+      systemd:
+        name: keepalived
+        state: restarted

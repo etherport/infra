@@ -6,6 +6,7 @@ metadata:
 spec:
   addresses:
     - 10.10.201.5/32           # Technitium DNS VIP
+    # Note: 10.10.201.20 reserved for WireGuard VIP (managed by Keepalived, not MetalLB)
     - 10.10.201.70-10.10.201.90
   autoAssign: true
   avoidBuggyIPs: false
