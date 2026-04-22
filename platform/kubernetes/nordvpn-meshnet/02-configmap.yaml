@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nordvpn-meshnet-config
+  namespace: nordvpn-meshnet
+data:
+  # Device name visible in Meshnet (e.g., "homelab-k8s.nord")
+  NORDVPN_NICKNAME: "homelab-k8s"
+
+  # Health check settings
+  NORDVPN_HEALTHCHECK_INTERVAL: "300"
+  NORDVPN_HEALTHCHECK_URL: "www.google.com"
+
+  # Enable debug logging (set to any value to enable)
+  # NORDVPN_MESHNET_DEBUG: "true"
+
+  # Peer permissions - allow all peers full access by default
+  # Format: comma-separated peer FQDNs (e.g., "graham-iphone.nord,graham-macbook.nord")
+  # Leave empty to allow all peers
+  NORDVPN_ALLOW_PEER_ROUTING: ""
+  NORDVPN_ALLOW_PEER_LOCAL: ""
+  NORDVPN_ALLOW_PEER_REMOTE: ""
+
+  # Deny specific peers (processed before allow rules)
+  NORDVPN_DENY_PEER_ROUTING: ""
+  NORDVPN_DENY_PEER_LOCAL: ""
+  NORDVPN_DENY_PEER_REMOTE: ""
