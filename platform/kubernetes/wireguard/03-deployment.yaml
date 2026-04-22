@@ -115,11 +115,22 @@ spec:
 
               chmod 600 /etc/wireguard/*.conf
 
+              # Bring up interfaces (handle case where they already exist from previous run)
               echo "Bringing up wg0..."
-              wg-quick up wg0
+              if ip link show wg0 > /dev/null 2>&1; then
+                echo "wg0 already exists, syncing config..."
+                wg syncconf wg0 <(wg-quick strip wg0)
+              else
+                wg-quick up wg0
+              fi
 
               echo "Bringing up wg1..."
-              wg-quick up wg1
+              if ip link show wg1 > /dev/null 2>&1; then
+                echo "wg1 already exists, syncing config..."
+                wg syncconf wg1 <(wg-quick strip wg1)
+              else
+                wg-quick up wg1
+              fi
 
               echo "WireGuard interfaces active:"
               wg show
