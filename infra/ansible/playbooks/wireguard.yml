@@ -40,6 +40,8 @@
     wg_mtu: 1420
 
     # vpn-local specific settings
+    # NOTE: vpn-local is BACKUP to the K8s WireGuard pod. wg0 is NOT auto-started;
+    # Keepalived notify scripts start/stop wg0 based on VRRP state.
     vpn_local:
       wg0:
         tunnel_ip: "10.255.255.2/30"
@@ -52,7 +54,7 @@
         listen_port: 51821
       # Keepalived VIP for WireGuard failover (backup to K8s WG pod)
       vip: "10.10.201.20"
-      vip_interface: "ens18"
+      vip_interface: "eth0"
       vrrp_priority: 100  # K8s pod has priority 150
 
     # vpn-aws specific settings
@@ -364,30 +366,39 @@
         state: present
       when: inventory_hostname == 'vpn-local'
 
-    - name: Create WireGuard health check script
+    - name: Create WireGuard failover script
       copy:
-        dest: /usr/local/bin/check-wireguard.sh
+        dest: /usr/local/bin/wg-failover.sh
         owner: root
         group: root
         mode: "0755"
         content: |
           #!/bin/bash
-          # Health check for WireGuard interfaces
-          # Returns 0 if healthy, 1 if unhealthy
+          # WireGuard failover script for Keepalived
+          # Called when VRRP state changes
+          # Manages both wg0 (site-to-site) and wg1 (remote access) since they share
+          # keys with the K8s WireGuard pod and cannot run simultaneously.
 
-          # Check wg0 interface exists
-          if ! ip link show wg0 > /dev/null 2>&1; then
-            exit 1
-          fi
+          TYPE=$1    # INSTANCE or GROUP
+          NAME=$2    # Name of instance/group
+          STATE=$3   # MASTER, BACKUP, or FAULT
 
-          # Check wg1 interface exists (if configured)
-          if [ -f /etc/wireguard/wg1.conf ]; then
-            if ! ip link show wg1 > /dev/null 2>&1; then
-              exit 1
-            fi
-          fi
+          logger -t wg-failover "State change: $STATE for $NAME"
 
-          exit 0
+          case $STATE in
+              MASTER)
+                  logger -t wg-failover "Becoming MASTER - starting WireGuard interfaces"
+                  systemctl start wg-quick@wg0
+                  [ -f /etc/wireguard/wg1.conf ] && systemctl start wg-quick@wg1
+                  sleep 2
+                  wg show 2>&1 | logger -t wg-failover
+                  ;;
+              BACKUP|FAULT)
+                  logger -t wg-failover "Becoming BACKUP/FAULT - stopping WireGuard interfaces"
+                  systemctl stop wg-quick@wg0 2>/dev/null || true
+                  systemctl stop wg-quick@wg1 2>/dev/null || true
+                  ;;
+          esac
       when: inventory_hostname == 'vpn-local'
 
     - name: Configure Keepalived for WireGuard VIP
@@ -402,20 +413,13 @@
             enable_script_security
           }
 
-          vrrp_script check_wg {
-            script "/usr/local/bin/check-wireguard.sh"
-            interval 2
-            weight -50
-            fall 3
-            rise 2
-          }
-
           vrrp_instance WG_VIP {
             state BACKUP
             interface {{ vpn_local.vip_interface }}
             virtual_router_id 51
             priority {{ vpn_local.vrrp_priority }}
             advert_int 1
+            nopreempt
 
             authentication {
               auth_type PASS
@@ -426,9 +430,7 @@
               {{ vpn_local.vip }}/24
             }
 
-            track_script {
-              check_wg
-            }
+            notify /usr/local/bin/wg-failover.sh
           }
       when: inventory_hostname == 'vpn-local'
       notify: Restart Keepalived
@@ -444,11 +446,19 @@
     # =========================================================================
     # Service management
     # =========================================================================
-    - name: Enable and start WireGuard wg0
+    - name: Enable and start WireGuard wg0 (vpn-aws)
       systemd:
         name: wg-quick@wg0
         enabled: yes
         state: started
+      when: inventory_hostname == 'vpn-aws'
+
+    - name: Disable WireGuard wg0 auto-start (vpn-local - managed by Keepalived)
+      systemd:
+        name: wg-quick@wg0
+        enabled: no
+        state: stopped
+      when: inventory_hostname == 'vpn-local'
 
     - name: Enable and start WireGuard wg1 (vpn-aws)
       systemd:
@@ -457,11 +467,11 @@
         state: started
       when: inventory_hostname == 'vpn-aws'
 
-    - name: Enable and start WireGuard wg1 (vpn-local when configured)
+    - name: Disable WireGuard wg1 auto-start (vpn-local - managed by Keepalived)
       systemd:
         name: wg-quick@wg1
-        enabled: yes
-        state: started
+        enabled: no
+        state: stopped
       when: inventory_hostname == 'vpn-local' and vpn_local_keys.stringData.wg1_private_key is defined
 
   # ===========================================================================

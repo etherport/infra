@@ -1,0 +1,18 @@
+# vpn-local host-specific variables
+#
+# SSH Configuration:
+# When running Ansible remotely (via VPN), direct SSH to vpn-local may fail
+# because its firewall only allows SSH from local network sources.
+#
+# To run Ansible via jump host:
+#   ansible-playbook ... -e "use_jump_host=true"
+#
+# Or set the environment variable:
+#   ANSIBLE_SSH_ARGS="-o ProxyJump=graham@10.10.201.50"
+#
+# Long-term fix: Update vpn-local's firewall to allow SSH from:
+#   - 10.254.0.0/24 (wg1 remote access)
+#   - 10.255.255.0/30 (wg0 tunnel)
+
+# ProxyJump configuration (optional, enabled with -e use_jump_host=true)
+ansible_ssh_common_args: "{{ '-o ProxyJump=graham@10.10.201.50' if use_jump_host | default(false) else '' }}"
