@@ -8,9 +8,11 @@ data:
     WireGuard VPN Configuration
     ===========================
 
-    This pod runs WireGuard with two interfaces:
+    This pod runs WireGuard site-to-site tunnel:
     - wg0: Site-to-site tunnel to vpn-aws (10.255.255.2/30)
-    - wg1: Remote access VPN for mobile clients (10.254.0.1/24)
+
+    Remote access (wg1) is handled by vpn-aws only.
+    Clients connect to vpn-aws:51821, then route through wg0 to homelab.
 
     VIP: 10.10.201.20 (managed by Keepalived)
 

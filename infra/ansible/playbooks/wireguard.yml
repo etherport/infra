@@ -42,6 +42,7 @@
     # vpn-local specific settings
     # NOTE: vpn-local is BACKUP to the K8s WireGuard pod. wg0 is NOT auto-started;
     # Keepalived notify scripts start/stop wg0 based on VRRP state.
+    # wg1 (remote access) is only on vpn-aws - clients connect there and route through wg0.
     vpn_local:
       wg0:
         tunnel_ip: "10.255.255.2/30"
@@ -49,9 +50,6 @@
         peer_endpoint: "44.240.60.80:51820"
         peer_allowed_ips: "10.10.100.0/22, 10.255.255.1/32, 10.254.0.0/24"
         keepalive: 25
-      wg1:
-        tunnel_ip: "10.254.0.1/24"
-        listen_port: 51821
       # Keepalived VIP for WireGuard failover (backup to K8s WG pod)
       vip: "10.10.201.20"
       vip_interface: "eth0"
@@ -204,29 +202,8 @@
       no_log: true
       notify: Restart WireGuard wg0
 
-    - name: Configure wg1 on vpn-local (remote access)
-      copy:
-        dest: /etc/wireguard/wg1.conf
-        owner: root
-        group: root
-        mode: "0600"
-        content: |
-          [Interface]
-          Address    = {{ vpn_local.wg1.tunnel_ip }}
-          ListenPort = {{ vpn_local.wg1.listen_port }}
-          PrivateKey = {{ vpn_local_keys.stringData.wg1_private_key }}
-          MTU        = {{ wg_mtu }}
-
-          {% for peer in wg1_peers %}
-          [Peer]
-          # {{ peer.name }}
-          PublicKey  = {{ peer.public_key }}
-          AllowedIPs = {{ peer.allowed_ips }}
-
-          {% endfor %}
-      when: inventory_hostname == 'vpn-local' and vpn_local_keys.stringData.wg1_private_key is defined
-      no_log: true
-      notify: Restart WireGuard wg1
+    # NOTE: wg1 (remote access) is only configured on vpn-aws
+    # Clients connect to vpn-aws:51821 and route through wg0 to homelab
 
     # =========================================================================
     # vpn-aws configuration
@@ -376,8 +353,8 @@
           #!/bin/bash
           # WireGuard failover script for Keepalived
           # Called when VRRP state changes
-          # Manages both wg0 (site-to-site) and wg1 (remote access) since they share
-          # keys with the K8s WireGuard pod and cannot run simultaneously.
+          # Manages wg0 (site-to-site tunnel to AWS)
+          # Note: wg1 (remote access) is only on vpn-aws
 
           TYPE=$1    # INSTANCE or GROUP
           NAME=$2    # Name of instance/group
@@ -387,16 +364,14 @@
 
           case $STATE in
               MASTER)
-                  logger -t wg-failover "Becoming MASTER - starting WireGuard interfaces"
+                  logger -t wg-failover "Becoming MASTER - starting WireGuard wg0"
                   systemctl start wg-quick@wg0
-                  [ -f /etc/wireguard/wg1.conf ] && systemctl start wg-quick@wg1
                   sleep 2
-                  wg show 2>&1 | logger -t wg-failover
+                  wg show wg0 2>&1 | logger -t wg-failover
                   ;;
               BACKUP|FAULT)
-                  logger -t wg-failover "Becoming BACKUP/FAULT - stopping WireGuard interfaces"
+                  logger -t wg-failover "Becoming BACKUP/FAULT - stopping WireGuard wg0"
                   systemctl stop wg-quick@wg0 2>/dev/null || true
-                  systemctl stop wg-quick@wg1 2>/dev/null || true
                   ;;
           esac
       when: inventory_hostname == 'vpn-local'
@@ -460,19 +435,12 @@
         state: stopped
       when: inventory_hostname == 'vpn-local'
 
-    - name: Enable and start WireGuard wg1 (vpn-aws)
+    - name: Enable and start WireGuard wg1 (vpn-aws only)
       systemd:
         name: wg-quick@wg1
         enabled: yes
         state: started
       when: inventory_hostname == 'vpn-aws'
-
-    - name: Disable WireGuard wg1 auto-start (vpn-local - managed by Keepalived)
-      systemd:
-        name: wg-quick@wg1
-        enabled: no
-        state: stopped
-      when: inventory_hostname == 'vpn-local' and vpn_local_keys.stringData.wg1_private_key is defined
 
   # ===========================================================================
   # Handlers
