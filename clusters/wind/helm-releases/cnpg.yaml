@@ -27,4 +27,11 @@ spec:
   upgrade:
     remediation:
       retries: 3
-  # No custom values - using defaults
+  values:
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "10m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"

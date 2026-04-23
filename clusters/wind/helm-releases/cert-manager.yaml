@@ -37,3 +37,26 @@ spec:
       enabled: true
       servicemonitor:
         enabled: false
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "10m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+    webhook:
+      resources:
+        requests:
+          memory: "32Mi"
+          cpu: "10m"
+        limits:
+          memory: "128Mi"
+          cpu: "100m"
+    cainjector:
+      resources:
+        requests:
+          memory: "64Mi"
+          cpu: "10m"
+        limits:
+          memory: "256Mi"
+          cpu: "200m"

@@ -39,6 +39,13 @@ spec:
         # Apply routes to all alerts, not just those from the monitoring namespace
         alertmanagerConfigMatcherStrategy:
           type: None
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "10m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
         storage:
           volumeClaimTemplate:
             spec:
@@ -53,9 +60,20 @@ spec:
       prometheusSpec:
         serviceMonitorSelectorNilUsesHelmValues: false
         podMonitorSelectorNilUsesHelmValues: false
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "100m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        # Retention settings
+        retention: 15d
+        retentionSize: 8GB
         storageSpec:
           volumeClaimTemplate:
             spec:
+              storageClassName: ceph-rbd
               accessModes:
                 - ReadWriteOnce
               resources:
@@ -67,6 +85,13 @@ spec:
         existingSecret: grafana-admin-credentials
         userKey: admin-user
         passwordKey: admin-password
+      resources:
+        requests:
+          memory: "128Mi"
+          cpu: "50m"
+        limits:
+          memory: "512Mi"
+          cpu: "500m"
       persistence:
         enabled: true
         storageClassName: ceph-rbd
@@ -87,3 +112,37 @@ spec:
           label: grafana_dashboard
           labelValue: "1"
           searchNamespace: ALL
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "10m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+    # Prometheus operator resource limits
+    prometheusOperator:
+      resources:
+        requests:
+          memory: "128Mi"
+          cpu: "50m"
+        limits:
+          memory: "512Mi"
+          cpu: "500m"
+    # Node exporter on all nodes
+    nodeExporter:
+      resources:
+        requests:
+          memory: "32Mi"
+          cpu: "10m"
+        limits:
+          memory: "64Mi"
+          cpu: "100m"
+    # Kube-state-metrics
+    kube-state-metrics:
+      resources:
+        requests:
+          memory: "64Mi"
+          cpu: "10m"
+        limits:
+          memory: "256Mi"
+          cpu: "200m"
