@@ -22,18 +22,10 @@ spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       terminationGracePeriodSeconds: 30
-      # Prefer k8s-w1 but allow scheduling on other workers if w1 is down
-      # Cleanup DaemonSet handles orphaned interfaces on other nodes
+      # Schedule on any worker node (not control-plane)
+      # Cleanup DaemonSet handles orphaned interfaces when pod moves
       affinity:
         nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              preference:
-                matchExpressions:
-                  - key: kubernetes.io/hostname
-                    operator: In
-                    values:
-                      - k8s-w1
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
               - matchExpressions:

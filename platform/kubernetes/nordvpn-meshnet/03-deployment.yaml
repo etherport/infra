@@ -24,17 +24,9 @@ spec:
       # Persistent hostname prevents Meshnet from seeing this as a new device on restart
       hostname: homelab-meshnet
 
-      # Prefer k8s-w2 (different from WireGuard on w1)
+      # Schedule on any worker node (not control-plane)
       affinity:
         nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              preference:
-                matchExpressions:
-                  - key: kubernetes.io/hostname
-                    operator: In
-                    values:
-                      - k8s-w2
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
               - matchExpressions:
