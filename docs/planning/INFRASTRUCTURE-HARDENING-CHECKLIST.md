@@ -147,6 +147,9 @@
 | 2026-04-13 | CloudWatch agent playbook created | `infra/ansible/playbooks/cloudwatch-agent.yml` |
 | 2026-04-13 | Swap file playbook created | `infra/ansible/playbooks/swap.yml` for t4g.nano instances |
 | 2026-04-13 | Tailscale documentation | `docs/architecture/vpn-tailscale.md` |
+| 2026-04-23 | WireGuard K8s HA deployment | K8s pod (primary) + vpn-local (backup) with Keepalived VRRP failover |
+| 2026-04-23 | WireGuard cleanup DaemonSet | Removes orphaned wg0/VIP when pod moves between nodes |
+| 2026-04-23 | WireGuard documentation update | Updated `docs/architecture/vpn-wireguard.md` with HA architecture |
 
 ---
 
@@ -155,9 +158,12 @@
 - **EBS Encryption:** ✅ Completed. Both VPN and DNS instances migrated to encrypted EBS. WireGuard keys now stored in SOPS and deployed via Ansible.
 
 - **WireGuard IaC:** All WireGuard configuration is now fully IaC-managed:
+  - **K8s (primary):** `platform/kubernetes/wireguard/` - Deployed via Flux
+  - **vpn-local (backup):** Deployed via Ansible `playbooks/wireguard.yml`
+  - **vpn-aws:** Deployed via Ansible `playbooks/wireguard.yml`
   - Server keys: `platform/wireguard/servers/{vpn-aws,vpn-local}.sops.yaml`
-  - Client configs: `platform/wireguard/clients/*.sops.yaml`
-  - Ansible playbook: `infra/ansible/playbooks/wireguard.yml` (uses community.sops)
+  - K8s secrets: `platform/kubernetes/wireguard/01-secrets.sops.yaml` (same keys as vpn-local)
+  - Failover: Keepalived VRRP with floating VIP 10.10.201.20
   - Requires: `export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt`
 
 - **Proxmox Standalone VMs:** vpn-local (1002) and dns-fallback (1001) managed by `infra/terraform/proxmox/standalone-vms/`

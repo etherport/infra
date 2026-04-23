@@ -8,45 +8,55 @@ Site-to-site VPN connecting local homelab to AWS. This is the **production traff
 
 > **BACKUP:** WireGuard wg1 (remote access) is retained as a backup for restrictive networks where Tailscale's DERP relay performance is insufficient. See [When to Use WireGuard vs Tailscale](#when-to-use-wireguard-vs-tailscale) below.
 
+## High Availability Architecture
+
+The local site WireGuard gateway runs in high availability mode with automatic failover:
+
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         WireGuard VPN Topology                              │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│   Local Homelab                           AWS (us-west-2)                   │
-│   ┌─────────────────┐                     ┌─────────────────┐               │
-│   │  vpn-local      │◄───── wg0 ─────────►│  vpn-aws        │               │
-│   │  10.10.201.15   │     (site-to-site)  │  10.10.100.10   │               │
-│   │                 │                     │                 │               │
-│   │  Tunnel IP:     │                     │  Tunnel IP:     │               │
-│   │  10.255.255.2   │                     │  10.255.255.1   │               │
-│   └────────┬────────┘                     └────────┬────────┘               │
-│            │                                       │                        │
-│            │ Routes to AWS:                        │ Routes to Local:       │
-│            │ 10.10.100.0/22                        │ 10.10.192.0/19         │
-│            │ 10.254.0.0/24                         │                        │
-│            │                                       │                        │
-│   ┌────────▼────────┐                     ┌────────▼────────┐               │
-│   │  Local Network  │                     │  AWS VPC        │               │
-│   │  10.10.0.0/16   │                     │  10.10.100.0/24 │               │
-│   │                 │                     │                 │               │
-│   │  VLANs:         │                     │  Instances:     │               │
-│   │  - 200: Mgmt    │                     │  - dns-aws (.5) │               │
-│   │  - 201: Servers │                     │  - vpn-aws (.10)│               │
-│   │  - 202: Clients │                     │                 │               │
-│   │  - 204: IoT     │                     └─────────────────┘               │
-│   │  - etc.         │                                                       │
-│   └─────────────────┘                              ▲                        │
-│                                                    │                        │
-│                                           ┌────────┴────────┐               │
-│                                           │  wg1 (remote)   │               │
-│                                           │  10.254.0.0/24  │               │
-│                                           │  [BACKUP]       │               │
-│                                           │  For slow DERP  │               │
-│                                           └─────────────────┘               │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    WireGuard HA Topology (Site-to-Site)                         │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│   AWS (us-west-2)                        Local Homelab                          │
+│   ┌─────────────────┐                    ┌─────────────────────────────────┐    │
+│   │    vpn-aws      │                    │         Floating VIP            │    │
+│   │  44.240.60.80   │◄───── wg0 ────────►│        10.10.201.20             │    │
+│   │  10.10.100.10   │    (site-to-site)  │                                 │    │
+│   │                 │                    │   ┌───────────────────────────┐ │    │
+│   │  wg0: S2S       │                    │   │  K8s WireGuard Pod        │ │    │
+│   │  wg1: Remote    │                    │   │  (PRIMARY - priority 150) │ │    │
+│   └────────┬────────┘                    │   │  On k8s-w1 preferred      │ │    │
+│            │                             │   └─────────────┬─────────────┘ │    │
+│            │                             │                 │ VRRP          │    │
+│            │                             │   ┌─────────────▼─────────────┐ │    │
+│            │                             │   │  vpn-local VM             │ │    │
+│   wg1 (remote access)                    │   │  (BACKUP - priority 100)  │ │    │
+│   10.254.0.0/24                          │   │  10.10.201.15             │ │    │
+│   [BACKUP for slow DERP]                 │   │  wg0 starts on failover   │ │    │
+│            │                             │   └───────────────────────────┘ │    │
+│            ▼                             └─────────────────────────────────┘    │
+│   Remote clients                                                                │
+│   (Graham: 10.254.0.10)                                                         │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Failover Behavior
+
+| Component | Primary | Backup | Failover Time |
+|-----------|---------|--------|---------------|
+| WireGuard wg0 | K8s pod | vpn-local VM | ~10-15 seconds |
+| VIP 10.10.201.20 | K8s node (k8s-w1) | vpn-local VM | ~2-3 seconds |
+
+**How it works:**
+1. K8s WireGuard pod runs with Keepalived sidecar (VRRP priority 150)
+2. vpn-local VM runs Keepalived (VRRP priority 100, `nopreempt`)
+3. VIP 10.10.201.20 floats between them via VRRP
+4. When K8s pod fails, vpn-local acquires VIP and starts wg0
+5. When K8s pod recovers, it reclaims VIP; vpn-local stops wg0
+
+**Cleanup DaemonSet:**
+A cleanup daemon runs on all worker nodes to remove orphaned wg0 interfaces when the WireGuard pod moves between nodes.
 
 ## Network Addressing
 
@@ -59,29 +69,41 @@ Site-to-site VPN connecting local homelab to AWS. This is the **production traff
 
 ## VPN Endpoints
 
-### vpn-local (Local Site Gateway)
+### K8s WireGuard Pod (Primary Local Gateway)
 
 | Property | Value |
 |----------|-------|
-| Hostname | vpn-local.wind.etherport.net |
-| LAN IP | 10.10.201.15 |
+| Namespace | wireguard |
+| Deployment | wireguard |
+| Node Affinity | Prefers k8s-w1, any worker allowed |
+| VIP | 10.10.201.20 (managed by Keepalived sidecar) |
 | Tunnel IP | 10.255.255.2/30 |
-| Listen Port | 51216 |
+| Host Port | 51820/UDP |
 | Public Key | `MwsTBFT0FPsZO+Bpe2Exk3y7oeIyv+HDx3j+lRSISTw=` |
+
+**Managed by:** Flux (GitOps) from `platform/kubernetes/wireguard/`
+
+### vpn-local (Backup Local Gateway)
+
+| Property | Value |
+|----------|-------|
+| Hostname | vpn-local |
+| LAN IP | 10.10.201.15 |
+| VIP (when active) | 10.10.201.20 |
+| Tunnel IP | 10.255.255.2/30 |
+| VRRP Priority | 100 (backup) |
+| Public Key | `MwsTBFT0FPsZO+Bpe2Exk3y7oeIyv+HDx3j+lRSISTw=` (same as K8s) |
 | OS | Ubuntu 24.04 (x86_64) |
 
-**Routes advertised to AWS:**
-- 10.10.192.0/19 (all local VLANs)
+**Managed by:** Ansible (`playbooks/wireguard.yml`)
 
-**Routes received from AWS:**
-- 10.10.100.0/22 (AWS VPC)
-- 10.254.0.0/24 (remote access clients)
+**Note:** K8s pod and vpn-local share the same WireGuard keys so AWS sees a single peer regardless of which is active.
 
-### vpn-aws (AWS Site Gateway)
+### vpn-aws (AWS Gateway)
 
 | Property | Value |
 |----------|-------|
-| Hostname | vpn-aws.wind.etherport.net |
+| Hostname | vpn-aws |
 | Private IP | 10.10.100.10 |
 | Public IP | 44.240.60.80 |
 | Tunnel IPs | wg0: 10.255.255.1/30, wg1: 10.254.0.1/24 |
@@ -92,19 +114,69 @@ Site-to-site VPN connecting local homelab to AWS. This is the **production traff
 
 **Interfaces:**
 - **wg0**: Site-to-site tunnel to local homelab
-- **wg1**: Remote access VPN for mobile clients
+- **wg1**: Remote access VPN for mobile clients (BACKUP to Tailscale)
+
+**Managed by:** Ansible (`playbooks/wireguard.yml`)
+
+## Deployment Methods
+
+### K8s WireGuard (Primary)
+
+Deployed via Flux from `platform/kubernetes/wireguard/`:
+
+```bash
+# Manual apply (Flux handles this automatically)
+kubectl apply -k platform/kubernetes/wireguard/
+
+# Check status
+kubectl get pods -n wireguard
+kubectl exec -n wireguard deployment/wireguard -c wireguard -- wg show wg0
+```
+
+### vpn-local and vpn-aws (Ansible)
+
+```bash
+cd infra/ansible
+
+# All VPN servers
+ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/wireguard.yml
+
+# Local only (vpn-local)
+ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-local
+
+# AWS only
+ansible-playbook -i inventory/aws/ playbooks/wireguard.yml --limit vpn-aws
+
+# Check mode (dry-run)
+ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/wireguard.yml --check --diff
+```
 
 ## Configuration Files
+
+### K8s Pod: wg0.conf (embedded in deployment)
+
+```ini
+[Interface]
+Address = 10.255.255.2/30
+ListenPort = 51820
+PrivateKey = <from secret>
+MTU = 1420
+
+[Peer]
+PublicKey = kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU=
+Endpoint = 44.240.60.80:51820
+AllowedIPs = 10.10.100.0/22, 10.255.255.1/32, 10.254.0.0/24
+PersistentKeepalive = 25
+```
 
 ### vpn-local: /etc/wireguard/wg0.conf
 
 ```ini
 [Interface]
 Address = 10.255.255.2/30
+PrivateKey = <from local_private.key>
 MTU = 1420
-# PrivateKey in /etc/wireguard/local_private.key
 
-# Peer: AWS hub
 [Peer]
 PublicKey = kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU=
 Endpoint = 44.240.60.80:51820
@@ -118,10 +190,9 @@ PersistentKeepalive = 25
 [Interface]
 Address = 10.255.255.1/30
 ListenPort = 51820
+PrivateKey = <from local_private.key>
 MTU = 1420
-# PrivateKey in /etc/wireguard/local_private.key
 
-# Peer: Local site router
 [Peer]
 PublicKey = MwsTBFT0FPsZO+Bpe2Exk3y7oeIyv+HDx3j+lRSISTw=
 AllowedIPs = 10.255.255.2/32, 10.10.192.0/19
@@ -136,8 +207,8 @@ PersistentKeepalive = 25
 [Interface]
 Address = 10.254.0.1/24
 ListenPort = 51821
+PrivateKey = <from aws_wg1_private.key>
 MTU = 1420
-# PrivateKey in /etc/wireguard/aws_wg1_private.key
 
 [Peer]
 # Graham (mobile)
@@ -145,19 +216,20 @@ PublicKey = 7FAI4YiWGRtKDl3AaG+jxjf0vDVaTtUisf68nQRFozA=
 AllowedIPs = 10.254.0.10/32
 ```
 
-## Routing Tables
+## Routing
 
-### vpn-local
+### UDM Pro Static Route
+
+Traffic to AWS is routed via the floating VIP:
 
 ```
-default via 10.10.201.1 dev eth0
-10.10.100.0/22 dev wg0 scope link          # AWS via tunnel
-10.10.201.0/24 dev eth0 proto kernel       # Local VLAN
-10.254.0.0/24 dev wg0 scope link           # Remote clients via AWS
-10.255.255.0/30 dev wg0 proto kernel       # Tunnel network
+Destination: 10.10.100.0/22
+Gateway: 10.10.201.20 (floating VIP)
 ```
 
-### vpn-aws
+This route remains stable regardless of whether K8s or vpn-local is active.
+
+### vpn-aws Routes
 
 ```
 default via 10.10.100.1 dev ens5
@@ -165,29 +237,6 @@ default via 10.10.100.1 dev ens5
 10.10.192.0/19 dev wg0 scope link          # Local homelab via tunnel
 10.254.0.0/24 dev wg1 proto kernel         # Remote access clients
 10.255.255.0/30 dev wg0 proto kernel       # Tunnel network
-```
-
-## System Configuration
-
-Both endpoints have IP forwarding enabled:
-
-```bash
-# /etc/sysctl.d/99-wg-forward.conf
-net.ipv4.ip_forward=1
-```
-
-## Service Management
-
-```bash
-# Enable and start WireGuard
-sudo systemctl enable wg-quick@wg0
-sudo systemctl start wg-quick@wg0
-
-# Check status
-sudo wg show
-
-# Restart after config change
-sudo systemctl restart wg-quick@wg0
 ```
 
 ## When to Use WireGuard vs Tailscale
@@ -215,17 +264,17 @@ WireGuard wg1 connects directly to vpn-aws's public IP (44.240.60.80:51821), byp
    wg genkey | tee private.key | wg pubkey > public.key
    ```
 
-2. Add peer to vpn-aws wg1.conf:
-   ```ini
-   [Peer]
-   # Client Name
-   PublicKey = <client-public-key>
-   AllowedIPs = 10.254.0.X/32
+2. Add peer to vpn-aws wg1.conf (via Ansible vars in `playbooks/wireguard.yml`):
+   ```yaml
+   wg1_peers:
+     - name: "NewClient"
+       public_key: "<client-public-key>"
+       allowed_ips: "10.254.0.X/32"
    ```
 
-3. Restart wg1:
+3. Run Ansible:
    ```bash
-   sudo systemctl restart wg-quick@wg1
+   ansible-playbook -i inventory/aws/ playbooks/wireguard.yml --limit vpn-aws
    ```
 
 4. Configure client with:
@@ -234,84 +283,102 @@ WireGuard wg1 connects directly to vpn-aws's public IP (44.240.60.80:51821), byp
 
 ## Troubleshooting
 
+### Check K8s WireGuard Status
+
 ```bash
-# Check tunnel status
+# Pod status
+kubectl get pods -n wireguard
+
+# Tunnel status
+kubectl exec -n wireguard deployment/wireguard -c wireguard -- wg show wg0
+
+# Keepalived status (VIP)
+kubectl exec -n wireguard deployment/wireguard -c keepalived -- ip addr show | grep 10.10.201.20
+
+# Logs
+kubectl logs -n wireguard deployment/wireguard -c wireguard
+kubectl logs -n wireguard deployment/wireguard -c keepalived
+```
+
+### Check vpn-local Status
+
+```bash
+# Via Ansible
+ansible vpn-local -i inventory/wind/ -m shell -a "wg show wg0; ip addr show | grep 10.10.201.20"
+
+# Keepalived logs
+journalctl -u keepalived -f
+```
+
+### Check vpn-aws Status
+
+```bash
+ssh vpn-aws
 sudo wg show
+ping 10.255.255.2  # Local tunnel endpoint
+```
 
-# Test connectivity
-ping 10.255.255.1  # From local to AWS tunnel
-ping 10.255.255.2  # From AWS to local tunnel
+### Verify Failover
 
-# Check routes
-ip route
+```bash
+# Scale down K8s WireGuard
+kubectl scale deployment wireguard -n wireguard --replicas=0
 
-# View logs
-sudo journalctl -u wg-quick@wg0 -f
+# Check vpn-local acquired VIP
+ansible vpn-local -m shell -a "ip addr show | grep 10.10.201.20"
+
+# Check tunnel still works
+ping 10.10.100.10
+
+# Restore K8s
+kubectl scale deployment wireguard -n wireguard --replicas=1
 ```
 
 ## MSS Clamping (MTU Fix)
 
-To prevent TCP fragmentation issues over the VPN tunnel, vpn-aws runs nftables rules that clamp the MSS (Maximum Segment Size) on forwarded traffic:
+To prevent TCP fragmentation issues over the VPN tunnel, vpn-aws runs nftables rules that clamp the MSS:
 
 ```nft
 # /etc/nftables.conf on vpn-aws
 table ip mangle {
   chain FORWARD {
     type filter hook forward priority mangle; policy accept;
-    # Clamp MSS for traffic from AWS to local homelab
     ip saddr 10.10.100.0/22 ip daddr 10.10.192.0/19 tcp flags syn / syn,rst counter tcp option maxseg size set rt mtu
-    # Clamp MSS for traffic from local homelab to AWS
     ip saddr 10.10.192.0/19 ip daddr 10.10.100.0/22 tcp flags syn / syn,rst counter tcp option maxseg size set rt mtu
   }
 }
 ```
 
-This ensures that TCP connections negotiate an appropriate MSS that accounts for the WireGuard encapsulation overhead, preventing packet fragmentation.
+## Key Management
 
-## Key File Locations
+### Key File Locations
 
 | Host | Key File | Purpose |
 |------|----------|---------|
+| K8s | Secret `wireguard-keys` | wg0 private key |
 | vpn-local | /etc/wireguard/local_private.key | wg0 private key |
-| vpn-local | /etc/wireguard/local_public.key | wg0 public key |
 | vpn-aws | /etc/wireguard/local_private.key | wg0 private key |
-| vpn-aws | /etc/wireguard/local_public.key | wg0 public key |
 | vpn-aws | /etc/wireguard/aws_wg1_private.key | wg1 private key |
-| vpn-aws | /etc/wireguard/aws_wg1_public.key | wg1 public key |
 
-## Ansible Management
+### SOPS-Encrypted Key Storage
 
-WireGuard configuration is managed via Ansible:
+Keys are stored encrypted with SOPS:
 
-```bash
-# Deploy WireGuard config to all VPN servers
-cd infra/ansible
-ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/wireguard.yml
+```
+platform/wireguard/servers/
+├── vpn-aws.sops.yaml      # AWS keys (wg0 + wg1)
+└── vpn-local.sops.yaml    # Local keys (wg0)
 
-# Check mode (dry-run)
-ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/wireguard.yml --check --diff
-
-# Target only vpn-local
-ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-local
-
-# Target only vpn-aws
-ansible-playbook -i inventory/aws/ playbooks/wireguard.yml --limit vpn-aws
+platform/kubernetes/wireguard/
+└── 01-secrets.sops.yaml   # K8s secret (same keys as vpn-local)
 ```
 
-The playbook manages:
-- WireGuard package installation
-- IP forwarding (sysctl)
-- wg0.conf and wg1.conf configuration
-- nftables MSS clamping rules (AWS only)
-- systemd service enablement
-
-**Note:** Private keys are NOT managed by Ansible. Keys must already exist on the hosts.
+**Important:** K8s and vpn-local use the SAME wg0 keys so AWS sees a single peer.
 
 ## Security Notes
 
-- Private keys are stored in separate files with 600 permissions
-- Key files owned by root:root
-- PresharedKey can be added for additional security (post-quantum resistance)
-- AWS Security Groups must allow UDP 51820/51821 from 0.0.0.0/0
-- Local firewall (UDM Pro) must allow UDP 51216 outbound
-- SSH access only via VPN (no public SSH on vpn-aws)
+- Private keys stored with 600 permissions, owned by root
+- All keys encrypted at rest with SOPS/age
+- PresharedKey can be added for post-quantum resistance
+- AWS Security Groups allow UDP 51820/51821 from 0.0.0.0/0
+- SSH access to vpn-aws only via VPN (no public SSH)

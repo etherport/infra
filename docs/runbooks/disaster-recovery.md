@@ -219,19 +219,35 @@ curl -s "http://localhost:5380/api/dashboard/stats?token=<token>"
 
 ## 4. VPN Recovery
 
+### Architecture Overview
+
+The site-to-site VPN runs in high availability mode:
+- **Primary:** K8s WireGuard pod (priority 150)
+- **Backup:** vpn-local VM (priority 100)
+- **VIP:** 10.10.201.20 (floating between K8s and vpn-local)
+
+Failover is automatic via Keepalived VRRP.
+
 ### 4.1 Site-to-Site VPN Down
 
 **Symptoms:** Cannot reach AWS resources (10.10.100.x) from local network.
 
 ```bash
-# Check local VPN gateway
-ssh graham@10.10.201.15 "sudo wg show"
+# Check K8s WireGuard (primary)
+kubectl get pods -n wireguard
+kubectl exec -n wireguard deployment/wireguard -c wireguard -- wg show wg0
 
-# Check AWS VPN gateway (if reachable via public IP)
+# Check VIP assignment
+kubectl exec -n wireguard deployment/wireguard -c keepalived -- ip addr show | grep 10.10.201.20
+
+# Check vpn-local (backup)
+ansible vpn-local -m shell -a "wg show wg0; ip addr show | grep 10.10.201.20"
+
+# Check AWS VPN gateway
 ssh ubuntu@44.240.60.80 "sudo wg show"
 
-# Restart local WireGuard
-ssh graham@10.10.201.15 "sudo systemctl restart wg-quick@wg0"
+# Restart K8s WireGuard
+kubectl rollout restart deployment wireguard -n wireguard
 
 # Restart AWS WireGuard
 ssh ubuntu@44.240.60.80 "sudo systemctl restart wg-quick@wg0"
@@ -240,16 +256,46 @@ ssh ubuntu@44.240.60.80 "sudo systemctl restart wg-quick@wg0"
 ping 10.255.255.1  # AWS tunnel endpoint
 ```
 
-### 4.2 VPN Gateway VM Failure
+### 4.2 K8s WireGuard Pod Failure
+
+Automatic failover to vpn-local occurs within ~10-15 seconds.
+
+```bash
+# Verify vpn-local took over
+ansible vpn-local -m shell -a "ip addr show | grep 10.10.201.20; wg show wg0"
+
+# Force K8s pod restart
+kubectl delete pod -n wireguard -l app=wireguard
+
+# Or scale and restore
+kubectl scale deployment wireguard -n wireguard --replicas=0
+kubectl scale deployment wireguard -n wireguard --replicas=1
+```
+
+### 4.3 vpn-local VM Failure (Backup)
+
+If K8s is primary, vpn-local failure has no immediate impact.
 
 ```bash
 # Recreate vpn-local VM
 cd ~/Projects/homelab-infra/infra/terraform/proxmox/standalone-vms
 terraform apply -target=proxmox_virtual_environment_vm.standalone["vpn-local"]
 
-# Reconfigure WireGuard
+# Reconfigure WireGuard and Keepalived
 cd ~/Projects/homelab-infra/infra/ansible
 ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-local
+```
+
+### 4.4 Complete Local Site Failure
+
+If both K8s and vpn-local are down, restore K8s first (faster recovery):
+
+```bash
+# Restore K8s WireGuard
+flux reconcile kustomization flux-system --with-source
+
+# Or apply manually
+kubectl apply -k platform/kubernetes/wireguard/
 ```
 
 ---

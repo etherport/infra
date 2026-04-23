@@ -1,0 +1,186 @@
+# WireGuard Kubernetes Deployment
+
+## Overview
+
+Primary WireGuard gateway running in Kubernetes with high availability failover to vpn-local VM.
+
+For full architecture documentation, see [docs/architecture/vpn-wireguard.md](../../../docs/architecture/vpn-wireguard.md).
+
+## Components
+
+| File | Purpose |
+|------|---------|
+| `00-namespace.yaml` | Namespace with privileged pod security |
+| `01-secrets.sops.yaml` | WireGuard keys (SOPS-encrypted) |
+| `02-configmap.yaml` | Documentation/reference config |
+| `03-deployment.yaml` | WireGuard + Keepalived deployment |
+| `04-cleanup-daemonset.yaml` | Orphaned interface cleanup |
+| `kustomization.yaml` | Kustomize configuration |
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    wireguard namespace                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Deployment: wireguard (replicas: 1)                        │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  Pod (hostNetwork: true, prefers k8s-w1)            │    │
+│  │  ┌─────────────────┐  ┌─────────────────┐           │    │
+│  │  │   wireguard     │  │   keepalived    │           │    │
+│  │  │   container     │  │   sidecar       │           │    │
+│  │  │                 │  │                 │           │    │
+│  │  │  - wg0 tunnel   │  │  - VIP mgmt     │           │    │
+│  │  │  - Site-to-site │  │  - VRRP pri 150 │           │    │
+│  │  │  - Port 51820   │  │  - Health check │           │    │
+│  │  └─────────────────┘  └─────────────────┘           │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                             │
+│  DaemonSet: wireguard-cleanup (on all workers)              │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  Removes orphaned wg0/VIP when pod moves nodes      │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Deployment
+
+### Via Flux (automatic)
+
+Changes pushed to `main` are automatically deployed by Flux.
+
+```bash
+# Force reconciliation
+flux reconcile kustomization flux-system --with-source
+```
+
+### Manual
+
+```bash
+kubectl apply -k platform/kubernetes/wireguard/
+```
+
+## Configuration
+
+### Key Settings
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| hostNetwork | true | Direct host networking for tunnel |
+| Node affinity | Prefers k8s-w1 | Falls back to any worker |
+| tolerationSeconds | 10 | Fast eviction on node failure |
+| VRRP priority | 150 | Higher than vpn-local (100) |
+| VIP | 10.10.201.20 | Floating between K8s and vpn-local |
+
+### Probes
+
+| Probe | Target | Initial Delay | Period |
+|-------|--------|---------------|--------|
+| Liveness | `ip link show wg0` | 90s | 10s |
+| Readiness | `wg show wg0` | 60s | 10s |
+
+## Operations
+
+### Check Status
+
+```bash
+# Pod status
+kubectl get pods -n wireguard
+
+# Tunnel status
+kubectl exec -n wireguard deployment/wireguard -c wireguard -- wg show wg0
+
+# VIP status
+kubectl exec -n wireguard deployment/wireguard -c keepalived -- ip addr show | grep 10.10.201.20
+
+# Cleanup daemon logs
+kubectl logs -n wireguard daemonset/wireguard-cleanup
+```
+
+### Test Failover
+
+```bash
+# Scale down (vpn-local will take over)
+kubectl scale deployment wireguard -n wireguard --replicas=0
+
+# Verify vpn-local has VIP
+ansible vpn-local -m shell -a "ip addr show | grep 10.10.201.20"
+
+# Scale back up
+kubectl scale deployment wireguard -n wireguard --replicas=1
+```
+
+### Restart
+
+```bash
+kubectl rollout restart deployment wireguard -n wireguard
+```
+
+## Secrets Management
+
+Secrets are SOPS-encrypted with age. To edit:
+
+```bash
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
+sops platform/kubernetes/wireguard/01-secrets.sops.yaml
+```
+
+**Important:** K8s and vpn-local must use the SAME keys so AWS sees a single peer.
+
+## Troubleshooting
+
+### Pod won't start
+
+1. Check for orphaned wg0 on the node:
+   ```bash
+   kubectl logs -n wireguard daemonset/wireguard-cleanup
+   ```
+
+2. Check probe failures:
+   ```bash
+   kubectl describe pod -n wireguard -l app=wireguard
+   ```
+
+### VIP not assigned
+
+1. Check keepalived logs:
+   ```bash
+   kubectl logs -n wireguard deployment/wireguard -c keepalived
+   ```
+
+2. Check VRRP communication:
+   ```bash
+   # Should see VRRP packets
+   kubectl exec -n wireguard deployment/wireguard -c keepalived -- tcpdump -i eth0 vrrp
+   ```
+
+### Tunnel not working
+
+1. Verify handshake:
+   ```bash
+   kubectl exec -n wireguard deployment/wireguard -c wireguard -- wg show wg0
+   # latest handshake should be recent
+   ```
+
+2. Check connectivity:
+   ```bash
+   kubectl exec -n wireguard deployment/wireguard -c wireguard -- ping -c 3 10.255.255.1
+   ```
+
+## Files
+
+### 03-deployment.yaml Key Sections
+
+- **wireguard container**: Installs wireguard-tools, creates wg0.conf, runs wg-quick
+- **keepalived sidecar**: Manages VIP 10.10.201.20 via VRRP
+- **preStop hooks**: Clean up wg0 and VIP on termination
+- **tolerations**: Fast eviction (10s) on node failure
+
+### 04-cleanup-daemonset.yaml
+
+- Runs on all worker nodes
+- Queries K8s API to check if wireguard pod is on this node
+- Removes orphaned wg0 interface and VIP if pod is not present
+- Uses `KUBERNETES_SERVICE_HOST` env var (hostNetwork can't resolve DNS)
