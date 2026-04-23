@@ -43,10 +43,10 @@ spec:
                 # Check if the main wireguard pod is running on THIS node
                 # by checking if there's a wg0 interface with an active WireGuard process
 
-                if ip link show wg0 > /dev/null 2>&1; then
-                  # wg0 exists on this node - check if WireGuard is actually running
-                  # The main pod runs wg-quick which creates the interface
-                  # If no handshake in last 3 minutes and we're not the active node, clean up
+                # Check if any WireGuard interfaces exist on this node
+                if ip link show wg0 > /dev/null 2>&1 || ip link show wg1 > /dev/null 2>&1; then
+                  # WireGuard interface(s) exist - check if the main pod is running here
+                  # The main pod runs wg-quick which creates the interfaces
 
                   # Check for wireguard pod on this node via kubernetes API
                   # Use KUBERNETES_SERVICE_HOST (auto-injected) since hostNetwork can't resolve DNS
@@ -57,8 +57,9 @@ spec:
                     2>/dev/null | jq -r '.items | length')
 
                   if [ "$POD_ON_NODE" = "0" ] || [ -z "$POD_ON_NODE" ]; then
-                    echo "$(date): Orphaned wg0 found on $HOSTNAME (no wireguard pod here), cleaning up..."
+                    echo "$(date): Orphaned WireGuard interfaces found on $HOSTNAME (no wireguard pod here), cleaning up..."
                     ip link del wg0 2>/dev/null || true
+                    ip link del wg1 2>/dev/null || true
 
                     # Also remove VIP if present
                     PRIMARY_IF=$(ip -o -4 addr show | grep -v '127.0.0.1' | head -1 | awk '{print $2}')

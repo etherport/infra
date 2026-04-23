@@ -55,6 +55,10 @@ spec:
               containerPort: 51820
               protocol: UDP
               hostPort: 51820
+            - name: wg1
+              containerPort: 51821
+              protocol: UDP
+              hostPort: 51821
           volumeMounts:
             - name: wireguard-keys
               mountPath: /secrets
@@ -71,15 +75,15 @@ spec:
               echo "Installing WireGuard tools..."
               apt-get update && apt-get install -y wireguard-tools iproute2 iptables
 
-              # Clean up any orphaned wg0 from previous runs
-              echo "Cleaning up any existing wg0..."
+              # Clean up any orphaned interfaces from previous runs
+              echo "Cleaning up any existing WireGuard interfaces..."
               ip link del wg0 2>/dev/null || true
+              ip link del wg1 2>/dev/null || true
 
               echo "Setting up WireGuard interfaces..."
               mkdir -p /etc/wireguard
 
               # Create wg0 config (site-to-site tunnel to AWS)
-              # Note: wg1 (remote access) is handled by vpn-aws only
               cat > /etc/wireguard/wg0.conf <<EOF
               [Interface]
               Address = 10.255.255.2/30
@@ -94,9 +98,24 @@ spec:
               PersistentKeepalive = 25
               EOF
 
+              # Create wg1 config (remote access - direct connection)
+              # Uses same keys as vpn-aws wg1 for seamless endpoint switching
+              cat > /etc/wireguard/wg1.conf <<EOF
+              [Interface]
+              Address = 10.254.0.1/24
+              ListenPort = 51821
+              PrivateKey = $(cat /secrets/wg1-private.key)
+              MTU = 1420
+
+              [Peer]
+              # Graham
+              PublicKey = 7FAI4YiWGRtKDl3AaG+jxjf0vDVaTtUisf68nQRFozA=
+              AllowedIPs = 10.254.0.10/32
+              EOF
+
               chmod 600 /etc/wireguard/*.conf
 
-              # Bring up wg0 (handle case where it already exists from previous run)
+              # Bring up wg0 (site-to-site)
               echo "Bringing up wg0..."
               if ip link show wg0 > /dev/null 2>&1; then
                 echo "wg0 already exists, syncing config..."
@@ -105,14 +124,28 @@ spec:
                 wg-quick up wg0
               fi
 
-              echo "WireGuard interface active:"
-              wg show wg0
+              # Bring up wg1 (remote access)
+              echo "Bringing up wg1..."
+              if ip link show wg1 > /dev/null 2>&1; then
+                echo "wg1 already exists, syncing config..."
+                wg syncconf wg1 <(wg-quick strip wg1)
+              else
+                wg-quick up wg1
+              fi
 
-              # Keep container running and monitor wg0
+              echo "WireGuard interfaces active:"
+              wg show wg0
+              wg show wg1
+
+              # Keep container running and monitor interfaces
               while true; do
                 if ! ip link show wg0 > /dev/null 2>&1; then
                   echo "WARNING: wg0 down, restarting..."
                   wg-quick up wg0 || true
+                fi
+                if ! ip link show wg1 > /dev/null 2>&1; then
+                  echo "WARNING: wg1 down, restarting..."
+                  wg-quick up wg1 || true
                 fi
                 sleep 30
               done
@@ -122,13 +155,13 @@ spec:
                 command:
                   - /bin/bash
                   - -c
-                  - "wg-quick down wg0 || true"
+                  - "wg-quick down wg1 || true; wg-quick down wg0 || true"
           livenessProbe:
             exec:
               command:
                 - /bin/bash
                 - -c
-                - "ip link show wg0"
+                - "ip link show wg0 && ip link show wg1"
             initialDelaySeconds: 90
             periodSeconds: 10
             failureThreshold: 3
@@ -137,7 +170,7 @@ spec:
               command:
                 - /bin/bash
                 - -c
-                - "wg show wg0"
+                - "wg show wg0 && wg show wg1"
             initialDelaySeconds: 60
             periodSeconds: 10
             failureThreshold: 3
@@ -212,11 +245,14 @@ spec:
               }
               EOF
 
-              # Create health check script (only checks wg0 - site-to-site tunnel)
+              # Create health check script (checks both wg0 and wg1)
               cat > /usr/local/bin/check-wireguard.sh <<'SCRIPT'
               #!/bin/bash
-              # Check wg0 interface exists
+              # Check both WireGuard interfaces exist
               if ! ip link show wg0 > /dev/null 2>&1; then
+                exit 1
+              fi
+              if ! ip link show wg1 > /dev/null 2>&1; then
                 exit 1
               fi
               exit 0
