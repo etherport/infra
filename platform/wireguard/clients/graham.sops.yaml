@@ -3,9 +3,11 @@
 # Decrypt with: sops -d graham.sops.yaml
 # Export to file: sops -d graham.sops.yaml | yq '.stringData.config' > wg-graham.conf
 #
-# To use on a new device:
-#   1. Decrypt and extract: sops -d graham.sops.yaml | yq '.stringData.config' > /etc/wireguard/wg0.conf
-#   2. Or import to WireGuard app directly
+# ENDPOINTS:
+#   wind.etherport.net:51821 - Direct to homelab (fastest, requires UDP)
+#   vpn.etherport.net:51821  - Via AWS (works everywhere, +30ms latency)
+#
+# Both use same server keys - just switch the Endpoint line
 apiVersion: v1
 kind: Secret
 metadata:
@@ -13,19 +15,19 @@ metadata:
     namespace: wireguard
 type: Opaque
 stringData:
-    config: ENC[AES256_GCM,data:WiFNMpoEhyIW9j9bQUKPZJ+vdaTxjhLYaLwVtNStkeNacwyzllwjZRqK8Gyuhl09WMwQD98JH2Cj8/5hXE3GMw8VwXFmDE8ovv0Uf99WPr6TS1Fl4jVEPEHG6ZXHsf/bW/Ievfd5rAMw+x0yQlSiCoutl/Wb4CBkEfHZRP30TJFUvXbeEZGTBoUj5AF3BZKls9e3PtfpIadpd8AOcPg2HspcwFWpOzqysniQSyc9qyYUZuwIy4hLqrARIYTUZGwe5dq76GUIoYPaJw9uMbz1tScPvKLg2NK5xDk1BE0Bj3kng6uUYA7RbE3Too2pTEdbEQYOvFYAZtCNxwjqDHclJqyvAIMvl040vzsCNQeLGrh+njpUSJsgqMadU5t8xK5MGGgUNqkq0iK/U4g3UW15fOdojYwoC2mK/wRiD9SawAWUsLE66dICKJRxtYQWXEoQX4nVAhx2Y9RcIQ1PuA==,iv:NC0grJp3/de/5By5+EyU6Dv9TJasaWrzeSAs9Jmr4cA=,tag:nPcyxWHjoqaIg3fwbRapcA==,type:str]
+    config: ENC[AES256_GCM,data:P4ESL/s9FMtSfzvmbJWovHFoKgFC9uV9knls9YA/sKrMawdbf7IkdBdEPajnGq4Of92FvxoJWEJ+LbRO4oVghSpuO3x8cTGNTg7oZlISQShUFvWFL7aUUbtQR3FqBD2bWj9FYoXkfMnSXNkDFKaIQ0dojO4+ToMia4r5YB7EY05SMXSbthviv5r+pNCcKmGxDESxepiEdMYyv5J1BS5NP/F14n4/3dDcn8JjffRft571uL4BFNF6LKEyGQRxNLMa6SUvY2D3buNn93hwUaUPYfEYpa1uedD2oPljis3mEBZ8yNzrcMXVGrpK4fZjniAZtgBf0IZA/g/O7l9oWqr2/lvi8+EH07lysry0xB83rm23OrU6rort3Gj1RTGfjTr3YrJQLO/4+8RggNFHhXLiecPrv7goygz28mVF2Faj4hpMNVMZngHJwtSsGIx0i6K3wATIgF8G+8qsHsI28lU=,iv:xC6FJUQn9uZEkyzLyTA3M3jmNGMnBPuWMSqkDp2w8mU=,tag:nZlUWp+eaFeW1KNqyJM70g==,type:str]
 sops:
     age:
         - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
           enc: |
             -----BEGIN AGE ENCRYPTED FILE-----
-            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBRb09nbWRiY3RmWlBDNUFD
-            RDB0Q2R5V0dMZWpSNStGUVRBL2o3bU9TbWdnCjhmcTF3SHFKbDNKY3g0cC9KZm5B
-            T085ZUtPSUF0UGcvTkVESlFpUm1yU1EKLS0tIHJSWHFnM2RXbzVNN0RiTXdhcXNa
-            WW9HNzh4UG1GRC9hQWtrOTRJUi95a1UKWCdpNqTpyw7KNnMvhA7VEDBW/tAiyn4n
-            TZgND0y6BfMQ4T1NbPBVPnork59AjwTbm+igl3oiupFX30X3cwpc2w==
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAxL2g2TnRuMm9YbU5HVFd5
+            RTF4cUROM1BRazBVNHU4MGxsbWNkR29IaXlRCitjWWFFTDZQU3B2eEtXYlQrMnFK
+            N1FCa0JZbnJtK3hoQlFWNDJ4bjBJYXcKLS0tIEVEM0NFeEFDYXB5SVJZM011VkpI
+            Vzg4SFg3NFNhc1IrRTNvMmRTaXp4cTQKrWAC9Ss1in3umw1hAIEPA0rxFxaLBdTf
+            WH3IFTZnmpmG5iUMQi1RlHX2AE+7ylFXZ7z7IVO2m8WKACD4ZXzKGQ==
             -----END AGE ENCRYPTED FILE-----
-    lastmodified: "2026-04-08T01:57:30Z"
-    mac: ENC[AES256_GCM,data:G1YmZxFcpQYLxnrQQmH7CMpZkfQu1ZpxGMlWSPPd5TAjhMJ25N3PsZ8WCaqKDNHvJizB7WgP5kG7Tnsv7zxmk9qeVWUXxP3x8eAjUFB7/5iYKlUsf7DuRSXLkuiEfImXfNH7bBkFt6kJQreLt3/IFB8uoPwuGAL7p+n3190iCMo=,iv:yW6kqAz0e5aJuAMw79a3SluPJdJveaeFRZtQk7JaNrI=,tag:maAZho85RKzrLXR+celdsg==,type:str]
+    lastmodified: "2026-04-23T19:32:48Z"
+    mac: ENC[AES256_GCM,data:J+RgoXzr+C+qN4rZ/cTrwPUWqsIlMzm9o1gKQ9q5+1SuT4z+Knzyg6Gj2vO4Q3/9iRnfhCeAf49h0WHL14dPOlSn/rd5/cKeVgjQ7c+SB4F/bSU2WqMT4C6/nwcRpyzVvYqLHFLKl7izr8VgWk8wgnutd2EVtJhhnQmLgnoHlok=,iv:mwPl/hFVvBaJJlr8zunCre+B3Ljn7+9/roeAWaWA6p4=,tag:lPtGmdeXd3Pl4/f9Svuyxg==,type:str]
     encrypted_regex: ^(data|stringData)$
     version: 3.11.0
