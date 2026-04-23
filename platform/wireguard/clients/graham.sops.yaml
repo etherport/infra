@@ -1,13 +1,14 @@
 # WireGuard Client Configuration - Graham
 # Encrypt with: sops -e -i graham.sops.yaml
 # Decrypt with: sops -d graham.sops.yaml
-# Export to file: sops -d graham.sops.yaml | yq '.stringData.config' > wg-graham.conf
 #
-# ENDPOINTS:
-#   wind.etherport.net:51821 - Direct to homelab (fastest, requires UDP)
-#   vpn.etherport.net:51821  - Via AWS (works everywhere, +30ms latency)
+# PROFILES:
+#   split-tunnel: Only homelab traffic through VPN (default)
+#   full-tunnel:  ALL traffic through VPN (privacy/security)
 #
-# Both use same server keys - just switch the Endpoint line
+# ENDPOINTS (both use same server keys):
+#   wind.etherport.net:51821 - Direct to homelab (fastest)
+#   vpn.etherport.net:51821  - Via AWS (fallback, works everywhere)
 apiVersion: v1
 kind: Secret
 metadata:
@@ -15,19 +16,22 @@ metadata:
     namespace: wireguard
 type: Opaque
 stringData:
-    config: ENC[AES256_GCM,data:P4ESL/s9FMtSfzvmbJWovHFoKgFC9uV9knls9YA/sKrMawdbf7IkdBdEPajnGq4Of92FvxoJWEJ+LbRO4oVghSpuO3x8cTGNTg7oZlISQShUFvWFL7aUUbtQR3FqBD2bWj9FYoXkfMnSXNkDFKaIQ0dojO4+ToMia4r5YB7EY05SMXSbthviv5r+pNCcKmGxDESxepiEdMYyv5J1BS5NP/F14n4/3dDcn8JjffRft571uL4BFNF6LKEyGQRxNLMa6SUvY2D3buNn93hwUaUPYfEYpa1uedD2oPljis3mEBZ8yNzrcMXVGrpK4fZjniAZtgBf0IZA/g/O7l9oWqr2/lvi8+EH07lysry0xB83rm23OrU6rort3Gj1RTGfjTr3YrJQLO/4+8RggNFHhXLiecPrv7goygz28mVF2Faj4hpMNVMZngHJwtSsGIx0i6K3wATIgF8G+8qsHsI28lU=,iv:xC6FJUQn9uZEkyzLyTA3M3jmNGMnBPuWMSqkDp2w8mU=,tag:nZlUWp+eaFeW1KNqyJM70g==,type:str]
+    #ENC[AES256_GCM,data:FDNgo9HCebjS4xPYsYgMMQmhfpRjWJlbvi4OcaIb/Qqnh798dMTxP+JxUQ==,iv:v8whmT9ymctR3fHmoY0uD8XscNyZBbsOQLx8okfwgqs=,tag:+6xpMojvDbmGXbq2G9y2+A==,type:comment]
+    split-tunnel.conf: ENC[AES256_GCM,data:WyhqpRA+OFjOZYJ6fUlj4WGncT0ZBnu56iQKY5T9985tas0c5NGHCB6b2EWcs2hQiOWVVEea3/HQkTsf0KQLUyV3XTp5HLO+Gra3kbJEX+7FaRyHLYoJoykQKLTsP79Zfrc34jRJjPXvBId/lKjqfgzefbk9Gn7Jr2X6uQRAKGsrcX9RfwdQ7WKjC49JgY3XnSdfIrEyRb09hGEMRlgBNXrdpB5nMS0QSM4zay/Rewwc0Z0VPS2s4TmncsLNa9/aOq2/fjuoa2fJuYePkCv0e1JTDE0zmSkPNq2A1fdY6AXuY/aANHaCTxHko9qjZLqNqXgBYDGy3ukRrGUD4+iuPSQfxht1sQTV/VJXmh93vWNEgMG+78tvJge3NlJztjl7NYAtlcbeIhz1bqDJfZIRII8qhXR2LakyTuoKbM6DFocHf3r2i5RZnEWJPm/po0kkDA==,iv:58H4QA9pkDHNbKJshHO1vtuXp/Wjaav3cwP1+bH6VuE=,tag:NZvinzg/6C6yUGZCLaym9w==,type:str]
+    #ENC[AES256_GCM,data:EemVQKN+0bfQs4ztafFA/u+Hw8BC9/4VJOZ543tuQQ6VItE++QCxt1F6RkIt,iv:IRsjwC0xt4NnzD1eqhqXnZFedzoPD4eZgCS8YhWkyms=,tag:c4SuAVitoT4teWqiHuExIg==,type:comment]
+    full-tunnel.conf: ENC[AES256_GCM,data:yuQ/nK8M7d2HWhI32XtvNvWgq4sSaNFMPAkqIQlfCZnj0XJApqbYNsSFIdv3Q0BiQqC0itrePBoCZ3jitJi46jKKcEONnh390QjXrDKWbF/jPVYEjn8Didv25xMvlzJg6vOEqeLz4FcMd0eOIOAirzsKx4f+UDwIn5owRqXoC26+hst6ACBJq2ShhBTRnikGtwOOmlx+WQSdZHqr2gY2mFW7Rryq5Qf0lrb8NfeD4StP66QIFu4oYFe2gEBmhmUEBlm88Mwyd00NNkfVJQSKSrbbhu5s/w9OoGj7uQfa0/iNyQDfcL1lDeo5h2rZEpRordJIjPsYeDIDo0ng9oEAr91PZBBgNY/WdxmN1gbF7d+u9lJq/Tv+h4C6e0fHwLdgnTE=,iv:Qiucc8Ne5V8cpKxTz3L1MF+XnWDZfZtkP0UW01kM/78=,tag:m2rvX7mv3Uz3whikomiECQ==,type:str]
 sops:
     age:
         - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
           enc: |
             -----BEGIN AGE ENCRYPTED FILE-----
-            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAxL2g2TnRuMm9YbU5HVFd5
-            RTF4cUROM1BRazBVNHU4MGxsbWNkR29IaXlRCitjWWFFTDZQU3B2eEtXYlQrMnFK
-            N1FCa0JZbnJtK3hoQlFWNDJ4bjBJYXcKLS0tIEVEM0NFeEFDYXB5SVJZM011VkpI
-            Vzg4SFg3NFNhc1IrRTNvMmRTaXp4cTQKrWAC9Ss1in3umw1hAIEPA0rxFxaLBdTf
-            WH3IFTZnmpmG5iUMQi1RlHX2AE+7ylFXZ7z7IVO2m8WKACD4ZXzKGQ==
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBVOEErMHBqRmppZXYzbnFy
+            Zjh2ZVN2QlQwcmU3c29na2w5VkEvdlZaMkF3CkU4dFlWa28wWCtaZkdBODVvemVv
+            RXE2T2N4d3VFUDlKcHV5LzhRRjVhdU0KLS0tIE1vSUdzWFhBVVZYcHdUNThxamRP
+            VVVLRVQ2Ky9RWi9IZkdJT1podmpBWUkKzOgLriZcYqC6ez0O/dzAizdifSxhl83S
+            uJPrXbu6plStJCPirnM+XIZq+K2NmrZxseyUjK9GJUGRIuZS7AeFAg==
             -----END AGE ENCRYPTED FILE-----
-    lastmodified: "2026-04-23T19:32:48Z"
-    mac: ENC[AES256_GCM,data:J+RgoXzr+C+qN4rZ/cTrwPUWqsIlMzm9o1gKQ9q5+1SuT4z+Knzyg6Gj2vO4Q3/9iRnfhCeAf49h0WHL14dPOlSn/rd5/cKeVgjQ7c+SB4F/bSU2WqMT4C6/nwcRpyzVvYqLHFLKl7izr8VgWk8wgnutd2EVtJhhnQmLgnoHlok=,iv:mwPl/hFVvBaJJlr8zunCre+B3Ljn7+9/roeAWaWA6p4=,tag:lPtGmdeXd3Pl4/f9Svuyxg==,type:str]
+    lastmodified: "2026-04-23T20:12:31Z"
+    mac: ENC[AES256_GCM,data:wH5ii3nQagXBOUxQfe/ygDTB+WAGsBY/N31eg7sG/IXbbKsEb9qtSRQ9mOjXPGcShLdlvMlslozEojIp5ToHX4drLjh/43FgBOfno1LReKTTCevieYrGMMiOMceke6zG06dKR4yamjL2r3CRd/LCTSkhmRhn+5rgzSBdHg1Ly/s=,iv:hiG/C164y4do/P1QOY2DjvDm+BAzZjyxLLim0A0UwuQ=,tag:tkiGIQcOD3mOoehvydFTXQ==,type:str]
     encrypted_regex: ^(data|stringData)$
     version: 3.11.0
