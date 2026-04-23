@@ -23,6 +23,7 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       terminationGracePeriodSeconds: 30
       # Prefer k8s-w1 but allow scheduling on other workers if w1 is down
+      # Cleanup DaemonSet handles orphaned interfaces on other nodes
       affinity:
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -42,11 +43,11 @@ spec:
         - key: node.kubernetes.io/not-ready
           operator: Exists
           effect: NoExecute
-          tolerationSeconds: 30
+          tolerationSeconds: 10
         - key: node.kubernetes.io/unreachable
           operator: Exists
           effect: NoExecute
-          tolerationSeconds: 30
+          tolerationSeconds: 10
       containers:
         - name: wireguard
           image: ubuntu:24.04
@@ -77,6 +78,10 @@ spec:
 
               echo "Installing WireGuard tools..."
               apt-get update && apt-get install -y wireguard-tools iproute2 iptables
+
+              # Clean up any orphaned wg0 from previous runs
+              echo "Cleaning up any existing wg0..."
+              ip link del wg0 2>/dev/null || true
 
               echo "Setting up WireGuard interfaces..."
               mkdir -p /etc/wireguard
@@ -132,8 +137,8 @@ spec:
                 - /bin/bash
                 - -c
                 - "ip link show wg0"
-            initialDelaySeconds: 60
-            periodSeconds: 30
+            initialDelaySeconds: 90
+            periodSeconds: 10
             failureThreshold: 3
           readinessProbe:
             exec:
@@ -141,7 +146,7 @@ spec:
                 - /bin/bash
                 - -c
                 - "wg show wg0"
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
             periodSeconds: 10
             failureThreshold: 3
           resources:
@@ -173,6 +178,10 @@ spec:
               # Detect primary network interface (first non-lo interface with an IP)
               PRIMARY_IF=$(ip -o -4 addr show | grep -v '127.0.0.1' | head -1 | awk '{print $2}')
               echo "Detected primary interface: $PRIMARY_IF"
+
+              # Clean up any orphaned VIP from previous runs
+              echo "Cleaning up any existing VIP..."
+              ip addr del 10.10.201.20/24 dev $PRIMARY_IF 2>/dev/null || true
 
               # Create keepalived config
               cat > /etc/keepalived/keepalived.conf <<EOF
@@ -224,6 +233,17 @@ spec:
 
               echo "Starting keepalived..."
               keepalived -n -l --dont-fork
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - |
+                    # Remove VIP before pod terminates
+                    PRIMARY_IF=$(ip -o -4 addr show | grep -v '127.0.0.1' | head -1 | awk '{print $2}')
+                    ip addr del 10.10.201.20/24 dev $PRIMARY_IF 2>/dev/null || true
+                    pkill keepalived || true
           resources:
             requests:
               memory: "64Mi"

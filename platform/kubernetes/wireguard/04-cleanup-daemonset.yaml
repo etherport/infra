@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: wireguard-cleanup
+  namespace: wireguard
+  labels:
+    app: wireguard-cleanup
+spec:
+  selector:
+    matchLabels:
+      app: wireguard-cleanup
+  template:
+    metadata:
+      labels:
+        app: wireguard-cleanup
+    spec:
+      hostNetwork: true
+      # Run on all worker nodes
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
+      containers:
+        - name: cleanup
+          image: alpine:3.19
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+          command:
+            - /bin/sh
+            - -c
+            - |
+              apk add --no-cache iproute2 curl jq
+
+              HOSTNAME=$(hostname)
+              echo "WireGuard cleanup daemon starting on $HOSTNAME"
+
+              while true; do
+                # Check if the main wireguard pod is running on THIS node
+                # by checking if there's a wg0 interface with an active WireGuard process
+
+                if ip link show wg0 > /dev/null 2>&1; then
+                  # wg0 exists on this node - check if WireGuard is actually running
+                  # The main pod runs wg-quick which creates the interface
+                  # If no handshake in last 3 minutes and we're not the active node, clean up
+
+                  # Check for wireguard pod on this node via kubernetes API
+                  # Use KUBERNETES_SERVICE_HOST (auto-injected) since hostNetwork can't resolve DNS
+                  API_SERVER="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
+                  POD_ON_NODE=$(curl -sk \
+                    -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+                    "${API_SERVER}/api/v1/namespaces/wireguard/pods?labelSelector=app=wireguard&fieldSelector=spec.nodeName=$HOSTNAME" \
+                    2>/dev/null | jq -r '.items | length')
+
+                  if [ "$POD_ON_NODE" = "0" ] || [ -z "$POD_ON_NODE" ]; then
+                    echo "$(date): Orphaned wg0 found on $HOSTNAME (no wireguard pod here), cleaning up..."
+                    ip link del wg0 2>/dev/null || true
+
+                    # Also remove VIP if present
+                    PRIMARY_IF=$(ip -o -4 addr show | grep -v '127.0.0.1' | head -1 | awk '{print $2}')
+                    ip addr del 10.10.201.20/24 dev $PRIMARY_IF 2>/dev/null || true
+
+                    echo "$(date): Cleanup complete on $HOSTNAME"
+                  fi
+                fi
+
+                sleep 30
+              done
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "64Mi"
+              cpu: "50m"
+      serviceAccountName: wireguard-cleanup
+      terminationGracePeriodSeconds: 5
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: wireguard-cleanup
+  namespace: wireguard
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: wireguard-cleanup
+  namespace: wireguard
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: wireguard-cleanup
+  namespace: wireguard
+subjects:
+  - kind: ServiceAccount
+    name: wireguard-cleanup
+    namespace: wireguard
+roleRef:
+  kind: Role
+  name: wireguard-cleanup
+  apiGroup: rbac.authorization.k8s.io

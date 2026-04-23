@@ -8,3 +8,4 @@ resources:
   - 01-secrets.sops.yaml
   - 02-configmap.yaml
   - 03-deployment.yaml
+  - 04-cleanup-daemonset.yaml
