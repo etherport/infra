@@ -226,6 +226,9 @@
           ListenPort = {{ vpn_local.wg1.listen_port }}
           PrivateKey = {{ vpn_local_keys.stringData.wg1_private_key }}
           MTU        = {{ wg_mtu }}
+          # NAT for full-tunnel clients (route all traffic through VPN)
+          PostUp = iptables -t nat -A POSTROUTING -s 10.254.0.0/24 ! -d 10.0.0.0/8 -j MASQUERADE
+          PostDown = iptables -t nat -D POSTROUTING -s 10.254.0.0/24 ! -d 10.0.0.0/8 -j MASQUERADE
 
           {% for peer in wg1_peers %}
           [Peer]
@@ -348,12 +351,19 @@
             }
           }
 
-          # NAT table for WireGuard alternate port (restricted networks)
-          # Redirects UDP 443 to 51821 for use behind restrictive firewalls
+          # NAT table for WireGuard
           table ip nat {
             chain PREROUTING {
               type nat hook prerouting priority dstnat; policy accept;
+              # Redirect UDP 443 to 51821 for use behind restrictive firewalls
               udp dport 443 redirect to :51821
+            }
+
+            chain POSTROUTING {
+              type nat hook postrouting priority srcnat; policy accept;
+              # Masquerade wg1 client traffic going to internet (full tunnel support)
+              # Don't masquerade traffic to private networks (10.0.0.0/8)
+              ip saddr 10.254.0.0/24 ip daddr != 10.0.0.0/8 oifname != "wg*" masquerade
             }
           }
       when: inventory_hostname == 'vpn-aws'
