@@ -56,9 +56,9 @@ spec:
               protocol: UDP
               hostPort: 51820
             - name: wg1
-              containerPort: 51821
+              containerPort: 9821
               protocol: UDP
-              hostPort: 51821
+              hostPort: 9821
           volumeMounts:
             - name: wireguard-keys
               mountPath: /secrets
@@ -103,7 +103,7 @@ spec:
               cat > /etc/wireguard/wg1.conf <<EOF
               [Interface]
               Address = 10.254.0.1/24
-              ListenPort = 51821
+              ListenPort = 9821
               PrivateKey = $(cat /secrets/wg1-private.key)
               MTU = 1420
               # NAT for full-tunnel clients (route all traffic through VPN)

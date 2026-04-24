@@ -7,8 +7,8 @@
 #   full-tunnel:  ALL traffic through VPN (privacy/security)
 #
 # ENDPOINTS (both use same server keys):
-#   wind.etherport.net:51821 - Direct to homelab (fastest)
-#   vpn.etherport.net:51821  - Via AWS (fallback, works everywhere)
+#   wind.etherport.net:9821 - Direct to homelab (fastest)
+#   vpn.etherport.net:9821  - Via AWS (fallback, works everywhere)
 apiVersion: v1
 kind: Secret
 metadata:
@@ -16,22 +16,22 @@ metadata:
     namespace: wireguard
 type: Opaque
 stringData:
-    #ENC[AES256_GCM,data:FDNgo9HCebjS4xPYsYgMMQmhfpRjWJlbvi4OcaIb/Qqnh798dMTxP+JxUQ==,iv:v8whmT9ymctR3fHmoY0uD8XscNyZBbsOQLx8okfwgqs=,tag:+6xpMojvDbmGXbq2G9y2+A==,type:comment]
-    split-tunnel.conf: ENC[AES256_GCM,data:WyhqpRA+OFjOZYJ6fUlj4WGncT0ZBnu56iQKY5T9985tas0c5NGHCB6b2EWcs2hQiOWVVEea3/HQkTsf0KQLUyV3XTp5HLO+Gra3kbJEX+7FaRyHLYoJoykQKLTsP79Zfrc34jRJjPXvBId/lKjqfgzefbk9Gn7Jr2X6uQRAKGsrcX9RfwdQ7WKjC49JgY3XnSdfIrEyRb09hGEMRlgBNXrdpB5nMS0QSM4zay/Rewwc0Z0VPS2s4TmncsLNa9/aOq2/fjuoa2fJuYePkCv0e1JTDE0zmSkPNq2A1fdY6AXuY/aANHaCTxHko9qjZLqNqXgBYDGy3ukRrGUD4+iuPSQfxht1sQTV/VJXmh93vWNEgMG+78tvJge3NlJztjl7NYAtlcbeIhz1bqDJfZIRII8qhXR2LakyTuoKbM6DFocHf3r2i5RZnEWJPm/po0kkDA==,iv:58H4QA9pkDHNbKJshHO1vtuXp/Wjaav3cwP1+bH6VuE=,tag:NZvinzg/6C6yUGZCLaym9w==,type:str]
-    #ENC[AES256_GCM,data:EemVQKN+0bfQs4ztafFA/u+Hw8BC9/4VJOZ543tuQQ6VItE++QCxt1F6RkIt,iv:IRsjwC0xt4NnzD1eqhqXnZFedzoPD4eZgCS8YhWkyms=,tag:c4SuAVitoT4teWqiHuExIg==,type:comment]
-    full-tunnel.conf: ENC[AES256_GCM,data:yuQ/nK8M7d2HWhI32XtvNvWgq4sSaNFMPAkqIQlfCZnj0XJApqbYNsSFIdv3Q0BiQqC0itrePBoCZ3jitJi46jKKcEONnh390QjXrDKWbF/jPVYEjn8Didv25xMvlzJg6vOEqeLz4FcMd0eOIOAirzsKx4f+UDwIn5owRqXoC26+hst6ACBJq2ShhBTRnikGtwOOmlx+WQSdZHqr2gY2mFW7Rryq5Qf0lrb8NfeD4StP66QIFu4oYFe2gEBmhmUEBlm88Mwyd00NNkfVJQSKSrbbhu5s/w9OoGj7uQfa0/iNyQDfcL1lDeo5h2rZEpRordJIjPsYeDIDo0ng9oEAr91PZBBgNY/WdxmN1gbF7d+u9lJq/Tv+h4C6e0fHwLdgnTE=,iv:Qiucc8Ne5V8cpKxTz3L1MF+XnWDZfZtkP0UW01kM/78=,tag:m2rvX7mv3Uz3whikomiECQ==,type:str]
+    #ENC[AES256_GCM,data:8oR1JGE3uByf0MOQz3X51EuJNUlyVyCyXWYQJRJ58zomcTZ5iCmSzcGncw==,iv:Yj4zQFIbXdFtGJj9lw6QKZn8RWF7RRDj6Jsaa+eaLRg=,tag:PFBZQINmDKGkTWkMNpevnQ==,type:comment]
+    split-tunnel.conf: ENC[AES256_GCM,data:A8+RZYwwmMllLHBcmegsRCsf2pK7E7ww6CRWd6/mre+ozggzHJvoKmxvA3TryA7iEctm6bsbDP8UGzRuBhfUvdHsl1BsU5u3oVYMogQbL84reK2kCrzT5NYYHx0TiZsul+HKldct4mS0qyKr/nj1xQb2w3i2MSJDQlPTW7zr7xdtu5KFVq6MKCQDHJA3uSYaOx5dcTsgl43R6xTEt2CFjFxxg5qwaEJpuh2CIpRB0X0iRqK7Pdlfyx3v9uufbBGVAKn5pOg08WEsxoKjLO0vowWCmLXwfHK3B5EYUu72F/IPZVFmaQO5p/py3g+7LUz7VTvfh9rUGRB67HyXmJ7B2jKoT/ovwF01g3KW4bbNxqDE43WaYDl9jbG0JrZSQCDB+WkefMe6AqiVT0zma8x+E3jtn4igto5y0zu523AzWu4rF1TElZvmN3rRnUwZqXzf,iv:CHl1yFTkEgujoEjLpK8qXnZZ2juLR+SAcWkOE8JBU0s=,tag:/Os9WhCJCKi5Tn8E/cjtMQ==,type:str]
+    #ENC[AES256_GCM,data:OC9efq1uI4G7ik7JPeIMErVFIuHBhtWg2VimKihUFFzYMYwwBQYZd+TP81rf,iv:z6ii+Y5Y9yd9VPCum9knWMzWOg7nIiOotOCBwuc3LtU=,tag:Kuv7FPp4SXLDbrwTylQRZQ==,type:comment]
+    full-tunnel.conf: ENC[AES256_GCM,data:eEh/uV6Ogmo+gyJrOV8CH62V4LAcjJvMfMo9QhoI5RgHfQ49klMgVqRzVBIbvzQCVQdUaIrgbVKAOp6oXWRaFfeZfZlAewoQXu+AX8JzG3FuZIf9XuEI0zPerbRUgZcPwa2IPCVMZ08AitYd3kA4gG/GB4YreOM+ijgPms4xdaWpTd6zYdBPvWOsuQ2dOL2s+ZsE8K/Tvj12gLlQ2wsFRG8At5AAA6xrf7hfsMtWNzwRKkVODoj4/lM77N4YePGf4CHmhQP82NQg/SxOrlvZhF7DkIg4YBS8wjdk1J18psUnYMVeZZhXWEBLGvey0+UF7HDnT8QNwhi1nOvmSrlAw3QJXvHZfWwCdESznUuwKPrJu6W0iymazgmX1vnBmNhG6g==,iv:fomJZFEQ0FZEm0S31sGadE5hfZqpRzt2cfkNddcJ//M=,tag:5oxnxwgcDGJwoNEThi1Rwg==,type:str]
 sops:
     age:
         - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
           enc: |
             -----BEGIN AGE ENCRYPTED FILE-----
-            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBVOEErMHBqRmppZXYzbnFy
-            Zjh2ZVN2QlQwcmU3c29na2w5VkEvdlZaMkF3CkU4dFlWa28wWCtaZkdBODVvemVv
-            RXE2T2N4d3VFUDlKcHV5LzhRRjVhdU0KLS0tIE1vSUdzWFhBVVZYcHdUNThxamRP
-            VVVLRVQ2Ky9RWi9IZkdJT1podmpBWUkKzOgLriZcYqC6ez0O/dzAizdifSxhl83S
-            uJPrXbu6plStJCPirnM+XIZq+K2NmrZxseyUjK9GJUGRIuZS7AeFAg==
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB5K0xWbWZ0RWY5MURYUnpB
+            d2VUMzRsZlIzeThzWWkra3NDUE41SWYraWpnCmpnZENhUHVad3ZFbTRxeUcxUWxz
+            dEx2dm4xWStBUkxLTS96RmxuOEMzMFkKLS0tIFJoanJkMkNBVXdFYWtRSDNIOG4w
+            RVFIREZLcUxEMUdhTFdkdExtOFhIcmcKhec7J6WH0hglDeH9LMCaiy+JTAbDaxnd
+            +bnIofvzLOYmAnTJLwY19YVtmv98Go8eBNHTKHYCqwK9s3FXxqMcyA==
             -----END AGE ENCRYPTED FILE-----
-    lastmodified: "2026-04-23T20:12:31Z"
-    mac: ENC[AES256_GCM,data:wH5ii3nQagXBOUxQfe/ygDTB+WAGsBY/N31eg7sG/IXbbKsEb9qtSRQ9mOjXPGcShLdlvMlslozEojIp5ToHX4drLjh/43FgBOfno1LReKTTCevieYrGMMiOMceke6zG06dKR4yamjL2r3CRd/LCTSkhmRhn+5rgzSBdHg1Ly/s=,iv:hiG/C164y4do/P1QOY2DjvDm+BAzZjyxLLim0A0UwuQ=,tag:tkiGIQcOD3mOoehvydFTXQ==,type:str]
+    lastmodified: "2026-04-24T03:03:03Z"
+    mac: ENC[AES256_GCM,data:MNlp9G3UiiANE6zhUHeuJ0uoRnchLRivGyocdBgYuVPfyE2vh9kH5YLR5oVKy4S4ugtp8MmJyOZA9zBhSQWzkGGuT45So6oLWVYBNXRVFkyXjfFYhfuoU5T4cbUMJ3zJYNNwHRI3DPtPImsHq/gjuR199vmqbhdSvazlYYdAkGA=,iv:+ctc/BqS/U4fE7XzewstoOGYUzEFPf38H2UdLr99/KQ=,tag:J78RrJxdI3rPfgMc7ZYcYA==,type:str]
     encrypted_regex: ^(data|stringData)$
     version: 3.11.0
