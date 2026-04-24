@@ -2,12 +2,75 @@
 
 ## Overview
 
-WireGuard configuration for the site-to-site VPN connecting local homelab to AWS.
+WireGuard VPN infrastructure providing:
+- **Site-to-site tunnel (wg0)**: Connects homelab to AWS
+- **Remote access (wg1)**: Direct VPN for mobile/travel use
 
-**Primary gateway:** K8s WireGuard pod (managed via Flux)
-**Backup gateway:** vpn-local VM (managed via Ansible)
+**Endpoints:**
+| Endpoint | Hostname | wg1 Port | Use Case |
+|----------|----------|----------|----------|
+| Homelab (K8s/vpn-local) | wind.etherport.net | 9821 | Direct, fastest |
+| AWS | vpn.etherport.net | 51821 | Relay, works everywhere |
 
 For full architecture documentation, see [docs/architecture/vpn-wireguard.md](../../docs/architecture/vpn-wireguard.md).
+
+## Client Configuration
+
+### Extracting Configs from SOPS
+
+Client configs are stored encrypted. To extract:
+
+```bash
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
+
+# View all configs
+sops -d platform/wireguard/clients/graham.sops.yaml
+
+# Extract specific config to file
+sops -d platform/wireguard/clients/graham.sops.yaml | \
+  yq '.stringData["aws-split.conf"]' > ~/wg-aws-split.conf
+```
+
+### Available Profiles
+
+| Profile | Endpoint | Traffic | DNS |
+|---------|----------|---------|-----|
+| homelab-split | wind.etherport.net:9821 | Homelab only | Homelab DNS |
+| homelab-full | wind.etherport.net:9821 | All traffic | Homelab DNS |
+| aws-split | vpn.etherport.net:51821 | Homelab only | AWS DNS |
+| aws-full | vpn.etherport.net:51821 | All traffic | AWS DNS |
+
+### Security Best Practices
+
+**Private keys are secrets.** Handle them accordingly:
+
+1. **Never commit plaintext keys** - Always use SOPS encryption
+2. **Secure distribution**:
+   - Use a password manager (1Password, Bitwarden)
+   - Send via encrypted channel (Signal, encrypted email)
+   - Generate QR code locally, scan directly (don't save image)
+3. **Per-device keys** (ideal): Generate unique keypairs per device so you can revoke individually
+4. **Rotate compromised keys immediately**: Update SOPS files, redeploy, update all clients
+
+### Adding a New Client
+
+1. Generate keypair:
+   ```bash
+   wg genkey | tee /tmp/client-private.key | wg pubkey > /tmp/client-public.key
+   ```
+
+2. Add peer to server configs:
+   - `infra/ansible/playbooks/wireguard.yml` (wg1_peers list)
+   - Redeploy with Ansible
+
+3. Create client SOPS file:
+   ```bash
+   cp platform/wireguard/clients/graham.sops.yaml platform/wireguard/clients/newclient.sops.yaml
+   sops platform/wireguard/clients/newclient.sops.yaml
+   # Update PrivateKey, Address (use next available 10.254.0.X)
+   ```
+
+4. Securely send config to client
 
 ## Directory Structure
 
@@ -16,26 +79,16 @@ platform/
 ├── wireguard/                    # Ansible-managed (vpn-local, vpn-aws)
 │   ├── servers/                  # Server private/public keys
 │   │   ├── vpn-aws.sops.yaml     # AWS VPN hub (wg0 + wg1)
-│   │   └── vpn-local.sops.yaml   # Local backup gateway (wg0)
+│   │   └── vpn-local.sops.yaml   # Local backup gateway (wg0 + wg1)
 │   └── clients/                  # Client configurations
-│       └── graham.sops.yaml      # Remote access client
+│       └── graham.sops.yaml      # Remote access client configs
 │
 └── kubernetes/wireguard/         # K8s primary gateway (Flux-managed)
     ├── 00-namespace.yaml
-    ├── 01-secrets.sops.yaml      # Same keys as vpn-local
-    ├── 02-configmap.yaml
+    ├── 01-secrets.sops.yaml      # Same wg0/wg1 keys as vpn-local
     ├── 03-deployment.yaml        # WireGuard + Keepalived
     ├── 04-cleanup-daemonset.yaml # Orphan interface cleanup
     └── kustomization.yaml
-```
-
-## Decrypting Files
-
-Requires the age key:
-
-```bash
-export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
-sops -d platform/wireguard/servers/vpn-aws.sops.yaml
 ```
 
 ## Deployment
@@ -65,9 +118,15 @@ ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-local
 ansible-playbook -i inventory/aws/ playbooks/wireguard.yml --limit vpn-aws
 ```
 
-## Key Rotation
+## Key Management
 
-To rotate server keys:
+### Shared Key Strategy
+
+For seamless failover, keys are shared:
+- **wg0**: K8s pod + vpn-local use same keys (AWS sees single peer)
+- **wg1**: K8s pod + vpn-local + vpn-aws use same keys (clients can switch endpoints)
+
+### Key Rotation
 
 1. Generate new keys:
    ```bash
@@ -76,7 +135,7 @@ To rotate server keys:
 
 2. Update SOPS files:
    ```bash
-   # For vpn-local and K8s (they share keys)
+   # For homelab (K8s + vpn-local share keys)
    sops platform/wireguard/servers/vpn-local.sops.yaml
    sops platform/kubernetes/wireguard/01-secrets.sops.yaml
 
@@ -84,7 +143,7 @@ To rotate server keys:
    sops platform/wireguard/servers/vpn-aws.sops.yaml
    ```
 
-3. Update peer public keys on the other side
+3. Update peer public keys on remote side
 
 4. Deploy:
    - K8s: Commit and push (Flux will apply)
@@ -93,32 +152,60 @@ To rotate server keys:
 ## Architecture
 
 ```
-                    Internet
-                        │
-                        ▼
-              ┌─────────────────┐
-              │    vpn-aws      │
-              │  44.240.60.80   │
-              │                 │
-              │ wg0: S2S tunnel │◄────── VIP 10.10.201.20
-              │ wg1: Remote VPN │        (K8s primary, vpn-local backup)
-              └─────────────────┘
-                        │
-            ┌───────────┴───────────┐
-            ▼                       ▼
-    AWS VPC (10.10.100.0/22)   Homelab (10.10.192.0/19)
+                         REMOTE CLIENT
+                              │
+           ┌──────────────────┼──────────────────┐
+           │                  │                  │
+           ▼                  ▼                  ▼
+    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+    │   HOMELAB   │    │    AWS      │    │  TAILSCALE  │
+    │ :9821 (wg1) │    │ :51821(wg1) │    │    DERP     │
+    └──────┬──────┘    └──────┬──────┘    └─────────────┘
+           │                  │
+           │    VIP 10.10.201.20
+           │    (K8s primary, vpn-local backup)
+           │                  │
+           │                  │ wg0 site-to-site
+           │                  │ (always up)
+           ▼                  ▼
+    ┌─────────────────────────────────────────────────┐
+    │                    HOMELAB                       │
+    │              10.10.192.0/19                     │
+    └─────────────────────────────────────────────────┘
 ```
 
 ## Tunnel Details
 
-| Tunnel | Purpose | Listen Port | Network |
-|--------|---------|-------------|---------|
-| wg0 | Site-to-site | 51820 | 10.255.255.0/30 |
-| wg1 | Remote access (backup) | 51821 | 10.254.0.0/24 |
+| Tunnel | Purpose | Port (Homelab) | Port (AWS) | Network |
+|--------|---------|----------------|------------|---------|
+| wg0 | Site-to-site | 51820 | 51820 | 10.255.255.0/30 |
+| wg1 | Remote access | 9821 | 51821 | 10.254.0.0/24 |
 
-## Important Notes
+## Troubleshooting
 
-- K8s and vpn-local share the SAME wg0 keys (AWS sees single peer)
-- wg1 (remote access) only runs on vpn-aws
-- VIP 10.10.201.20 floats between K8s and vpn-local via Keepalived
-- UDM Pro routes to VIP, not to specific host IPs
+### Check interface status
+```bash
+# K8s
+kubectl exec -n wireguard deployment/wireguard -c wireguard -- wg show
+
+# vpn-local/vpn-aws
+ssh vpn-local "sudo wg show"
+ssh vpn-aws "sudo wg show"
+```
+
+### Check VIP assignment
+```bash
+kubectl exec -n wireguard deployment/wireguard -c keepalived -- ip addr | grep 10.10.201.20
+```
+
+### Force failover test
+```bash
+# Scale down K8s to trigger failover to vpn-local
+kubectl scale deployment wireguard -n wireguard --replicas=0
+
+# Check VIP moved to vpn-local
+ssh vpn-local "ip addr | grep 10.10.201.20"
+
+# Restore
+kubectl scale deployment wireguard -n wireguard --replicas=1
+```
