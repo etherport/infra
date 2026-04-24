@@ -1,7 +1,7 @@
 # WireGuard container with pre-installed tools
 # Build: docker build -f Dockerfile.wireguard -t ghcr.io/YOUR_ORG/wireguard:latest .
 # Or use locally: docker build -f Dockerfile.wireguard -t wireguard:local .
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
