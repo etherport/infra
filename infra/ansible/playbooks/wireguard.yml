@@ -67,7 +67,7 @@
         keepalive: 25
       wg1:
         tunnel_ip: "10.254.0.1/24"
-        listen_port: 9821
+        listen_port: 51821
 
     # Remote access peers for wg1 (AWS and local when wg1 is configured)
     wg1_peers:
@@ -94,7 +94,7 @@
     #   [Peer]
     #   PublicKey = Aav0cNl4osaEEISQLyKLt88foAPwdVYaeTuyLF/PNTo=
     #   AllowedIPs = 10.10.100.0/22, 10.10.192.0/19, 10.254.0.0/24, 10.255.255.0/30
-    #   Endpoint = vpn.etherport.net:9821
+    #   Endpoint = vpn.etherport.net:51821  # AWS, or wind.etherport.net:9821 for direct
     #   PersistentKeepalive = 25
     # =========================================================================
 
@@ -355,8 +355,8 @@
           table ip nat {
             chain PREROUTING {
               type nat hook prerouting priority dstnat; policy accept;
-              # Redirect UDP 443 to 9821 for use behind restrictive firewalls
-              udp dport 443 redirect to :9821
+              # Redirect UDP 443 to 51821 for use behind restrictive firewalls
+              udp dport 443 redirect to :51821
             }
 
             chain POSTROUTING {
