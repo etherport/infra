@@ -43,6 +43,7 @@
     # NOTE: vpn-local is BACKUP to the K8s WireGuard pod. wg0/wg1 are NOT auto-started;
     # Keepalived notify scripts start/stop interfaces based on VRRP state.
     vpn_local:
+      ip: "10.10.201.15"  # Host IP for policy routing
       wg0:
         tunnel_ip: "10.255.255.2/30"
         peer_public_key: "kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU="
@@ -485,6 +486,84 @@
         state: stopped
       when: inventory_hostname == 'vpn-local'
 
+    # =========================================================================
+    # Policy routing for VPN clients connecting via AWS (vpn-local)
+    # When traffic from VPN clients (10.254.0.0/24) arrives via wg0 (from AWS),
+    # responses must go back via wg0, not via the local wg1 interface
+    # =========================================================================
+    - name: Create policy routing table entry
+      lineinfile:
+        path: /etc/iproute2/rt_tables
+        line: "100 wg0_return"
+        regexp: "^100\\s+wg0_return"
+      when: inventory_hostname == 'vpn-local'
+
+    - name: Create VPN policy routing script
+      copy:
+        dest: /usr/local/bin/wg-policy-routing.sh
+        owner: root
+        group: root
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          # Policy routing for VPN clients connecting via AWS
+          # Ensures responses to VPN clients go back via wg0 (to AWS), not wg1
+
+          # Get default gateway
+          DEFAULT_GW=$(ip route | grep "^default" | awk '{print $3}')
+          HOST_IP={{ vpn_local.ip }}
+
+          # Create route for VPN client traffic via default gateway
+          ip route replace 10.254.0.0/24 via $DEFAULT_GW table wg0_return
+
+          # Mark connections from VPN clients arriving via wg0 (not wg1)
+          iptables -t mangle -C PREROUTING -s 10.254.0.0/24 ! -i wg1 -j CONNMARK --set-mark 100 2>/dev/null || \
+          iptables -t mangle -A PREROUTING -s 10.254.0.0/24 ! -i wg1 -j CONNMARK --set-mark 100
+
+          # Restore mark on response packets
+          iptables -t mangle -C OUTPUT -d 10.254.0.0/24 -j CONNMARK --restore-mark 2>/dev/null || \
+          iptables -t mangle -A OUTPUT -d 10.254.0.0/24 -j CONNMARK --restore-mark
+
+          # Use wg0_return table for marked packets
+          ip rule del fwmark 100 table wg0_return 2>/dev/null || true
+          ip rule add fwmark 100 table wg0_return prio 99
+
+          # Source-based rule for local host responses
+          ip rule del from $HOST_IP to 10.254.0.0/24 lookup wg0_return 2>/dev/null || true
+          ip rule add from $HOST_IP to 10.254.0.0/24 lookup wg0_return prio 97
+
+          logger -t wg-policy-routing "Policy routing configured for VPN clients via AWS"
+      when: inventory_hostname == 'vpn-local'
+
+    - name: Create systemd service for VPN policy routing
+      copy:
+        dest: /etc/systemd/system/wg-policy-routing.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=WireGuard VPN Policy Routing
+          After=network.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/bin/wg-policy-routing.sh
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=multi-user.target
+      when: inventory_hostname == 'vpn-local'
+      notify: Reload systemd
+
+    - name: Enable and start VPN policy routing service
+      systemd:
+        name: wg-policy-routing
+        enabled: yes
+        state: started
+        daemon_reload: yes
+      when: inventory_hostname == 'vpn-local'
+
     - name: Enable and start WireGuard wg1 (vpn-aws only)
       systemd:
         name: wg-quick@wg1
@@ -513,3 +592,7 @@
       systemd:
         name: keepalived
         state: restarted
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes

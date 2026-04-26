@@ -140,6 +140,39 @@ spec:
               wg show wg0
               wg show wg1
 
+              # Setup policy routing for VPN clients connecting via AWS
+              # When traffic from VPN clients (10.254.0.0/24) arrives via wg0 (from AWS),
+              # responses must go back via wg0, not via the local wg1 interface
+              echo "Setting up policy routing for AWS VPN client traffic..."
+
+              # Create routing table for wg0 return traffic
+              grep -q "100 wg0_return" /etc/iproute2/rt_tables || echo "100 wg0_return" >> /etc/iproute2/rt_tables
+
+              # Get default gateway
+              DEFAULT_GW=$(ip route | grep "^default" | awk '{print $3}')
+
+              # Route VPN client traffic via default gateway (returns through wg0 to AWS)
+              ip route replace 10.254.0.0/24 via $DEFAULT_GW table wg0_return
+
+              # Mark connections from VPN clients arriving via wg0 (not wg1)
+              iptables -t mangle -C PREROUTING -s 10.254.0.0/24 ! -i wg1 -j CONNMARK --set-mark 100 2>/dev/null || \
+              iptables -t mangle -A PREROUTING -s 10.254.0.0/24 ! -i wg1 -j CONNMARK --set-mark 100
+
+              # Restore mark on response packets
+              iptables -t mangle -C OUTPUT -d 10.254.0.0/24 -j CONNMARK --restore-mark 2>/dev/null || \
+              iptables -t mangle -A OUTPUT -d 10.254.0.0/24 -j CONNMARK --restore-mark
+
+              # Use wg0_return table for marked packets
+              ip rule del fwmark 100 table wg0_return 2>/dev/null || true
+              ip rule add fwmark 100 table wg0_return prio 99
+
+              # Also add source-based rule for local host responses
+              HOST_IP=$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+              ip rule del from $HOST_IP to 10.254.0.0/24 lookup wg0_return 2>/dev/null || true
+              ip rule add from $HOST_IP to 10.254.0.0/24 lookup wg0_return prio 97
+
+              echo "Policy routing configured"
+
               # Keep container running and monitor interfaces
               while true; do
                 if ! ip link show wg0 > /dev/null 2>&1; then
