@@ -149,6 +149,20 @@ For seamless failover, keys are shared:
    - K8s: Commit and push (Flux will apply)
    - VMs: Run Ansible playbook
 
+## Network Requirements
+
+### UDM Port Forwards
+
+For remote access via homelab endpoint (wind.etherport.net:9821):
+
+| Name | WAN Port | Forward IP | Forward Port | Protocol |
+|------|----------|------------|--------------|----------|
+| WireGuard wg1 | 9821 | 10.10.201.20 | 9821 | UDP |
+
+Configure in UDM: Network → Port Forwarding → Create
+
+Note: AWS endpoint (vpn.etherport.net:51821) works without local port forwards since it's a cloud VM with a public IP.
+
 ## Architecture
 
 ```
