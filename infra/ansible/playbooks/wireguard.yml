@@ -228,7 +228,8 @@
           PrivateKey = {{ vpn_local_keys.stringData.wg1_private_key }}
           MTU        = {{ wg_mtu }}
           # NAT for full-tunnel clients (route all traffic through VPN)
-          PostUp = iptables -t nat -A POSTROUTING -s 10.254.0.0/24 ! -d 10.0.0.0/8 -j MASQUERADE
+          # Use -I to insert at beginning - ensures rule runs before other chains
+          PostUp = iptables -t nat -I POSTROUTING 1 -s 10.254.0.0/24 ! -d 10.0.0.0/8 -j MASQUERADE
           PostDown = iptables -t nat -D POSTROUTING -s 10.254.0.0/24 ! -d 10.0.0.0/8 -j MASQUERADE
 
           {% for peer in wg1_peers %}
@@ -280,7 +281,8 @@
           PrivateKey = {{ vpn_aws_keys.stringData.wg1_private_key }}
           MTU        = {{ wg_mtu }}
           # NAT for full-tunnel clients (route all traffic through VPN)
-          PostUp = iptables -t nat -A POSTROUTING -s 10.254.0.0/24 ! -d 10.0.0.0/8 -j MASQUERADE
+          # Use -I to insert at beginning - ensures rule runs before other chains
+          PostUp = iptables -t nat -I POSTROUTING 1 -s 10.254.0.0/24 ! -d 10.0.0.0/8 -j MASQUERADE
           PostDown = iptables -t nat -D POSTROUTING -s 10.254.0.0/24 ! -d 10.0.0.0/8 -j MASQUERADE
 
           {% for peer in wg1_peers %}
