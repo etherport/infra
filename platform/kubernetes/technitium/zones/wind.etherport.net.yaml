@@ -9,6 +9,18 @@ ttl: 3600  # Default TTL (1 hour)
 
 records:
   # =============================================================================
+  # Apex Record - Public WAN IP for VPN endpoint
+  # =============================================================================
+  # wind.etherport.net resolves to WAN1 public IP for WireGuard remote access
+  # Keep in sync with wan1 record below (both updated by DDNS Lambda)
+
+  - name: "@"
+    type: A
+    value: 47.159.189.230
+    ttl: 300
+    comment: Apex record for VPN endpoint (matches wan1)
+
+  # =============================================================================
   # Infrastructure - Core Services
   # =============================================================================
 
