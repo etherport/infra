@@ -73,6 +73,24 @@ spec:
                       name: route53-ddns-config
                       key: ip_service_url
                       optional: true
+                - name: IP_DNS_SOURCE
+                  valueFrom:
+                    configMapKeyRef:
+                      name: route53-ddns-config
+                      key: ip_dns_source
+                      optional: true
+                - name: IP_WAN1_DNS
+                  valueFrom:
+                    configMapKeyRef:
+                      name: route53-ddns-config
+                      key: ip_wan1_dns
+                      optional: true
+                - name: IP_WAN2_DNS
+                  valueFrom:
+                    configMapKeyRef:
+                      name: route53-ddns-config
+                      key: ip_wan2_dns
+                      optional: true
                 - name: AWS_REGION
                   value: "us-west-2"
                 - name: AWS_DEFAULT_REGION

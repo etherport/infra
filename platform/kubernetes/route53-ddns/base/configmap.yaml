@@ -13,5 +13,14 @@ data:
   # DNS record TTL in seconds
   ttl: "300"
 
-  # URL to fetch public IP from (HTTPS for security)
+  # IP source: "auto" detects active WAN by comparing egress IP to wan1/wan2
+  # Supports WAN failover - uses whichever WAN is currently active
+  # Set to specific DNS name (e.g., "wan1.wind.etherport.net") to force a specific WAN
+  ip_dns_source: "auto"
+
+  # WAN DNS names for auto-detection (optional, defaults shown)
+  ip_wan1_dns: "wan1.wind.etherport.net"
+  ip_wan2_dns: "wan2.wind.etherport.net"
+
+  # Fallback URL (not used when ip_dns_source is set)
   ip_service_url: "https://checkip.amazonaws.com"

@@ -11,7 +11,14 @@
 #   AWS_REGION       - AWS region (default: us-west-2)
 #
 # Optional:
-#   IP_SERVICE_URL   - URL to get public IP (default: http://checkip.amazonaws.com)
+#   IP_DNS_SOURCE    - How to determine the public IP:
+#                      "auto" - Auto-detect active WAN by comparing egress to wan1/wan2 DNS
+#                      "<dns_name>" - Resolve specific DNS name (e.g., wan1.wind.etherport.net)
+#                      (empty) - Use IP_SERVICE_URL (default behavior)
+#   IP_WAN1_DNS      - DNS name for WAN1 (default: wan1.wind.etherport.net)
+#   IP_WAN2_DNS      - DNS name for WAN2 (default: wan2.wind.etherport.net)
+#   IP_SERVICE_URL   - URL to get public IP (default: https://checkip.amazonaws.com)
+#                      Only used if IP_DNS_SOURCE is not set
 #   PUSHGATEWAY_URL  - Prometheus pushgateway URL for metrics
 #
 
@@ -23,6 +30,7 @@ VERSION="1.0.1"
 # Configuration
 TTL="${TTL:-300}"
 IP_SERVICE_URL="${IP_SERVICE_URL:-https://checkip.amazonaws.com}"
+IP_DNS_SOURCE="${IP_DNS_SOURCE:-}"  # If set, resolve this DNS name instead of using IP_SERVICE_URL
 AWS_REGION="${AWS_REGION:-us-west-2}"
 START_EPOCH=$(date +%s)
 
@@ -45,9 +53,85 @@ validate_ip() {
   return 0
 }
 
+fetch_ip_from_dns() {
+  # Resolve IP from DNS record using external resolver (8.8.8.8)
+  local dns_name="$1"
+  local ip
+  ip=$(dig +short "$dns_name" @8.8.8.8 2>/dev/null | head -1)
+  [[ -n "$ip" ]] && echo "$ip" && return 0
+  return 1
+}
+
+detect_active_wan_ip() {
+  # Detect which WAN is active by resolving both wan1 and wan2
+  # and comparing to our actual egress IP
+  local wan1_dns="${IP_WAN1_DNS:-wan1.wind.etherport.net}"
+  local wan2_dns="${IP_WAN2_DNS:-wan2.wind.etherport.net}"
+
+  local wan1_ip wan2_ip egress_ip
+
+  # Get both WAN IPs from DNS
+  wan1_ip=$(fetch_ip_from_dns "$wan1_dns" 2>/dev/null || echo "")
+  wan2_ip=$(fetch_ip_from_dns "$wan2_dns" 2>/dev/null || echo "")
+
+  # Get our actual egress IP
+  egress_ip=$(curl -s --max-time 3 "${IP_SERVICE_URL:-https://checkip.amazonaws.com}" 2>/dev/null || echo "")
+
+  echo "  WAN1 ($wan1_dns): ${wan1_ip:-<unresolved>}" >&2
+  echo "  WAN2 ($wan2_dns): ${wan2_ip:-<unresolved>}" >&2
+  echo "  Egress IP: ${egress_ip:-<unknown>}" >&2
+
+  # If egress matches wan1 or wan2, use that
+  if [[ -n "$egress_ip" && "$egress_ip" == "$wan1_ip" ]]; then
+    echo "  Active WAN: WAN1 (egress matches)" >&2
+    echo "$wan1_ip"
+    return 0
+  elif [[ -n "$egress_ip" && "$egress_ip" == "$wan2_ip" ]]; then
+    echo "  Active WAN: WAN2 (egress matches)" >&2
+    echo "$wan2_ip"
+    return 0
+  fi
+
+  # If egress doesn't match either (multi-path/load-balanced), prefer wan1
+  if [[ -n "$wan1_ip" ]]; then
+    echo "  Active WAN: WAN1 (default primary)" >&2
+    echo "$wan1_ip"
+    return 0
+  elif [[ -n "$wan2_ip" ]]; then
+    echo "  Active WAN: WAN2 (wan1 unavailable)" >&2
+    echo "$wan2_ip"
+    return 0
+  fi
+
+  return 1
+}
+
 fetch_ip_with_retry() {
   local max_attempts=3
   local delay=1
+
+  # If IP_DNS_SOURCE is set to "auto", detect active WAN
+  if [[ "${IP_DNS_SOURCE:-}" == "auto" ]]; then
+    echo "Detecting active WAN..." >&2
+    local ip
+    ip=$(detect_active_wan_ip) && [[ -n "$ip" ]] && echo "$ip" && return 0
+    echo "WARNING: Could not detect active WAN IP" >&2
+    return 1
+  fi
+
+  # If IP_DNS_SOURCE is set to a specific DNS name, use that
+  if [[ -n "${IP_DNS_SOURCE:-}" ]]; then
+    for ((i=1; i<=max_attempts; i++)); do
+      local ip
+      ip=$(fetch_ip_from_dns "$IP_DNS_SOURCE") && [[ -n "$ip" ]] && echo "$ip" && return 0
+      echo "WARNING: DNS lookup attempt $i/$max_attempts failed for $IP_DNS_SOURCE, retrying in ${delay}s..." >&2
+      sleep "$delay"
+      delay=$((delay * 2))
+    done
+    return 1
+  fi
+
+  # Default: use HTTP service
   for ((i=1; i<=max_attempts; i++)); do
     local ip
     ip=$(curl -s --max-time 3 "$IP_SERVICE_URL" 2>&1) && [[ -n "$ip" ]] && echo "$ip" && return 0
@@ -85,7 +169,13 @@ echo "======================================"
 echo "Time:        $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo "Zones:       ${#ZONE_ARRAY[@]}"
 echo "TTL:         ${TTL}s"
-echo "IP Service:  ${IP_SERVICE_URL}"
+if [[ "${IP_DNS_SOURCE:-}" == "auto" ]]; then
+  echo "IP Source:   Auto-detect active WAN"
+elif [[ -n "${IP_DNS_SOURCE:-}" ]]; then
+  echo "IP Source:   DNS lookup of ${IP_DNS_SOURCE}"
+else
+  echo "IP Source:   ${IP_SERVICE_URL}"
+fi
 echo "======================================"
 echo ""
 
