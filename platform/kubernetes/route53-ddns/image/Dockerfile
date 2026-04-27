@@ -4,6 +4,7 @@ FROM public.ecr.aws/aws-cli/aws-cli:2.34.25
 # Note: curl is already installed (curl-minimal) in the base image
 RUN yum install -y \
     jq \
+    bind-utils \
     && yum clean all
 
 # Copy update script
