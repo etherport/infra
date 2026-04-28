@@ -48,7 +48,7 @@
         tunnel_ip: "10.255.255.2/30"
         peer_public_key: "kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU="
         peer_endpoint: "44.240.60.80:51820"
-        peer_allowed_ips: "10.10.100.0/22, 10.255.255.1/32, 10.254.0.0/24"
+        peer_allowed_ips: "10.10.100.0/22, 10.255.255.1/32"
         keepalive: 25
       wg1:
         tunnel_ip: "10.254.0.1/24"
@@ -230,7 +230,10 @@
           # NAT for full-tunnel clients (route all traffic through VPN)
           # Use -I to insert at beginning - ensures rule runs before other chains
           PostUp = iptables -t nat -I POSTROUTING 1 -s 10.254.0.0/24 ! -d 10.0.0.0/8 -j MASQUERADE
+          # NAT for VPN clients accessing homelab LAN (so replies route back correctly)
+          PostUp = iptables -t nat -I POSTROUTING 1 -s 10.254.0.0/24 -o eth0 -j MASQUERADE
           PostDown = iptables -t nat -D POSTROUTING -s 10.254.0.0/24 ! -d 10.0.0.0/8 -j MASQUERADE
+          PostDown = iptables -t nat -D POSTROUTING -s 10.254.0.0/24 -o eth0 -j MASQUERADE
 
           {% for peer in wg1_peers %}
           [Peer]
@@ -283,7 +286,10 @@
           # NAT for full-tunnel clients (route all traffic through VPN)
           # Use -I to insert at beginning - ensures rule runs before other chains
           PostUp = iptables -t nat -I POSTROUTING 1 -s 10.254.0.0/24 ! -d 10.0.0.0/8 -j MASQUERADE
+          # NAT for VPN clients accessing homelab via wg0 (so replies route back correctly)
+          PostUp = iptables -t nat -I POSTROUTING 1 -s 10.254.0.0/24 -o wg0 -j MASQUERADE
           PostDown = iptables -t nat -D POSTROUTING -s 10.254.0.0/24 ! -d 10.0.0.0/8 -j MASQUERADE
+          PostDown = iptables -t nat -D POSTROUTING -s 10.254.0.0/24 -o wg0 -j MASQUERADE
 
           {% for peer in wg1_peers %}
           [Peer]

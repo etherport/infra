@@ -94,7 +94,7 @@ spec:
               [Peer]
               PublicKey = kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU=
               Endpoint = 44.240.60.80:51820
-              AllowedIPs = 10.10.100.0/22, 10.255.255.1/32, 10.254.0.0/24
+              AllowedIPs = 10.10.100.0/22, 10.255.255.1/32
               PersistentKeepalive = 25
               EOF
 
@@ -109,7 +109,10 @@ spec:
               # NAT for full-tunnel clients (route all traffic through VPN)
               # Use -I to insert at beginning - must run BEFORE Cilium/K8s rules
               PostUp = iptables -t nat -I POSTROUTING 1 -s 10.254.0.0/24 ! -d 10.0.0.0/8 -j MASQUERADE
+              # NAT for VPN clients accessing homelab LAN (so replies route back correctly)
+              PostUp = iptables -t nat -I POSTROUTING 1 -s 10.254.0.0/24 -o eth0 -j MASQUERADE
               PostDown = iptables -t nat -D POSTROUTING -s 10.254.0.0/24 ! -d 10.0.0.0/8 -j MASQUERADE
+              PostDown = iptables -t nat -D POSTROUTING -s 10.254.0.0/24 -o eth0 -j MASQUERADE
 
               [Peer]
               # Graham
