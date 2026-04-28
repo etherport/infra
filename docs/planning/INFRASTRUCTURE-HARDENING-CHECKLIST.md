@@ -150,6 +150,8 @@
 | 2026-04-23 | WireGuard K8s HA deployment | K8s pod (primary) + vpn-local (backup) with Keepalived VRRP failover |
 | 2026-04-23 | WireGuard cleanup DaemonSet | Removes orphaned wg0/VIP when pod moves between nodes |
 | 2026-04-23 | WireGuard documentation update | Updated `docs/architecture/vpn-wireguard.md` with HA architecture |
+| 2026-04-28 | Tailscale failover on vpn-local | Backup subnet router with auto-failover script, exit node enabled |
+| 2026-04-28 | Tailscale documentation update | Updated `docs/architecture/vpn-tailscale.md` with vpn-local failover |
 
 ---
 

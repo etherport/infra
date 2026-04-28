@@ -25,13 +25,13 @@ Tailscale provides mesh VPN connectivity for remote client access as a supplemen
 │                     │                      │                      │         │
 │                     ▼                      ▼                      ▼         │
 │   ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────┐ │
-│   │  k8s-homelab-router │    │  vpn-aws            │    │  Other clients  │ │
-│   │  (K8s Connector)    │    │  (Subnet Router)    │    │                 │ │
-│   │                     │    │                     │    │                 │ │
-│   │  Routes:            │    │  Routes:            │    │                 │ │
-│   │  10.10.192.0/19     │    │  10.10.100.0/22     │    │                 │ │
-│   │  (on-prem)          │    │  (AWS)              │    │                 │ │
-│   └──────────┬──────────┘    └──────────┬──────────┘    └─────────────────┘ │
+│   │  k8s-homelab-router │    │  vpn-local          │    │  vpn-aws        │ │
+│   │  (K8s Connector)    │    │  (BACKUP router)    │    │  (Subnet Router)│ │
+│   │  PRIMARY            │    │                     │    │                 │ │
+│   │  Routes:            │    │  Routes:            │    │  Routes:        │ │
+│   │  10.10.192.0/19     │    │  10.10.192.0/19     │    │  10.10.100.0/22 │ │
+│   │  (on-prem)          │    │  (failover only)    │    │  (AWS)          │ │
+│   └──────────┬──────────┘    └──────────┬──────────┘    └────────┬────────┘ │
 │              │                          │                                   │
 │              │                          │ (NOT via Tailscale)               │
 │              │                          │                                   │
@@ -111,6 +111,29 @@ spec:
     - "tag:subnet-router"
 ```
 
+### vpn-local Backup Router
+
+vpn-local runs as a backup subnet router with automatic failover. When the K8s Connector is down, vpn-local takes over advertising on-prem routes:
+
+```bash
+# Failover script monitors K8s router every 10s
+# After 3 consecutive failures, vpn-local advertises routes
+# When K8s recovers, vpn-local releases routes
+
+# Systemd service: tailscale-failover.service
+# Script: /usr/local/bin/tailscale-failover.sh
+```
+
+**Failover Behavior:**
+
+| K8s Router State | vpn-local Routes | Notes |
+|------------------|------------------|-------|
+| UP | None (standby) | K8s is primary |
+| DOWN (3+ checks) | 10.10.192.0/19 | Auto-failover |
+| Recovered | None (releases) | K8s resumes primary |
+
+The failover script checks K8s router via `tailscale ping 100.70.241.55`. Routes are approved in Tailscale admin but only advertised during failover.
+
 ### AWS VPN Server Tailscale
 
 Advertises AWS subnet to the Tailnet:
@@ -133,7 +156,8 @@ Exit nodes allow routing **all** traffic through a Tailscale node, not just priv
 | Node | Tailscale IP | Exit Location | Use Case |
 |------|--------------|---------------|----------|
 | vpn-aws | 100.117.87.10 | AWS us-west-2 | Privacy, US exit |
-| k8s-homelab-router | 100.117.63.43 | Home ISP | Appear at home |
+| k8s-homelab-router | 100.70.241.55 | Home ISP | Appear at home (primary) |
+| vpn-local | 100.73.247.54 | Home ISP | Appear at home (backup) |
 
 ### Usage
 
@@ -238,13 +262,18 @@ The playbook manages per-host settings:
 # From playbooks/tailscale.yml
 tailscale_advertise_routes:
   vpn-aws: "10.10.100.0/22"
+  vpn-local: ""  # Empty - failover script controls this
 
 tailscale_host_accept_routes:
-  vpn-aws: false  # Critical: prevents WireGuard route override
+  vpn-aws: false   # Critical: prevents WireGuard route override
+  vpn-local: false # Has WireGuard - don't accept Tailscale routes
 
 tailscale_advertise_exit_node:
-  vpn-aws: true   # Allow using vpn-aws as exit node
+  vpn-aws: true    # Allow using vpn-aws as exit node
+  vpn-local: true  # Backup exit node
 ```
+
+The playbook also deploys the failover script and systemd service on vpn-local.
 
 ## Comparison: WireGuard wg1 vs Tailscale
 
