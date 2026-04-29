@@ -194,7 +194,7 @@
           set -euo pipefail
 
           # Configuration
-          K8S_ROUTER_IP="100.70.241.55"  # K8s homelab-router Tailscale IP
+          K8S_ROUTER_IP="100.75.199.69"  # K8s homelab-router Tailscale IP
           HOMELAB_ROUTES="10.10.192.0/19"
           CHECK_INTERVAL=10
           FAILURE_THRESHOLD=3

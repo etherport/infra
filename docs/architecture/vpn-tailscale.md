@@ -132,7 +132,7 @@ vpn-local runs as a backup subnet router with automatic failover. When the K8s C
 | DOWN (3+ checks) | 10.10.192.0/19 | Auto-failover |
 | Recovered | None (releases) | K8s resumes primary |
 
-The failover script checks K8s router via `tailscale ping 100.70.241.55`. Routes are approved in Tailscale admin but only advertised during failover.
+The failover script checks K8s router via `tailscale ping 100.75.199.69`. Routes are approved in Tailscale admin but only advertised during failover.
 
 ### AWS VPN Server Tailscale
 
@@ -156,7 +156,7 @@ Exit nodes allow routing **all** traffic through a Tailscale node, not just priv
 | Node | Tailscale IP | Exit Location | Use Case |
 |------|--------------|---------------|----------|
 | vpn-aws | 100.117.87.10 | AWS us-west-2 | Privacy, US exit |
-| k8s-homelab-router | 100.70.241.55 | Home ISP | Appear at home (primary) |
+| k8s-homelab-router | 100.75.199.69 | Home ISP | Appear at home (primary) |
 | vpn-local | 100.73.247.54 | Home ISP | Appear at home (backup) |
 
 ### Usage
@@ -166,7 +166,7 @@ Exit nodes allow routing **all** traffic through a Tailscale node, not just priv
 tailscale set --exit-node=100.117.87.10
 
 # Route ALL traffic through homelab (appear at home)
-tailscale set --exit-node=100.117.63.43
+tailscale set --exit-node=100.75.199.69
 
 # Disable exit node (split tunnel - only private traffic via Tailscale)
 tailscale set --exit-node=
@@ -179,7 +179,7 @@ Add to `~/.zshrc` for convenience:
 ```bash
 alias ts-split='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node='
 alias ts-aws='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node=100.117.87.10'
-alias ts-home='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node=100.117.63.43'
+alias ts-home='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node=100.75.199.69'
 alias ts-status='/Applications/Tailscale.app/Contents/MacOS/Tailscale status'
 ```
 
