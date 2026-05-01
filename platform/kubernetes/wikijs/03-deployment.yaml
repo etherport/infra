@@ -28,7 +28,7 @@ spec:
               mountPath: /wiki/data
       containers:
         - name: wiki-js
-          image: ghcr.io/requarks/wiki:2.5.313 # {"$imagepolicy": "flux-system:wikijs"}
+          image: ghcr.io/requarks/wiki:2.5.314 # {"$imagepolicy": "flux-system:wikijs"}
           ports:
             - name: http
               containerPort: 3000
