@@ -62,10 +62,56 @@ A cleanup daemon runs on all worker nodes to remove orphaned wg0 interfaces when
 
 | Network | CIDR | Purpose |
 |---------|------|---------|
-| 10.255.255.0/30 | Site-to-site tunnel | Point-to-point link between sites |
+| 10.255.255.0/29 | Site-to-site tunnel | Multi-endpoint tunnel (vpn-aws=.1, homelab=.2, regional=.3-.6) |
 | 10.254.0.0/24 | Remote access | Mobile/roaming client VPN |
 | 10.10.192.0/19 | Local homelab | All local VLANs (10.10.192.0 - 10.10.223.255) |
 | 10.10.100.0/22 | AWS networks | AWS VPC and related (10.10.100.0 - 10.10.103.255) |
+| 10.10.112.0/24 | Mumbai regional VPC | Travel VPN (temporary, see [Regional VPNs](#regional-travel-vpns)) |
+
+## Regional Travel VPNs
+
+**TEMPORARY INFRASTRUCTURE** - Regional VPNs are deployed for travel and destroyed when not needed.
+
+### Current Deployment
+
+| Region | IP Assignment | VPC CIDR | Status | Notes |
+|--------|---------------|----------|--------|-------|
+| ap-south-1 (Mumbai) | 10.255.255.3 | 10.10.112.0/24 | **ACTIVE** | Direct wg0 tunnel to homelab |
+| us-east-1 | 10.255.255.4 | 10.10.116.0/24 | Planned | Next region |
+| eu-west-1 | 10.255.255.5 | 10.10.120.0/24 | Planned | Future |
+
+### Architecture
+
+Regional VPNs use **direct wg0 tunnels** to homelab (not VPC peering transit) because AWS VPC peering doesn't support transit routing.
+
+```
+Your Device (10.254.0.10)
+     │
+     │ WireGuard wg1 (51821)
+     ▼
+vpn-mumbai (ap-south-1)
+     │
+     ├── Internet → NAT → local IP (fast, local egress)
+     │
+     ├── AWS VPC (10.10.100.0/22) → VPC Peering → us-west-2
+     │
+     └── Homelab (10.10.192.0/19) → wg0 tunnel → homelab K8s pod
+```
+
+### Deployment
+
+See [Regional VPN Deployment Runbook](../runbooks/regional-vpn-deployment.md) for:
+- Terraform deployment commands
+- Client configuration
+- Cost estimates (~$0.22/day)
+- Teardown instructions
+
+### When to Update This Section
+
+Update this section whenever:
+- A new regional VPN is deployed
+- An existing regional VPN is destroyed
+- IP assignments change
 
 ## VPN Endpoints
 
@@ -157,30 +203,43 @@ ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/wireguard.yml --
 
 ```ini
 [Interface]
-Address = 10.255.255.2/30
+Address = 10.255.255.2/29
 ListenPort = 51820
 PrivateKey = <from secret>
 MTU = 1420
+# NAT for regional VPN traffic (so replies route back via wg0)
+PostUp = iptables -t nat -I POSTROUTING 1 -s 10.255.255.0/29 -o eth0 -j MASQUERADE
+PostUp = iptables -I FORWARD 1 -i wg0 -o eth0 -j ACCEPT
+PostUp = iptables -I FORWARD 1 -i eth0 -o wg0 -j ACCEPT
 
 [Peer]
+# vpn-aws (us-west-2) - primary site-to-site
 PublicKey = kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU=
 Endpoint = 44.240.60.80:51820
-AllowedIPs = 10.10.100.0/22, 10.255.255.1/32, 10.254.0.0/24
+AllowedIPs = 10.10.100.0/22, 10.255.255.1/32
+PersistentKeepalive = 25
+
+[Peer]
+# vpn-mumbai (ap-south-1) - TEMPORARY regional travel endpoint
+PublicKey = y1vB4tdG7YdaTE8RODm1f69dnz6vnIqTmANA4BQvnBg=
+AllowedIPs = 10.10.112.0/24, 10.255.255.3/32
 PersistentKeepalive = 25
 ```
 
 ### vpn-local: /etc/wireguard/wg0.conf
 
+> **Note:** vpn-local should be updated to /29 to match K8s pod. See [Ansible drift](#known-drift) below.
+
 ```ini
 [Interface]
-Address = 10.255.255.2/30
+Address = 10.255.255.2/29
 PrivateKey = <from local_private.key>
 MTU = 1420
 
 [Peer]
 PublicKey = kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU=
 Endpoint = 44.240.60.80:51820
-AllowedIPs = 10.10.100.0/22, 10.255.255.1/32, 10.254.0.0/24
+AllowedIPs = 10.10.100.0/22, 10.255.255.1/32
 PersistentKeepalive = 25
 ```
 
@@ -374,6 +433,17 @@ platform/kubernetes/wireguard/
 ```
 
 **Important:** K8s and vpn-local use the SAME wg0 keys so AWS sees a single peer.
+
+## Known Drift
+
+Configuration drift between sources of truth:
+
+| Component | Git/Ansible | Running | Action Needed |
+|-----------|-------------|---------|---------------|
+| vpn-local wg0 subnet | /30 | N/A (not active) | Update Ansible to /29 |
+| vpn-local wg0 regional peers | None | N/A | Add regional peers to Ansible |
+
+**To fix:** Update `infra/ansible/playbooks/wireguard.yml` variable `vpn_local.wg0.tunnel_ip` from `/30` to `/29`.
 
 ## Security Notes
 

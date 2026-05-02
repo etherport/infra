@@ -2,16 +2,27 @@
 
 Deploy temporary WireGuard VPN endpoints in AWS regions closest to your travel location.
 
+**IMPORTANT:** Regional VPNs are **temporary infrastructure**. Destroy when done traveling to stop billing.
+
+## Current Deployment Status
+
+| Region | Tunnel IP | VPC CIDR | Status | Deployed |
+|--------|-----------|----------|--------|----------|
+| ap-south-1 (Mumbai) | 10.255.255.3 | 10.10.112.0/24 | **ACTIVE** | 2026-05 |
+| us-east-1 (Virginia) | 10.255.255.4 | 10.10.116.0/24 | Planned | - |
+| eu-west-1 (Ireland) | 10.255.255.5 | 10.10.120.0/24 | Planned | - |
+
 ## Quick Reference: Closest Regions
 
 | Location | AWS Region | Region Code | Latency |
 |----------|------------|-------------|---------|
-| Abu Dhabi / Dubai / Gulf | **me-south-1** (Bahrain) | `bah` | ~5-10ms |
-| Europe (West) | eu-west-1 (Ireland) | `ire` | ~20ms |
-| Europe (Central) | eu-central-1 (Frankfurt) | `fra` | ~15ms |
-| Asia (East) | ap-northeast-1 (Tokyo) | `tyo` | ~30ms |
-| Asia (Southeast) | ap-southeast-1 (Singapore) | `sgp` | ~20ms |
-| US East Coast | us-east-1 (Virginia) | `use` | ~10ms |
+| India / Gulf | **ap-south-1** (Mumbai) | `mumbai` | ~10-20ms |
+| Abu Dhabi / Dubai | me-central-1 (UAE) | `uae` | ~5ms |
+| Europe (West) | eu-west-1 (Ireland) | `ireland` | ~20ms |
+| Europe (Central) | eu-central-1 (Frankfurt) | `frankfurt` | ~15ms |
+| Asia (East) | ap-northeast-1 (Tokyo) | `tokyo` | ~30ms |
+| Asia (Southeast) | ap-southeast-1 (Singapore) | `singapore` | ~20ms |
+| US East Coast | us-east-1 (Virginia) | `virginia` | ~10ms |
 
 ## Prerequisites
 
@@ -22,35 +33,65 @@ Deploy temporary WireGuard VPN endpoints in AWS regions closest to your travel l
 
 ## Method 1: Terraform (Recommended)
 
-### Deploy
+The Terraform module deploys:
+- **wg0**: Direct tunnel to homelab (required because VPC peering doesn't support transit routing)
+- **wg1**: Remote access for your devices
+- **VPC Peering**: For AWS us-west-2 traffic only
+
+### Deploy a New Region
 
 ```bash
 cd ~/Projects/homelab-infra/infra/terraform/aws-regional-vpn
 
-# Initialize (first time only)
+# 1. Generate new WireGuard keys for wg0
+wg genkey | tee /tmp/wg0.key | wg pubkey > /tmp/wg0.pub
+
+# 2. Add peer to homelab K8s WireGuard deployment (platform/kubernetes/wireguard/03-deployment.yaml)
+#    See terraform output homelab_peer_config after apply
+
+# 3. Initialize and deploy
 terraform init
 
-# Deploy to Bahrain (closest to UAE)
-terraform apply -var="region=me-south-1" -var="region_short=bah"
+# Example: Deploy to Mumbai
+terraform apply \
+  -var="region=ap-south-1" \
+  -var="region_short=mumbai" \
+  -var="vpc_cidr=10.10.112.0/24" \
+  -var="wg0_tunnel_ip=10.255.255.3" \
+  -var="wg0_private_key=$(cat /tmp/wg0.key)" \
+  -var="wg0_public_key=$(cat /tmp/wg0.pub)"
 
-# Get the public IP
+# Get outputs
 terraform output vpn_public_ip
+terraform output homelab_peer_config  # Add this to K8s deployment
+terraform output client_config        # Your device config (sensitive)
 ```
+
+### Tunnel IP Assignments
+
+| IP | Region | Notes |
+|----|--------|-------|
+| 10.255.255.1 | vpn-aws (us-west-2) | Primary, permanent |
+| 10.255.255.2 | Homelab K8s | Primary local endpoint |
+| 10.255.255.3 | Mumbai (ap-south-1) | Currently active |
+| 10.255.255.4 | Reserved | Next region |
+| 10.255.255.5 | Reserved | Future |
+| 10.255.255.6 | Reserved | Future |
 
 ### Configure Client
 
-Update your WireGuard config with the new endpoint:
+Get client config from Terraform output or create manually:
 
 ```ini
-# ~/.wireguard/travel-bah.conf
+# ~/.wireguard/travel-mumbai.conf
 [Interface]
 PrivateKey = <your private key from 1Password>
 Address = 10.254.0.10/32
 DNS = 10.10.201.5, 10.10.201.6
 
 [Peer]
-# vpn-bah (Bahrain)
-PublicKey = <vpn-aws public key - same as existing>
+# vpn-mumbai (ap-south-1)
+PublicKey = kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU=  # Same as vpn-aws wg1
 Endpoint = <terraform output vpn_public_ip>:51821
 AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 25
@@ -62,18 +103,43 @@ PersistentKeepalive = 25
 # SSH to verify instance is running
 ssh -i ~/.ssh/gs-ec2.pem ubuntu@<public-ip>
 
-# Check WireGuard status
+# Check WireGuard status (should show wg0 and wg1)
 sudo wg show
 
+# Verify homelab connectivity via wg0
+ping 10.10.201.50
+
 # On your device, activate the tunnel and test
+wg-quick up travel-mumbai
 ping 10.10.201.50  # Homelab
-curl https://api.ipify.org  # Should show Bahrain IP
+curl https://api.ipify.org  # Should show regional IP
 ```
 
 ### Destroy (Stop Billing!)
 
+**IMPORTANT:** Update this runbook when destroying!
+
 ```bash
-terraform destroy -var="region=me-south-1" -var="region_short=bah"
+# 1. Destroy infrastructure
+cd ~/Projects/homelab-infra/infra/terraform/aws-regional-vpn
+terraform destroy \
+  -var="region=ap-south-1" \
+  -var="region_short=mumbai" \
+  -var="vpc_cidr=10.10.112.0/24" \
+  -var="wg0_tunnel_ip=10.255.255.3" \
+  -var="wg0_private_key=dummy" \
+  -var="wg0_public_key=dummy"
+
+# 2. Remove peer from homelab K8s deployment
+# Edit platform/kubernetes/wireguard/03-deployment.yaml
+# Remove the [Peer] block for vpn-mumbai
+
+# 3. Commit and push
+git add .
+git commit -m "Remove Mumbai regional VPN (travel complete)"
+git push
+
+# 4. Update this runbook - mark region as inactive
 ```
 
 ## Method 2: Manual AWS CLI (Faster for One-Off)
