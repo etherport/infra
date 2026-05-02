@@ -80,6 +80,16 @@
     aws_networks: "10.10.100.0/22"
     local_networks: "10.10.192.0/19"
 
+    # Regional VPN peers for wg0 (homelab side)
+    # These are TEMPORARY regional VPNs for travel - add/remove as needed
+    # Both K8s WireGuard pod and vpn-local need these peers for failover to work
+    wg0_regional_peers:
+      - name: "vpn-mumbai (ap-south-1)"
+        comment: "TEMPORARY regional travel endpoint"
+        public_key: "y1vB4tdG7YdaTE8RODm1f69dnz6vnIqTmANA4BQvnBg="
+        allowed_ips: "10.10.112.0/24, 10.255.255.3/32"
+        keepalive: 25
+
     # =========================================================================
     # Client Config Template (for reference)
     # =========================================================================
@@ -204,13 +214,30 @@
           Address = {{ vpn_local.wg0.tunnel_ip }}
           PrivateKey = {{ vpn_local_keys.stringData.wg0_private_key }}
           MTU = {{ wg_mtu }}
+          # NAT for regional VPN traffic (so replies route back via wg0)
+          PostUp = iptables -t nat -I POSTROUTING 1 -s 10.255.255.0/29 -o eth0 -j MASQUERADE
+          PostUp = iptables -I FORWARD 1 -i wg0 -o eth0 -j ACCEPT
+          PostUp = iptables -I FORWARD 1 -i eth0 -o wg0 -j ACCEPT
+          PostDown = iptables -t nat -D POSTROUTING -s 10.255.255.0/29 -o eth0 -j MASQUERADE || true
+          PostDown = iptables -D FORWARD -i wg0 -o eth0 -j ACCEPT || true
+          PostDown = iptables -D FORWARD -i eth0 -o wg0 -j ACCEPT || true
 
-          # Peer: AWS hub
+          # Peer: AWS hub (primary site-to-site)
           [Peer]
           PublicKey = {{ vpn_local.wg0.peer_public_key }}
           Endpoint = {{ vpn_local.wg0.peer_endpoint }}
           AllowedIPs = {{ vpn_local.wg0.peer_allowed_ips }}
           PersistentKeepalive = {{ vpn_local.wg0.keepalive }}
+
+          {% for peer in wg0_regional_peers %}
+          # {{ peer.name }}{% if peer.comment is defined %} - {{ peer.comment }}{% endif %}
+
+          [Peer]
+          PublicKey = {{ peer.public_key }}
+          AllowedIPs = {{ peer.allowed_ips }}
+          PersistentKeepalive = {{ peer.keepalive }}
+
+          {% endfor %}
       when: inventory_hostname == 'vpn-local'
       no_log: true
       notify: Restart WireGuard wg0
