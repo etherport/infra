@@ -357,7 +357,16 @@ resource "aws_security_group" "vpn" {
   description = "WireGuard VPN access"
   vpc_id      = aws_vpc.regional.id
 
-  # WireGuard remote access
+  # WireGuard wg0 (site-to-site tunnel from homelab)
+  ingress {
+    from_port   = 51820
+    to_port     = 51820
+    protocol    = "udp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "WireGuard site-to-site"
+  }
+
+  # WireGuard wg1 (remote access for clients)
   ingress {
     from_port   = 51821
     to_port     = 51821
@@ -522,11 +531,14 @@ output "client_config" {
   sensitive   = true
   value       = <<-EOT
     # Save as ~/.wireguard/travel-${var.region_short}.conf
+    #
+    # DNS: Using dns-aws (10.10.100.5) which can resolve internal names
+    # and forwards to public DNS. Fallback to 1.1.1.1 if dns-aws is down.
 
     [Interface]
     PrivateKey = <your private key from 1Password>
     Address = 10.254.0.10/32
-    DNS = 10.10.201.5, 10.10.201.6
+    DNS = 10.10.100.5, 1.1.1.1
 
     [Peer]
     # vpn-${var.region_short} (${var.region})

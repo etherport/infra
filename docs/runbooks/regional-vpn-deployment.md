@@ -84,10 +84,14 @@ Get client config from Terraform output or create manually:
 
 ```ini
 # ~/.wireguard/travel-mumbai.conf
+#
+# DNS: dns-aws (10.10.100.5) resolves internal names and forwards public queries.
+# Fallback to 1.1.1.1 if dns-aws is unreachable (e.g., VPC peering down).
+
 [Interface]
 PrivateKey = <your private key from 1Password>
 Address = 10.254.0.10/32
-DNS = 10.10.201.5, 10.10.201.6
+DNS = 10.10.100.5, 1.1.1.1
 
 [Peer]
 # vpn-mumbai (ap-south-1)
@@ -96,6 +100,11 @@ Endpoint = <terraform output vpn_public_ip>:51821
 AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 25
 ```
+
+**DNS Options:**
+- `10.10.100.5, 1.1.1.1` - dns-aws + public fallback (recommended)
+- `10.10.201.5, 10.10.201.6` - Homelab only (breaks if homelab tunnel is down)
+- `1.1.1.1, 8.8.8.8` - Public only (no internal name resolution)
 
 ### Verify Connection
 
