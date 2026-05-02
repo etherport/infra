@@ -20,3 +20,7 @@ metadata:
 spec:
   ipAddressPools:
     - primary
+  # Note: With Cilium CNI, MetalLB may create ARP responders on lxc interfaces
+  # which causes L2 announcements to fail. If this happens, add:
+  # interfaces:
+  #   - eth0

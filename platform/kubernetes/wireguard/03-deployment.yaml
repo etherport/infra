@@ -84,17 +84,32 @@ spec:
               mkdir -p /etc/wireguard
 
               # Create wg0 config (site-to-site tunnel to AWS)
+              # Uses /29 to allow multiple regional VPN endpoints (vpn-aws=.1, homelab=.2, regional=.3-.6)
               cat > /etc/wireguard/wg0.conf <<EOF
               [Interface]
-              Address = 10.255.255.2/30
+              Address = 10.255.255.2/29
               ListenPort = 51820
               PrivateKey = $(cat /secrets/wg0-private.key)
               MTU = 1420
+              # NAT for regional VPN traffic (so replies route back via wg0)
+              PostUp = iptables -t nat -I POSTROUTING 1 -s 10.255.255.0/29 -o eth0 -j MASQUERADE
+              PostUp = iptables -I FORWARD 1 -i wg0 -o eth0 -j ACCEPT
+              PostUp = iptables -I FORWARD 1 -i eth0 -o wg0 -j ACCEPT
+              PostDown = iptables -t nat -D POSTROUTING -s 10.255.255.0/29 -o eth0 -j MASQUERADE || true
+              PostDown = iptables -D FORWARD -i wg0 -o eth0 -j ACCEPT || true
+              PostDown = iptables -D FORWARD -i eth0 -o wg0 -j ACCEPT || true
 
               [Peer]
+              # vpn-aws (us-west-2) - primary site-to-site
               PublicKey = kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU=
               Endpoint = 44.240.60.80:51820
               AllowedIPs = 10.10.100.0/22, 10.255.255.1/32
+              PersistentKeepalive = 25
+
+              [Peer]
+              # vpn-mumbai (ap-south-1) - regional travel endpoint
+              PublicKey = y1vB4tdG7YdaTE8RODm1f69dnz6vnIqTmANA4BQvnBg=
+              AllowedIPs = 10.10.112.0/24, 10.255.255.3/32
               PersistentKeepalive = 25
               EOF
 
