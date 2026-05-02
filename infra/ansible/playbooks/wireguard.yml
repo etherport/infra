@@ -45,7 +45,7 @@
     vpn_local:
       ip: "10.10.201.15"  # Host IP for policy routing
       wg0:
-        tunnel_ip: "10.255.255.2/30"
+        tunnel_ip: "10.255.255.2/29"
         peer_public_key: "kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU="
         peer_endpoint: "44.240.60.80:51820"
         peer_allowed_ips: "10.10.100.0/22, 10.255.255.1/32"
@@ -61,7 +61,7 @@
     # vpn-aws specific settings
     vpn_aws:
       wg0:
-        tunnel_ip: "10.255.255.1/30"
+        tunnel_ip: "10.255.255.1/29"
         listen_port: 51820
         peer_public_key: "MwsTBFT0FPsZO+Bpe2Exk3y7oeIyv+HDx3j+lRSISTw="
         peer_allowed_ips: "10.255.255.2/32, 10.10.192.0/19"
@@ -94,7 +94,7 @@
     #
     #   [Peer]
     #   PublicKey = Aav0cNl4osaEEISQLyKLt88foAPwdVYaeTuyLF/PNTo=
-    #   AllowedIPs = 10.10.100.0/22, 10.10.192.0/19, 10.254.0.0/24, 10.255.255.0/30
+    #   AllowedIPs = 10.10.100.0/22, 10.10.192.0/19, 10.254.0.0/24, 10.255.255.0/29
     #   Endpoint = vpn.etherport.net:51821  # AWS, or wind.etherport.net:9821 for direct
     #   PersistentKeepalive = 25
     # =========================================================================

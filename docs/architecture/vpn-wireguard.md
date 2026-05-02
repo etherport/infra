@@ -123,7 +123,7 @@ Update this section whenever:
 | Deployment | wireguard |
 | Node Affinity | Prefers k8s-w1, any worker allowed |
 | VIP | 10.10.201.20 (managed by Keepalived sidecar) |
-| Tunnel IP | 10.255.255.2/30 |
+| Tunnel IP | 10.255.255.2/29 |
 | Host Port | 51820/UDP |
 | Public Key | `MwsTBFT0FPsZO+Bpe2Exk3y7oeIyv+HDx3j+lRSISTw=` |
 
@@ -136,7 +136,7 @@ Update this section whenever:
 | Hostname | vpn-local |
 | LAN IP | 10.10.201.15 |
 | VIP (when active) | 10.10.201.20 |
-| Tunnel IP | 10.255.255.2/30 |
+| Tunnel IP | 10.255.255.2/29 |
 | VRRP Priority | 100 (backup) |
 | Public Key | `MwsTBFT0FPsZO+Bpe2Exk3y7oeIyv+HDx3j+lRSISTw=` (same as K8s) |
 | OS | Ubuntu 24.04 (x86_64) |
@@ -152,7 +152,7 @@ Update this section whenever:
 | Hostname | vpn-aws |
 | Private IP | 10.10.100.10 |
 | Public IP | 44.240.60.80 |
-| Tunnel IPs | wg0: 10.255.255.1/30, wg1: 10.254.0.1/24 |
+| Tunnel IPs | wg0: 10.255.255.1/29, wg1: 10.254.0.1/24 |
 | Listen Ports | wg0: 51820, wg1: 51821 |
 | Public Key (wg0) | `kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU=` |
 | Public Key (wg1) | `Aav0cNl4osaEEISQLyKLt88foAPwdVYaeTuyLF/PNTo=` |
@@ -228,8 +228,6 @@ PersistentKeepalive = 25
 
 ### vpn-local: /etc/wireguard/wg0.conf
 
-> **Note:** vpn-local should be updated to /29 to match K8s pod. See [Ansible drift](#known-drift) below.
-
 ```ini
 [Interface]
 Address = 10.255.255.2/29
@@ -247,7 +245,7 @@ PersistentKeepalive = 25
 
 ```ini
 [Interface]
-Address = 10.255.255.1/30
+Address = 10.255.255.1/29
 ListenPort = 51820
 PrivateKey = <from local_private.key>
 MTU = 1420
@@ -295,7 +293,7 @@ default via 10.10.100.1 dev ens5
 10.10.100.0/25 dev ens5 proto kernel       # AWS VPC subnet
 10.10.192.0/19 dev wg0 scope link          # Local homelab via tunnel
 10.254.0.0/24 dev wg1 proto kernel         # Remote access clients
-10.255.255.0/30 dev wg0 proto kernel       # Tunnel network
+10.255.255.0/29 dev wg0 proto kernel       # Tunnel network
 ```
 
 ## When to Use WireGuard vs Tailscale
@@ -440,10 +438,10 @@ Configuration drift between sources of truth:
 
 | Component | Git/Ansible | Running | Action Needed |
 |-----------|-------------|---------|---------------|
-| vpn-local wg0 subnet | /30 | N/A (not active) | Update Ansible to /29 |
+| vpn-local wg0 subnet | /29 ✓ | N/A (not active) | Run Ansible when on-site |
 | vpn-local wg0 regional peers | None | N/A | Add regional peers to Ansible |
 
-**To fix:** Update `infra/ansible/playbooks/wireguard.yml` variable `vpn_local.wg0.tunnel_ip` from `/30` to `/29`.
+**Status:** Ansible updated to /29. vpn-local VM needs Ansible run to apply (currently backup, not routing traffic).
 
 ## Security Notes
 
