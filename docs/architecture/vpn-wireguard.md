@@ -432,16 +432,17 @@ platform/kubernetes/wireguard/
 
 **Important:** K8s and vpn-local use the SAME wg0 keys so AWS sees a single peer.
 
-## Known Drift
+## Configuration Sync Status
 
-Configuration drift between sources of truth:
+All WireGuard endpoints are in sync as of 2026-05-03:
 
-| Component | Git/Ansible | Running | Action Needed |
-|-----------|-------------|---------|---------------|
-| vpn-local wg0 subnet | /29 ✓ | N/A (not active) | Run Ansible when on-site |
-| vpn-local wg0 regional peers | None | N/A | Add regional peers to Ansible |
+| Component | Git/Ansible | Running | Status |
+|-----------|-------------|---------|--------|
+| K8s pod wg0 | /29 + Mumbai | /29 + Mumbai | ✓ Synced |
+| vpn-local wg0 | /29 + Mumbai | /29 + Mumbai | ✓ Synced |
+| vpn-aws wg0 | /29 | /29 | ✓ Synced |
 
-**Status:** Ansible updated to /29. vpn-local VM needs Ansible run to apply (currently backup, not routing traffic).
+**Last sync:** Ansible applied to vpn-local and vpn-aws on 2026-05-03.
 
 ## Security Notes
 
