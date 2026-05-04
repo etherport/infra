@@ -153,15 +153,18 @@ For seamless failover, keys are shared:
 
 ### UDM Port Forwards
 
-For remote access via homelab endpoint (wind.etherport.net:9821):
+Required port forwards for homelab WireGuard endpoints:
 
-| Name | WAN Port | Forward IP | Forward Port | Protocol |
-|------|----------|------------|--------------|----------|
-| WireGuard wg1 | 9821 | 10.10.201.20 | 9821 | UDP |
+| Name | WAN Port | Forward IP | Forward Port | Protocol | Purpose |
+|------|----------|------------|--------------|----------|---------|
+| WireGuard wg0 | 9820 | 10.10.201.20 | 51820 | UDP | Regional VPN tunnels (Mumbai, etc.) |
+| WireGuard wg1 | 9821 | 10.10.201.20 | 9821 | UDP | Direct remote access |
 
 Configure in UDM: Network → Port Forwarding → Create
 
-Note: AWS endpoint (vpn.etherport.net:51821) works without local port forwards since it's a cloud VM with a public IP.
+**Why port 9820 for wg0?** Ports 10000-60000 are used by Twilio for voice/SIP traffic. Port 51820 falls within this range, so we use 9820 externally and forward to 51820 internally.
+
+**Note:** vpn-aws endpoints (vpn.etherport.net:51820/51821) work without local port forwards since it's a cloud VM with a public IP.
 
 ## Architecture
 
@@ -190,10 +193,12 @@ Note: AWS endpoint (vpn.etherport.net:51821) works without local port forwards s
 
 ## Tunnel Details
 
-| Tunnel | Purpose | Port (Homelab) | Port (AWS) | Network |
-|--------|---------|----------------|------------|---------|
-| wg0 | Site-to-site | 51820 | 51820 | 10.255.255.0/30 |
-| wg1 | Remote access | 9821 | 51821 | 10.254.0.0/24 |
+| Tunnel | Purpose | Port (Homelab External) | Port (Homelab Internal) | Port (AWS) | Network |
+|--------|---------|-------------------------|-------------------------|------------|---------|
+| wg0 | Site-to-site + Regional | 9820 | 51820 | 51820 | 10.255.255.0/29 |
+| wg1 | Remote access | 9821 | 9821 | 51821 | 10.254.0.0/24 |
+
+**Note:** Regional VPNs (Mumbai, etc.) connect INBOUND to homelab's wg0 via port 9820. The vpn-aws connection is OUTBOUND from homelab, so it doesn't need a port forward.
 
 ## Troubleshooting
 

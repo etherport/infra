@@ -105,6 +105,12 @@ variable "homelab_endpoint" {
   default     = "47.159.189.5"  # Homelab public IP
 }
 
+variable "homelab_wg0_port" {
+  description = "Homelab WireGuard wg0 port (external port forwarded through UDM). Port 9820 is used to avoid conflict with Twilio range (10000-60000)."
+  type        = number
+  default     = 9820  # UDM forwards 9820 → VIP:51820
+}
+
 variable "wg0_private_key" {
   description = "WireGuard wg0 private key for this regional instance. Generate with: wg genkey"
   type        = string
@@ -427,6 +433,7 @@ resource "aws_instance" "vpn" {
     wg0_tunnel_ip          = var.wg0_tunnel_ip
     homelab_wg0_public_key = data.sops_file.homelab_keys.data["stringData.wg0_public_key"]
     homelab_endpoint       = var.homelab_endpoint
+    homelab_wg0_port       = var.homelab_wg0_port
     homelab_cidr           = "10.10.192.0/19"
     # wg1 - Remote access (shares keys with vpn-aws for seamless endpoint switching)
     wg1_private_key        = data.sops_file.wg_keys.data["stringData.wg1_private_key"]

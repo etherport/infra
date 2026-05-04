@@ -51,9 +51,9 @@ variable "wg_peer_public_key" {
 }
 
 variable "wg_peer_endpoint" {
-  description = "Endpoint of homelab WireGuard (e.g., wind.etherport.net:51820)"
+  description = "Endpoint of homelab WireGuard. Port 9820 is used to avoid conflict with Twilio range (10000-60000). UDM forwards 9820 → VIP:51820."
   type        = string
-  default     = "wind.etherport.net:51820"
+  default     = "wind.etherport.net:9820"
 }
 
 variable "wg_peer_allowed_ips" {
