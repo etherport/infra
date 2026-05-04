@@ -211,13 +211,22 @@ spec:
                   - /bin/bash
                   - -c
                   - "wg-quick down wg1 || true; wg-quick down wg0 || true"
+          # Startup probe: allows up to 5 minutes for apt-get install
+          startupProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - "which wg && ip link show wg0"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 30  # 30 * 10s = 5 minutes max startup
           livenessProbe:
             exec:
               command:
                 - /bin/bash
                 - -c
                 - "ip link show wg0 && ip link show wg1"
-            initialDelaySeconds: 90
             periodSeconds: 10
             failureThreshold: 3
           readinessProbe:
@@ -226,7 +235,6 @@ spec:
                 - /bin/bash
                 - -c
                 - "wg show wg0 && wg show wg1"
-            initialDelaySeconds: 60
             periodSeconds: 10
             failureThreshold: 3
           resources:
