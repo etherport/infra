@@ -64,23 +64,11 @@ records:
     comment: Technitium DNS on AWS (remote failover)
 
   # =============================================================================
-  # Infrastructure - WAN DDNS (updated by Lambda via router)
+  # Infrastructure - WAN DDNS
   # =============================================================================
-  # These records are updated dynamically by the DDNS Lambda when the router
-  # reports IP changes. Initial values are placeholders - the router will
-  # update them on first connection. Also stored in Route53 zone for redundancy.
-
-  - name: wan1
-    type: A
-    value: 47.159.189.230
-    ttl: 300
-    comment: WAN1 public IP (DDNS managed)
-
-  - name: wan2
-    type: A
-    value: 35.129.99.172
-    ttl: 300
-    comment: WAN2 public IP (DDNS managed)
+  # wan1 and wan2 records are NOT defined here - they are dynamic and managed
+  # by Route53 via the DDNS Lambda. Technitium forwards these queries upstream.
+  # See: infra/terraform/aws/ddns-lambda/ and docs/setup/network/ubiquiti-ddns.md
 
   # =============================================================================
   # Infrastructure - Network Equipment
