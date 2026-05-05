@@ -93,9 +93,12 @@ spec:
               MTU = 1420
               # NAT for regional VPN traffic (so replies route back via wg0)
               PostUp = iptables -t nat -I POSTROUTING 1 -s 10.255.255.0/29 -o eth0 -j MASQUERADE
+              # NAT for LAN traffic going to AWS via wg0
+              PostUp = iptables -t nat -I POSTROUTING 1 -o wg0 -j MASQUERADE
               PostUp = iptables -I FORWARD 1 -i wg0 -o eth0 -j ACCEPT
               PostUp = iptables -I FORWARD 1 -i eth0 -o wg0 -j ACCEPT
               PostDown = iptables -t nat -D POSTROUTING -s 10.255.255.0/29 -o eth0 -j MASQUERADE || true
+              PostDown = iptables -t nat -D POSTROUTING -o wg0 -j MASQUERADE || true
               PostDown = iptables -D FORWARD -i wg0 -o eth0 -j ACCEPT || true
               PostDown = iptables -D FORWARD -i eth0 -o wg0 -j ACCEPT || true
 
