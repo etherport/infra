@@ -84,10 +84,12 @@
     # Regional VPN peers for wg0 (homelab side)
     # These are TEMPORARY regional VPNs for travel - add/remove as needed
     # Both K8s WireGuard pod and vpn-local need these peers for failover to work
+    # Homelab initiates connection to regional VPNs (avoids UDM port forward issues)
     wg0_regional_peers:
       - name: "vpn-mumbai (ap-south-1)"
         comment: "TEMPORARY regional travel endpoint"
         public_key: "y1vB4tdG7YdaTE8RODm1f69dnz6vnIqTmANA4BQvnBg="
+        endpoint: "3.110.81.4:51820"
         allowed_ips: "10.10.112.0/24, 10.255.255.3/32"
         keepalive: 25
 
@@ -239,7 +241,8 @@
 
           [Peer]
           PublicKey = {{ peer.public_key }}
-          AllowedIPs = {{ peer.allowed_ips }}
+          {% if peer.endpoint is defined %}Endpoint = {{ peer.endpoint }}
+          {% endif %}AllowedIPs = {{ peer.allowed_ips }}
           PersistentKeepalive = {{ peer.keepalive }}
 
           {% endfor %}

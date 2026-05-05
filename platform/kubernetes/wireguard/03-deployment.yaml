@@ -111,7 +111,9 @@ spec:
 
               [Peer]
               # vpn-mumbai (ap-south-1) - regional travel endpoint
+              # Homelab initiates connection (avoids UDM port forward issues)
               PublicKey = y1vB4tdG7YdaTE8RODm1f69dnz6vnIqTmANA4BQvnBg=
+              Endpoint = 3.110.81.4:51820
               AllowedIPs = 10.10.112.0/24, 10.255.255.3/32
               PersistentKeepalive = 25
               EOF
