@@ -34,29 +34,39 @@ spec:
             - /bin/sh
             - -c
             - |
-              apk add --no-cache iproute2 curl jq
+              # Install only iproute2 and curl - no jq needed
+              apk add --no-cache iproute2 curl || {
+                echo "ERROR: Failed to install required packages, exiting"
+                exit 1
+              }
 
               HOSTNAME=$(hostname)
               echo "WireGuard cleanup daemon starting on $HOSTNAME"
 
               while true; do
-                # Check if the main wireguard pod is running on THIS node
-                # by checking if there's a wg0 interface with an active WireGuard process
-
                 # Check if any WireGuard interfaces exist on this node
                 if ip link show wg0 > /dev/null 2>&1 || ip link show wg1 > /dev/null 2>&1; then
                   # WireGuard interface(s) exist - check if the main pod is running here
-                  # The main pod runs wg-quick which creates the interfaces
-
                   # Check for wireguard pod on this node via kubernetes API
                   # Use KUBERNETES_SERVICE_HOST (auto-injected) since hostNetwork can't resolve DNS
                   API_SERVER="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
-                  POD_ON_NODE=$(curl -sk \
+                  API_RESPONSE=$(curl -sk \
                     -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
                     "${API_SERVER}/api/v1/namespaces/wireguard/pods?labelSelector=app=wireguard&fieldSelector=spec.nodeName=$HOSTNAME" \
-                    2>/dev/null | jq -r '.items | length')
+                    2>/dev/null)
 
-                  if [ "$POD_ON_NODE" = "0" ] || [ -z "$POD_ON_NODE" ]; then
+                  # Check API response validity (must contain "items")
+                  if ! echo "$API_RESPONSE" | grep -q '"items"'; then
+                    echo "$(date): WARNING: Invalid API response, skipping cleanup cycle"
+                    sleep 30
+                    continue
+                  fi
+
+                  # Count pods by checking for "metadata" entries in items array
+                  # Empty items array: "items": []
+                  # Non-empty: "items": [{"metadata":...
+                  if echo "$API_RESPONSE" | grep -q '"items":\s*\[\s*\]'; then
+                    # Empty items array - no wireguard pod on this node
                     echo "$(date): Orphaned WireGuard interfaces found on $HOSTNAME (no wireguard pod here), cleaning up..."
                     ip link del wg0 2>/dev/null || true
                     ip link del wg1 2>/dev/null || true

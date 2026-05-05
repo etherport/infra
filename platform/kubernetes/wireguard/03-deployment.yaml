@@ -187,8 +187,8 @@ spec:
 
               # Also add source-based rule for local host responses
               HOST_IP=$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
-              ip rule del from $HOST_IP to 10.254.0.0/24 lookup wg0_return 2>/dev/null || true
-              ip rule add from $HOST_IP to 10.254.0.0/24 lookup wg0_return prio 97
+              ip rule del from $HOST_IP to 10.254.0.0/24 table wg0_return 2>/dev/null || true
+              ip rule add from $HOST_IP to 10.254.0.0/24 table wg0_return prio 97
 
               echo "Policy routing configured"
 
