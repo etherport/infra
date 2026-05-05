@@ -46,7 +46,7 @@
       ip: "10.10.201.15"  # Host IP for policy routing
       wg0:
         tunnel_ip: "10.255.255.2/29"
-        listen_port: 51820  # Must match K8s pod for NAT/failover to work
+        listen_port: 9820  # External port (UDM 9820→VIP:9820) - avoids Twilio range conflict
         peer_public_key: "kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU="
         peer_endpoint: "44.240.60.80:51820"
         peer_allowed_ips: "10.10.100.0/22, 10.255.255.1/32"

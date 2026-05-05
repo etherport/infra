@@ -52,9 +52,9 @@ spec:
             privileged: false
           ports:
             - name: wg0
-              containerPort: 51820
+              containerPort: 9820
               protocol: UDP
-              hostPort: 51820
+              hostPort: 9820
             - name: wg1
               containerPort: 9821
               protocol: UDP
@@ -88,7 +88,7 @@ spec:
               cat > /etc/wireguard/wg0.conf <<EOF
               [Interface]
               Address = 10.255.255.2/29
-              ListenPort = 51820
+              ListenPort = 9820
               PrivateKey = $(cat /secrets/wg0-private.key)
               MTU = 1420
               # NAT for regional VPN traffic (so replies route back via wg0)
