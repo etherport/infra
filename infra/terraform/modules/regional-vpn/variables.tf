@@ -40,9 +40,9 @@ variable "wg_private_key" {
 }
 
 variable "wg_address" {
-  description = "WireGuard interface address (e.g., 10.255.255.5/30)"
+  description = "WireGuard interface address (e.g., 10.255.255.5/29)"
   type        = string
-  default     = "10.255.255.5/30"
+  default     = "10.255.255.5/29"
 }
 
 variable "wg_peer_public_key" {
@@ -59,7 +59,7 @@ variable "wg_peer_endpoint" {
 variable "wg_peer_allowed_ips" {
   description = "Allowed IPs for homelab peer (routes to send through tunnel)"
   type        = string
-  default     = "10.10.192.0/19,10.255.255.0/30"
+  default     = "10.10.192.0/19,10.255.255.0/29"
 }
 
 variable "client_public_key" {

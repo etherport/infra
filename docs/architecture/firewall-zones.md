@@ -57,7 +57,7 @@ The homelab network uses a **dual-router architecture** with routing responsibil
                                AWS/WireGuard Routes (via L3 Switch)
                                ─────────────────────────────────────
                                10.10.100.0/22   - AWS Environment
-                               10.255.255.0/30 - WireGuard tunnel endpoint
+                               10.255.255.0/29 - WireGuard tunnel endpoint
                                10.254.0.0/24   - WireGuard client tunnel
 ```
 
@@ -110,7 +110,7 @@ The homelab network uses a **dual-router architecture** with routing responsibil
 | Destination | Purpose |
 |-------------|---------|
 | 10.10.100.0/22 | AWS Environment |
-| 10.255.255.0/30 | WireGuard tunnel endpoint |
+| 10.255.255.0/29 | WireGuard tunnel endpoint |
 | 10.254.0.0/24 | WireGuard client tunnel |
 
 ## Zone Definitions
@@ -368,7 +368,7 @@ Create the following Network Objects:
 | `NVR-Server` | IPv4 Address/Subnet | 10.10.205.10 |
 | `Home-Assistant` | IPv4 Address/Subnet | 10.10.204.25 |
 | `Router-Gateway` | IPv4 Address/Subnet | 10.10.200.1 |
-| `AWS-Networks` | IPv4 Address/Subnet | 10.10.100.0/22, 10.255.255.0/30, 10.254.0.0/24 |
+| `AWS-Networks` | IPv4 Address/Subnet | 10.10.100.0/22, 10.255.255.0/29, 10.254.0.0/24 |
 
 ### Step 3: Create Port Groups
 

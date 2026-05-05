@@ -100,7 +100,7 @@ AWS resources in us-west-2 connected to local homelab via WireGuard VPN. The inf
 | Inbound | All | All | 10.10.100.0/22 | VPC resources |
 | Inbound | All | All | 10.10.192.0/19 | Homelab (wind) network |
 | Inbound | All | All | 10.254.0.0/24 | Remote VPN clients |
-| Inbound | All | All | 10.255.255.0/30 | Site-to-site VPN clients |
+| Inbound | All | All | 10.255.255.0/29 | Site-to-site VPN clients |
 | Outbound | All | All | 0.0.0.0/0 | All outbound |
 
 ### SSH Access Security Group (`sg-0079fee23ee54417a`)
