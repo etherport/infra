@@ -45,8 +45,8 @@ PostDown = iptables -t nat -D POSTROUTING -o wg0 -j MASQUERADE
 
 [Peer]
 # Homelab WireGuard pod
+# No Endpoint - homelab initiates connection to us (avoids port forward issues)
 PublicKey = ${homelab_wg0_public_key}
-Endpoint = ${homelab_endpoint}:${homelab_wg0_port}
 AllowedIPs = ${homelab_cidr}, 10.255.255.2/32
 PersistentKeepalive = 25
 EOF
