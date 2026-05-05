@@ -4,8 +4,8 @@
 # Devices use HTTPS with self-signed certificates:
 #   - ups1.wind.etherport.net -> 10.10.200.10:443
 #   - ups2.wind.etherport.net -> 10.10.200.11:443
-#   - pdu1.wind.etherport.net -> 10.10.200.15:443
-#   - pdu2.wind.etherport.net -> 10.10.200.16:443
+#   - pdu1.wind.etherport.net -> 10.10.200.15:80 (HTTP - HTTPS not working)
+#   - pdu2.wind.etherport.net -> 10.10.200.16:80 (HTTP - HTTPS not working)
 ---
 # ServersTransport for self-signed certs on infrastructure devices
 apiVersion: traefik.io/v1alpha1
@@ -100,7 +100,7 @@ spec:
           scheme: https
   tls: {}
 ---
-# PDU1
+# PDU1 - Uses HTTP (HTTPS not working on device)
 apiVersion: v1
 kind: Service
 metadata:
@@ -108,8 +108,8 @@ metadata:
   namespace: traefik
 spec:
   ports:
-    - port: 443
-      targetPort: 443
+    - port: 80
+      targetPort: 80
       protocol: TCP
 ---
 apiVersion: v1
@@ -121,7 +121,7 @@ subsets:
   - addresses:
       - ip: 10.10.200.15
     ports:
-      - port: 443
+      - port: 80
         protocol: TCP
 ---
 apiVersion: traefik.io/v1alpha1
@@ -137,12 +137,10 @@ spec:
       kind: Rule
       services:
         - name: pdu1-external
-          port: 443
-          serversTransport: insecure-transport
-          scheme: https
+          port: 80
   tls: {}
 ---
-# PDU2
+# PDU2 - Uses HTTP (HTTPS not working on device)
 apiVersion: v1
 kind: Service
 metadata:
@@ -150,8 +148,8 @@ metadata:
   namespace: traefik
 spec:
   ports:
-    - port: 443
-      targetPort: 443
+    - port: 80
+      targetPort: 80
       protocol: TCP
 ---
 apiVersion: v1
@@ -163,7 +161,7 @@ subsets:
   - addresses:
       - ip: 10.10.200.16
     ports:
-      - port: 443
+      - port: 80
         protocol: TCP
 ---
 apiVersion: traefik.io/v1alpha1
@@ -179,9 +177,7 @@ spec:
       kind: Rule
       services:
         - name: pdu2-external
-          port: 443
-          serversTransport: insecure-transport
-          scheme: https
+          port: 80
   tls: {}
 ---
 # Proxmox IPMI/BMC
