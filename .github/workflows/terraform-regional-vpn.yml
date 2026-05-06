@@ -105,7 +105,9 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
         run: |
           # Use default workspace values for validation
+          # aws_profile="" uses environment variables instead of profile
           terraform plan \
+            -var="aws_profile=" \
             -var="region=ap-south-1" \
             -var="region_short=mumbai" \
             -var="vpc_cidr=10.10.112.0/24" \
@@ -136,6 +138,7 @@ jobs:
         if: github.event.inputs.action == 'plan'
         run: |
           terraform plan \
+            -var="aws_profile=" \
             -var="region=${{ github.event.inputs.region }}" \
             -var="region_short=${{ github.event.inputs.region_short }}" \
             -var="vpc_cidr=${{ github.event.inputs.vpc_cidr }}" \
@@ -149,6 +152,7 @@ jobs:
         run: |
           if [ "${{ steps.wg_keys.outputs.new_keys }}" == "true" ]; then
             terraform apply -auto-approve \
+              -var="aws_profile=" \
               -var="region=${{ github.event.inputs.region }}" \
               -var="region_short=${{ github.event.inputs.region_short }}" \
               -var="vpc_cidr=${{ github.event.inputs.vpc_cidr }}" \
@@ -157,6 +161,7 @@ jobs:
               -var="wg0_public_key=${{ steps.wg_keys.outputs.wg0_public }}"
           else
             terraform apply -auto-approve \
+              -var="aws_profile=" \
               -var="region=${{ github.event.inputs.region }}" \
               -var="region_short=${{ github.event.inputs.region_short }}" \
               -var="vpc_cidr=${{ github.event.inputs.vpc_cidr }}" \
@@ -172,6 +177,7 @@ jobs:
         if: github.event.inputs.action == 'destroy'
         run: |
           terraform destroy -auto-approve \
+            -var="aws_profile=" \
             -var="region=${{ github.event.inputs.region }}" \
             -var="region_short=${{ github.event.inputs.region_short }}" \
             -var="vpc_cidr=${{ github.event.inputs.vpc_cidr }}" \

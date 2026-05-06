@@ -64,6 +64,12 @@ variable "region_short" {
   default     = "uae"
 }
 
+variable "aws_profile" {
+  description = "AWS profile to use (empty string for environment variables)"
+  type        = string
+  default     = "homelab"
+}
+
 variable "vpc_cidr" {
   description = "VPC CIDR block for regional VPN"
   type        = string
@@ -131,7 +137,7 @@ variable "wg0_public_key" {
 provider "aws" {
   alias   = "regional"
   region  = var.region
-  profile = "homelab"
+  profile = var.aws_profile != "" ? var.aws_profile : null
 
   default_tags {
     tags = {
@@ -146,7 +152,7 @@ provider "aws" {
 provider "aws" {
   alias   = "hub"
   region  = "us-west-2"
-  profile = "homelab"
+  profile = var.aws_profile != "" ? var.aws_profile : null
 
   default_tags {
     tags = {
