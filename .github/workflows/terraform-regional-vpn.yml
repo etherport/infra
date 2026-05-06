@@ -90,7 +90,9 @@ jobs:
           chmod 600 ~/.config/sops/age/keys.txt
 
       - name: Terraform Init
-        run: terraform init
+        run: |
+          # Override backend profile since we use env vars in CI
+          terraform init -backend-config="profile=" -reconfigure
 
       - name: Select/Create Workspace
         if: github.event.inputs.workspace != 'default'
