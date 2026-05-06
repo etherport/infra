@@ -95,7 +95,7 @@ jobs:
           terraform init -backend-config="profile=" -reconfigure
 
       - name: Select/Create Workspace
-        if: github.event.inputs.workspace != 'default'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.workspace != 'default'
         run: |
           terraform workspace select ${{ github.event.inputs.workspace }} || \
           terraform workspace new ${{ github.event.inputs.workspace }}
