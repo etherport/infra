@@ -549,7 +549,7 @@ output "client_config" {
 
     [Peer]
     # vpn-${var.region_short} (${var.region})
-    PublicKey = ${data.sops_file.wg_keys.data["stringData.wg0_public_key"]}
+    PublicKey = ${data.sops_file.wg_keys.data["stringData.wg1_public_key"]}
     Endpoint = ${aws_instance.vpn.public_ip}:51821
     AllowedIPs = 0.0.0.0/0
     PersistentKeepalive = 25
