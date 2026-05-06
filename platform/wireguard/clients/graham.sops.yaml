@@ -8,7 +8,7 @@
 #
 # ENDPOINTS:
 #   wind.etherport.net:9821  - Direct to homelab (fastest, requires UDM port forward)
-#   vpn.etherport.net:51821  - Via AWS (works everywhere, +30ms latency)
+#   vpn-usw2.etherport.net:51821  - Via AWS US-West-2 (works everywhere, +30ms latency)
 apiVersion: v1
 kind: Secret
 metadata:

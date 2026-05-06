@@ -10,7 +10,8 @@ WireGuard VPN infrastructure providing:
 | Endpoint | Hostname | wg1 Port | Use Case |
 |----------|----------|----------|----------|
 | Homelab (K8s/vpn-local) | wind.etherport.net | 9821 | Direct, fastest |
-| AWS | vpn.etherport.net | 51821 | Relay, works everywhere |
+| AWS US-West-2 | vpn-usw2.etherport.net | 51821 | West coast relay |
+| AWS US-East-1 | vpn-use1.etherport.net | 51821 | East coast relay |
 
 For full architecture documentation, see [docs/architecture/vpn-wireguard.md](../../docs/architecture/vpn-wireguard.md).
 
@@ -37,8 +38,10 @@ sops -d platform/wireguard/clients/graham.sops.yaml | \
 |---------|----------|---------|-----|
 | homelab-split | wind.etherport.net:9821 | Homelab only | Homelab DNS |
 | homelab-full | wind.etherport.net:9821 | All traffic | Homelab DNS |
-| aws-split | vpn.etherport.net:51821 | Homelab only | AWS DNS |
-| aws-full | vpn.etherport.net:51821 | All traffic | AWS DNS |
+| usw2-split | vpn-usw2.etherport.net:51821 | Homelab only | AWS DNS |
+| usw2-full | vpn-usw2.etherport.net:51821 | All traffic | AWS DNS |
+| use1-split | vpn-use1.etherport.net:51821 | Homelab only | AWS DNS |
+| use1-full | vpn-use1.etherport.net:51821 | All traffic | AWS DNS |
 
 ### Security Best Practices
 
@@ -164,7 +167,7 @@ Configure in UDM: Network → Port Forwarding → Create
 
 **Why port 9820 for wg0?** Ports 10000-60000 are used by Twilio for voice/SIP traffic. Port 51820 falls within this range, so we use 9820 externally and forward to 51820 internally.
 
-**Note:** vpn-aws endpoints (vpn.etherport.net:51820/51821) work without local port forwards since it's a cloud VM with a public IP.
+**Note:** vpn-aws endpoints (vpn-usw2.etherport.net:51820/51821) work without local port forwards since it's a cloud VM with a public IP.
 
 ## Architecture
 

@@ -108,7 +108,7 @@
     #   [Peer]
     #   PublicKey = Aav0cNl4osaEEISQLyKLt88foAPwdVYaeTuyLF/PNTo=
     #   AllowedIPs = 10.10.100.0/22, 10.10.192.0/19, 10.254.0.0/24, 10.255.255.0/29
-    #   Endpoint = vpn.etherport.net:51821  # AWS, or wind.etherport.net:9821 for direct
+    #   Endpoint = vpn-usw2.etherport.net:51821  # AWS US-West-2, or wind.etherport.net:9821 for direct
     #   PersistentKeepalive = 25
     # =========================================================================
 

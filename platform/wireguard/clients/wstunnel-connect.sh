@@ -12,7 +12,7 @@
 set -e
 
 # wstunnel server endpoint
-SERVER="vpn.etherport.net"
+SERVER="vpn-usw2.etherport.net"
 SERVER_PORT="443"
 
 # Local port to listen on (WireGuard will connect here)
