@@ -1,0 +1,29 @@
+# WireGuard Server Keys - vpn-use1 (us-east-1)
+# Used by Terraform to deploy keys during instance provisioning
+#
+# Encrypt with: sops -e -i vpn-use1.sops.yaml
+# Decrypt with: sops -d vpn-use1.sops.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+    name: wireguard-server-vpn-use1
+type: Opaque
+stringData:
+    #ENC[AES256_GCM,data:S8S5pAtKNvnbSO0S3fG+7a9R/2VSOPlRORc+lLgXauPNmga4gT2ctgpNnliJrrSj9x+ahMmeMEFXEwVP6g==,iv:Td7kUnddZStsstKFAuiLsOOYWO2Lh4B6VsJJmq2RJAo=,tag:OmPsX5RisZnmXPHoPm4O8g==,type:comment]
+    wg0_private_key: ENC[AES256_GCM,data:BAWmUg00yPgFcyRtTX99JOGK4UT3CsJPEmlHu35zdpt6mrAwJisSJGTY1Jk=,iv:oR1oaE+isU8Kx6QmTHMDkKhtOq2z8QFEsYfXBwurp+4=,tag:AsxZkxWWdmpzbuxg0/Vjwg==,type:str]
+    wg0_public_key: ENC[AES256_GCM,data:G4xGxUe3BDqAQMIZJLy5JWpNtMpk/Xj+fXXbp+UPp8hhjDnFolmJyWFLcFk=,iv:fF8C7VartPaDoH0z5fNe6t/mdrIaf3TCyuI80zXkrQY=,tag:cLU33UFPsFAwWsUNbxRhrg==,type:str]
+sops:
+    age:
+        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBsenJGS2lRVUltdzJBekp4
+            OElRc0U0R3d4aVhFTzZud2ZpeE14NXRFNEVBCkE2ZmVYSHhBMTVGR21IZk9aR3lN
+            ekJUTEY3SXFDRGhDS09OaVhMMGd2NFkKLS0tIFZyczVSQU9qU3NUYldmMXM2V3hE
+            VEdRUXNuNVpFWlA0RjdoQ3RtSVpiT2MKCjZGxXshO6gTDOHUBsoRPktoqEuL7/Bh
+            3kmT38LxqQqSp5f4Wz+2imhfhwJCzsotQm7H7xY05REbkNVrDI2Ctg==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-05-06T04:20:52Z"
+    mac: ENC[AES256_GCM,data:B/N3r5DD9/ocAO33yM0Ep5ToF9+k+Blnnx1GxPgqID+EiGEodd9zYMndJ2+eOsZOIHP21RkA4uUbKoFjmsMpIF8OvCwE9zI0Nl7AYHCXc+C+oo/y+EQuq2ZRJ68iQy9cHMI1+LP5A5MFIh7Ge1QBL2pZz9VqK/zmXrcUdoDKeMk=,iv:UwWUihj6jDBGtg/NJL9Gafx4PHnManOtMzeT0ztZoOg=,tag:KBDRKJhoFMPg1oc+Sir2cg==,type:str]
+    encrypted_regex: ^(data|stringData)$
+    version: 3.11.0

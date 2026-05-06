@@ -116,6 +116,14 @@ spec:
               Endpoint = 3.110.81.4:51820
               AllowedIPs = 10.10.112.0/24, 10.255.255.3/32
               PersistentKeepalive = 25
+
+              [Peer]
+              # vpn-use1 (us-east-1) - permanent east coast endpoint
+              # Homelab initiates connection (static Elastic IP)
+              PublicKey = vwQ0C92BHfBBhuUkZsukGxt76Nu6R2gwpwlPz396PgM=
+              Endpoint = 35.169.37.16:51820
+              AllowedIPs = 10.10.104.0/22, 10.255.255.4/32
+              PersistentKeepalive = 25
               EOF
 
               # Create wg1 config (remote access - direct connection)
