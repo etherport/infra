@@ -6,12 +6,6 @@ variable "aws_profile" {
   default     = "homelab"
 }
 
-variable "vpn_eip" {
-  description = "Elastic IP address of the VPN server"
-  type        = string
-  default     = "44.240.60.80"
-}
-
 variable "alb_dns_name" {
   description = "DNS name of the private-infra ALB"
   type        = string

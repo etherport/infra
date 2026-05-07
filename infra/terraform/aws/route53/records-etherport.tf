@@ -10,15 +10,6 @@
 # Infrastructure Records
 #------------------------------------------------------------------------------
 
-# VPN server - points to VPN instance EIP
-resource "aws_route53_record" "etherport_vpn" {
-  zone_id = aws_route53_zone.etherport.zone_id
-  name    = "vpn.etherport.net"
-  type    = "A"
-  ttl     = 300
-  records = [var.vpn_eip]
-}
-
 # TEST RECORD - Delete after demo
 resource "aws_route53_record" "etherport_test_gha" {
   zone_id = aws_route53_zone.etherport.zone_id
