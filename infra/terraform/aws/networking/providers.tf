@@ -11,7 +11,7 @@ terraform {
 
 provider "aws" {
   region  = "us-west-2"
-  profile = "homelab"
+  profile = var.aws_profile != "" ? var.aws_profile : null
 
   default_tags {
     tags = {

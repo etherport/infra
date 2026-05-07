@@ -1,5 +1,11 @@
 # Variables for compute module
 
+variable "aws_profile" {
+  description = "AWS profile to use (empty string for environment variables in CI)"
+  type        = string
+  default     = "homelab"
+}
+
 variable "gs_ec2_public_key" {
   description = "Public key for GS-EC2 key pair"
   type        = string

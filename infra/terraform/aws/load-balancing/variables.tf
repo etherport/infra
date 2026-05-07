@@ -1,5 +1,11 @@
 # Variables for load-balancing module
 
+variable "aws_profile" {
+  description = "AWS profile to use (empty string for environment variables in CI)"
+  type        = string
+  default     = "homelab"
+}
+
 variable "traefik_ip" {
   description = "IP address of Traefik ingress controller"
   type        = string
