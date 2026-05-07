@@ -1,3 +1,9 @@
+variable "aws_profile" {
+  description = "AWS profile to use (empty string for environment variables in CI)"
+  type        = string
+  default     = "homelab"
+}
+
 variable "ha_base_url" {
   description = "Home Assistant base URL"
   type        = string

@@ -15,7 +15,7 @@ terraform {
 
 provider "aws" {
   region  = var.aws_region
-  profile = "homelab"
+  profile = var.aws_profile != "" ? var.aws_profile : null
 }
 
 data "aws_caller_identity" "current" {}

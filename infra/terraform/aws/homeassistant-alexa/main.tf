@@ -16,7 +16,7 @@ terraform {
 # This Lambda must be in us-east-1 for Alexa Smart Home skills
 provider "aws" {
   region  = "us-east-1"
-  profile = "homelab"
+  profile = var.aws_profile != "" ? var.aws_profile : null
 }
 
 data "aws_caller_identity" "current" {}

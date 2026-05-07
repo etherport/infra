@@ -1,3 +1,9 @@
+variable "aws_profile" {
+  description = "AWS profile to use (empty string for environment variables in CI)"
+  type        = string
+  default     = "homelab"
+}
+
 variable "aws_region" {
   description = "AWS region"
   type        = string
