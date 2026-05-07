@@ -1,5 +1,11 @@
 # Variables for route53 module
 
+variable "aws_profile" {
+  description = "AWS profile to use (empty string for environment variables in CI)"
+  type        = string
+  default     = "homelab"
+}
+
 variable "vpn_eip" {
   description = "Elastic IP address of the VPN server"
   type        = string

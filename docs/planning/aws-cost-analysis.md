@@ -81,7 +81,6 @@ When using `aws-full` VPN for internet egress through vpn-aws:
 | dns-restrict-ip | ~8,640 (every 5 min) | 100ms | ~$0.00 |
 | ddns-updater | ~100 | 200ms | ~$0.00 |
 | email-forward | ~500 | 500ms | ~$0.00 |
-| snapshot-archive | 30 | 2s | ~$0.00 |
 | homeassistant-alexa | ~1,000 | 300ms | ~$0.00 |
 | **Subtotal** | | | **<$0.10** |
 

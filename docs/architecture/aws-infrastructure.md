@@ -261,19 +261,6 @@ All Lambda functions are managed via Terraform modules in `infra/terraform/aws/`
 
 **Purpose:** Updates Route53 DNS records with current public IP. Called via API Gateway from Ubiquiti UDM-Pro DDNS client.
 
-### snapshot-archive
-
-| Property | Value |
-|----------|-------|
-| Function Name | `snapshot-archive` |
-| Runtime | Python 3.13 |
-| Architecture | arm64 |
-| Memory | 128 MB |
-| Timeout | 10 seconds |
-| Terraform Module | `infra/terraform/aws/snapshot-archive/` |
-
-**Purpose:** Archives EC2 snapshots older than 7 days to S3 Deep Archive and sends daily summary emails via SES.
-
 ### email-forward
 
 | Property | Value |
@@ -506,7 +493,7 @@ infra/ansible/inventory/aws/
 - Configuration files in Git (this repo)
 - WireGuard keys in 1Password
 - Technitium zones synced via GitOps from YAML files
-- EC2 snapshots managed by DLM policy and snapshot_archive Lambda
+- **EC2 instances are disposable** - no snapshots needed (Terraform + Ansible can recreate)
 
 ## External Monitoring
 
@@ -578,7 +565,6 @@ All AWS infrastructure is now managed via Terraform. See `infra/terraform/aws/MI
 | `ddns-lambda/` | `aws/ddns-lambda/terraform.tfstate` | Dynamic DNS updater (API Gateway + Lambda) |
 | `dns-restrict-ip/` | `aws/dns-restrict-ip/terraform.tfstate` | DNS security group IP updater |
 | `email-forward/` | `aws/email-forward/terraform.tfstate` | SES email forwarding |
-| `snapshot-archive/` | `aws/snapshot-archive/terraform.tfstate` | EC2 snapshot archival |
 | `homeassistant-alexa/` | `aws/homeassistant-alexa/terraform.tfstate` | Home Assistant Alexa integration |
 | `external-monitoring/` | `aws/external-monitoring/terraform.tfstate` | Route53 health checks and alerting |
 
@@ -610,9 +596,7 @@ Account: 830881980142
 The following resources exist but are managed manually or by other means:
 
 - **WAF WebACL:** `CreatedByALB-private-infra-alb` - Auto-created by ALB, managed via AWS Console
-- **DLM Policy:** EBS snapshot lifecycle - Uses AWS DLM SIMPLIFIED format (not TF-compatible)
 - **Key Pairs:** `GS-EC2`, `Wordpress-key` - Created manually, private keys in 1Password
-- **EBS Snapshots:** Managed by DLM policy and snapshot-archive Lambda
 
 ## Out of Scope (Public Web Infrastructure)
 

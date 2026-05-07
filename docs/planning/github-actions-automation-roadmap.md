@@ -28,7 +28,6 @@ Analysis of homelab-infra Terraform modules and recommendations for GitHub Actio
 | `route53/` | High | No | **High** |
 | `s3/` | Low | No | Low |
 | `ses/` | Low-Medium | No | Medium |
-| `snapshot-archive/` | Low | No | Low |
 
 ### Proxmox Modules
 
