@@ -10,15 +10,6 @@
 # Infrastructure Records
 #------------------------------------------------------------------------------
 
-# TEST RECORD - Delete after demo
-resource "aws_route53_record" "etherport_test_gha" {
-  zone_id = aws_route53_zone.etherport.zone_id
-  name    = "test-github-actions.etherport.net"
-  type    = "TXT"
-  ttl     = 60
-  records = ["GitHub Actions workflow test - safe to delete"]
-}
-
 # ALB alias for *.wind.etherport.net
 resource "aws_route53_record" "etherport_wind_wildcard" {
   zone_id = aws_route53_zone.etherport.zone_id
