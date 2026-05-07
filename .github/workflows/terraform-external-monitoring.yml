@@ -29,6 +29,7 @@ env:
   TF_VERSION: '1.14.3'
   AWS_REGION: us-west-2
   WORKING_DIR: infra/terraform/aws/external-monitoring
+  TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
 
 jobs:
   terraform:
@@ -64,7 +65,7 @@ jobs:
         if: github.event_name == 'pull_request'
         id: plan_pr
         run: |
-          terraform plan -var="aws_profile=" -no-color -out=tfplan 2>&1 | tee plan_output.txt
+          terraform plan -var="aws_profile=" -input=false -no-color -out=tfplan 2>&1 | tee plan_output.txt
           # Truncate if too long for PR comment
           if [ $(wc -c < plan_output.txt) -gt 60000 ]; then
             head -c 30000 plan_output.txt > plan_truncated.txt
@@ -111,7 +112,7 @@ jobs:
         run: |
           echo "## External Monitoring Changes" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          terraform plan -var="aws_profile=" -no-color 2>&1 | head -100 >> $GITHUB_STEP_SUMMARY
+          terraform plan -var="aws_profile=" -input=false -no-color 2>&1 | head -100 >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "*Run workflow manually with 'apply' action to deploy changes.*" >> $GITHUB_STEP_SUMMARY
 
@@ -119,13 +120,13 @@ jobs:
       - name: Terraform Plan (Manual)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'plan'
         run: |
-          terraform plan -var="aws_profile=" -no-color
+          terraform plan -var="aws_profile=" -input=false -no-color
 
       # Manual dispatch - apply
       - name: Terraform Apply
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
         run: |
-          terraform apply -auto-approve -var="aws_profile="
+          terraform apply -auto-approve -input=false -var="aws_profile="
 
       - name: Summary
         if: always()
