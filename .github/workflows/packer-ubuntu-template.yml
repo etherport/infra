@@ -23,6 +23,8 @@ env:
   PKR_VAR_proxmox_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
   PKR_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
   PKR_VAR_ssh_private_key_file: /home/runner/.ssh/id_ed25519
+  # Force IPv4 - runner doesn't have IPv6 connectivity
+  GODEBUG: netdns=go+only4
 
 jobs:
   packer:
