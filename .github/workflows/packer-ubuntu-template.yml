@@ -25,7 +25,7 @@ jobs:
     name: Packer ${{ github.event.inputs.action || 'build' }}
     runs-on: homelab-runner
     container:
-      image: hashicorp/packer:1.12.0
+      image: hashicorp/packer:1.15.3
       env:
         PKR_VAR_proxmox_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
         PKR_VAR_proxmox_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
