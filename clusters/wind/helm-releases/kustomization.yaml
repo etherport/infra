@@ -12,4 +12,5 @@ resources:
   - velero.yaml
   - tailscale-operator.yaml
   - tailscale-connector.yaml
+  - github-actions-runner.yaml
   # Note: cilium is managed by kubespray, not Flux
