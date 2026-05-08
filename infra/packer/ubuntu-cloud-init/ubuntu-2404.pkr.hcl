@@ -80,8 +80,8 @@ variable "ssh_private_key_file" {
 
 variable "ubuntu_iso_url" {
   type        = string
-  description = "URL to Ubuntu Server Live ISO"
-  default     = "https://releases.ubuntu.com/24.04/ubuntu-24.04.3-live-server-amd64.iso"
+  description = "URL to Ubuntu Server Live ISO (using CDN mirror for reliability)"
+  default     = "https://mirror.arizona.edu/ubuntu-releases/24.04/ubuntu-24.04.3-live-server-amd64.iso"
 }
 
 variable "ubuntu_iso_checksum" {
