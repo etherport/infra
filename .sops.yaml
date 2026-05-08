@@ -1,0 +1,27 @@
+# SOPS configuration for homelab-infra
+# Age public key stored in 1Password as "Homelab SOPS Age Key"
+#
+# Decrypt with: sops -d <file>
+# Edit with: sops <file>
+
+creation_rules:
+  # Kubernetes secrets
+  - path_regex: 'platform/kubernetes/.*\.sops\.ya?ml$'
+    encrypted_regex: '^(data|stringData)$'
+    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+
+  # WireGuard configs
+  - path_regex: 'platform/wireguard/.*\.sops\.ya?ml$'
+    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+
+  # Terraform secrets
+  - path_regex: 'infra/terraform/.*\.sops\.ya?ml$'
+    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+
+  # Ansible/Kubespray secrets
+  - path_regex: 'infra/(ansible|kubespray)/.*\.sops\.ya?ml$'
+    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+
+  # Default rule for any .sops.yaml file
+  - path_regex: '.*\.sops\.ya?ml$'
+    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
