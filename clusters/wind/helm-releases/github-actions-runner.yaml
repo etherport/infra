@@ -51,7 +51,7 @@ spec:
   valuesFrom:
     - kind: Secret
       name: github-actions-runner-config
-      targetNamespace: github-actions-runner
+      namespace: github-actions-runner
       valuesKey: values.yaml
   values:
     runnerScaleSetName: "homelab-runner"
