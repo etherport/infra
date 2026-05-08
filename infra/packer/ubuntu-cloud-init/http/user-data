@@ -32,7 +32,7 @@ autoinstall:
     install-server: true
     allow-pw: false
     authorized-keys:
-      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILYAIoV2OKRSPnLnUfsAf8UoJJHhHf5zO/Rl47fNSCZZ graham@etherport.net
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab
 
   # Packages to install during autoinstall
   packages:

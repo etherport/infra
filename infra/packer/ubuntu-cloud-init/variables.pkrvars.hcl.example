@@ -9,4 +9,4 @@ template_vm_id       = 9000
 template_name        = "ubuntu-2404-cloud-init"
 storage_pool         = "local-zfs"
 ssh_username         = "ubuntu"
-ssh_public_key       = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILYAIoV2OKRSPnLnUfsAf8UoJJHhHf5zO/Rl47fNSCZZ graham@etherport.net"
+ssh_public_key       = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab"
