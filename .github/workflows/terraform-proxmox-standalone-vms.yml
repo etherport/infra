@@ -1,0 +1,133 @@
+name: Proxmox Standalone VMs Terraform
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/terraform/proxmox/standalone-vms/**'
+      - '.github/workflows/terraform-proxmox-standalone-vms.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/terraform/proxmox/standalone-vms/**'
+      - '.github/workflows/terraform-proxmox-standalone-vms.yml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  TF_VERSION: '1.14.3'
+  AWS_REGION: us-west-2
+  WORKING_DIR: infra/terraform/proxmox/standalone-vms
+  TF_VAR_proxmox_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
+  TF_VAR_proxmox_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
+
+jobs:
+  terraform:
+    name: Terraform ${{ github.event.inputs.action || 'plan' }}
+    runs-on: homelab-runner
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: |
+          terraform init -backend-config="profile=" -reconfigure
+
+      - name: Terraform Plan (PR)
+        if: github.event_name == 'pull_request'
+        id: plan_pr
+        run: |
+          terraform plan -input=false -no-color -out=tfplan 2>&1 | tee plan_output.txt
+          if [ $(wc -c < plan_output.txt) -gt 60000 ]; then
+            head -c 30000 plan_output.txt > plan_truncated.txt
+            echo -e "\n\n... (truncated) ...\n\n" >> plan_truncated.txt
+            tail -c 30000 plan_output.txt >> plan_truncated.txt
+            mv plan_truncated.txt plan_output.txt
+          fi
+        continue-on-error: true
+
+      - name: Comment PR with Plan
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('${{ env.WORKING_DIR }}/plan_output.txt', 'utf8');
+            const outcome = '${{ steps.plan_pr.outcome }}';
+
+            const body = `## Proxmox Standalone VMs Terraform Plan
+
+            **Result:** ${outcome === 'success' ? '✅ Success' : '❌ Failed'}
+
+            <details>
+            <summary>Show Plan Output</summary>
+
+            \`\`\`hcl
+            ${plan}
+            \`\`\`
+
+            </details>
+
+            *Triggered by @${{ github.actor }} on \`${{ github.event.pull_request.head.ref }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Terraform Plan (Push)
+        if: github.event_name == 'push'
+        run: |
+          echo "## Proxmox Standalone VMs Changes" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          terraform plan -input=false -no-color 2>&1 | head -100 >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "*Run workflow manually with 'apply' action to deploy changes.*" >> $GITHUB_STEP_SUMMARY
+
+      - name: Terraform Plan (Manual)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'plan'
+        run: |
+          terraform plan -input=false -no-color
+
+      - name: Terraform Apply
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
+        run: |
+          terraform apply -auto-approve -input=false
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Proxmox Standalone VMs Terraform Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Action**: ${{ github.event.inputs.action || 'plan' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Actor**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY

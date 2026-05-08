@@ -79,3 +79,13 @@ metadata:
 spec:
   interval: 1h
   url: https://pkgs.tailscale.com/helmcharts
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: github-actions
+  namespace: flux-system
+spec:
+  interval: 1h
+  type: oci
+  url: oci://ghcr.io/actions/actions-runner-controller-charts
