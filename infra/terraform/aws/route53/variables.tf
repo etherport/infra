@@ -17,3 +17,9 @@ variable "alb_zone_id" {
   type        = string
   default     = "Z1H1FL5HABSF5"
 }
+
+variable "vpn_public_ip" {
+  description = "Public IP (EIP) of the VPN instance in us-west-2"
+  type        = string
+  default     = "44.240.60.80"
+}
