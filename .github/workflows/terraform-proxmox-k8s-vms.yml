@@ -27,107 +27,41 @@ permissions:
 
 env:
   TF_VERSION: '1.14.3'
-  AWS_REGION: us-west-2
   WORKING_DIR: infra/terraform/proxmox/k8s-vms
-  TF_VAR_proxmox_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
-  TF_VAR_proxmox_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
 
 jobs:
   terraform:
     name: Terraform ${{ github.event.inputs.action || 'plan' }}
     runs-on: homelab-runner
+    container:
+      image: hashicorp/terraform:${{ env.TF_VERSION }}
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_DEFAULT_REGION: us-west-2
+        TF_VAR_proxmox_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
+        TF_VAR_proxmox_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
     defaults:
       run:
         working-directory: ${{ env.WORKING_DIR }}
 
     steps:
+      - name: Install git
+        run: apk add --no-cache git
+        working-directory: /
+
       - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v4
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+        run: |
+          git clone --depth 1 --branch ${{ github.ref_name }} https://github.com/${{ github.repository }}.git .
+        working-directory: ${{ github.workspace }}
 
       - name: Terraform Init
-        run: |
-          terraform init -backend-config="profile=" -reconfigure
+        run: terraform init -backend-config="profile=" -reconfigure
 
-      - name: Terraform Plan (PR)
-        if: github.event_name == 'pull_request'
-        id: plan_pr
-        run: |
-          terraform plan -input=false -no-color -out=tfplan 2>&1 | tee plan_output.txt
-          if [ $(wc -c < plan_output.txt) -gt 60000 ]; then
-            head -c 30000 plan_output.txt > plan_truncated.txt
-            echo -e "\n\n... (truncated) ...\n\n" >> plan_truncated.txt
-            tail -c 30000 plan_output.txt >> plan_truncated.txt
-            mv plan_truncated.txt plan_output.txt
-          fi
-        continue-on-error: true
-
-      - name: Comment PR with Plan
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v9
-        with:
-          script: |
-            const fs = require('fs');
-            const plan = fs.readFileSync('${{ env.WORKING_DIR }}/plan_output.txt', 'utf8');
-            const outcome = '${{ steps.plan_pr.outcome }}';
-
-            const body = `## Proxmox K8s VMs Terraform Plan
-
-            **Result:** ${outcome === 'success' ? '✅ Success' : '❌ Failed'}
-
-            <details>
-            <summary>Show Plan Output</summary>
-
-            \`\`\`hcl
-            ${plan}
-            \`\`\`
-
-            </details>
-
-            *Triggered by @${{ github.actor }} on \`${{ github.event.pull_request.head.ref }}\`*`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: body
-            });
-
-      - name: Terraform Plan (Push)
-        if: github.event_name == 'push'
-        run: |
-          echo "## Proxmox K8s VMs Changes" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          terraform plan -input=false -no-color 2>&1 | head -100 >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "*Run workflow manually with 'apply' action to deploy changes.*" >> $GITHUB_STEP_SUMMARY
-
-      - name: Terraform Plan (Manual)
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'plan'
-        run: |
-          terraform plan -input=false -no-color
+      - name: Terraform Plan
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.action == 'plan'
+        run: terraform plan -input=false -no-color
 
       - name: Terraform Apply
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
-        run: |
-          terraform apply -auto-approve -input=false
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "## Proxmox K8s VMs Terraform Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Action**: ${{ github.event.inputs.action || 'plan' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Actor**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+        run: terraform apply -auto-approve -input=false
