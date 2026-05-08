@@ -59,3 +59,8 @@ spec:
     maxRunners: 3
     containerMode:
       type: "dind"
+    # Use host network so Packer HTTP server is reachable from Proxmox VMs
+    template:
+      spec:
+        hostNetwork: true
+        dnsPolicy: ClusterFirstWithHostNet
