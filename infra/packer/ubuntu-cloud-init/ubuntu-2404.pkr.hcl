@@ -148,18 +148,18 @@ source "proxmox-iso" "ubuntu-cloud-init" {
   cloud_init_storage_pool = var.storage_pool
 
   # Boot configuration - autoinstall via subiquity
-  # Wait for GRUB menu, enter command mode (c), load kernel with autoinstall params, then boot
-  # Extended waits for UEFI initialization
+  # UEFI boots fast, GRUB has 5s countdown - must interrupt quickly
+  # Press Escape to stop countdown, then 'c' for command mode
   boot_command = [
-    "<wait30>",
-    "c<wait5>",
+    "<esc><wait2>",
+    "c<wait2>",
     "linux /casper/vmlinuz autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ---<enter>",
-    "<wait5>",
+    "<wait2>",
     "initrd /casper/initrd<enter>",
-    "<wait5>",
+    "<wait2>",
     "boot<enter>"
   ]
-  boot_wait = "10s"
+  boot_wait = "8s"
 
   # HTTP server for autoinstall files
   http_directory = "http"
