@@ -10,65 +10,80 @@ terraform {
 }
 
 provider "proxmox" {
-  # base URL of your Proxmox API
-  endpoint = "https://pve.wind.etherport.net:8006/api2/json"
-
-  # bpg/proxmox expects a single api_token string in the form:
-  #   <TOKEN_ID>=<TOKEN_SECRET>
+  endpoint  = "https://pve.wind.etherport.net:8006/api2/json"
   api_token = "${var.proxmox_token_id}=${var.proxmox_token_secret}"
-
-  insecure = true
+  insecure  = true
 }
 
 locals {
-  node_name    = "pve" # Proxmox node short name (as seen in UI)
+  node_name    = "pve"
   storage_name = "local-zfs"
   bridge_name  = "vmbr0"
   vlan_tag     = 201
   gateway_201  = "10.10.201.1"
+  cpu_type     = "host"
 
-  # IMPORTANT: Use a modern CPU type for Kubernetes nodes.
-  # `qemu64` can hide CPU flags and break some containers (e.g., glibc x86-64-v2 requirement).
-  # Recommended by the provider docs: "x86-64-v2-AES". Using "host" is fine for single-node labs.
-  cpu_type = "host"
-
-  k8s_nodes = {
+  # Control plane nodes - 3 for HA (etcd quorum requires odd number)
+  # Slim configuration since they only run etcd, API server, controller-manager, scheduler
+  control_plane_nodes = {
     k8s-cp1 = {
       ip        = "10.10.201.50"
       vcpus     = 4
-      memory_mb = 8192
-      disk_gb   = 60
+      memory_mb = 4096
+      disk_gb   = 50
     }
-    k8s-w1 = {
+    k8s-cp2 = {
       ip        = "10.10.201.51"
       vcpus     = 4
-      memory_mb = 8192
+      memory_mb = 4096
+      disk_gb   = 50
+    }
+    k8s-cp3 = {
+      ip        = "10.10.201.52"
+      vcpus     = 4
+      memory_mb = 4096
+      disk_gb   = 50
+    }
+  }
+
+  # Worker nodes - run actual workloads
+  worker_nodes = {
+    k8s-w1 = {
+      ip        = "10.10.201.53"
+      vcpus     = 4
+      memory_mb = 10240
       disk_gb   = 80
     }
     k8s-w2 = {
-      ip        = "10.10.201.52"
+      ip        = "10.10.201.54"
       vcpus     = 4
-      memory_mb = 8192
+      memory_mb = 10240
       disk_gb   = 80
     }
     k8s-w3 = {
-      ip        = "10.10.201.53"
+      ip        = "10.10.201.55"
       vcpus     = 4
-      memory_mb = 8192
+      memory_mb = 10240
+      disk_gb   = 80
+    }
+    k8s-w4 = {
+      ip        = "10.10.201.56"
+      vcpus     = 4
+      memory_mb = 10240
       disk_gb   = 80
     }
   }
 }
 
-resource "proxmox_virtual_environment_vm" "k8s_nodes" {
-  for_each = local.k8s_nodes
+# Control plane nodes
+resource "proxmox_virtual_environment_vm" "control_plane" {
+  for_each = local.control_plane_nodes
 
   node_name   = local.node_name
   name        = each.key
-  description = "Managed by Terraform (k8s node)"
-  tags        = ["terraform", "k8s"]
+  description = "Managed by Terraform (k8s control plane)"
+  tags        = ["terraform", "k8s", "control-plane"]
 
-  # Clone from your existing Ubuntu 24.04 cloud-init template (VM 9000)
   clone {
     vm_id = 9000
     full  = true
@@ -92,14 +107,13 @@ resource "proxmox_virtual_environment_vm" "k8s_nodes" {
     ssd          = true
   }
 
-  # Primary network interface (VLAN 201 - management)
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = local.vlan_tag
   }
 
-  # Additional network interfaces for multi-VLAN support (Home Assistant, etc.)
+  # Additional VLANs for multi-network support
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
@@ -109,7 +123,7 @@ resource "proxmox_virtual_environment_vm" "k8s_nodes" {
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
-    vlan_id = 204 # IoT devices VLAN
+    vlan_id = 204 # IoT VLAN
   }
 
   network_device {
@@ -118,12 +132,78 @@ resource "proxmox_virtual_environment_vm" "k8s_nodes" {
     vlan_id = 205 # Security VLAN
   }
 
-  # cloud-init: static IPs for each node
-  # Note: cloud-init only configures the first interface (eth0)
-  # Additional interfaces (eth1-eth3) must be configured via systemd-networkd
   initialization {
     datastore_id = local.storage_name
+    ip_config {
+      ipv4 {
+        address = "${each.value.ip}/24"
+        gateway = local.gateway_201
+      }
+    }
+  }
 
+  started = true
+  on_boot = true
+}
+
+# Worker nodes
+resource "proxmox_virtual_environment_vm" "workers" {
+  for_each = local.worker_nodes
+
+  node_name   = local.node_name
+  name        = each.key
+  description = "Managed by Terraform (k8s worker)"
+  tags        = ["terraform", "k8s", "worker"]
+
+  clone {
+    vm_id = 9000
+    full  = true
+  }
+
+  cpu {
+    cores = each.value.vcpus
+    type  = local.cpu_type
+  }
+
+  memory {
+    dedicated = each.value.memory_mb
+  }
+
+  disk {
+    datastore_id = local.storage_name
+    interface    = "scsi0"
+    size         = each.value.disk_gb
+    file_format  = "raw"
+    discard      = "on"
+    ssd          = true
+  }
+
+  network_device {
+    bridge  = local.bridge_name
+    model   = "virtio"
+    vlan_id = local.vlan_tag
+  }
+
+  network_device {
+    bridge  = local.bridge_name
+    model   = "virtio"
+    vlan_id = 202
+  }
+
+  network_device {
+    bridge  = local.bridge_name
+    model   = "virtio"
+    vlan_id = 204
+  }
+
+  network_device {
+    bridge  = local.bridge_name
+    model   = "virtio"
+    vlan_id = 205
+  }
+
+  initialization {
+    datastore_id = local.storage_name
     ip_config {
       ipv4 {
         address = "${each.value.ip}/24"
@@ -140,23 +220,19 @@ resource "proxmox_virtual_environment_vm" "k8s_nodes" {
 resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
   node_name   = local.node_name
   name        = "k8s-gpu1"
-  description = "Managed by Terraform (k8s GPU worker node)"
-  tags        = ["terraform", "k8s", "gpu"]
+  description = "Managed by Terraform (k8s GPU worker)"
+  tags        = ["terraform", "k8s", "worker", "gpu"]
 
-  # Q35 machine type is required for PCI passthrough
   machine = "q35"
-
-  # BIOS configuration - disable Secure Boot for NVIDIA driver compatibility
-  bios = "ovmf"
+  bios    = "ovmf"
 
   efi_disk {
     datastore_id      = local.storage_name
     file_format       = "raw"
     type              = "4m"
-    pre_enrolled_keys = false # Disable Secure Boot for NVIDIA driver compatibility
+    pre_enrolled_keys = false
   }
 
-  # Clone from your existing Ubuntu 24.04 cloud-init template (VM 9000)
   clone {
     vm_id = 9000
     full  = true
@@ -168,7 +244,7 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
   }
 
   memory {
-    dedicated = 24576 # 24GB RAM
+    dedicated = 20480 # 20GB - reduced from 24GB to fit new layout
   }
 
   disk {
@@ -180,50 +256,39 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
     ssd          = true
   }
 
-  # Primary network interface (VLAN 201 - management)
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = local.vlan_tag
   }
 
-  # Additional network interfaces for multi-VLAN support (Home Assistant, etc.)
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
-    vlan_id = 202 # Client VLAN
+    vlan_id = 202
   }
 
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
-    vlan_id = 204 # IoT devices VLAN
+    vlan_id = 204
   }
 
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
-    vlan_id = 205 # Security VLAN
+    vlan_id = 205
   }
 
-  # GPU passthrough - Tesla P40
-  # IMPORTANT: You must configure this in Proxmox first:
-  # 1. Enable IOMMU in host BIOS and /etc/default/grub
-  # 2. Blacklist nouveau driver
-  # 3. Load vfio-pci driver
-  # 4. Identify GPU PCI address (lspci | grep NVIDIA)
-  # 5. Create resource mapping in Proxmox UI (Datacenter > Resource Mappings)
   hostpci {
     device  = "hostpci0"
-    mapping = "gpu-tesla-p40" # Resource mapping name in Proxmox
+    mapping = "gpu-tesla-p40"
     pcie    = true
     rombar  = true
   }
 
-  # cloud-init: static IP (changed from .53 to .60 for clean IP organization)
   initialization {
     datastore_id = local.storage_name
-
     ip_config {
       ipv4 {
         address = "10.10.201.60/24"
@@ -236,19 +301,40 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
   on_boot = true
 }
 
-output "k8s_nodes" {
+# Outputs
+output "control_plane_nodes" {
   value = {
-    for name, vm in proxmox_virtual_environment_vm.k8s_nodes :
+    for name, vm in proxmox_virtual_environment_vm.control_plane :
     name => {
       name = vm.name
-      ip   = local.k8s_nodes[name].ip
+      ip   = local.control_plane_nodes[name].ip
     }
   }
 }
 
-output "k8s_gpu_node" {
+output "worker_nodes" {
+  value = {
+    for name, vm in proxmox_virtual_environment_vm.workers :
+    name => {
+      name = vm.name
+      ip   = local.worker_nodes[name].ip
+    }
+  }
+}
+
+output "gpu_node" {
   value = {
     name = proxmox_virtual_environment_vm.k8s_gpu1.name
     ip   = "10.10.201.60"
+  }
+}
+
+# Summary output for quick reference
+output "cluster_summary" {
+  value = {
+    control_planes = 3
+    workers        = 5 # 4 standard + 1 GPU
+    total_vcpus    = 3 * 4 + 4 * 4 + 8  # 36 vCPUs
+    total_ram_gb   = 3 * 4 + 4 * 10 + 20 # 72 GB
   }
 }
