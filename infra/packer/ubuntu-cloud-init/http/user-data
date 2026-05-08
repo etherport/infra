@@ -7,11 +7,10 @@ autoinstall:
 
   # Network - DHCP during install, cloud-init will reconfigure later
   network:
-    network:
-      version: 2
-      ethernets:
-        ens18:
-          dhcp4: true
+    version: 2
+    ethernets:
+      ens18:
+        dhcp4: true
 
   # Storage - simple layout, will be resized by Terraform
   storage:
