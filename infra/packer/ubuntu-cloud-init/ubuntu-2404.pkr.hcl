@@ -81,13 +81,13 @@ variable "ssh_private_key_file" {
 variable "ubuntu_iso_url" {
   type        = string
   description = "URL to Ubuntu Server Live ISO"
-  default     = "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
+  default     = "https://releases.ubuntu.com/24.04/ubuntu-24.04.3-live-server-amd64.iso"
 }
 
 variable "ubuntu_iso_checksum" {
   type        = string
-  description = "Checksum for Ubuntu Server ISO"
-  default     = "file:https://releases.ubuntu.com/24.04/SHA256SUMS"
+  description = "SHA256 checksum for Ubuntu Server ISO"
+  default     = "sha256:c3514bf0056180d09376462a7a1b4f213c1d6e8ea67fae5c25099c6fd3d8274b"
 }
 
 # Source definition for Proxmox
