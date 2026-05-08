@@ -1,0 +1,91 @@
+name: Ansible Proxmox
+
+on:
+  workflow_dispatch:
+    inputs:
+      playbook:
+        description: 'Playbook to run'
+        required: true
+        type: choice
+        options:
+          - proxmox-setup
+          - proxmox
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - check
+          - apply
+      allow_reboot:
+        description: 'Allow reboot if needed'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  WORKING_DIR: infra/ansible
+
+jobs:
+  ansible:
+    name: Ansible ${{ github.event.inputs.playbook }} (${{ github.event.inputs.action }})
+    runs-on: homelab-runner
+    container:
+      image: cytopia/ansible:latest
+      options: --user root
+
+    steps:
+      - name: Install dependencies
+        run: |
+          apk add --no-cache git openssh-client
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+        working-directory: /
+
+      - name: Checkout
+        run: |
+          git clone --depth 1 --branch ${{ github.ref_name }} https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git .
+        working-directory: ${{ github.workspace }}
+
+      - name: Setup SSH key
+        run: |
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H pve.wind.etherport.net >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Run Ansible playbook (check mode)
+        if: github.event.inputs.action == 'check'
+        run: |
+          ansible-playbook \
+            -i inventory/wind/ \
+            playbooks/${{ github.event.inputs.playbook }}.yml \
+            --check \
+            -v
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Run Ansible playbook (apply)
+        if: github.event.inputs.action == 'apply'
+        run: |
+          EXTRA_VARS=""
+          if [ "${{ github.event.inputs.allow_reboot }}" = "true" ]; then
+            EXTRA_VARS="-e allow_reboot=true"
+          fi
+          ansible-playbook \
+            -i inventory/wind/ \
+            playbooks/${{ github.event.inputs.playbook }}.yml \
+            $EXTRA_VARS \
+            -v
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Ansible Proxmox" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Playbook**: ${{ github.event.inputs.playbook }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Action**: ${{ github.event.inputs.action }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Allow Reboot**: ${{ github.event.inputs.allow_reboot }}" >> $GITHUB_STEP_SUMMARY
+        working-directory: /

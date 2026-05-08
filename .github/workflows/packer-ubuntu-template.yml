@@ -1,0 +1,66 @@
+name: Packer Ubuntu Template
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - validate
+          - build
+  schedule:
+    # Rebuild monthly on the 1st at 3am UTC (keep template updated)
+    - cron: '0 3 1 * *'
+
+permissions:
+  contents: read
+
+env:
+  PACKER_VERSION: '1.12.0'
+  WORKING_DIR: infra/packer/ubuntu-cloud-init
+
+jobs:
+  packer:
+    name: Packer ${{ github.event.inputs.action || 'build' }}
+    runs-on: homelab-runner
+    container:
+      image: hashicorp/packer:${{ env.PACKER_VERSION }}
+      env:
+        PKR_VAR_proxmox_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
+        PKR_VAR_proxmox_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
+        PKR_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+
+    steps:
+      - name: Install git
+        run: apk add --no-cache git openssh-client
+        working-directory: /
+
+      - name: Checkout
+        run: |
+          git clone --depth 1 --branch ${{ github.ref_name }} https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git .
+        working-directory: ${{ github.workspace }}
+
+      - name: Initialize Packer
+        run: packer init .
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Validate template
+        run: packer validate .
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Build template
+        if: github.event.inputs.action == 'build' || github.event_name == 'schedule'
+        run: packer build -force .
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Packer Ubuntu Template" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Action**: ${{ github.event.inputs.action || 'build' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Template**: ubuntu-2404-cloud-init (VM 9000)" >> $GITHUB_STEP_SUMMARY
+        working-directory: /

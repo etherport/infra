@@ -1,0 +1,66 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+
+  # Network - DHCP during install, cloud-init will reconfigure later
+  network:
+    network:
+      version: 2
+      ethernets:
+        ens18:
+          dhcp4: true
+
+  # Storage - simple layout, will be resized by Terraform
+  storage:
+    layout:
+      name: direct
+    swap:
+      size: 0
+
+  # User account
+  identity:
+    hostname: ubuntu-template
+    username: graham
+    # Password hash for 'changeme' - will be disabled, SSH key only
+    password: "$6$rounds=4096$xyz$placeholder"
+
+  # SSH configuration
+  ssh:
+    install-server: true
+    allow-pw: false
+    authorized-keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILYAIoV2OKRSPnLnUfsAf8UoJJHhHf5zO/Rl47fNSCZZ graham@etherport.net
+
+  # Packages to install during autoinstall
+  packages:
+    - qemu-guest-agent
+    - cloud-init
+    - cloud-guest-utils
+    - python3
+    - python3-pip
+    - curl
+    - wget
+    - git
+    - vim
+    - htop
+    - ca-certificates
+    - gnupg
+    - lsb-release
+    - open-iscsi
+    - nfs-common
+
+  # Late commands - run after installation
+  late-commands:
+    # Enable qemu-guest-agent
+    - curtin in-target --target=/target -- systemctl enable qemu-guest-agent
+    # Configure cloud-init datasource for Proxmox
+    - echo 'datasource_list: [NoCloud, ConfigDrive]' > /target/etc/cloud/cloud.cfg.d/99-proxmox.cfg
+    # Disable password authentication
+    - sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' /target/etc/ssh/sshd_config
+    - sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /target/etc/ssh/sshd_config
+
+  # Reboot after installation
+  shutdown: reboot

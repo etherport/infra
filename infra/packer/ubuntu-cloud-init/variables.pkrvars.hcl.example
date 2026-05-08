@@ -1,0 +1,12 @@
+# Copy this file to variables.pkrvars.hcl and fill in your values
+# DO NOT commit variables.pkrvars.hcl to git (it's in .gitignore)
+
+proxmox_url          = "https://pve.wind.etherport.net:8006/api2/json"
+proxmox_token_id     = "graham@pam!terraform"
+proxmox_token_secret = "your-token-secret-here"
+proxmox_node         = "pve"
+template_vm_id       = 9000
+template_name        = "ubuntu-2404-cloud-init"
+storage_pool         = "local-zfs"
+ssh_username         = "graham"
+ssh_public_key       = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILYAIoV2OKRSPnLnUfsAf8UoJJHhHf5zO/Rl47fNSCZZ graham@etherport.net"

@@ -1,0 +1,130 @@
+# Ubuntu 24.04 Cloud-Init Template for Proxmox
+
+This Packer template creates a reusable Ubuntu 24.04 LTS VM template (VM ID 9000) in Proxmox that can be cloned by Terraform.
+
+## Features
+
+- Ubuntu 24.04 LTS (Noble Numbat) cloud image
+- Cloud-init enabled for Proxmox
+- QEMU guest agent for better VM management
+- Pre-installed packages: Python3, curl, wget, git, open-iscsi, nfs-common
+- SSH key authentication only (password disabled)
+- Q35 machine type with OVMF (UEFI) for GPU passthrough compatibility
+
+## Prerequisites
+
+1. **Packer installed** (v1.9+)
+   ```bash
+   brew install packer  # macOS
+   ```
+
+2. **Proxmox API token** with permissions:
+   - VM.Allocate
+   - VM.Clone
+   - VM.Config.*
+   - VM.Monitor
+   - Datastore.AllocateSpace
+   - Sys.Audit
+
+3. **SSH key** at `~/.ssh/id_ed25519`
+
+## Usage
+
+### 1. Initialize Packer plugins
+
+```bash
+cd infra/packer/ubuntu-cloud-init
+packer init .
+```
+
+### 2. Create variables file
+
+```bash
+cp variables.pkrvars.hcl.example variables.pkrvars.hcl
+# Edit variables.pkrvars.hcl with your Proxmox credentials
+```
+
+### 3. Build the template
+
+```bash
+packer build -var-file=variables.pkrvars.hcl .
+```
+
+This will:
+1. Download Ubuntu 24.04 cloud image
+2. Create a VM in Proxmox
+3. Run autoinstall via cloud-init
+4. Install required packages
+5. Clean up for templating
+6. Convert VM to template (ID 9000)
+
+### 4. Verify the template
+
+```bash
+# SSH to Proxmox and check
+pvesh get /nodes/pve/qemu/9000/config
+```
+
+## Rebuilding the Template
+
+To update the template (e.g., for new Ubuntu patches):
+
+```bash
+# Delete existing template first
+pvesh delete /nodes/pve/qemu/9000
+
+# Rebuild
+packer build -var-file=variables.pkrvars.hcl .
+```
+
+Or use the GitHub Actions workflow (if configured):
+```bash
+gh workflow run packer-ubuntu-template.yml -f action=build
+```
+
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `proxmox_url` | `https://pve.wind.etherport.net:8006/api2/json` | Proxmox API URL |
+| `proxmox_node` | `pve` | Proxmox node name |
+| `template_vm_id` | `9000` | VM ID for the template |
+| `template_name` | `ubuntu-2404-cloud-init` | Template name |
+| `storage_pool` | `local-zfs` | Storage pool for VM disks |
+| `ssh_username` | `graham` | Default user in template |
+
+## What's Installed
+
+- **System**: Ubuntu 24.04 LTS, fully updated
+- **Packages**:
+  - `qemu-guest-agent` - VM management
+  - `cloud-init`, `cloud-guest-utils` - Cloud provisioning
+  - `python3`, `python3-pip` - Ansible requirement
+  - `open-iscsi`, `nfs-common` - Storage connectivity
+  - `curl`, `wget`, `git`, `vim`, `htop` - Utilities
+
+## Integration with Terraform
+
+The Terraform configs in `infra/terraform/proxmox/` clone from this template:
+
+```hcl
+clone {
+  vm_id = 9000  # This template
+  full  = true
+}
+```
+
+## Troubleshooting
+
+### Build hangs at "Waiting for SSH"
+- Check Proxmox firewall allows outbound connections
+- Verify the VM gets a DHCP address
+- Check Proxmox console for autoinstall errors
+
+### Template already exists
+- Delete first: `pvesh delete /nodes/pve/qemu/9000`
+- Or change `template_vm_id` in variables
+
+### Permission denied
+- Verify API token has required permissions
+- Check token isn't expired
