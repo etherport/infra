@@ -31,7 +31,7 @@
     # Subnet routes per host (override in host_vars or inventory)
     # NOTE: vpn-local initially advertises NO routes - failover script enables them
     tailscale_advertise_routes:
-      vpn-aws: "10.10.100.0/22"
+      vpn-aws: "10.10.100.0/22,10.10.192.0/19"  # AWS VPC + Homelab (via WireGuard)
       vpn-local: ""  # Backup router - routes enabled by failover script when K8s router is down
 
     # Accept routes from other Tailscale nodes (per-host)
