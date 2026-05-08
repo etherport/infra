@@ -149,11 +149,16 @@ source "proxmox-iso" "ubuntu-cloud-init" {
 
   # Boot configuration - autoinstall via subiquity
   # For UEFI, edit existing GRUB entry (e) to add autoinstall parameters
-  # This is more reliable than command mode (c) for Ubuntu Server ISO
+  # Use Ctrl+X to boot (more reliable than F10 in some VNC implementations)
   boot_command = [
-    "e<down><down><down><end>",
-    " autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ",
-    "<f10>"
+    "<wait3>",
+    "e",
+    "<wait1><down><wait1><down><wait1><down><wait1><down><wait1>",
+    "<end>",
+    "<wait1>",
+    " autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/",
+    "<wait1>",
+    "<leftCtrlOn>x<leftCtrlOff>"
   ]
   boot_wait = "5s"
 
