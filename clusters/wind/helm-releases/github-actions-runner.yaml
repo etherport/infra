@@ -59,16 +59,3 @@ spec:
     maxRunners: 3
     containerMode:
       type: "dind"
-    template:
-      spec:
-        containers:
-          - name: runner
-            image: ghcr.io/actions/actions-runner:latest
-            command: ["/home/runner/run.sh"]
-            resources:
-              requests:
-                memory: "512Mi"
-                cpu: "250m"
-              limits:
-                memory: "2Gi"
-                cpu: "2000m"
