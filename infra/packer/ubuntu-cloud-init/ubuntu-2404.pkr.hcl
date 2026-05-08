@@ -64,7 +64,7 @@ variable "storage_pool" {
 variable "ssh_username" {
   type        = string
   description = "Username for SSH access during build"
-  default     = "graham"
+  default     = "ubuntu"
 }
 
 variable "ssh_public_key" {

@@ -20,11 +20,11 @@ autoinstall:
     swap:
       size: 0
 
-  # User account
+  # User account - using 'ubuntu' to match AWS EC2 defaults
   identity:
     hostname: ubuntu-template
-    username: graham
-    # Password hash for 'changeme' - will be disabled, SSH key only
+    username: ubuntu
+    # Password hash - will be disabled, SSH key only
     password: "$6$rounds=4096$xyz$placeholder"
 
   # SSH configuration

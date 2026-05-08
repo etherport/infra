@@ -8,5 +8,5 @@ proxmox_node         = "pve"
 template_vm_id       = 9000
 template_name        = "ubuntu-2404-cloud-init"
 storage_pool         = "local-zfs"
-ssh_username         = "graham"
+ssh_username         = "ubuntu"
 ssh_public_key       = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILYAIoV2OKRSPnLnUfsAf8UoJJHhHf5zO/Rl47fNSCZZ graham@etherport.net"
