@@ -129,11 +129,13 @@ source "proxmox-iso" "ubuntu-cloud-init" {
     model  = "virtio"
   }
 
-  # ISO/Boot
-  iso_url          = var.ubuntu_iso_url
-  iso_checksum     = var.ubuntu_iso_checksum
-  iso_storage_pool = "local"
-  unmount_iso      = true
+  # ISO/Boot - using boot_iso block (replaces deprecated iso_* fields)
+  boot_iso {
+    iso_url          = var.ubuntu_iso_url
+    iso_checksum     = var.ubuntu_iso_checksum
+    iso_storage_pool = "local"
+    unmount          = true
+  }
 
   # Cloud-init
   cloud_init              = true
@@ -154,7 +156,7 @@ source "proxmox-iso" "ubuntu-cloud-init" {
 
   # SSH connection
   ssh_username         = var.ssh_username
-  ssh_private_key_file = "~/.ssh/id_ed25519"
+  ssh_private_key_file = "/root/.ssh/id_ed25519"
   ssh_timeout          = "30m"
 
   # Tags

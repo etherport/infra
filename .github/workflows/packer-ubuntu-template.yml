@@ -41,6 +41,12 @@ jobs:
           git clone --depth 1 --branch ${{ github.ref_name }} https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git .
         working-directory: ${{ github.workspace }}
 
+      - name: Setup SSH key
+        run: |
+          mkdir -p /root/.ssh
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /root/.ssh/id_ed25519
+          chmod 600 /root/.ssh/id_ed25519
+
       - name: Initialize Packer
         run: packer init .
         working-directory: ${{ env.WORKING_DIR }}
