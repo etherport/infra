@@ -18,7 +18,6 @@ permissions:
   contents: read
 
 env:
-  PACKER_VERSION: '1.12.0'
   WORKING_DIR: infra/packer/ubuntu-cloud-init
 
 jobs:
@@ -26,7 +25,7 @@ jobs:
     name: Packer ${{ github.event.inputs.action || 'build' }}
     runs-on: homelab-runner
     container:
-      image: hashicorp/packer:${{ env.PACKER_VERSION }}
+      image: hashicorp/packer:1.12.0
       env:
         PKR_VAR_proxmox_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
         PKR_VAR_proxmox_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
