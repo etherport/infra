@@ -26,7 +26,6 @@ permissions:
   pull-requests: write
 
 env:
-  TF_VERSION: '1.14.3'
   WORKING_DIR: infra/terraform/proxmox/standalone-vms
 
 jobs:
@@ -34,7 +33,7 @@ jobs:
     name: Terraform ${{ github.event.inputs.action || 'plan' }}
     runs-on: homelab-runner
     container:
-      image: hashicorp/terraform:${{ env.TF_VERSION }}
+      image: hashicorp/terraform:1.14.3
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
