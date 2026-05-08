@@ -1,6 +1,12 @@
 # AWS US-East-1 Hub Infrastructure
 # Variables
 
+variable "aws_profile" {
+  description = "AWS profile to use (empty string for environment variables in CI)"
+  type        = string
+  default     = "homelab"
+}
+
 #------------------------------------------------------------------------------
 # Network Configuration
 #------------------------------------------------------------------------------

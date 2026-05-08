@@ -30,7 +30,7 @@ terraform {
 
 provider "aws" {
   region  = "us-east-1"
-  profile = "homelab"
+  profile = var.aws_profile != "" ? var.aws_profile : null
 
   default_tags {
     tags = {
@@ -45,7 +45,7 @@ provider "aws" {
 provider "aws" {
   alias   = "hub"
   region  = "us-west-2"
-  profile = "homelab"
+  profile = var.aws_profile != "" ? var.aws_profile : null
 
   default_tags {
     tags = {
