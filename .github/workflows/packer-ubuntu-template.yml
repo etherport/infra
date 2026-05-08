@@ -19,33 +19,30 @@ permissions:
 
 env:
   WORKING_DIR: infra/packer/ubuntu-cloud-init
+  PKR_VAR_proxmox_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
+  PKR_VAR_proxmox_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
+  PKR_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+  PKR_VAR_ssh_private_key_file: /home/runner/.ssh/id_ed25519
 
 jobs:
   packer:
     name: Packer ${{ github.event.inputs.action || 'build' }}
     runs-on: homelab-runner
-    container:
-      image: hashicorp/packer:1.12.0
-      env:
-        PKR_VAR_proxmox_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
-        PKR_VAR_proxmox_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
-        PKR_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
 
     steps:
-      - name: Install git
-        run: apk add --no-cache git openssh-client
-        working-directory: /
-
       - name: Checkout
-        run: |
-          git clone --depth 1 --branch ${{ github.ref_name }} https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git .
-        working-directory: ${{ github.workspace }}
+        uses: actions/checkout@v4
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@v3
+        with:
+          version: 1.12.0
 
       - name: Setup SSH key
         run: |
-          mkdir -p /root/.ssh
-          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /root/.ssh/id_ed25519
-          chmod 600 /root/.ssh/id_ed25519
+          mkdir -p /home/runner/.ssh
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /home/runner/.ssh/id_ed25519
+          chmod 600 /home/runner/.ssh/id_ed25519
 
       - name: Initialize Packer
         run: packer init .
@@ -68,4 +65,3 @@ jobs:
           echo "- **Action**: ${{ github.event.inputs.action || 'build' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Template**: ubuntu-2404-cloud-init (VM 9000)" >> $GITHUB_STEP_SUMMARY
-        working-directory: /

@@ -72,6 +72,12 @@ variable "ssh_public_key" {
   description = "SSH public key to add to the template"
 }
 
+variable "ssh_private_key_file" {
+  type        = string
+  description = "Path to SSH private key for Packer to connect"
+  default     = "~/.ssh/id_ed25519"
+}
+
 variable "ubuntu_iso_url" {
   type        = string
   description = "URL to Ubuntu cloud image"
@@ -156,7 +162,7 @@ source "proxmox-iso" "ubuntu-cloud-init" {
 
   # SSH connection
   ssh_username         = var.ssh_username
-  ssh_private_key_file = "/root/.ssh/id_ed25519"
+  ssh_private_key_file = var.ssh_private_key_file
   ssh_timeout          = "30m"
 
   # Tags
