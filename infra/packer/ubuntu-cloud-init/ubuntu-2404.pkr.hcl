@@ -80,14 +80,14 @@ variable "ssh_private_key_file" {
 
 variable "ubuntu_iso_url" {
   type        = string
-  description = "URL to Ubuntu cloud image"
-  default     = "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+  description = "URL to Ubuntu Server Live ISO"
+  default     = "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
 }
 
 variable "ubuntu_iso_checksum" {
   type        = string
-  description = "Checksum for Ubuntu cloud image"
-  default     = "file:https://cloud-images.ubuntu.com/noble/current/SHA256SUMS"
+  description = "Checksum for Ubuntu Server ISO"
+  default     = "file:https://releases.ubuntu.com/24.04/SHA256SUMS"
 }
 
 # Source definition for Proxmox
@@ -147,23 +147,26 @@ source "proxmox-iso" "ubuntu-cloud-init" {
   cloud_init              = true
   cloud_init_storage_pool = var.storage_pool
 
-  # Boot configuration - autoinstall via cloud-init
+  # Boot configuration - autoinstall via subiquity
+  # Wait for GRUB, edit boot entry, add autoinstall params, then boot
   boot_command = [
-    "<wait5>",
-    "e<wait>",
-    "<down><down><down><end>",
-    " autoinstall ds=nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/",
-    "<F10>"
+    "<wait10>",
+    "c<wait3>",
+    "linux /casper/vmlinuz autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ---<enter>",
+    "<wait3>",
+    "initrd /casper/initrd<enter>",
+    "<wait3>",
+    "boot<enter>"
   ]
-  boot_wait = "10s"
+  boot_wait = "5s"
 
   # HTTP server for autoinstall files
   http_directory = "http"
 
-  # SSH connection
+  # SSH connection - extended timeout for full ISO install
   ssh_username         = var.ssh_username
   ssh_private_key_file = var.ssh_private_key_file
-  ssh_timeout          = "30m"
+  ssh_timeout          = "45m"
 
   # Tags
   tags = "template;ubuntu;cloud-init;packer"

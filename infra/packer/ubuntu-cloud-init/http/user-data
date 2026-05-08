@@ -24,8 +24,8 @@ autoinstall:
   identity:
     hostname: ubuntu-template
     username: ubuntu
-    # Password hash - will be disabled, SSH key only
-    password: "$6$rounds=4096$xyz$placeholder"
+    # Password: 'ubuntu' - disabled via SSH, only used for console recovery
+    password: "$6$xDpuH/v1lSb4qB01$xDY3p8XGOhGfvTJF7kahCpLC34qQwMomob1PahJBnXT79F6Aqbnh9ERYCOz19PBkwRNAPsl2hJA/Woql3GetE0"
 
   # SSH configuration
   ssh:
