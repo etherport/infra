@@ -18,7 +18,6 @@ resources:
   # Applications
   - ../../platform/kubernetes/home-automation
   - ../../platform/kubernetes/plex
-  - ../../platform/kubernetes/icloudpd
   - ../../platform/kubernetes/rclone-gdrive
   - ../../platform/kubernetes/kopia
   - ../../platform/kubernetes/wikijs

@@ -27,7 +27,6 @@
         "/plexinc/pms-docker/",
         "/kopia/kopia/",
         "/rclone/rclone/",
-        "/icloudpd/icloudpd/",
         "/home-assistant/home-assistant/",
         "/^python$/",
         "/^busybox$/"
