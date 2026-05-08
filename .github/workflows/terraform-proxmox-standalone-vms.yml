@@ -51,7 +51,7 @@ jobs:
 
       - name: Checkout
         run: |
-          git clone --depth 1 --branch ${{ github.ref_name }} https://github.com/${{ github.repository }}.git .
+          git clone --depth 1 --branch ${{ github.ref_name }} https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git .
         working-directory: ${{ github.workspace }}
 
       - name: Terraform Init
