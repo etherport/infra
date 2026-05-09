@@ -56,10 +56,10 @@ autoinstall:
     # Enable qemu-guest-agent
     - curtin in-target --target=/target -- systemctl enable qemu-guest-agent
     # Configure cloud-init datasource for Proxmox
-    - echo 'datasource_list: [NoCloud, ConfigDrive]' > /target/etc/cloud/cloud.cfg.d/99-proxmox.cfg
+    - "echo 'datasource_list: [NoCloud, ConfigDrive]' > /target/etc/cloud/cloud.cfg.d/99-proxmox.cfg"
     # Disable password authentication
-    - sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' /target/etc/ssh/sshd_config
-    - sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /target/etc/ssh/sshd_config
+    - "sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' /target/etc/ssh/sshd_config"
+    - "sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /target/etc/ssh/sshd_config"
 
   # Reboot after installation
   shutdown: reboot
