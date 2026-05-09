@@ -129,10 +129,11 @@ source "proxmox-iso" "ubuntu-cloud-init" {
 
   scsi_controller = "virtio-scsi-single"
 
-  # Network
+  # Network - VLAN 201 (server VLAN with DHCP)
   network_adapters {
-    bridge = "vmbr0"
-    model  = "virtio"
+    bridge   = "vmbr0"
+    model    = "virtio"
+    vlan_tag = 201
   }
 
   # ISO/Boot - using boot_iso block (replaces deprecated iso_* fields)
@@ -148,16 +149,15 @@ source "proxmox-iso" "ubuntu-cloud-init" {
   cloud_init_storage_pool = var.storage_pool
 
   # Boot configuration - autoinstall via subiquity (UEFI)
-  # Uses S3-hosted autoinstall files (avoids HTTP server network issues with remote runners)
-  # Press 'e' to edit, navigate to linux line, add autoinstall params, F10 to boot
+  # Uses S3-hosted autoinstall files (runner can't serve HTTP to Proxmox VMs)
   boot_command = [
     "e<wait3>",
     "<down><down><down><end>",
     "<bs><bs><bs><bs><wait>",
-    " ip=dhcp autoinstall ds=nocloud-net\\;s=http://s3.us-west-2.amazonaws.com/packer-autoinstall.etherport.net/ubuntu-2404/ ---<wait>",
+    " autoinstall ds=nocloud-net\\;s=http://s3.us-west-2.amazonaws.com/packer-autoinstall.etherport.net/ubuntu-2404/ ---<wait>",
     "<f10>"
   ]
-  boot_wait = "10s"
+  boot_wait = "5s"
 
   # SSH connection - extended timeout for full ISO install
   ssh_username         = var.ssh_username
