@@ -162,7 +162,7 @@ source "proxmox-iso" "ubuntu-cloud-init" {
     "e<wait5s>",
     "<down><down><down><end><wait>",
     "<left><left><left><left><wait>",
-    "autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ <wait>",
+    "autoinstall ds=nocloud\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ <wait>",
     "<f10>"
   ]
 
