@@ -34,27 +34,18 @@ autoinstall:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab
 
   # Packages to install during autoinstall
+  # Note: qemu-guest-agent installed by Packer provisioner (avoids repo issues during install)
   packages:
-    - qemu-guest-agent
+    - openssh-server
     - cloud-init
     - cloud-guest-utils
     - python3
-    - python3-pip
     - curl
     - wget
-    - git
-    - vim
-    - htop
     - ca-certificates
-    - gnupg
-    - lsb-release
-    - open-iscsi
-    - nfs-common
 
   # Late commands - run after installation
   late-commands:
-    # Enable qemu-guest-agent
-    - curtin in-target --target=/target -- systemctl enable qemu-guest-agent
     # Configure cloud-init datasource for Proxmox
     - "echo 'datasource_list: [NoCloud, ConfigDrive]' > /target/etc/cloud/cloud.cfg.d/99-proxmox.cfg"
     # Disable password authentication
