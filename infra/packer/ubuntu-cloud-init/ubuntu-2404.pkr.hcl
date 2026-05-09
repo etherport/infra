@@ -148,17 +148,15 @@ source "proxmox-iso" "ubuntu-cloud-init" {
   cloud_init_storage_pool = var.storage_pool
 
   # Boot configuration - autoinstall via subiquity
-  # For UEFI, edit existing GRUB entry (e) to add autoinstall parameters
-  # Use Ctrl+X to boot (more reliable than F10 in some VNC implementations)
+  # Edit GRUB entry, delete trailing ---, add autoinstall params, boot with F10
+  # Based on: https://www.virtualizationhowto.com/2024/04/proxmox-packer-template-for-ubuntu-24-04/
   boot_command = [
-    "<wait3>",
-    "e",
-    "<wait1><down><wait1><down><wait1><down><wait1><down><wait1>",
-    "<end>",
-    "<wait1>",
-    " autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/",
-    "<wait1>",
-    "<leftCtrlOn>x<leftCtrlOff>"
+    "<esc><wait>",
+    "e<wait>",
+    "<down><down><down><end>",
+    "<bs><bs><bs><bs><wait>",
+    "autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ---<wait>",
+    "<f10><wait>"
   ]
   boot_wait = "5s"
 
