@@ -148,13 +148,9 @@ source "proxmox-iso" "ubuntu-cloud-init" {
   cloud_init              = true
   cloud_init_storage_pool = var.storage_pool
 
-  # HTTP server for autoinstall files (Packer serves ./http directory)
-  http_directory = "http"
-  http_port_min  = 8100
-  http_port_max  = 8150
-
   # Boot configuration - autoinstall via subiquity (UEFI)
   # Navigate to linux line, position BEFORE "---" delimiter, insert autoinstall params
+  # Use seedfrom= syntax to avoid semicolon escaping issues
   boot_key_interval = "100ms"
   boot_wait         = "10s"
   boot_command = [
@@ -162,7 +158,7 @@ source "proxmox-iso" "ubuntu-cloud-init" {
     "e<wait5s>",
     "<down><down><down><end><wait>",
     "<left><left><left><left><wait>",
-    "autoinstall ds=nocloud\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ <wait>",
+    "autoinstall ds=nocloud seedfrom=http://s3.us-west-2.amazonaws.com/packer-autoinstall.etherport.net/ubuntu-2404/ <wait>",
     "<f10>"
   ]
 
