@@ -109,13 +109,7 @@ source "proxmox-iso" "ubuntu-cloud-init" {
   memory   = 2048
   cpu_type = "host"
   machine  = "q35"
-  bios     = "ovmf"
-
-  efi_config {
-    efi_storage_pool  = var.storage_pool
-    efi_type          = "4m"
-    pre_enrolled_keys = false
-  }
+  bios     = "seabios"  # BIOS mode - simpler boot sequence than UEFI
 
   # Storage
   disks {
@@ -147,18 +141,15 @@ source "proxmox-iso" "ubuntu-cloud-init" {
   cloud_init              = true
   cloud_init_storage_pool = var.storage_pool
 
-  # Boot configuration - autoinstall via subiquity
+  # Boot configuration - autoinstall via subiquity (BIOS mode)
   # Uses S3-hosted autoinstall files (avoids HTTP server network issues with remote runners)
-  # No <esc> - UEFI GRUB goes to command mode with esc. Just press 'e' directly to edit.
-  # Use HTTP (not HTTPS) - SSL certs may not be available during early boot
   boot_command = [
-    "e<wait3>",
-    "<down><down><down><end>",
-    "<bs><bs><bs><bs><wait>",
-    " autoinstall ds=nocloud-net\\;s=http://s3.us-west-2.amazonaws.com/packer-autoinstall.etherport.net/ubuntu-2404/ ---<wait>",
-    "<f10><wait>"
+    "<esc><esc><esc><wait>",
+    "<enter><wait>",
+    "<f6><esc>",
+    " autoinstall ip=dhcp ds=nocloud-net;s=http://s3.us-west-2.amazonaws.com/packer-autoinstall.etherport.net/ubuntu-2404/<enter>"
   ]
-  boot_wait = "10s"
+  boot_wait = "5s"
 
   # SSH connection - extended timeout for full ISO install
   ssh_username         = var.ssh_username
