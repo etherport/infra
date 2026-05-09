@@ -150,14 +150,14 @@ source "proxmox-iso" "ubuntu-cloud-init" {
 
   # Boot configuration - autoinstall via subiquity (UEFI)
   # Uses S3-hosted autoinstall files (runner can't serve HTTP to Proxmox VMs)
-  # Sequence: esc (stop countdown) -> e (edit) -> navigate -> append autoinstall -> F10 (boot)
+  # Use GRUB command mode (c) to directly load kernel with autoinstall params
+  # This is more reliable than trying to edit (e) the existing boot entry
+  boot_key_interval = "100ms"
   boot_command = [
-    "<esc><wait>",
-    "e<wait>",
-    "<down><down><down><end>",
-    "<bs><bs><bs><bs><wait>",
-    " autoinstall ds=nocloud-net\\;s=http://s3.us-west-2.amazonaws.com/packer-autoinstall.etherport.net/ubuntu-2404/ ---<wait>",
-    "<f10><wait>"
+    "c<wait>",
+    "linux /casper/vmlinuz --- autoinstall ds='nocloud-net;s=http://s3.us-west-2.amazonaws.com/packer-autoinstall.etherport.net/ubuntu-2404/'<enter><wait5s>",
+    "initrd /casper/initrd<enter><wait5s>",
+    "boot<enter>"
   ]
   boot_wait = "10s"
 
