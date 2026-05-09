@@ -157,7 +157,7 @@ source "proxmox-iso" "ubuntu-cloud-init" {
     "<wait><up><wait>",
     "e<wait5s>",
     "<down><down><down><end><wait>",
-    "<leftArrow><leftArrow><leftArrow><leftArrow><wait>",
+    "<left><left><left><left><wait>",
     "autoinstall ds=nocloud-net\\;s=http://s3.us-west-2.amazonaws.com/packer-autoinstall.etherport.net/ubuntu-2404/ <wait>",
     "<f10>"
   ]
