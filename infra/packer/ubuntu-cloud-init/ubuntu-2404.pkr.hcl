@@ -143,30 +143,24 @@ source "proxmox-iso" "ubuntu-cloud-init" {
     unmount          = true
   }
 
-  # Autoinstall config via CD-ROM (avoids HTTP server network issues)
-  # Creates a cidata ISO that the installer reads directly
-  additional_iso_files {
-    cd_files         = ["./http/user-data", "./http/meta-data"]
-    cd_label         = "cidata"
-    iso_storage_pool = "local"
-    unmount          = true
-  }
-
   # Cloud-init for post-install (Terraform will configure this)
   cloud_init              = true
   cloud_init_storage_pool = var.storage_pool
 
   # Boot configuration - autoinstall via subiquity
-  # Edit GRUB entry, delete trailing ---, add autoinstall pointing to CD, boot with F10
+  # Requires runner to use hostNetwork so VM can reach HTTP server
   boot_command = [
     "<esc><wait>",
     "e<wait>",
     "<down><down><down><end>",
     "<bs><bs><bs><bs><wait>",
-    "autoinstall ds=nocloud\\;s=/cidata/ ---<wait>",
+    "autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ---<wait>",
     "<f10><wait>"
   ]
   boot_wait = "5s"
+
+  # HTTP server for autoinstall files (runner must use hostNetwork)
+  http_directory = "http"
 
   # SSH connection - extended timeout for full ISO install
   ssh_username         = var.ssh_username
