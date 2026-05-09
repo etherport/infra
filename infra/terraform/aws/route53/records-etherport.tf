@@ -36,13 +36,21 @@ resource "aws_route53_record" "etherport_ha_wind" {
   }
 }
 
-# VPN endpoint for remote access (WireGuard)
+# VPN endpoints for remote access (WireGuard)
 resource "aws_route53_record" "etherport_vpn_use1" {
   zone_id = aws_route53_zone.etherport.zone_id
   name    = "vpn-use1.etherport.net"
   type    = "A"
   ttl     = 300
-  records = [var.vpn_public_ip]
+  records = [var.vpn_use1_public_ip]
+}
+
+resource "aws_route53_record" "etherport_vpn_usw2" {
+  zone_id = aws_route53_zone.etherport.zone_id
+  name    = "vpn-usw2.etherport.net"
+  type    = "A"
+  ttl     = 300
+  records = [var.vpn_usw2_public_ip]
 }
 
 #------------------------------------------------------------------------------
