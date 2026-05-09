@@ -144,13 +144,20 @@ source "proxmox-iso" "ubuntu-cloud-init" {
     unmount          = true
   }
 
+  # Autoinstall config via CIDATA ISO - cloud-init finds this automatically
+  additional_iso_files {
+    cd_files         = ["./http/user-data", "./http/meta-data"]
+    cd_label         = "cidata"
+    iso_storage_pool = "local"
+    unmount          = true
+  }
+
   # Cloud-init for post-install (Terraform will configure this)
   cloud_init              = true
   cloud_init_storage_pool = var.storage_pool
 
-  # Boot configuration - autoinstall via subiquity (UEFI)
-  # Navigate to linux line, position BEFORE "---" delimiter, insert autoinstall params
-  # Use seedfrom= syntax to avoid semicolon escaping issues
+  # Boot configuration - just add 'autoinstall' keyword
+  # Cloud-init will find config from CIDATA ISO automatically
   boot_key_interval = "100ms"
   boot_wait         = "10s"
   boot_command = [
@@ -158,7 +165,7 @@ source "proxmox-iso" "ubuntu-cloud-init" {
     "e<wait5s>",
     "<down><down><down><end><wait>",
     "<left><left><left><left><wait>",
-    "autoinstall ds=nocloud-net%3Bs=http://s3.us-west-2.amazonaws.com/packer-autoinstall.etherport.net/ubuntu-2404/ <wait>",
+    "autoinstall <wait>",
     "<f10>"
   ]
 
