@@ -144,22 +144,28 @@ source "proxmox-iso" "ubuntu-cloud-init" {
     unmount          = true
   }
 
+  # Autoinstall config as CIDATA ISO - Ubuntu auto-detects this
+  additional_iso_files {
+    cd_files         = ["./autoinstall/user-data", "./autoinstall/meta-data"]
+    cd_label         = "cidata"
+    iso_storage_pool = "local"
+    unmount          = true
+  }
+
   # Cloud-init for post-install (Terraform will configure this)
   cloud_init              = true
   cloud_init_storage_pool = var.storage_pool
 
-  # Boot configuration - autoinstall via subiquity (UEFI)
-  # Uses S3-hosted autoinstall files (runner can't serve HTTP to Proxmox VMs)
-  # Use GRUB command mode (c) to directly load kernel with autoinstall params
-  # This is more reliable than trying to edit (e) the existing boot entry
-  boot_key_interval = "100ms"
+  # Boot configuration - add autoinstall kernel param, CIDATA provides config
+  # Wait for GRUB, edit entry to add autoinstall, boot
+  boot_key_interval = "50ms"
   boot_command = [
-    "c<wait>",
-    "linux /casper/vmlinuz --- autoinstall ds='nocloud-net;s=http://s3.us-west-2.amazonaws.com/packer-autoinstall.etherport.net/ubuntu-2404/'<enter><wait5s>",
-    "initrd /casper/initrd<enter><wait5s>",
-    "boot<enter>"
+    "<wait3s>e<wait2s>",
+    "<down><down><down><end><wait>",
+    " autoinstall<wait>",
+    "<f10>"
   ]
-  boot_wait = "10s"
+  boot_wait = "5s"
 
   # SSH connection - extended timeout for full ISO install
   ssh_username         = var.ssh_username
