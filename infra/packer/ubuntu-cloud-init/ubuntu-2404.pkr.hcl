@@ -149,14 +149,16 @@ source "proxmox-iso" "ubuntu-cloud-init" {
   cloud_init_storage_pool = var.storage_pool
 
   # Boot configuration - autoinstall via subiquity (UEFI)
-  # Press 'e' immediately to edit first entry, then navigate WITHIN the editor
-  # The <down> keys navigate inside the edit screen, not the GRUB menu
+  # Navigate to linux line, position BEFORE "---" delimiter, insert autoinstall params
+  # Parameters after "---" go to init, not kernel - must be before!
   boot_key_interval = "100ms"
   boot_wait         = "10s"
   boot_command = [
+    "<wait><up><wait>",
     "e<wait5s>",
     "<down><down><down><end><wait>",
-    " autoinstall ds=nocloud-net\\;s=http://s3.us-west-2.amazonaws.com/packer-autoinstall.etherport.net/ubuntu-2404/<wait>",
+    "<leftArrow><leftArrow><leftArrow><leftArrow><wait>",
+    "autoinstall ds=nocloud-net\\;s=http://s3.us-west-2.amazonaws.com/packer-autoinstall.etherport.net/ubuntu-2404/ <wait>",
     "<f10>"
   ]
 
