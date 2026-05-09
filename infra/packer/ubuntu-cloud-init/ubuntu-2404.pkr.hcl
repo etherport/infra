@@ -150,6 +150,7 @@ source "proxmox-iso" "ubuntu-cloud-init" {
     cd_label         = "cidata"
     iso_storage_pool = "local"
     unmount          = true
+    device           = "sata1"
   }
 
   # Cloud-init for post-install (Terraform will configure this)
