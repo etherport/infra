@@ -150,11 +150,12 @@ source "proxmox-iso" "ubuntu-cloud-init" {
   # Boot configuration - autoinstall via subiquity
   # Uses S3-hosted autoinstall files (avoids HTTP server network issues with remote runners)
   # No <esc> - UEFI GRUB goes to command mode with esc. Just press 'e' directly to edit.
+  # Use HTTP (not HTTPS) - SSL certs may not be available during early boot
   boot_command = [
     "e<wait3>",
     "<down><down><down><end>",
     "<bs><bs><bs><bs><wait>",
-    " autoinstall ds=nocloud-net\\;s=https://s3.us-west-2.amazonaws.com/packer-autoinstall.etherport.net/ubuntu-2404/ ---<wait>",
+    " autoinstall ds=nocloud-net\\;s=http://s3.us-west-2.amazonaws.com/packer-autoinstall.etherport.net/ubuntu-2404/ ---<wait>",
     "<f10><wait>"
   ]
   boot_wait = "10s"
