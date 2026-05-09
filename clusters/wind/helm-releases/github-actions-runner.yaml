@@ -58,7 +58,7 @@ spec:
     minRunners: 0
     maxRunners: 3
     containerMode:
-      type: "kubernetes"
+      type: "dind"
     # Use host network so Packer HTTP server is reachable from Proxmox VMs
     template:
       spec:
