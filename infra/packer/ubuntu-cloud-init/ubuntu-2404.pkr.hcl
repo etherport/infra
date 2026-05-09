@@ -150,14 +150,16 @@ source "proxmox-iso" "ubuntu-cloud-init" {
 
   # Boot configuration - autoinstall via subiquity (UEFI)
   # Uses S3-hosted autoinstall files (runner can't serve HTTP to Proxmox VMs)
+  # Sequence: esc (stop countdown) -> e (edit) -> navigate -> append autoinstall -> F10 (boot)
   boot_command = [
-    "e<wait3>",
+    "<esc><wait>",
+    "e<wait>",
     "<down><down><down><end>",
     "<bs><bs><bs><bs><wait>",
     " autoinstall ds=nocloud-net\\;s=http://s3.us-west-2.amazonaws.com/packer-autoinstall.etherport.net/ubuntu-2404/ ---<wait>",
-    "<f10>"
+    "<f10><wait>"
   ]
-  boot_wait = "5s"
+  boot_wait = "10s"
 
   # SSH connection - extended timeout for full ISO install
   ssh_username         = var.ssh_username
