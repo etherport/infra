@@ -46,6 +46,11 @@ jobs:
           echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /home/runner/.ssh/id_ed25519
           chmod 600 /home/runner/.ssh/id_ed25519
 
+      - name: Install ISO tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xorriso
+
       - name: Initialize Packer
         run: packer init .
         working-directory: ${{ env.WORKING_DIR }}
