@@ -128,6 +128,13 @@ resource "aws_vpc_security_group_ingress_rule" "internal_homelab" {
   cidr_ipv4         = "10.10.192.0/19"
 }
 
+resource "aws_vpc_security_group_ingress_rule" "internal_aws_spokes" {
+  security_group_id = aws_security_group.internal_comms.id
+  description       = "Allow all traffic from AWS spoke VPCs (use1 hub, regional/travel VPNs)"
+  ip_protocol       = "-1"
+  cidr_ipv4         = "10.10.96.0/19"
+}
+
 resource "aws_vpc_security_group_ingress_rule" "internal_vpn_clients" {
   security_group_id = aws_security_group.internal_comms.id
   description       = "Allow all traffic from remote VPN clients"
@@ -137,9 +144,9 @@ resource "aws_vpc_security_group_ingress_rule" "internal_vpn_clients" {
 
 resource "aws_vpc_security_group_ingress_rule" "internal_s2s_vpn" {
   security_group_id = aws_security_group.internal_comms.id
-  description       = "Allow all traffic from S2S VPN clients"
+  description       = "Allow all traffic from S2S VPN tunnel IPs"
   ip_protocol       = "-1"
-  cidr_ipv4         = "10.255.255.0/30"
+  cidr_ipv4         = "10.255.255.0/29"
 }
 
 resource "aws_vpc_security_group_egress_rule" "internal_all_ipv4" {
