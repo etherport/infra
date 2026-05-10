@@ -23,13 +23,16 @@ autoinstall:
   identity:
     hostname: ubuntu-template
     username: ubuntu
-    # Password: 'ubuntu' - disabled via SSH, only used for console recovery
-    password: "$6$xDpuH/v1lSb4qB01$xDY3p8XGOhGfvTJF7kahCpLC34qQwMomob1PahJBnXT79F6Aqbnh9ERYCOz19PBkwRNAPsl2hJA/Woql3GetE0"
+    # Password: 'ubuntu' - kept enabled during build for console recovery and debug.
+    # Production hardening: re-disable PasswordAuthentication once the template is proven.
+    password: "$6$R6zzPLmgQ8cYD$7b.PyMRQ8IYbYRELRM3vcoQbvLN2TRD1L0eOyTusyVn57Y05pWgpvwTnSm/g/.F00M5lZCI3TFBXJ.1S5SsyG1"
 
   # SSH configuration
+  # Note: allow-pw=true during template build so we can SSH-debug if key auth fails.
+  # Cloned VMs from this template get their keys via cloud-init at first boot.
   ssh:
     install-server: true
-    allow-pw: false
+    allow-pw: true
     authorized-keys:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab
 
@@ -48,9 +51,11 @@ autoinstall:
   late-commands:
     # Configure cloud-init datasource for Proxmox
     - "echo 'datasource_list: [NoCloud, ConfigDrive]' > /target/etc/cloud/cloud.cfg.d/99-proxmox.cfg"
-    # Disable password authentication
-    - "sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' /target/etc/ssh/sshd_config"
-    - "sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /target/etc/ssh/sshd_config"
+    # Diagnostic markers so we can confirm autoinstall completed via console login if SSH fails
+    - "date -u +%FT%TZ > /target/var/log/autoinstall-completed"
+    - "ip -4 addr show > /target/var/log/autoinstall-network.log 2>&1 || true"
+    - "cp /target/home/ubuntu/.ssh/authorized_keys /target/var/log/autoinstall-authorized_keys 2>&1 || echo 'no authorized_keys' > /target/var/log/autoinstall-authorized_keys"
+    - "curtin in-target --target=/target -- systemctl enable ssh"
 
   # Reboot after installation
   shutdown: reboot
