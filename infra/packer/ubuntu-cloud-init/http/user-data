@@ -37,11 +37,13 @@ autoinstall:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab
 
   # Packages to install during autoinstall
-  # Note: qemu-guest-agent installed by Packer provisioner (avoids repo issues during install)
+  # qemu-guest-agent must be installed here (not in a Packer provisioner) so Proxmox
+  # can report the VM's IP to Packer before SSH is attempted.
   packages:
     - openssh-server
     - cloud-init
     - cloud-guest-utils
+    - qemu-guest-agent
     - python3
     - curl
     - wget
@@ -51,11 +53,13 @@ autoinstall:
   late-commands:
     # Configure cloud-init datasource for Proxmox
     - "echo 'datasource_list: [NoCloud, ConfigDrive]' > /target/etc/cloud/cloud.cfg.d/99-proxmox.cfg"
+    # Enable required services in the installed system
+    - "curtin in-target --target=/target -- systemctl enable ssh"
+    - "curtin in-target --target=/target -- systemctl enable qemu-guest-agent"
     # Diagnostic markers so we can confirm autoinstall completed via console login if SSH fails
     - "date -u +%FT%TZ > /target/var/log/autoinstall-completed"
     - "ip -4 addr show > /target/var/log/autoinstall-network.log 2>&1 || true"
     - "cp /target/home/ubuntu/.ssh/authorized_keys /target/var/log/autoinstall-authorized_keys 2>&1 || echo 'no authorized_keys' > /target/var/log/autoinstall-authorized_keys"
-    - "curtin in-target --target=/target -- systemctl enable ssh"
 
   # Reboot after installation
   shutdown: reboot

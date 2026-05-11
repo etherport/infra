@@ -129,6 +129,17 @@ source "proxmox-iso" "ubuntu-cloud-init" {
 
   scsi_controller = "virtio-scsi-single"
 
+  # Boot order: try disk first, then installer CD. On first boot the disk is
+  # empty so OVMF falls through to ide2 (installer). After autoinstall writes
+  # to scsi0 and reboots, BIOS finds a bootable disk and skips the CD —
+  # otherwise the VM loops back into the installer forever.
+  boot = "order=scsi0;ide2;net0"
+
+  # Enable QEMU guest agent at the VM level so Proxmox/Packer can query the
+  # VM's IP. The agent itself is installed by autoinstall (in user-data
+  # packages) — otherwise Packer can't discover the IP to SSH to.
+  qemu_agent = true
+
   # Network - VLAN 201 (server VLAN with DHCP)
   network_adapters {
     bridge   = "vmbr0"
