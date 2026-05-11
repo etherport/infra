@@ -61,7 +61,9 @@ jobs:
 
       - name: Build template
         if: github.event.inputs.action == 'build' || github.event_name == 'schedule'
-        run: packer build -force .
+        # -on-error=abort keeps the VM around on failure so we can console into it for debugging.
+        # Revert to default cleanup once builds are passing reliably.
+        run: packer build -force -on-error=abort .
         working-directory: ${{ env.WORKING_DIR }}
 
       - name: Summary
