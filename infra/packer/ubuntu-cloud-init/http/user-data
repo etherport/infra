@@ -55,7 +55,25 @@ autoinstall:
   # By this point networking is fully up and apt mirrors are reachable, so
   # qemu-guest-agent installs cleanly. Packer waits for the agent to report
   # the VM's IP, then SSHs in.
+  #
+  # IMPORTANT: cloud-init's default 'ubuntu' user has lock_passwd=true, which
+  # re-locks the password subiquity set. And cloud-init's default-user logic
+  # can wipe the ssh.authorized_keys that subiquity installed. We explicitly
+  # manage the user here so neither happens.
   user-data:
+    users:
+      - name: ubuntu
+        lock_passwd: false
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        shell: /bin/bash
+        ssh_authorized_keys:
+          - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab
+    chpasswd:
+      expire: false
+      users:
+        - name: ubuntu
+          password: ubuntu
+          type: text
     package_update: true
     packages:
       - qemu-guest-agent
@@ -68,6 +86,14 @@ autoinstall:
     - "echo 'datasource_list: [NoCloud, ConfigDrive]' > /target/etc/cloud/cloud.cfg.d/99-proxmox.cfg"
     # Force ssh to be enabled (sometimes subiquity skips this)
     - "curtin in-target --target=/target -- systemctl enable ssh"
+    # Belt-and-suspenders: write the SSH key directly into the installed
+    # user's authorized_keys. If subiquity's ssh.authorized-keys or our
+    # cloud-init users block both fail, this still puts the key in place.
+    - "mkdir -p /target/home/ubuntu/.ssh"
+    - "echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab' > /target/home/ubuntu/.ssh/authorized_keys"
+    - "curtin in-target --target=/target -- chown -R ubuntu:ubuntu /home/ubuntu/.ssh"
+    - "curtin in-target --target=/target -- chmod 700 /home/ubuntu/.ssh"
+    - "curtin in-target --target=/target -- chmod 600 /home/ubuntu/.ssh/authorized_keys"
     # Diagnostic markers so we can confirm autoinstall completed via console login if SSH fails
     - "date -u +%FT%TZ > /target/var/log/autoinstall-completed"
     - "ip -4 addr show > /target/var/log/autoinstall-network.log 2>&1 || true"
