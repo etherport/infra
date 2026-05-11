@@ -147,7 +147,8 @@ source "proxmox-iso" "ubuntu-cloud-init" {
     vlan_tag = 201
   }
 
-  # ISO/Boot - using boot_iso block (replaces deprecated iso_* fields)
+  # ISO/Boot - installer ISO that the VM boots from initially.
+  # Default type (ide2) so it doesn't collide with our scsi0 disk.
   boot_iso {
     iso_url          = var.ubuntu_iso_url
     iso_checksum     = var.ubuntu_iso_checksum
@@ -155,36 +156,37 @@ source "proxmox-iso" "ubuntu-cloud-init" {
     unmount          = true
   }
 
-  # Autoinstall config via CIDATA ISO - cloud-init finds this automatically
-  additional_iso_files {
-    cd_files         = ["./http/user-data", "./http/meta-data"]
-    cd_label         = "cidata"
-    iso_storage_pool = "local"
-    unmount          = true
-    device           = "sata1"
-  }
+  # Serve autoinstall config via Packer's built-in HTTP server. This avoids
+  # the CIDATA-ISO problem where the autoinstall config stays attached to
+  # the VM after install and confuses first-boot cloud-init (the autoinstall
+  # YAML is structurally different from regular cloud-init user-data).
+  http_directory = "./http"
 
-  # Cloud-init for post-install (Terraform will configure this)
+  # Cloud-init drive for post-install (Terraform will configure this when
+  # cloning the template).
   cloud_init              = true
   cloud_init_storage_pool = var.storage_pool
 
-  # Boot configuration - just add 'autoinstall' keyword
-  # Cloud-init will find config from CIDATA ISO automatically
+  # Boot configuration. Drop into GRUB shell with `c`, then type the kernel
+  # command line directly. This is significantly more robust than navigating
+  # the installer's menu+editor (which our previous approach depended on
+  # exact cursor positioning). The ds= value tells the live ISO's cloud-init
+  # to fetch autoinstall config from Packer's HTTP server.
   boot_key_interval = "100ms"
   boot_wait         = "10s"
   boot_command = [
-    "<wait><up><wait>",
-    "e<wait5s>",
-    "<down><down><down><end><wait>",
-    "<left><left><left><left><wait>",
-    "autoinstall <wait>",
-    "<f10>"
+    "c<wait>",
+    "linux /casper/vmlinuz autoinstall ds=\"nocloud-net;seedfrom=http://{{.HTTPIP}}:{{.HTTPPort}}/\" ---",
+    "<enter><wait>",
+    "initrd /casper/initrd<enter><wait>",
+    "boot<enter>"
   ]
 
-  # SSH connection - extended timeout for full ISO install
-  ssh_username         = var.ssh_username
-  ssh_private_key_file = var.ssh_private_key_file
-  ssh_timeout          = "45m"
+  # SSH connection - extended timeout for full ISO install + reboot + cloud-init
+  ssh_username           = var.ssh_username
+  ssh_private_key_file   = var.ssh_private_key_file
+  ssh_timeout            = "45m"
+  ssh_handshake_attempts = 100
 
   # Tags
   tags = "template;ubuntu;cloud-init;packer"

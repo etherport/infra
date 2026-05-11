@@ -19,76 +19,45 @@ autoinstall:
     swap:
       size: 0
 
-  # User account - using 'ubuntu' to match AWS EC2 defaults
+  # User account - using 'ubuntu' to match AWS EC2 defaults.
+  # Password is 'ubuntu' (verified hash). Used for console recovery only;
+  # SSH password auth is disabled below.
   identity:
     hostname: ubuntu-template
     username: ubuntu
-    # Password: 'ubuntu' - kept enabled during build for console recovery and debug.
-    # Production hardening: re-disable PasswordAuthentication once the template is proven.
     password: "$6$R6zzPLmgQ8cYD$7b.PyMRQ8IYbYRELRM3vcoQbvLN2TRD1L0eOyTusyVn57Y05pWgpvwTnSm/g/.F00M5lZCI3TFBXJ.1S5SsyG1"
 
-  # SSH configuration
-  # Note: allow-pw=true during template build so we can SSH-debug if key auth fails.
-  # Cloned VMs from this template get their keys via cloud-init at first boot.
+  # SSH configuration - subiquity writes the authorized key for the ubuntu
+  # user directly during install. No cloud-init users: trickery needed.
   ssh:
     install-server: true
-    allow-pw: true
+    allow-pw: false
     authorized-keys:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab
 
-  # Packages to install during autoinstall.
-  # Keep this list MINIMAL — anything not in the live ISO's local cache fails
-  # to retrieve during autoinstall (the installer's network isn't reliably up
-  # when the package step runs). qemu-guest-agent in particular fails here
-  # with exit 100; it's installed via cloud-init on first boot instead (see
-  # user-data section below).
+  # Stop the live installer's SSH so it doesn't conflict with the target's
+  # SSH coming up after reboot.
+  early-commands:
+    - sudo systemctl stop ssh
+
+  # Packages to install during autoinstall. qemu-guest-agent has to be here
+  # so Proxmox can report the VM's IP to Packer once the VM reboots.
   packages:
     - openssh-server
     - cloud-init
     - cloud-guest-utils
+    - qemu-guest-agent
     - python3
     - curl
     - wget
     - ca-certificates
 
-  # cloud-init user-data to apply on the installed system's FIRST BOOT.
-  # By this point networking is fully up and apt mirrors are reachable, so
-  # qemu-guest-agent installs cleanly. Packer waits for the agent to report
-  # the VM's IP, then SSHs in.
-  #
-  # IMPORTANT: cloud-init's default 'ubuntu' user has lock_passwd=true, which
-  # re-locks the password subiquity set. And cloud-init's default-user logic
-  # can wipe the ssh.authorized_keys that subiquity installed. We explicitly
-  # manage the user here so neither happens.
-  user-data:
-    users:
-      - name: ubuntu
-        lock_passwd: false
-        sudo: ALL=(ALL) NOPASSWD:ALL
-        shell: /bin/bash
-        ssh_authorized_keys:
-          - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab
-    chpasswd:
-      expire: false
-      users:
-        - name: ubuntu
-          password: ubuntu
-          type: text
-    package_update: true
-    packages:
-      - qemu-guest-agent
-    runcmd:
-      - [systemctl, enable, --now, qemu-guest-agent]
-
-  # Late commands - run after installation.
-  # Keep these MINIMAL and append `|| true` to anything non-essential. If any
-  # late-command exits non-zero, subiquity aborts the install entirely.
-  # In particular, do NOT touch /home/ubuntu here — the user's home directory
-  # isn't fully set up by subiquity until first-boot cloud-init runs. The
-  # SSH key is installed via the cloud-init users: block above.
+  # Late commands - minimal. Anything that exits non-zero aborts the whole
+  # install, so we keep this short and `|| true` non-essential pieces.
   late-commands:
     - "echo 'datasource_list: [NoCloud, ConfigDrive]' > /target/etc/cloud/cloud.cfg.d/99-proxmox.cfg"
     - "curtin in-target --target=/target -- systemctl enable ssh || true"
+    - "curtin in-target --target=/target -- systemctl enable qemu-guest-agent || true"
     - "date -u +%FT%TZ > /target/var/log/autoinstall-completed || true"
 
   # Reboot after installation
