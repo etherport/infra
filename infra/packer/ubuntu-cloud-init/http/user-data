@@ -36,26 +36,38 @@ autoinstall:
     authorized-keys:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab
 
-  # Packages to install during autoinstall
-  # qemu-guest-agent must be installed here (not in a Packer provisioner) so Proxmox
-  # can report the VM's IP to Packer before SSH is attempted.
+  # Packages to install during autoinstall.
+  # Keep this list MINIMAL — anything not in the live ISO's local cache fails
+  # to retrieve during autoinstall (the installer's network isn't reliably up
+  # when the package step runs). qemu-guest-agent in particular fails here
+  # with exit 100; it's installed via cloud-init on first boot instead (see
+  # user-data section below).
   packages:
     - openssh-server
     - cloud-init
     - cloud-guest-utils
-    - qemu-guest-agent
     - python3
     - curl
     - wget
     - ca-certificates
 
+  # cloud-init user-data to apply on the installed system's FIRST BOOT.
+  # By this point networking is fully up and apt mirrors are reachable, so
+  # qemu-guest-agent installs cleanly. Packer waits for the agent to report
+  # the VM's IP, then SSHs in.
+  user-data:
+    package_update: true
+    packages:
+      - qemu-guest-agent
+    runcmd:
+      - [systemctl, enable, --now, qemu-guest-agent]
+
   # Late commands - run after installation
   late-commands:
     # Configure cloud-init datasource for Proxmox
     - "echo 'datasource_list: [NoCloud, ConfigDrive]' > /target/etc/cloud/cloud.cfg.d/99-proxmox.cfg"
-    # Enable required services in the installed system
+    # Force ssh to be enabled (sometimes subiquity skips this)
     - "curtin in-target --target=/target -- systemctl enable ssh"
-    - "curtin in-target --target=/target -- systemctl enable qemu-guest-agent"
     # Diagnostic markers so we can confirm autoinstall completed via console login if SSH fails
     - "date -u +%FT%TZ > /target/var/log/autoinstall-completed"
     - "ip -4 addr show > /target/var/log/autoinstall-network.log 2>&1 || true"
