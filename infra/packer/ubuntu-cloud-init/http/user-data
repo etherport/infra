@@ -52,24 +52,38 @@ autoinstall:
   early-commands:
     - sudo systemctl stop ssh
 
-  # Packages to install during autoinstall. qemu-guest-agent has to be here
-  # so Proxmox can report the VM's IP to Packer once the VM reboots.
+  # Packages to install during autoinstall. Keep this list to main-only
+  # packages that the live ISO can definitely retrieve. qemu-guest-agent is
+  # in universe and the curtin postinstall phase fails to fetch it (exit 100,
+  # 'No such file or directory' from apt cache) even with apt.primary set —
+  # likely because curtin's postinstall sources don't pick up universe. We
+  # install it on first boot via cloud-init user-data below instead.
   packages:
     - openssh-server
     - cloud-init
     - cloud-guest-utils
-    - qemu-guest-agent
     - python3
     - curl
     - wget
     - ca-certificates
+
+  # cloud-init user-data baked into the installed system. With HTTP datasource
+  # (no CIDATA staying attached), subiquity writes this as the local NoCloud
+  # seed, and cloud-init applies it cleanly on first boot — no more conflict
+  # with re-reading the original autoinstall YAML.
+  user-data:
+    package_update: true
+    package_upgrade: false
+    packages:
+      - qemu-guest-agent
+    runcmd:
+      - [systemctl, enable, --now, qemu-guest-agent]
 
   # Late commands - minimal. Anything that exits non-zero aborts the whole
   # install, so we keep this short and `|| true` non-essential pieces.
   late-commands:
     - "echo 'datasource_list: [NoCloud, ConfigDrive]' > /target/etc/cloud/cloud.cfg.d/99-proxmox.cfg"
     - "curtin in-target --target=/target -- systemctl enable ssh || true"
-    - "curtin in-target --target=/target -- systemctl enable qemu-guest-agent || true"
     - "date -u +%FT%TZ > /target/var/log/autoinstall-completed || true"
 
   # Reboot after installation
