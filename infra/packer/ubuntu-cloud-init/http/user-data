@@ -80,24 +80,16 @@ autoinstall:
     runcmd:
       - [systemctl, enable, --now, qemu-guest-agent]
 
-  # Late commands - run after installation
+  # Late commands - run after installation.
+  # Keep these MINIMAL and append `|| true` to anything non-essential. If any
+  # late-command exits non-zero, subiquity aborts the install entirely.
+  # In particular, do NOT touch /home/ubuntu here — the user's home directory
+  # isn't fully set up by subiquity until first-boot cloud-init runs. The
+  # SSH key is installed via the cloud-init users: block above.
   late-commands:
-    # Configure cloud-init datasource for Proxmox
     - "echo 'datasource_list: [NoCloud, ConfigDrive]' > /target/etc/cloud/cloud.cfg.d/99-proxmox.cfg"
-    # Force ssh to be enabled (sometimes subiquity skips this)
-    - "curtin in-target --target=/target -- systemctl enable ssh"
-    # Belt-and-suspenders: write the SSH key directly into the installed
-    # user's authorized_keys. If subiquity's ssh.authorized-keys or our
-    # cloud-init users block both fail, this still puts the key in place.
-    - "mkdir -p /target/home/ubuntu/.ssh"
-    - "echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab' > /target/home/ubuntu/.ssh/authorized_keys"
-    - "curtin in-target --target=/target -- chown -R ubuntu:ubuntu /home/ubuntu/.ssh"
-    - "curtin in-target --target=/target -- chmod 700 /home/ubuntu/.ssh"
-    - "curtin in-target --target=/target -- chmod 600 /home/ubuntu/.ssh/authorized_keys"
-    # Diagnostic markers so we can confirm autoinstall completed via console login if SSH fails
-    - "date -u +%FT%TZ > /target/var/log/autoinstall-completed"
-    - "ip -4 addr show > /target/var/log/autoinstall-network.log 2>&1 || true"
-    - "cp /target/home/ubuntu/.ssh/authorized_keys /target/var/log/autoinstall-authorized_keys 2>&1 || echo 'no authorized_keys' > /target/var/log/autoinstall-authorized_keys"
+    - "curtin in-target --target=/target -- systemctl enable ssh || true"
+    - "date -u +%FT%TZ > /target/var/log/autoinstall-completed || true"
 
   # Reboot after installation
   shutdown: reboot
