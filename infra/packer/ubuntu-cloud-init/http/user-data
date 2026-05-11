@@ -19,6 +19,18 @@ autoinstall:
     swap:
       size: 0
 
+  # Explicit APT sources so package install during autoinstall doesn't fall
+  # back to the live ISO's CD-ROM-only sources (which lack qemu-guest-agent
+  # and others, causing exit 100 during install_qemu-guest-agent step).
+  apt:
+    geoip: true
+    preserve_sources_list: false
+    primary:
+      - arches: [amd64, i386]
+        uri: http://archive.ubuntu.com/ubuntu
+      - arches: [default]
+        uri: http://ports.ubuntu.com/ubuntu-ports
+
   # User account - using 'ubuntu' to match AWS EC2 defaults.
   # Password is 'ubuntu' (verified hash). Used for console recovery only;
   # SSH password auth is disabled below.
