@@ -92,18 +92,6 @@ variable "ssh_private_key_file" {
   default     = "~/.ssh/id_ed25519"
 }
 
-variable "build_ip" {
-  type        = string
-  description = "Temporary static IP (CIDR) for the build VM. Cloned VMs override this via Terraform."
-  default     = "10.10.201.250/24"
-}
-
-variable "build_gateway" {
-  type        = string
-  description = "Gateway for the build VM"
-  default     = "10.10.201.1"
-}
-
 #------------------------------------------------------------------------------
 # Source - proxmox-clone
 #------------------------------------------------------------------------------
@@ -131,18 +119,10 @@ source "proxmox-clone" "ubuntu" {
   cloud_init              = true
   cloud_init_storage_pool = var.storage_pool
 
-  # Cloud-init user + SSH key for the build itself. Terraform overrides
-  # these per-clone for actual workload VMs.
-  ciuser  = var.ssh_username
-  sshkeys = var.ssh_public_key
-
-  # Static IP during build so Packer can SSH in without depending on
-  # guest-agent IP discovery races. .250 is high-range, outside DHCP pool
-  # and clear of the UDM honeypot (.99).
-  ipconfig {
-    ip      = var.build_ip
-    gateway = var.build_gateway
-  }
+  # ciuser/sshkeys/ipconfig are inherited from VM 9000 (set in
+  # setup-cloud-base.sh). The proxmox-clone source doesn't accept those
+  # fields directly; configuring them on the source template is the
+  # canonical pattern. Terraform overrides per-clone for workload VMs.
 
   qemu_agent = true
 

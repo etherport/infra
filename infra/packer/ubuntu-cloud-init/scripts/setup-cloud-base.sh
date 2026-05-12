@@ -63,8 +63,21 @@ qm set "$BASE_VMID" --boot "order=scsi0;ide2;net0"
 echo ">>> Resizing disk to 10G..."
 qm resize "$BASE_VMID" scsi0 10G
 
-echo ">>> Setting default cloud-init user (ubuntu)..."
+echo ">>> Setting cloud-init defaults (user, SSH key, IP, DNS)..."
 qm set "$BASE_VMID" --ciuser ubuntu
+# SSH public key used by Packer during build (must match ANSIBLE_SSH_KEY in
+# GH secrets / 1P "Homelab Automation SSH Key"). Terraform overrides this
+# per-clone for workload VMs.
+SSHKEY_FILE=$(mktemp /tmp/cloudbase-ssh-XXXX.pub)
+cat > "$SSHKEY_FILE" <<'EOF'
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab
+EOF
+qm set "$BASE_VMID" --sshkeys "$SSHKEY_FILE"
+rm -f "$SSHKEY_FILE"
+# Static IP for the Packer build clone (outside DHCP pool, clear of UDM
+# honeypot at .99). Terraform overrides per-clone for workload VMs.
+qm set "$BASE_VMID" --ipconfig0 "ip=10.10.201.250/24,gw=10.10.201.1"
+qm set "$BASE_VMID" --nameserver "10.10.201.5 10.10.201.6"
 
 echo ">>> Converting to template..."
 qm template "$BASE_VMID"
