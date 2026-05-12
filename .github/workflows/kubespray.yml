@@ -71,6 +71,10 @@ jobs:
             ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts 2>/dev/null || true
           done
 
+      - name: Clean stale venv from prior failed runs
+        run: rm -rf kubespray/venv
+        working-directory: ${{ env.WORKING_DIR }}
+
       - name: Run kubespray setup (venv + deps)
         run: ./setup.sh
         working-directory: ${{ env.WORKING_DIR }}
