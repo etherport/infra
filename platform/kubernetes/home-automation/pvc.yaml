@@ -3,6 +3,13 @@ kind: PersistentVolumeClaim
 metadata:
   name: home-assistant-config
   namespace: home-automation
+  annotations:
+    # PVC is bound to a manually-created static PV (home-assistant-config-recovery)
+    # that references the original RBD image preserved on external Ceph. Without
+    # this annotation Flux tries to clear spec.volumeName on every reconcile,
+    # which fails because PVC.spec is immutable on bound claims and blocks the
+    # whole Kustomization. See docs/planning/migration-questions-2026-05-12.md.
+    kustomize.toolkit.fluxcd.io/reconcile: disabled
 spec:
   accessModes:
     - ReadWriteOnce
