@@ -21,11 +21,9 @@ http:
   cors_allowed_origins:
     - https://ha.wind.etherport.net
 
-# Leviton account (credentials in secrets.yaml)
-light:
-  - platform: decora_wifi
-    username: !secret leviton_username
-    password: !secret leviton_password
+# Leviton Decora Wi-Fi YAML configuration removed - now handled via HA UI
+# (the integration was deprecated for YAML in HA 2026.x; lights are imported
+# automatically via the HA frontend). Removed 2026-05-12.
 
 alexa:
   smart_home:
