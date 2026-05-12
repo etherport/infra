@@ -77,6 +77,26 @@ from `pre-migration-20260512-1915`, scales wireguard back to 1.
 once we have `Secrets: write` PAT permission? Long-term yes, but for
 this bootstrap it runs locally.
 
+### 7. Chowned /opt/cni to root:root post-kubespray
+**Background:** After kubespray completed, Cilium pods crashlooped on
+the `mount-cgroup` init container with "Permission denied" writing to
+`/opt/cni/bin/cilium-mount`. Root cause: kubespray creates a `kube`
+user as `kube_owner` and chowns `/opt/cni/bin` to `kube:root` with
+mode 0755. Cilium's init container drops `CAP_DAC_OVERRIDE`, so root
+inside the container falls under "group" permissions (rx only) and
+can't write.
+
+**What I did:** Ran `ansible -m shell -a 'chown -R root:root /opt/cni'`
+on all 8 K8s nodes. Pods came up immediately.
+
+**Open question:** This will reoccur on every kubespray re-run /
+upgrade. We should either:
+- Set `cni_bin_owner: root` explicitly in kubespray group_vars (already
+  set per the existing `cni_bin_owner: root` line in all.yml — but
+  somehow the directory still ended up `kube:root`. Worth investigating
+  why the override isn't taking effect.)
+- Or add CAP_DAC_OVERRIDE to Cilium's init container.
+
 ## Open architectural questions for your review
 
 1. **Two inventories (ansible vs kubespray)** — consolidate?
@@ -94,6 +114,33 @@ this bootstrap it runs locally.
    self-hosted, Linux, X64`. Should some workflows use ONLY `lifecycle`
    to skip the runner-in-K8s? Workflows that touch K8s cluster
    lifecycle specifically.
+
+## Final state at end of autonomous run
+
+### What's working ✅
+- All 8 K8s nodes Ready (sequential IDs 100-102, 110-113, 120 — your preferred scheme)
+- gh-runner VM at 10.10.201.30 with self-hosted runner registered as `homelab-runner, lifecycle, self-hosted, Linux, X64`
+- Cilium CNI healthy after fixing `/opt/cni` ownership
+- Velero restore from `pre-migration-20260512-1915` **Completed**
+- Ceph RBD CSI driver running on all nodes (after loading `rbd` kernel module everywhere — added to `/etc/modules-load.d/rbd.conf` for persistence)
+- Flux + GitOps: 9/11 HelmReleases healthy (cert-manager, cnpg operator, kured, tailscale-operator, velero, arc-controller, arc-runner-homelab, gpu-operator, traefik)
+- DNS service (technitium) running with MetalLB LBs at 10.10.201.5/.71/.72
+- Traefik LB at 10.10.201.70
+- WireGuard pod back at replicas=1 (failover from vpn-local should reclaim VIP via VRRP priority)
+
+### Issues remaining for your review ⚠️
+1. **monitoring HelmRelease (kube-prometheus-stack) failed** with `context deadline exceeded`. Re-reconcile triggered. May need explicit chart timeout bump or staged install. Pushgateway waits on this.
+2. **postgres-cluster-1 CrashLoopBackOff** — CNPG operator can't bootstrap a replica from the restored PV. Logs show `Timeout: failed waiting for *v1.Cluster Informer to sync` and `Error while checking if there is enough disk space for WALs`. This is typical CNPG behavior when restoring a primary with stale WAL state — usually needs the operator to coordinate or a manual `cnpg promote` once the primary is ready. wikijs (depends on postgres) is crashlooping for the same reason.
+3. **GPU operator pods stuck in Init** (~15 min). NVIDIA driver containers take a while; check `kubectl logs -n gpu-operator-system <pod> -c nvidia-driver-ctr` if they don't move soon.
+4. **kubectl can't reach k8s-gpu1 (10.10.201.60) via SSH from this Mac** but K8s cluster reaches it fine — VPN routing quirk. Worked around with `kubectl debug node + nsenter` to load `rbd` module.
+5. **s3-sync-daily-report Jobs Error** — cronjob-scheduled during restore window, probably expected (no buckets to sync to during outage).
+
+### Tasks for you on return
+1. Approve / fix the monitoring HelmRelease (check timeout settings)
+2. Investigate postgres CNPG restore — may need `kubectl cnpg restart` or manual promote
+3. Verify K8s WireGuard pod has reclaimed VIP from vpn-local (check `kubectl exec -n wireguard deploy/wireguard -- wg show` and `kubectl get svc -n wireguard`)
+4. Cycle through remaining Task list (NetworkPolicies, dns-fallback+vpn-local rebuild)
+5. Decide on adding `Secrets: write` to claude-cli PAT so I can fully automate next time
 
 ## Files modified during the autonomous run
 
