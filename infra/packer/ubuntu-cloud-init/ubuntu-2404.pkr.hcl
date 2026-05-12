@@ -1,13 +1,18 @@
-# Ubuntu 24.04 LTS Cloud-Init Template for Proxmox
-# This creates a VM template (ID 9000) that Terraform can clone
+# Ubuntu 24.04 cloud-init template for Proxmox via proxmox-clone.
+#
+# This clones a pre-existing base VM (VM 9000 — Ubuntu 24.04 cloud image
+# imported via scripts/setup-cloud-base.sh) and customizes it via shell
+# provisioners. The result is saved as a template at VM ID 9001 for
+# Terraform to clone.
+#
+# Why proxmox-clone (not proxmox-iso): Ubuntu cloud images ship with
+# cloud-init, qemu-guest-agent, the ubuntu user, and SSH server already
+# configured. We avoid the autoinstall/subiquity quirks (qemu-guest-agent
+# install failures, chpasswd in chroot, datasource confusion) entirely.
 #
 # Usage:
 #   packer init .
 #   packer build -var-file=variables.pkrvars.hcl .
-#
-# Prerequisites:
-#   - Packer installed (https://www.packer.io/downloads)
-#   - Proxmox API token with VM creation permissions
 
 packer {
   required_plugins {
@@ -18,7 +23,10 @@ packer {
   }
 }
 
+#------------------------------------------------------------------------------
 # Variables
+#------------------------------------------------------------------------------
+
 variable "proxmox_url" {
   type        = string
   description = "Proxmox API URL"
@@ -43,15 +51,21 @@ variable "proxmox_node" {
   default     = "pve"
 }
 
+variable "base_template_id" {
+  type        = number
+  description = "VM ID of the base cloud-image template to clone from"
+  default     = 9000
+}
+
 variable "template_vm_id" {
   type        = number
-  description = "VM ID for the template"
-  default     = 9000
+  description = "VM ID for the customized template Packer produces"
+  default     = 9001
 }
 
 variable "template_name" {
   type        = string
-  description = "Name for the template VM"
+  description = "Name for the produced template VM"
   default     = "ubuntu-2404-cloud-init"
 }
 
@@ -63,211 +77,128 @@ variable "storage_pool" {
 
 variable "ssh_username" {
   type        = string
-  description = "Username for SSH access during build"
+  description = "Cloud-init username and SSH user during build"
   default     = "ubuntu"
 }
 
 variable "ssh_public_key" {
   type        = string
-  description = "SSH public key to add to the template"
+  description = "SSH public key injected into the template via cloud-init"
 }
 
 variable "ssh_private_key_file" {
   type        = string
-  description = "Path to SSH private key for Packer to connect"
+  description = "Path to SSH private key Packer uses to connect during build"
   default     = "~/.ssh/id_ed25519"
 }
 
-variable "ubuntu_iso_url" {
+variable "build_ip" {
   type        = string
-  description = "URL to Ubuntu Server Live ISO (using CDN mirror for reliability)"
-  default     = "https://mirror.arizona.edu/ubuntu-releases/24.04/ubuntu-24.04.3-live-server-amd64.iso"
+  description = "Temporary static IP (CIDR) for the build VM. Cloned VMs override this via Terraform."
+  default     = "10.10.201.250/24"
 }
 
-variable "ubuntu_iso_checksum" {
+variable "build_gateway" {
   type        = string
-  description = "SHA256 checksum for Ubuntu Server ISO"
-  default     = "sha256:c3514bf0056180d09376462a7a1b4f213c1d6e8ea67fae5c25099c6fd3d8274b"
+  description = "Gateway for the build VM"
+  default     = "10.10.201.1"
 }
 
-# Source definition for Proxmox
-source "proxmox-iso" "ubuntu-cloud-init" {
-  # Proxmox connection
+#------------------------------------------------------------------------------
+# Source - proxmox-clone
+#------------------------------------------------------------------------------
+
+source "proxmox-clone" "ubuntu" {
   proxmox_url              = var.proxmox_url
   username                 = var.proxmox_token_id
   token                    = var.proxmox_token_secret
-  insecure_skip_tls_verify = true
   node                     = var.proxmox_node
+  insecure_skip_tls_verify = true
 
-  # VM settings
+  # Source template - the Ubuntu cloud image imported by setup-cloud-base.sh
+  clone_vm_id = var.base_template_id
+
+  # Destination VM (becomes the new template)
   vm_id                = var.template_vm_id
   vm_name              = var.template_name
-  template_description = "Ubuntu 24.04 LTS cloud-init template - Built by Packer"
+  template_description = "Ubuntu 24.04 LTS cloud-init template - Built by Packer from cloud image"
 
-  # Hardware - 4GB RAM matches reference repo; the 2GB we had previously
-  # caused installer memory pressure that may have contributed to package
-  # download flakiness during autoinstall.
-  cores    = 2
-  memory   = 4096
-  cpu_type = "host"
-  machine  = "q35"
-  bios     = "ovmf"
+  # Hardware overrides (the base template's defaults are fine, but be explicit)
+  cores  = 2
+  memory = 2048
 
-  efi_config {
-    efi_storage_pool  = var.storage_pool
-    efi_type          = "4m"
-    pre_enrolled_keys = false
-  }
-
-  # Storage
-  disks {
-    disk_size    = "10G"
-    storage_pool = var.storage_pool
-    type         = "scsi"
-    format       = "raw"
-    discard      = true
-    ssd          = true
-  }
-
-  scsi_controller = "virtio-scsi-single"
-
-  # Boot order: try disk first, then installer CD. On first boot the disk is
-  # empty so OVMF falls through to ide2 (installer). After autoinstall writes
-  # to scsi0 and reboots, BIOS finds a bootable disk and skips the CD —
-  # otherwise the VM loops back into the installer forever.
-  boot = "order=scsi0;ide2;net0"
-
-  # QEMU guest agent enabled at the VM level for post-build use (Proxmox/
-  # Terraform queries it on cloned VMs). Disabled for Packer's own IP-
-  # discovery though — qemu-guest-agent isn't installed in the autoinstall
-  # phase (it's in universe and curtin's postinstall apt can't reach it).
-  # Instead we give the build VM a static IP and tell Packer to connect
-  # to that directly via ssh_host.
-  qemu_agent = true
-
-  # Network - VLAN 201 (server VLAN with DHCP)
-  network_adapters {
-    bridge   = "vmbr0"
-    model    = "virtio"
-    vlan_tag = 201
-  }
-
-  # ISO/Boot - installer ISO that the VM boots from initially.
-  # Default type (ide2) so it doesn't collide with our scsi0 disk.
-  boot_iso {
-    iso_url          = var.ubuntu_iso_url
-    iso_checksum     = var.ubuntu_iso_checksum
-    iso_storage_pool = "local"
-    unmount          = true
-  }
-
-  # Serve autoinstall config via Packer's built-in HTTP server. This avoids
-  # the CIDATA-ISO problem where the autoinstall config stays attached to
-  # the VM after install and confuses first-boot cloud-init (the autoinstall
-  # YAML is structurally different from regular cloud-init user-data).
-  http_directory = "./http"
-
-  # Cloud-init drive for post-install (Terraform will configure this when
-  # cloning the template).
+  # Cloud-init drive for post-clone configuration by Terraform
   cloud_init              = true
   cloud_init_storage_pool = var.storage_pool
 
-  # Boot configuration. Drop into GRUB shell with `c`, then type the kernel
-  # command line directly. This is significantly more robust than navigating
-  # the installer's menu+editor (which our previous approach depended on
-  # exact cursor positioning). The ds= value tells the live ISO's cloud-init
-  # to fetch autoinstall config from Packer's HTTP server.
-  boot_key_interval = "100ms"
-  boot_wait         = "10s"
-  boot_command = [
-    "c<wait>",
-    "linux /casper/vmlinuz autoinstall ds=\"nocloud-net;seedfrom=http://{{.HTTPIP}}:{{.HTTPPort}}/\" ---",
-    "<enter><wait>",
-    "initrd /casper/initrd<enter><wait>",
-    "boot<enter>"
-  ]
+  # Cloud-init user + SSH key for the build itself. Terraform overrides
+  # these per-clone for actual workload VMs.
+  ciuser  = var.ssh_username
+  sshkeys = var.ssh_public_key
 
-  # SSH connection. Packer discovers the VM's IP via the QEMU guest agent
-  # (qemu_agent = true above). The agent gets installed by Packer's shell
-  # provisioner after first SSH — chicken-and-egg, but the proxmox plugin
-  # is happy to wait until DHCP completes and an IP is reachable.
+  # Static IP during build so Packer can SSH in without depending on
+  # guest-agent IP discovery races. .250 is high-range, outside DHCP pool
+  # and clear of the UDM honeypot (.99).
+  ipconfig {
+    ip      = var.build_ip
+    gateway = var.build_gateway
+  }
+
+  qemu_agent = true
+
+  tags = "template;ubuntu;cloud-init;packer"
+
+  # SSH connection - connect directly to the static IP
+  ssh_host               = "10.10.201.250"
   ssh_username           = var.ssh_username
   ssh_private_key_file   = var.ssh_private_key_file
-  ssh_timeout            = "45m"
-  ssh_handshake_attempts = 100
-
-  # Tags
-  tags = "template;ubuntu;cloud-init;packer"
+  ssh_timeout            = "10m"
+  ssh_handshake_attempts = 50
 }
 
-# Build definition
+#------------------------------------------------------------------------------
+# Build
+#------------------------------------------------------------------------------
+
 build {
-  sources = ["source.proxmox-iso.ubuntu-cloud-init"]
+  sources = ["source.proxmox-clone.ubuntu"]
 
-  # Wait for cloud-init to complete
+  # Wait for cloud-init to finish first-boot config before we start changing
+  # things underneath it.
   provisioner "shell" {
     inline = [
-      "while [ ! -f /var/lib/cloud/instance/boot-finished ]; do echo 'Waiting for cloud-init...'; sleep 5; done"
+      "echo 'Waiting for cloud-init to finish...'",
+      "sudo cloud-init status --wait || true",
+      "echo 'Cloud-init done.'",
     ]
   }
 
-  # Update system packages
+  # System update and base packages. Cloud image already has cloud-init,
+  # qemu-guest-agent, openssh-server, etc., so this is mostly upgrades plus
+  # the homelab-specific additions.
   provisioner "shell" {
     inline = [
-      "sudo apt-get update",
-      "sudo apt-get upgrade -y",
-      "sudo apt-get dist-upgrade -y"
+      "sudo DEBIAN_FRONTEND=noninteractive apt-get update",
+      "sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y",
+      "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip curl wget git vim htop ca-certificates gnupg lsb-release open-iscsi nfs-common qemu-guest-agent",
+      "sudo systemctl enable --now qemu-guest-agent",
     ]
   }
 
-  # Install essential packages
-  provisioner "shell" {
-    inline = [
-      "sudo apt-get install -y qemu-guest-agent cloud-init cloud-guest-utils",
-      "sudo apt-get install -y python3 python3-pip",
-      "sudo apt-get install -y curl wget git vim htop",
-      "sudo apt-get install -y ca-certificates gnupg lsb-release",
-      "sudo apt-get install -y open-iscsi nfs-common"
-    ]
-  }
-
-  # Enable qemu-guest-agent
-  provisioner "shell" {
-    inline = [
-      "sudo systemctl enable qemu-guest-agent",
-      "sudo systemctl start qemu-guest-agent || true"
-    ]
-  }
-
-  # Configure cloud-init for Proxmox
-  provisioner "shell" {
-    inline = [
-      "sudo rm -f /etc/cloud/cloud.cfg.d/99-installer.cfg",
-      "echo 'datasource_list: [NoCloud, ConfigDrive]' | sudo tee /etc/cloud/cloud.cfg.d/99-proxmox.cfg"
-    ]
-  }
-
-  # Clean up for templating
+  # Cleanup for templating - clear caches, machine-id, cloud-init state.
+  # The next time this template is cloned, cloud-init runs fresh on first
+  # boot and applies the new VM's identity.
   provisioner "shell" {
     inline = [
       "sudo apt-get autoremove -y",
       "sudo apt-get clean",
       "sudo rm -rf /var/lib/apt/lists/*",
       "sudo cloud-init clean --logs --seed",
-      "sudo rm -f /etc/machine-id",
       "sudo truncate -s 0 /etc/machine-id",
       "sudo rm -f /var/lib/dbus/machine-id",
       "sudo ln -sf /etc/machine-id /var/lib/dbus/machine-id",
-      "sudo rm -rf /tmp/*",
-      "sudo rm -rf /var/tmp/*",
-      "sudo sync"
-    ]
-  }
-
-  # Post-processor to convert to template
-  post-processor "shell-local" {
-    inline = [
-      "echo 'Template ${var.template_name} (ID ${var.template_vm_id}) created successfully!'"
+      "sudo rm -rf /tmp/* /var/tmp/*",
+      "sudo sync",
     ]
   }
 }

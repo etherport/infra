@@ -46,11 +46,6 @@ jobs:
           echo "${{ secrets.ANSIBLE_SSH_KEY }}" > /home/runner/.ssh/id_ed25519
           chmod 600 /home/runner/.ssh/id_ed25519
 
-      - name: Install ISO tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xorriso
-
       - name: Initialize Packer
         run: packer init .
         working-directory: ${{ env.WORKING_DIR }}
@@ -61,9 +56,7 @@ jobs:
 
       - name: Build template
         if: github.event.inputs.action == 'build' || github.event_name == 'schedule'
-        # -on-error=abort keeps the VM around on failure so we can console into it for debugging.
-        # Revert to default cleanup once builds are passing reliably.
-        run: packer build -force -on-error=abort .
+        run: packer build -force .
         working-directory: ${{ env.WORKING_DIR }}
 
       - name: Summary
@@ -73,4 +66,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Action**: ${{ github.event.inputs.action || 'build' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Template**: ubuntu-2404-cloud-init (VM 9000)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Template**: ubuntu-2404-cloud-init (VM 9001, cloned from base 9000)" >> $GITHUB_STEP_SUMMARY
