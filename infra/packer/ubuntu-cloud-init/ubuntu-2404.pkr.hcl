@@ -104,9 +104,11 @@ source "proxmox-iso" "ubuntu-cloud-init" {
   vm_name              = var.template_name
   template_description = "Ubuntu 24.04 LTS cloud-init template - Built by Packer"
 
-  # Hardware
+  # Hardware - 4GB RAM matches reference repo; the 2GB we had previously
+  # caused installer memory pressure that may have contributed to package
+  # download flakiness during autoinstall.
   cores    = 2
-  memory   = 2048
+  memory   = 4096
   cpu_type = "host"
   machine  = "q35"
   bios     = "ovmf"
@@ -185,9 +187,10 @@ source "proxmox-iso" "ubuntu-cloud-init" {
     "boot<enter>"
   ]
 
-  # SSH connection - connect to the static IP baked into autoinstall network
-  # config. Bypasses the guest-agent IP-discovery path entirely.
-  ssh_host               = "10.10.201.99"
+  # SSH connection. Packer discovers the VM's IP via the QEMU guest agent
+  # (qemu_agent = true above). The agent gets installed by Packer's shell
+  # provisioner after first SSH — chicken-and-egg, but the proxmox plugin
+  # is happy to wait until DHCP completes and an IP is reachable.
   ssh_username           = var.ssh_username
   ssh_private_key_file   = var.ssh_private_key_file
   ssh_timeout            = "45m"

@@ -1,26 +1,21 @@
 #cloud-config
+# Log everything cloud-init does on the live system to a file we can
+# inspect after build (helpful when subiquity events scroll off the
+# console mid-install).
+output: {all: '| tee -a /var/log/cloud-init-output.log'}
 autoinstall:
   version: 1
   locale: en_US.UTF-8
   keyboard:
     layout: us
 
-  # Network - static IP during build so Packer doesn't depend on the guest
-  # agent to discover the VM's address. This IP is only used while building
-  # the template; cloned VMs get their own network config from cloud-init
-  # at clone time. .99 is chosen to be outside the DHCP pool and the K8s/
-  # standalone-VM ranges.
+  # Network - DHCP during install. The build VM gets a dynamic IP; Packer
+  # discovers it via the QEMU guest agent (installed in late-commands below).
   network:
     version: 2
     ethernets:
       ens18:
-        addresses:
-          - 10.10.201.99/24
-        routes:
-          - to: default
-            via: 10.10.201.1
-        nameservers:
-          addresses: [10.10.201.5, 10.10.201.6]
+        dhcp4: true
 
   # Storage - simple layout, will be resized by Terraform
   storage:
@@ -62,32 +57,19 @@ autoinstall:
   early-commands:
     - sudo systemctl stop ssh
 
-  # Packages to install during autoinstall. Keep this list to main-only
-  # packages that the live ISO can definitely retrieve. qemu-guest-agent is
-  # in universe and the curtin postinstall phase fails to fetch it (exit 100,
-  # 'No such file or directory' from apt cache) even with apt.primary set —
-  # likely because curtin's postinstall sources don't pick up universe. We
-  # install it on first boot via cloud-init user-data below instead.
+  # Packages to install during autoinstall. Same set as the reference repo —
+  # including qemu-guest-agent so Packer can discover the VM's IP after
+  # reboot. Previous attempts hit exit 100 here, possibly due to 2GB RAM
+  # pressure on apt cache; bumping the VM to 4GB should help.
   packages:
     - openssh-server
     - cloud-init
     - cloud-guest-utils
+    - qemu-guest-agent
     - python3
     - curl
     - wget
     - ca-certificates
-
-  # cloud-init user-data baked into the installed system. With HTTP datasource
-  # (no CIDATA staying attached), subiquity writes this as the local NoCloud
-  # seed, and cloud-init applies it cleanly on first boot — no more conflict
-  # with re-reading the original autoinstall YAML.
-  user-data:
-    package_update: true
-    package_upgrade: false
-    packages:
-      - qemu-guest-agent
-    runcmd:
-      - [systemctl, enable, --now, qemu-guest-agent]
 
   # Late commands - minimal. Anything that exits non-zero aborts the whole
   # install, so we keep this short and `|| true` non-essential pieces.
@@ -95,11 +77,15 @@ autoinstall:
     - "echo 'datasource_list: [NoCloud, ConfigDrive]' > /target/etc/cloud/cloud.cfg.d/99-proxmox.cfg"
     - "curtin in-target --target=/target -- systemctl enable ssh || true"
     # Force-set the ubuntu password to 'ubuntu' and unlock the account.
-    # Subiquity's identity.password field doesn't reliably end up working
-    # in the installed system (account stays locked or hash doesn't take).
-    # Setting it explicitly via chpasswd guarantees console login works.
-    - "echo 'ubuntu:ubuntu' | curtin in-target --target=/target -- chpasswd || true"
+    # Previous attempts used `echo X | curtin in-target ... chpasswd` but
+    # the pipe is in the LIVE system's shell — stdin never reaches chpasswd
+    # inside the chroot. Wrapping with `bash -c` runs the pipe inside the
+    # target, where chpasswd actually receives the input.
+    - "curtin in-target --target=/target -- bash -c 'echo ubuntu:ubuntu | chpasswd'"
     - "curtin in-target --target=/target -- passwd -u ubuntu || true"
+    # Diagnostic: dump the ubuntu user's /etc/shadow entry so we can see
+    # post-build whether the password actually took (or remained locked).
+    - "grep '^ubuntu:' /target/etc/shadow > /target/var/log/autoinstall-shadow.log || true"
     - "date -u +%FT%TZ > /target/var/log/autoinstall-completed || true"
 
   # Reboot after installation
