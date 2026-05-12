@@ -25,20 +25,24 @@ locals {
 
   # Control plane nodes - 3 for HA (etcd quorum requires odd number)
   # Slim configuration since they only run etcd, API server, controller-manager, scheduler
+  # VM ID scheme: control planes 100-102, workers 110-113, GPU 120.
   control_plane_nodes = {
     k8s-cp1 = {
+      vm_id     = 100
       ip        = "10.10.201.50"
       vcpus     = 4
       memory_mb = 4096
       disk_gb   = 50
     }
     k8s-cp2 = {
+      vm_id     = 101
       ip        = "10.10.201.51"
       vcpus     = 4
       memory_mb = 4096
       disk_gb   = 50
     }
     k8s-cp3 = {
+      vm_id     = 102
       ip        = "10.10.201.52"
       vcpus     = 4
       memory_mb = 4096
@@ -49,24 +53,28 @@ locals {
   # Worker nodes - run actual workloads
   worker_nodes = {
     k8s-w1 = {
+      vm_id     = 110
       ip        = "10.10.201.53"
       vcpus     = 4
       memory_mb = 10240
       disk_gb   = 80
     }
     k8s-w2 = {
+      vm_id     = 111
       ip        = "10.10.201.54"
       vcpus     = 4
       memory_mb = 10240
       disk_gb   = 80
     }
     k8s-w3 = {
+      vm_id     = 112
       ip        = "10.10.201.55"
       vcpus     = 4
       memory_mb = 10240
       disk_gb   = 80
     }
     k8s-w4 = {
+      vm_id     = 113
       ip        = "10.10.201.56"
       vcpus     = 4
       memory_mb = 10240
@@ -80,6 +88,7 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
   for_each = local.control_plane_nodes
 
   node_name   = local.node_name
+  vm_id       = each.value.vm_id
   name        = each.key
   description = "Managed by Terraform (k8s control plane)"
   tags        = ["terraform", "k8s", "control-plane"]
@@ -134,6 +143,10 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
 
   initialization {
     datastore_id = local.storage_name
+    user_account {
+      username = "ubuntu"
+      keys     = [var.ssh_public_key]
+    }
     ip_config {
       ipv4 {
         address = "${each.value.ip}/24"
@@ -151,6 +164,7 @@ resource "proxmox_virtual_environment_vm" "workers" {
   for_each = local.worker_nodes
 
   node_name   = local.node_name
+  vm_id       = each.value.vm_id
   name        = each.key
   description = "Managed by Terraform (k8s worker)"
   tags        = ["terraform", "k8s", "worker"]
@@ -204,6 +218,10 @@ resource "proxmox_virtual_environment_vm" "workers" {
 
   initialization {
     datastore_id = local.storage_name
+    user_account {
+      username = "ubuntu"
+      keys     = [var.ssh_public_key]
+    }
     ip_config {
       ipv4 {
         address = "${each.value.ip}/24"
@@ -219,6 +237,7 @@ resource "proxmox_virtual_environment_vm" "workers" {
 # GPU worker node with Tesla P40 passthrough
 resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
   node_name   = local.node_name
+  vm_id       = 120
   name        = "k8s-gpu1"
   description = "Managed by Terraform (k8s GPU worker)"
   tags        = ["terraform", "k8s", "worker", "gpu"]
@@ -289,6 +308,10 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
 
   initialization {
     datastore_id = local.storage_name
+    user_account {
+      username = "ubuntu"
+      keys     = [var.ssh_public_key]
+    }
     ip_config {
       ipv4 {
         address = "10.10.201.60/24"

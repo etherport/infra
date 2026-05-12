@@ -49,6 +49,15 @@ locals {
       description = "WireGuard VPN gateway - local site S2S endpoint"
       tags        = ["terraform", "vpn", "standalone"]
     }
+    gh-runner = {
+      vm_id       = 1003
+      ip          = "10.10.201.30"
+      vcpus       = 2
+      memory_mb   = 2048
+      disk_gb     = 20
+      description = "GitHub Actions self-hosted runner for K8s-lifecycle workflows (outside the cluster it manages)"
+      tags        = ["terraform", "runner", "standalone"]
+    }
   }
 
   # Imported VMs - pre-existing VMs adopted into Terraform (no clone block)
@@ -97,6 +106,10 @@ resource "proxmox_virtual_environment_vm" "standalone" {
 
   initialization {
     datastore_id = local.storage_name
+    user_account {
+      username = "ubuntu"
+      keys     = [var.ssh_public_key]
+    }
     ip_config {
       ipv4 {
         address = "${each.value.ip}/24"
