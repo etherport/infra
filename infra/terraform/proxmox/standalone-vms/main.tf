@@ -67,7 +67,7 @@ resource "proxmox_virtual_environment_vm" "standalone" {
   tags        = each.value.tags
 
   clone {
-    vm_id = 9000 # Ubuntu 24.04 cloud-init template
+    vm_id = 9001 # Ubuntu 24.04 customized template (Packer-built; VM 9000 is the raw cloud-image base)
     full  = true
   }
 

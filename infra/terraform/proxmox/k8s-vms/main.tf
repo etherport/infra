@@ -85,7 +85,7 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
   tags        = ["terraform", "k8s", "control-plane"]
 
   clone {
-    vm_id = 9000
+    vm_id = 9001
     full  = true
   }
 
@@ -156,7 +156,7 @@ resource "proxmox_virtual_environment_vm" "workers" {
   tags        = ["terraform", "k8s", "worker"]
 
   clone {
-    vm_id = 9000
+    vm_id = 9001
     full  = true
   }
 
@@ -234,7 +234,7 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
   }
 
   clone {
-    vm_id = 9000
+    vm_id = 9001
     full  = true
   }
 

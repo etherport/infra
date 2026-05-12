@@ -59,7 +59,6 @@ qm create "$BASE_VMID" \
   --efidisk0 "$STORAGE:0,efitype=4m,pre-enrolled-keys=1" \
   --scsihw virtio-scsi-single \
   --net0 "virtio,bridge=$BRIDGE,tag=$VLAN_TAG" \
-  --serial0 socket \
   --agent enabled=1 \
   --ostype l26 \
   --tags "template;ubuntu;cloud-init;base"
