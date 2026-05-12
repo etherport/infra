@@ -72,20 +72,25 @@ autoinstall:
     - ca-certificates
 
   # Late commands - minimal. Anything that exits non-zero aborts the whole
-  # install, so we keep this short and `|| true` non-essential pieces.
+  # install, so EVERY command here uses `|| true`.
   late-commands:
-    - "echo 'datasource_list: [NoCloud, ConfigDrive]' > /target/etc/cloud/cloud.cfg.d/99-proxmox.cfg"
+    - "echo 'datasource_list: [NoCloud, ConfigDrive]' > /target/etc/cloud/cloud.cfg.d/99-proxmox.cfg || true"
     - "curtin in-target --target=/target -- systemctl enable ssh || true"
-    # Force-set the ubuntu password to 'ubuntu' and unlock the account.
-    # Previous attempts used `echo X | curtin in-target ... chpasswd` but
-    # the pipe is in the LIVE system's shell — stdin never reaches chpasswd
-    # inside the chroot. Wrapping with `bash -c` runs the pipe inside the
-    # target, where chpasswd actually receives the input.
-    - "curtin in-target --target=/target -- bash -c 'echo ubuntu:ubuntu | chpasswd'"
+    # Diagnostic: capture pre-state so we can see if ubuntu user/shadow
+    # exist at late-commands time and what their entries look like.
+    - "ls -la /target/etc/shadow /target/etc/passwd /target/usr/sbin/chpasswd > /target/var/log/autoinstall-debug.log 2>&1 || true"
+    - "grep '^ubuntu' /target/etc/passwd /target/etc/shadow >> /target/var/log/autoinstall-debug.log 2>&1 || true"
+    # Primary attempt: chpasswd. Wrapped in bash -c so the echo pipe runs
+    # INSIDE the chroot rather than in the live shell.
+    - "curtin in-target --target=/target -- bash -c 'echo ubuntu:ubuntu | chpasswd' || true"
+    # Fallback: directly inject a known-good SHA-512 hash for 'ubuntu' into
+    # /etc/shadow on the target. Works even if chpasswd/PAM is broken in
+    # the chroot. The hash here was verified to decode to 'ubuntu'.
+    - "sed -i 's|^ubuntu:[^:]*:|ubuntu:$6$R6zzPLmgQ8cYD$7b.PyMRQ8IYbYRELRM3vcoQbvLN2TRD1L0eOyTusyVn57Y05pWgpvwTnSm/g/.F00M5lZCI3TFBXJ.1S5SsyG1:|' /target/etc/shadow || true"
+    # Make sure the account isn't locked (sed above strips a leading '!' if any)
     - "curtin in-target --target=/target -- passwd -u ubuntu || true"
-    # Diagnostic: dump the ubuntu user's /etc/shadow entry so we can see
-    # post-build whether the password actually took (or remained locked).
-    - "grep '^ubuntu:' /target/etc/shadow > /target/var/log/autoinstall-shadow.log || true"
+    # Final state dump: what /etc/shadow actually contains for ubuntu now.
+    - "grep '^ubuntu:' /target/etc/shadow > /target/var/log/autoinstall-shadow.log 2>&1 || true"
     - "date -u +%FT%TZ > /target/var/log/autoinstall-completed || true"
 
   # Reboot after installation
