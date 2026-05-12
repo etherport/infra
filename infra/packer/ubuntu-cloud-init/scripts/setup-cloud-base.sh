@@ -4,8 +4,13 @@
 # Packer's proxmox-clone source then clones VM 9000 each build to produce
 # the customized VM 9001 template.
 #
-# Run on PVE host as root (e.g. via `ssh -t graham@pve 'sudo bash -s' < setup-cloud-base.sh`).
+# Run on PVE host as root (e.g. via `ssh -t graham@pve 'sudo bash /tmp/setup-cloud-base.sh'`).
 # Re-running is safe: existing VM 9000 is destroyed first.
+#
+# Configuration matches the existing k8s VM hardware where it makes sense
+# (virtio-scsi-single, OVMF/UEFI with pre-enrolled keys, cloud-init on
+# scsi1, io_uring backend) while staying on the more modern q35 machine
+# type for new templates.
 
 set -euo pipefail
 
@@ -15,6 +20,18 @@ STORAGE="${STORAGE:-local-zfs}"
 IMG_PATH="${IMG_PATH:-/var/lib/vz/template/iso/noble-server-cloudimg-amd64.img}"
 BRIDGE="${BRIDGE:-vmbr0}"
 VLAN_TAG="${VLAN_TAG:-201}"
+
+# SSH public key Packer uses to connect to the build VM after clone.
+# Must match the private key stored in GH secret ANSIBLE_SSH_KEY and in 1P
+# "Homelab Automation SSH Key". Terraform overrides this per-clone for
+# workload VMs.
+SSH_PUBKEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab'
+
+# Static IP for Packer-build clones. Outside DHCP pool, clear of UDM
+# honeypot (.99). Terraform overrides this per-clone.
+BUILD_IP="${BUILD_IP:-10.10.201.250/24}"
+BUILD_GW="${BUILD_GW:-10.10.201.1}"
+NAMESERVERS="${NAMESERVERS:-10.10.201.5 10.10.201.6}"
 
 if [ ! -f "$IMG_PATH" ]; then
   echo "Cloud image not found at $IMG_PATH"
@@ -39,11 +56,10 @@ qm create "$BASE_VMID" \
   --cpu host \
   --machine q35 \
   --bios ovmf \
-  --efidisk0 "$STORAGE:0,efitype=4m,pre-enrolled-keys=0" \
-  --scsihw virtio-scsi-pci \
+  --efidisk0 "$STORAGE:0,efitype=4m,pre-enrolled-keys=1" \
+  --scsihw virtio-scsi-single \
   --net0 "virtio,bridge=$BRIDGE,tag=$VLAN_TAG" \
   --serial0 socket \
-  --vga serial0 \
   --agent enabled=1 \
   --ostype l26 \
   --tags "template;ubuntu;cloud-init;base"
@@ -51,37 +67,30 @@ qm create "$BASE_VMID" \
 echo ">>> Importing cloud image to $STORAGE..."
 qm importdisk "$BASE_VMID" "$IMG_PATH" "$STORAGE" --format raw
 
-echo ">>> Attaching imported disk as scsi0..."
-qm set "$BASE_VMID" --scsi0 "$STORAGE:vm-$BASE_VMID-disk-1,discard=on,ssd=1"
+echo ">>> Attaching imported disk as scsi0 (with io_uring backend)..."
+qm set "$BASE_VMID" --scsi0 "$STORAGE:vm-$BASE_VMID-disk-1,aio=io_uring,discard=on,ssd=1"
 
-echo ">>> Adding cloud-init drive..."
-qm set "$BASE_VMID" --ide2 "$STORAGE:cloudinit"
+echo ">>> Adding cloud-init drive on scsi1 (matches k8s VM pattern)..."
+qm set "$BASE_VMID" --scsi1 "$STORAGE:cloudinit"
 
 echo ">>> Setting boot order (disk first)..."
-qm set "$BASE_VMID" --boot "order=scsi0;ide2;net0"
+qm set "$BASE_VMID" --boot "order=scsi0"
 
 echo ">>> Resizing disk to 10G..."
 qm resize "$BASE_VMID" scsi0 10G
 
-echo ">>> Setting cloud-init defaults (user, SSH key, IP, DNS)..."
+echo ">>> Setting cloud-init defaults..."
 qm set "$BASE_VMID" --ciuser ubuntu
-# SSH public key used by Packer during build (must match ANSIBLE_SSH_KEY in
-# GH secrets / 1P "Homelab Automation SSH Key"). Terraform overrides this
-# per-clone for workload VMs.
 SSHKEY_FILE=$(mktemp /tmp/cloudbase-ssh-XXXX.pub)
-cat > "$SSHKEY_FILE" <<'EOF'
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab
-EOF
+printf '%s\n' "$SSH_PUBKEY" > "$SSHKEY_FILE"
 qm set "$BASE_VMID" --sshkeys "$SSHKEY_FILE"
 rm -f "$SSHKEY_FILE"
-# Static IP for the Packer build clone (outside DHCP pool, clear of UDM
-# honeypot at .99). Terraform overrides per-clone for workload VMs.
-qm set "$BASE_VMID" --ipconfig0 "ip=10.10.201.250/24,gw=10.10.201.1"
-qm set "$BASE_VMID" --nameserver "10.10.201.5 10.10.201.6"
+qm set "$BASE_VMID" --ipconfig0 "ip=$BUILD_IP,gw=$BUILD_GW"
+qm set "$BASE_VMID" --nameserver "$NAMESERVERS"
 
 echo ">>> Converting to template..."
 qm template "$BASE_VMID"
 
 echo
 echo "=== Done! VM $BASE_VMID is now a template. ==="
-qm config "$BASE_VMID" | head -25
+qm config "$BASE_VMID"
