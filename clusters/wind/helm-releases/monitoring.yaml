@@ -20,11 +20,14 @@ spec:
         kind: HelmRepository
         name: prometheus-community
   targetNamespace: monitoring
+  timeout: 15m
   install:
     createNamespace: true
+    timeout: 15m
     remediation:
       retries: 3
   upgrade:
+    timeout: 15m
     remediation:
       retries: 3
   values:
@@ -81,6 +84,11 @@ spec:
                   storage: 10Gi
     grafana:
       enabled: true
+      # Use Recreate strategy so the old pod releases the RWO Ceph RBD PVC
+      # before the new pod tries to attach. With the default RollingUpdate
+      # the new pod can't bind the volume cross-node and Helm times out.
+      deploymentStrategy:
+        type: Recreate
       admin:
         existingSecret: grafana-admin-credentials
         userKey: admin-user
