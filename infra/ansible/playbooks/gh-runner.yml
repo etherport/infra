@@ -1,0 +1,144 @@
+---
+# GitHub Actions self-hosted runner installation
+#
+# Installs the actions/runner binary as a systemd service on hosts in the
+# gh_runners inventory group. Uses a GitHub PAT (passed via GH_TOKEN env)
+# to fetch a one-time registration token from the repo API.
+#
+# Usage:
+#   GH_TOKEN=$(op item get p4k7sihbwzls55lvt6qlf23fcu --fields token --reveal) \
+#     ansible-playbook -i inventory/wind/ playbooks/gh-runner.yml
+#
+# Re-runs are idempotent: existing runner stays configured; only updates the
+# binary if runner_version changed. To force re-registration, delete
+# {{ runner_home }}/.runner on the host and re-run.
+
+- name: GitHub Actions self-hosted runner
+  hosts: gh_runners
+  become: true
+  gather_facts: true
+
+  vars:
+    runner_version: "2.328.0"
+    runner_user: ubuntu
+    runner_home: /home/{{ runner_user }}/actions-runner
+    repo_url: https://github.com/sparked-diamond/infra
+    runner_name: "{{ inventory_hostname }}"
+    # Labels: keep 'homelab-runner' so existing workflows (runs-on: homelab-runner)
+    # auto-dispatch. Add 'lifecycle' for workflows specifically targeting this
+    # outside-the-cluster runner (kubespray, K8s VM TF, etc.).
+    runner_labels: "homelab-runner,lifecycle,self-hosted,Linux,X64"
+    runner_arch_map:
+      x86_64: x64
+      aarch64: arm64
+    runner_arch: "{{ runner_arch_map[ansible_architecture] }}"
+
+  pre_tasks:
+    - name: Verify GH_TOKEN is provided via env
+      ansible.builtin.assert:
+        that:
+          - lookup('ansible.builtin.env', 'GH_TOKEN') | length > 0
+        fail_msg: "GH_TOKEN env var must be set. Pass via `GH_TOKEN=<pat> ansible-playbook ...`."
+
+  tasks:
+    - name: Install runner dependencies
+      ansible.builtin.apt:
+        name:
+          - curl
+          - jq
+          - git
+          - libicu74  # required by .NET runtime in actions/runner
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Create runner home directory
+      ansible.builtin.file:
+        path: "{{ runner_home }}"
+        state: directory
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+        mode: "0755"
+
+    - name: Check installed runner version (if any)
+      ansible.builtin.slurp:
+        src: "{{ runner_home }}/.version"
+      register: installed_version_raw
+      failed_when: false
+      changed_when: false
+
+    - name: Set installed_version fact
+      ansible.builtin.set_fact:
+        installed_version: "{{ installed_version_raw.content | default('') | b64decode | trim }}"
+
+    - name: Download actions-runner archive
+      ansible.builtin.get_url:
+        url: "https://github.com/actions/runner/releases/download/v{{ runner_version }}/actions-runner-linux-{{ runner_arch }}-{{ runner_version }}.tar.gz"
+        dest: "/tmp/actions-runner-{{ runner_version }}.tar.gz"
+        mode: "0644"
+      when: installed_version != runner_version
+
+    - name: Extract actions-runner
+      ansible.builtin.unarchive:
+        src: "/tmp/actions-runner-{{ runner_version }}.tar.gz"
+        dest: "{{ runner_home }}"
+        remote_src: true
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+      when: installed_version != runner_version
+
+    - name: Record installed version
+      ansible.builtin.copy:
+        content: "{{ runner_version }}"
+        dest: "{{ runner_home }}/.version"
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+        mode: "0644"
+      when: installed_version != runner_version
+
+    - name: Check if runner is already configured
+      ansible.builtin.stat:
+        path: "{{ runner_home }}/.runner"
+      register: runner_config
+
+    - name: Fetch one-time registration token from GitHub
+      ansible.builtin.uri:
+        url: "https://api.github.com/repos/{{ repo_url | regex_replace('https://github.com/', '') }}/actions/runners/registration-token"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ lookup('ansible.builtin.env', 'GH_TOKEN') }}"
+          Accept: "application/vnd.github+json"
+          X-GitHub-Api-Version: "2022-11-28"
+        status_code: 201
+      register: reg_token
+      no_log: true
+      when: not runner_config.stat.exists
+
+    - name: Configure runner (one-time)
+      ansible.builtin.command:
+        cmd: >-
+          ./config.sh
+            --url {{ repo_url }}
+            --token {{ reg_token.json.token }}
+            --name {{ runner_name }}
+            --labels {{ runner_labels }}
+            --unattended
+            --replace
+        chdir: "{{ runner_home }}"
+      become_user: "{{ runner_user }}"
+      when: not runner_config.stat.exists
+      no_log: true
+
+    - name: Install runner as systemd service
+      ansible.builtin.command:
+        cmd: ./svc.sh install {{ runner_user }}
+        chdir: "{{ runner_home }}"
+      args:
+        creates: "/etc/systemd/system/actions.runner.sparked-diamond-infra.{{ runner_name }}.service"
+
+    - name: Start + enable runner service
+      ansible.builtin.systemd:
+        name: "actions.runner.sparked-diamond-infra.{{ runner_name }}.service"
+        state: started
+        enabled: true
+        daemon_reload: true

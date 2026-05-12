@@ -1,0 +1,90 @@
+name: Kubespray
+
+# Runs kubespray playbooks against the wind cluster via the self-hosted
+# 'lifecycle' runner (gh-runner VM at 10.10.201.30). The runner lives
+# outside the cluster it manages so cluster destroy/rebuild doesn't kill
+# the runner mid-job.
+#
+# Common playbooks:
+#   cluster.yml          - Initial cluster install / reconcile
+#   upgrade-cluster.yml  - Upgrade Kubernetes version
+#   reset.yml            - Tear down (destructive!)
+#   scale.yml            - Add nodes after inventory update
+
+on:
+  workflow_dispatch:
+    inputs:
+      playbook:
+        description: 'Kubespray playbook'
+        required: true
+        type: choice
+        default: cluster.yml
+        options:
+          - cluster.yml
+          - upgrade-cluster.yml
+          - scale.yml
+          - remove-node.yml
+          - reset.yml
+      extra_args:
+        description: 'Additional ansible-playbook args (e.g. --limit, --check)'
+        required: false
+        default: ''
+      limit:
+        description: 'Limit to specific hosts/groups (--limit value)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  WORKING_DIR: infra/kubespray
+
+jobs:
+  kubespray:
+    name: Kubespray ${{ inputs.playbook }}
+    runs-on: [self-hosted, lifecycle]
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout (with kubespray submodule)
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Setup SSH key for cluster access
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Pre-trust host keys (idempotent) so ansible doesn't fail on
+          # first-contact prompts.
+          for ip in 10.10.201.50 10.10.201.51 10.10.201.52 10.10.201.53 10.10.201.54 10.10.201.55 10.10.201.56 10.10.201.60; do
+            ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts 2>/dev/null || true
+          done
+
+      - name: Run kubespray setup (venv + deps)
+        run: ./setup.sh
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Run kubespray playbook
+        run: |
+          ARGS="${{ inputs.extra_args }}"
+          if [ -n "${{ inputs.limit }}" ]; then
+            ARGS="$ARGS --limit ${{ inputs.limit }}"
+          fi
+          ./kubespray.sh ${{ inputs.playbook }} $ARGS
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Kubespray ${{ inputs.playbook }}"
+            echo ""
+            echo "- **Playbook**: ${{ inputs.playbook }}"
+            echo "- **Limit**: ${{ inputs.limit || '(none)' }}"
+            echo "- **Extra args**: ${{ inputs.extra_args || '(none)' }}"
+            echo "- **Runner**: ${{ runner.name }}"
+            echo "- **Job status**: ${{ job.status }}"
+          } >> $GITHUB_STEP_SUMMARY
