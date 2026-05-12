@@ -5,12 +5,22 @@ autoinstall:
   keyboard:
     layout: us
 
-  # Network - DHCP during install, cloud-init will reconfigure later
+  # Network - static IP during build so Packer doesn't depend on the guest
+  # agent to discover the VM's address. This IP is only used while building
+  # the template; cloned VMs get their own network config from cloud-init
+  # at clone time. .99 is chosen to be outside the DHCP pool and the K8s/
+  # standalone-VM ranges.
   network:
     version: 2
     ethernets:
       ens18:
-        dhcp4: true
+        addresses:
+          - 10.10.201.99/24
+        routes:
+          - to: default
+            via: 10.10.201.1
+        nameservers:
+          addresses: [10.10.201.5, 10.10.201.6]
 
   # Storage - simple layout, will be resized by Terraform
   storage:
@@ -84,6 +94,12 @@ autoinstall:
   late-commands:
     - "echo 'datasource_list: [NoCloud, ConfigDrive]' > /target/etc/cloud/cloud.cfg.d/99-proxmox.cfg"
     - "curtin in-target --target=/target -- systemctl enable ssh || true"
+    # Force-set the ubuntu password to 'ubuntu' and unlock the account.
+    # Subiquity's identity.password field doesn't reliably end up working
+    # in the installed system (account stays locked or hash doesn't take).
+    # Setting it explicitly via chpasswd guarantees console login works.
+    - "echo 'ubuntu:ubuntu' | curtin in-target --target=/target -- chpasswd || true"
+    - "curtin in-target --target=/target -- passwd -u ubuntu || true"
     - "date -u +%FT%TZ > /target/var/log/autoinstall-completed || true"
 
   # Reboot after installation

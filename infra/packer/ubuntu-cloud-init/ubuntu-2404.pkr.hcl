@@ -135,9 +135,12 @@ source "proxmox-iso" "ubuntu-cloud-init" {
   # otherwise the VM loops back into the installer forever.
   boot = "order=scsi0;ide2;net0"
 
-  # Enable QEMU guest agent at the VM level so Proxmox/Packer can query the
-  # VM's IP. The agent itself is installed by autoinstall (in user-data
-  # packages) — otherwise Packer can't discover the IP to SSH to.
+  # QEMU guest agent enabled at the VM level for post-build use (Proxmox/
+  # Terraform queries it on cloned VMs). Disabled for Packer's own IP-
+  # discovery though — qemu-guest-agent isn't installed in the autoinstall
+  # phase (it's in universe and curtin's postinstall apt can't reach it).
+  # Instead we give the build VM a static IP and tell Packer to connect
+  # to that directly via ssh_host.
   qemu_agent = true
 
   # Network - VLAN 201 (server VLAN with DHCP)
@@ -182,7 +185,9 @@ source "proxmox-iso" "ubuntu-cloud-init" {
     "boot<enter>"
   ]
 
-  # SSH connection - extended timeout for full ISO install + reboot + cloud-init
+  # SSH connection - connect to the static IP baked into autoinstall network
+  # config. Bypasses the guest-agent IP-discovery path entirely.
+  ssh_host               = "10.10.201.99"
   ssh_username           = var.ssh_username
   ssh_private_key_file   = var.ssh_private_key_file
   ssh_timeout            = "45m"
