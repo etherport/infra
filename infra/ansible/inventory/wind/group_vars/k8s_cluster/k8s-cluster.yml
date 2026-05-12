@@ -148,7 +148,7 @@ kube_proxy_nodeport_addresses: >-
 # kube_override_hostname: {{ inventory_hostname }}
 
 ## Encrypting Secret Data at Rest
-kube_encrypt_secret_data: false
+kube_encrypt_secret_data: true
 
 # Graceful Node Shutdown (Kubernetes >= 1.21.0), see https://kubernetes.io/blog/2021/04/21/graceful-node-shutdown-beta/
 # kubelet_shutdown_grace_period had to be greater than kubelet_shutdown_grace_period_critical_pods to allow
@@ -237,8 +237,12 @@ kubeadm_certificate_key: "{{ lookup('password', credentials_dir + '/kubeadm_cert
 # K8s image pull policy (imagePullPolicy)
 k8s_image_pull_policy: IfNotPresent
 
-# audit log for kubernetes
-kubernetes_audit: false
+# audit log for kubernetes - record API server activity for incident response
+kubernetes_audit: true
+audit_log_path: "/var/log/kubernetes/audit.log"
+audit_log_maxage: 30
+audit_log_maxbackups: 10
+audit_log_maxsize: 100
 
 # define kubelet config dir for dynamic kubelet
 # kubelet_config_dir:
