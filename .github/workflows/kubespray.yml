@@ -52,6 +52,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install kubespray prerequisites on runner
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            python3 python3-venv python3-pip \
+            git curl jq \
+            build-essential libffi-dev libssl-dev
+
       - name: Setup SSH key for cluster access
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
