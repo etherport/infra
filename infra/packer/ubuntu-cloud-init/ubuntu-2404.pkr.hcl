@@ -111,9 +111,12 @@ source "proxmox-clone" "ubuntu" {
   vm_name              = var.template_name
   template_description = "Ubuntu 24.04 LTS cloud-init template - Built by Packer from cloud image"
 
-  # Hardware overrides (the base template's defaults are fine, but be explicit)
-  cores  = 2
-  memory = 2048
+  # Hardware. Packer defaults scsi_controller to lsi when cloning, which
+  # loses the base template's virtio-scsi-single setting and breaks boot
+  # (Ubuntu cloud image doesn't find the disk via LSI). Explicitly preserve.
+  cores           = 2
+  memory          = 2048
+  scsi_controller = "virtio-scsi-single"
 
   # Cloud-init drive for post-clone configuration by Terraform
   cloud_init              = true
