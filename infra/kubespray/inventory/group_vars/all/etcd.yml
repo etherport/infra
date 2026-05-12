@@ -14,3 +14,12 @@ etcd_data_dir: /var/lib/etcd
 ## Settings for etcd deployment type
 # Set this to docker if you are using container_manager: docker
 etcd_deployment_type: host
+
+## Auto-snapshot configuration - take snapshots every N committed transactions.
+## etcdctl reads these snapshots; ours are also covered by Velero + Proxmox
+## VM-level backups, so this is belt-and-suspenders.
+etcd_snapshot_count: 100000
+
+## Periodic compaction: discard etcd revisions older than this duration to
+## prevent unbounded etcd disk growth.
+etcd_compaction_retention: "8"
