@@ -57,15 +57,15 @@ autoinstall:
   early-commands:
     - sudo systemctl stop ssh
 
-  # Packages to install during autoinstall. Same set as the reference repo —
-  # including qemu-guest-agent so Packer can discover the VM's IP after
-  # reboot. Previous attempts hit exit 100 here, possibly due to 2GB RAM
-  # pressure on apt cache; bumping the VM to 4GB should help.
+  # Packages to install during autoinstall. qemu-guest-agent is excluded —
+  # it consistently fails with exit 100 during curtin's postinstall
+  # --download-only step (not a memory issue, not an apt-sources issue;
+  # likely curtin's postinstall apt has a bug or quirk with this specific
+  # package). We install it manually after the system is up.
   packages:
     - openssh-server
     - cloud-init
     - cloud-guest-utils
-    - qemu-guest-agent
     - python3
     - curl
     - wget
