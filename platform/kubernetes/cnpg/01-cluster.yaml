@@ -6,8 +6,22 @@ metadata:
 spec:
   description: "Shared PostgreSQL cluster for homelab applications"
 
-  # Single instance for homelab (increase to 3 for HA)
-  instances: 1
+  # 3 instances for HA — one primary + two streaming replicas. CNPG
+  # operator handles automatic failover (RTO ~30s) and creates a
+  # cluster-rw / cluster-ro / cluster-r Service trio. Applications
+  # using postgres should connect to `postgres-cluster-rw.postgres.svc`
+  # for read-write traffic so they survive primary failover.
+  instances: 3
+
+  # Spread instances across nodes — primary on a different host from
+  # replicas so a single node failure can't drop more than one replica.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          cnpg.io/cluster: postgres-cluster
 
   # PostgreSQL version
   imageName: ghcr.io/cloudnative-pg/postgresql:16.4

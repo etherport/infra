@@ -3,5 +3,12 @@ kind: Kustomization
 
 resources:
   - 00-namespace.yaml
+  # 03 + 04 must apply BEFORE 01-cluster.yaml so that when CNPG reconciles
+  # the Cluster it finds an already-Bound PVC with cnpg adoption labels and
+  # adopts the existing pgdata instead of running bootstrap.initdb on a
+  # fresh empty volume. See 03-static-pv-recovery.yaml for the "skip on
+  # truly fresh install" case.
+  - 03-static-pv-recovery.yaml
+  - 04-pvc-pre-bind.yaml
   - 01-cluster.yaml
   - 02-credentials.sops.yaml

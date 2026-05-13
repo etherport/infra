@@ -170,6 +170,34 @@ spec:
 
 Commit and push - Flux handles the rolling update.
 
+## Disaster Recovery — adopting existing pgdata after cluster rebuild
+
+When the K8s cluster is rebuilt but the underlying Ceph RBD image
+holding pgdata survives, you can recover the database WITHOUT running
+`initdb` on top of empty storage.
+
+The repo ships `03-static-pv-recovery.yaml` and `04-pvc-pre-bind.yaml`
+which encode this pattern declaratively:
+
+1. The static PV references the original RBD image by name
+   (`imageName` + `volumeHandle` + `staticVolume: "true"`).
+2. The pre-bound PVC carries the CNPG adoption labels
+   (`cnpg.io/instanceName`, `cnpg.io/pvcRole=PG_DATA`, etc.) and
+   annotation `cnpg.io/pvcStatus: ready`. CNPG sees the ready PVC and
+   adopts it instead of provisioning fresh + running initdb.
+3. `kustomization.yaml` orders these BEFORE `01-cluster.yaml`.
+
+If the Ceph image has been rotated (or you're doing a truly fresh
+install with no prior data), comment 03/04 out of `kustomization.yaml`
+and the cluster will fall through to `bootstrap.initdb` as normal.
+
+After apply, verify:
+```bash
+kubectl get cluster -n postgres postgres-cluster -o jsonpath='{.status.phase}'
+# → "Cluster in healthy state"
+kubectl exec -n postgres postgres-cluster-1 -- psql -c '\dt'
+```
+
 ## Backup Configuration (Optional)
 
 To enable S3 backups, add to cluster spec:

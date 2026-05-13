@@ -1,0 +1,33 @@
+# Pre-bound PVC carrying the CNPG adoption labels.
+#
+# When the CNPG operator finds an existing PVC for instance 1 with
+# `cnpg.io/pvcStatus=ready`, it adopts it instead of creating a fresh
+# PVC and running bootstrap.initdb on top of empty storage. This is the
+# durable equivalent of running `kubectl label pvc/postgres-cluster-1 ...`
+# by hand after a cluster rebuild.
+#
+# Pair with 03-static-pv-recovery.yaml so this PVC binds to the existing
+# Ceph RBD image rather than provisioning a new empty volume.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-cluster-1
+  namespace: postgres
+  labels:
+    cnpg.io/cluster: postgres-cluster
+    cnpg.io/instanceName: postgres-cluster-1
+    cnpg.io/instanceRole: primary
+    cnpg.io/pvcRole: PG_DATA
+    role: primary
+  annotations:
+    cnpg.io/nodeSerial: "1"
+    cnpg.io/pvcStatus: ready
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: ceph-rbd
+  volumeMode: Filesystem
+  volumeName: postgres-cluster-1-recovery

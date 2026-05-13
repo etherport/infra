@@ -1,0 +1,54 @@
+# Static PersistentVolume binding the postgres-cluster-1 PVC directly to the
+# existing Ceph RBD image that holds the live pgdata.
+#
+# WHY THIS EXISTS
+# After a cluster rebuild, a fresh CNPG Cluster with `bootstrap.initdb` would
+# wipe the database. To make CNPG *adopt* the existing pgdata instead, the
+# PVC must already exist and be Bound with the cnpg adoption labels — that
+# happens in 04-pvc-pre-bind.yaml, but the PVC needs *this* PV to bind to.
+#
+# WHEN TO APPLY
+# - On first install of a brand-new cluster: DO NOT apply this file (omit
+#   from kustomization.yaml). CNPG bootstrap.initdb will create a fresh DB.
+# - On a rebuild where the underlying Ceph image still exists: apply this
+#   file (already included in kustomization.yaml). The image name below is
+#   environment-specific — see `rbd image-meta list k8s-ceph/<image>` to
+#   confirm it carries the right `csi.storage.k8s.io/pvc/name` metadata.
+#
+# Update the imageName / volumeHandle if the Ceph image is ever rotated.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-cluster-1-recovery
+spec:
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 10Gi
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: postgres-cluster-1
+    namespace: postgres
+  csi:
+    driver: rbd.csi.ceph.com
+    fsType: ext4
+    nodeStageSecretRef:
+      name: csi-rbd-secret
+      namespace: ceph-csi
+    controllerExpandSecretRef:
+      name: csi-rbd-secret
+      namespace: ceph-csi
+    volumeAttributes:
+      clusterID: 4de37616-ef82-4295-8ff0-7309d4b34812
+      imageFeatures: layering
+      imageName: csi-vol-0ef4fde9-ef2f-4b26-8efb-f2301f683d0b
+      journalPool: k8s-ceph
+      pool: k8s-ceph
+      staticVolume: "true"
+    volumeHandle: csi-vol-0ef4fde9-ef2f-4b26-8efb-f2301f683d0b
+  mountOptions:
+    - discard
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ceph-rbd
+  volumeMode: Filesystem
