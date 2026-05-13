@@ -3,6 +3,12 @@ kind: PersistentVolumeClaim
 metadata:
   name: plex-config
   namespace: plex
+  annotations:
+    # PVC is bound to a manually-created static PV (plex-config-recovery)
+    # that references the original RBD image preserved on external Ceph.
+    # Flux must not try to clear spec.volumeName on reconcile (immutable
+    # on a Bound claim). See docs/planning/long-term-stability-review-2026-05-12.md.
+    kustomize.toolkit.fluxcd.io/reconcile: disabled
 spec:
   accessModes:
     - ReadWriteOnce

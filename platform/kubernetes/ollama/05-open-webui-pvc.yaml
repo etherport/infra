@@ -3,6 +3,10 @@ kind: PersistentVolumeClaim
 metadata:
   name: open-webui-data
   namespace: ollama
+  annotations:
+    # Bound to static PV open-webui-data-recovery (original RBD image).
+    # See docs/planning/long-term-stability-review-2026-05-12.md.
+    kustomize.toolkit.fluxcd.io/reconcile: disabled
 spec:
   accessModes:
     - ReadWriteOnce

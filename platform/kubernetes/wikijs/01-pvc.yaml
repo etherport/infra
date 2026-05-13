@@ -3,6 +3,10 @@ kind: PersistentVolumeClaim
 metadata:
   name: wiki-js-data
   namespace: wikijs
+  annotations:
+    # Bound to static PV wiki-js-data-recovery (original RBD image).
+    # See docs/planning/long-term-stability-review-2026-05-12.md.
+    kustomize.toolkit.fluxcd.io/reconcile: disabled
 spec:
   accessModes:
     - ReadWriteOnce
