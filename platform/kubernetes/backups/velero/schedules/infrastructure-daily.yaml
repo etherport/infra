@@ -1,0 +1,18 @@
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: infrastructure-daily
+  namespace: velero
+spec:
+  schedule: "0 4 * * *"
+  template:
+    includedNamespaces:
+      - route53-ddns
+      - monitoring
+      - traefik
+      - cert-manager
+      - icloudpd
+      - rclone
+      - metallb-system
+    defaultVolumesToFsBackup: true
+    ttl: 720h0m0s

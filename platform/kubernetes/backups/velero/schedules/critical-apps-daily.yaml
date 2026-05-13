@@ -1,0 +1,13 @@
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: critical-apps-daily
+  namespace: velero
+spec:
+  schedule: "0 2 * * *"
+  template:
+    includedNamespaces:
+      - home-automation
+      - plex
+    defaultVolumesToFsBackup: true
+    ttl: 720h0m0s
