@@ -37,6 +37,36 @@ spec:
             }
           ]
     spec:
+      # HA is a singleton (Multus macvlan IPs would collide across replicas
+      # and integrations like Z-Wave/Zigbee would fight for device state),
+      # so we maximise survival of the single instance instead of true HA:
+      #   * priorityClassName ensures HA is the last thing the scheduler
+      #     evicts under resource pressure
+      #   * toleration tolerationSeconds: 10 makes node-loss failover
+      #     take 10s instead of the default 5 min
+      #   * nodeAffinity prefers non-GPU workers (same lesson as Traefik —
+      #     a GPU reboot shouldn't drag HA down with it)
+      priorityClassName: k8s-cluster-critical
+      terminationGracePeriodSeconds: 30
+      tolerations:
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 10
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 10
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - k8s-gpu1
       containers:
       - name: home-assistant
         image: ghcr.io/home-assistant/home-assistant:2026.5.1 # {"$imagepolicy": "flux-system:home-assistant"}
