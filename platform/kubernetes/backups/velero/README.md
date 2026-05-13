@@ -313,22 +313,43 @@ kubectl scale deployment home-assistant -n home-automation --replicas=1
 
 ### Scenario 4: Cluster Rebuild
 
-After rebuilding the Kubernetes cluster:
+> **Pre-migration safety** — before tearing down the old cluster, take a
+> final manual backup with file-system data:
+> ```bash
+> velero backup create pre-migration-$(date +%Y%m%d-%H%M) \
+>   --include-namespaces home-automation,postgres,plex,ollama,monitoring,traefik,dns,wikijs,backups \
+>   --default-volumes-to-fs-backup \
+>   --wait
+> # Verify backup is Completed AND has PV data:
+> velero backup describe <name> | grep -E 'Phase|Errors|Warnings'
+> kubectl get podvolumebackups -n velero | grep -vE 'Completed|NAME'   # should be empty
+> ```
+>
+> Omitting `--default-volumes-to-fs-backup` produces a metadata-only
+> backup that cannot recover PV contents. With the Helm values pinning
+> `defaultVolumesToFsBackup: true` cluster-wide this flag is now the
+> default, but old/cached client behaviour can still surprise you.
 
-1. **Reinstall Velero** (same S3 bucket and credentials)
-2. **Verify backup storage location:**
+After rebuilding the Kubernetes cluster (Flux brings Velero back via
+`clusters/wind/helm-releases/velero.yaml`):
+
+1. **Verify backup storage location:**
    ```bash
-   velero backup-location get
+   velero backup-location get   # default location must be Available
    ```
-3. **List available backups:**
+2. **List available backups:**
    ```bash
    velero backup get
    ```
-4. **Restore namespaces:**
+3. **Restore everything (or a subset):**
    ```bash
-   velero restore create cluster-restore \
-     --from-backup <latest-cluster-backup>
+   velero restore create cluster-restore --from-backup <name> --wait
    ```
+4. **If PVCs come up empty** — the backup was metadata-only. Recovery
+   path is to find the legacy RBD images on Ceph, build static-PV
+   manifests pointing at them, and pre-bind PVCs. See the postgres
+   manifests at `platform/kubernetes/cnpg/03-static-pv-recovery.yaml`
+   + `04-pvc-pre-bind.yaml` for the canonical pattern.
 
 ## Monitoring
 

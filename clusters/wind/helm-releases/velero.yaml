@@ -29,6 +29,16 @@ spec:
       retries: 3
   values:
     configuration:
+      # Use Kopia (not Restic) for filesystem PV backups. Restic is being
+      # phased out in upstream Velero and Kopia is significantly faster on
+      # large repos. Pin explicitly so this doesn't drift on chart bumps.
+      uploaderType: kopia
+      # Cluster-wide default: capture PV data on every backup unless a
+      # specific Backup/Schedule opts out. The migration outage was caused
+      # by an ad-hoc `velero backup create` that omitted
+      # --default-volumes-to-fs-backup and produced a metadata-only backup
+      # that was unrecoverable when PVs vanished with the old cluster.
+      defaultVolumesToFsBackup: true
       backupStorageLocation:
         - provider: aws
           bucket: velero.wind.etherport.net

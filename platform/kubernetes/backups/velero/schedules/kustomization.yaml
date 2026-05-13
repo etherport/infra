@@ -4,5 +4,13 @@ kind: Kustomization
 namespace: velero
 
 resources:
-  - wikijs-daily.yaml
+  - critical-apps-daily.yaml
+  - infrastructure-daily.yaml
+  - kube-system-daily.yaml
+  - monitoring-daily.yaml
+  - ollama-daily.yaml
+  - plex-daily.yaml
   - postgres-daily.yaml
+  - technitium-daily.yaml
+  - traefik-daily.yaml
+  - wikijs-daily.yaml
