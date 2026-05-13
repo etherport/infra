@@ -29,16 +29,57 @@
   tasks:
     # =========================================================================
     # Fix 1: CNI bin directory permissions
-    # Cilium's mount-cgroup init container needs to write to /opt/cni/bin
-    # Without this, pods fail with: cp: cannot create regular file '/hostbin/cilium-mount': Permission denied
+    # Cilium's mount-cgroup init container needs to write to /opt/cni/bin.
+    # The durable fix is `cni_bin_owner: root` in kubespray group_vars
+    # k8s-cluster.yml — kubespray then creates the dir root:root (mode 0755)
+    # and Cilium's in-container root can write without CAP_DAC_OVERRIDE.
+    # This task is the recovery for nodes provisioned before that flag was
+    # set (or where someone re-chowned to `kube`). Idempotent: matches
+    # what kubespray would produce.
     # =========================================================================
-    - name: Ensure /opt/cni/bin exists with correct permissions
+    - name: Ensure /opt/cni/bin is root:root 0755 (matches kubespray cni_bin_owner=root)
       file:
         path: /opt/cni/bin
         state: directory
-        mode: "0777"
+        mode: "0755"
         owner: root
         group: root
+
+    # =========================================================================
+    # Fix 1b: VLAN parent interfaces UP for Multus macvlan
+    # The extra vNICs on VLAN 202/204/205 (enp6s19/20/21) ship DOWN out of
+    # the cloud image unless they're declared in netplan. Without them UP,
+    # Multus macvlan can't attach virtual interfaces to pods, and HA loses
+    # access to Hue/Tuya/Roomba/Tesla on IoT VLAN 204.
+    # Idempotent: file written once, netplan apply only on change.
+    # =========================================================================
+    - name: Ensure VLAN parent interfaces are UP via netplan
+      copy:
+        dest: /etc/netplan/51-vlan-interfaces.yaml
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          network:
+            version: 2
+            ethernets:
+              enp6s19:
+                optional: true
+                dhcp4: no
+                dhcp6: no
+              enp6s20:
+                optional: true
+                dhcp4: no
+                dhcp6: no
+              enp6s21:
+                optional: true
+                dhcp4: no
+                dhcp6: no
+      register: vlan_netplan
+
+    - name: Apply netplan if VLAN config changed
+      command: netplan apply
+      when: vlan_netplan.changed
 
     # =========================================================================
     # Fix 2: Load RBD kernel module at boot
@@ -142,34 +183,16 @@
               done
           fi
 
-          # Clean up volume attachments on nodes that are Ready but have no matching pod
-          for node in $($KUBECTL --kubeconfig=$KUBECONFIG get nodes -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
-              VAS=$($KUBECTL --kubeconfig=$KUBECONFIG get volumeattachments \
-                  -o jsonpath="{range .items[?(@.spec.nodeName=='$node')]}{.metadata.name} {end}" 2>/dev/null || true)
-              for va in $VAS; do
-                  PV=$($KUBECTL --kubeconfig=$KUBECONFIG get volumeattachment $va \
-                      -o jsonpath='{.spec.source.persistentVolumeName}' 2>/dev/null || true)
-                  [ -z "$PV" ] && continue
-                  PVC=$($KUBECTL --kubeconfig=$KUBECONFIG get pv $PV \
-                      -o jsonpath='{.spec.claimRef.namespace}/{.spec.claimRef.name}' 2>/dev/null || true)
-                  [ -z "$PVC" ] && continue
-                  NAMESPACE=$(echo $PVC | cut -d'/' -f1)
-                  PVC_NAME=$(echo $PVC | cut -d'/' -f2)
-                  # Check if pod using this PVC is on this node and running
-                  POD_ON_NODE=$($KUBECTL --kubeconfig=$KUBECONFIG get pods -n $NAMESPACE \
-                      --field-selector spec.nodeName=$node,status.phase=Running \
-                      -o jsonpath="{range .items[*]}{range .spec.volumes[*]}{.persistentVolumeClaim.claimName}{' '}{end}{end}" 2>/dev/null | grep -w "$PVC_NAME" || true)
-                  if [ -z "$POD_ON_NODE" ]; then
-                      # Check if there's a pod trying to use this PVC on a different node
-                      PENDING_POD=$($KUBECTL --kubeconfig=$KUBECONFIG get pods -n $NAMESPACE \
-                          -o jsonpath="{range .items[?(@.status.phase=='Pending')]}{.metadata.name}{' '}{end}" 2>/dev/null || true)
-                      if [ -n "$PENDING_POD" ]; then
-                          log "Deleting stale volume attachment $va on $node (PVC $PVC needed elsewhere)"
-                          $KUBECTL --kubeconfig=$KUBECONFIG delete volumeattachment $va 2>/dev/null || true
-                      fi
-                  fi
-              done
-          done
+          # NOTE: deliberately no VolumeAttachment cleanup here.
+          # An earlier version of this script deleted VAs for any PVC whose
+          # pod wasn't in `Running` phase on the same node — but pods in
+          # `ContainerCreating` (the normal state while a VA is being
+          # mounted) also failed that check, so the script raced with
+          # normal mounting: VA created → cleanup deletes it → kubelet
+          # retries → infinite loop, pod never mounts. The CSI
+          # external-attacher already handles VA lifecycle correctly,
+          # including stale-VA cleanup on node reboot. This script's
+          # job is just stuck-pod recovery (Unknown / UnexpectedAdmissionError).
       notify: Reload systemd
 
     - name: Create post-reboot cleanup systemd service
