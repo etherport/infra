@@ -47,7 +47,15 @@ platform/kubernetes/route53-ddns/base/secret.yaml
 **/alertmanager-config.yaml
 **/credentials.yaml
 !**/*.sops.yaml
-# Repo-root local backup artifacts (WireGuard private keys, Technitium
-# config exports). Leading slash anchors to repo root so this does NOT
-# match platform/kubernetes/backups/ (Velero + S3 sync manifests).
-/backups/
+# Generic catch-alls for raw private-key material. All real secrets are
+# SOPS-encrypted now (*.sops.yaml — see ~20 files across the repo) so we
+# should never have raw keys committed; these patterns are defense in depth.
+**/*.key
+**/*.pem
+**/id_rsa
+**/id_rsa.pub
+**/id_ed25519
+**/id_ed25519.pub
+**/wg0.conf
+**/wg1.conf
+**/wg-private-*.key
