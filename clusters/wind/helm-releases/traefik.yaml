@@ -28,8 +28,49 @@ spec:
     remediation:
       retries: 3
   values:
-    additionalArguments:
-      - "--ocsp=true"
+    # HA setup: replicas=2 with podAntiAffinity, no RWO PVC.
+    # Certs come from cert-manager — see platform/kubernetes/traefik/:
+    #   * clusterissuer-letsencrypt.yaml (DNS-01 via Route53, 6-day certs)
+    #   * certificate-wildcard.yaml (*.wind.etherport.net + apex)
+    #   * tlsstore-default.yaml (default TLSStore points at the Secret)
+    # All IngressRoutes use `tls: {}` so they pick up the wildcard via
+    # the default TLSStore. Traefik no longer issues certs itself —
+    # the old acme.json on traefik-ceph-pvc is dead weight, hence
+    # persistence.enabled: false here.
+    deployment:
+      replicas: 2
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+    affinity:
+      # Keep Traefik off the GPU node so a GPU-only reboot can't take
+      # down ingress with it.
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values:
+                    - k8s-gpu1
+      # Spread the 2 replicas across hosts so a single node failure
+      # never takes both pods.
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: traefik
+                app.kubernetes.io/instance: traefik-traefik
+            topologyKey: kubernetes.io/hostname
+    # --ocsp=true previously was a no-op with cert-manager-issued certs;
+    # LE stopped serving OCSP in Aug 2025 and the wildcard cert uses the
+    # `shortlived` profile (6-day rotation) which makes OCSP irrelevant.
+    additionalArguments: []
     env: []
     ingressClass:
       enabled: true
@@ -41,9 +82,7 @@ spec:
           - websecure
         matchRule: Host(`traefik.wind.etherport.net`)
     persistence:
-      enabled: true
-      existingClaim: traefik-ceph-pvc
-      path: /data
+      enabled: false
     ports:
       web:
         redirections:
