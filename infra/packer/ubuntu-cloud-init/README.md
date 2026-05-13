@@ -44,25 +44,35 @@ cp variables.pkrvars.hcl.example variables.pkrvars.hcl
 # Edit variables.pkrvars.hcl with your Proxmox credentials
 ```
 
-### 3. Build the template
+### 3. Ensure base template VM 9000 exists on PVE
+
+Packer clones from VM **9000** (raw Ubuntu cloud image, created
+once by `scripts/setup-cloud-base.sh`) and produces VM **9001**
+(customised template Terraform clones from for each workload VM).
+
+If 9000 doesn't exist yet, on the PVE host:
+```bash
+sudo bash scripts/setup-cloud-base.sh
+```
+
+### 4. Build the template (VM 9001)
 
 ```bash
 packer build -var-file=variables.pkrvars.hcl .
 ```
 
 This will:
-1. Download Ubuntu 24.04 cloud image
-2. Create a VM in Proxmox
-3. Run autoinstall via cloud-init
-4. Install required packages
-5. Clean up for templating
-6. Convert VM to template (ID 9000)
+1. Clone VM 9000 → temporary build VM
+2. apt upgrade + install homelab base packages
+3. Write `/etc/netplan/51-vlan-interfaces.yaml` (Multus VLAN parents)
+4. Clean cloud-init state + machine-id for templating
+5. Convert to template at ID **9001**
 
-### 4. Verify the template
+### 5. Verify the template
 
 ```bash
 # SSH to Proxmox and check
-pvesh get /nodes/pve/qemu/9000/config
+pvesh get /nodes/pve/qemu/9001/config
 ```
 
 ## Rebuilding the Template
@@ -70,8 +80,8 @@ pvesh get /nodes/pve/qemu/9000/config
 To update the template (e.g., for new Ubuntu patches):
 
 ```bash
-# Delete existing template first
-pvesh delete /nodes/pve/qemu/9000
+# Packer is invoked with -force which destroys the existing 9001 first;
+# no manual `pvesh delete` is required.
 
 # Rebuild
 packer build -var-file=variables.pkrvars.hcl .
@@ -122,7 +132,7 @@ clone {
 - Check Proxmox console for autoinstall errors
 
 ### Template already exists
-- Delete first: `pvesh delete /nodes/pve/qemu/9000`
+- Delete first: ``
 - Or change `template_vm_id` in variables
 
 ### Permission denied

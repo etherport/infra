@@ -155,6 +155,12 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
     }
   }
 
+  # Wait for qemu-guest-agent IP report before considering create complete.
+  # Template already enables guest agent in Packer.
+  agent {
+    enabled = true
+  }
+
   started = true
   on_boot = true
 }
@@ -230,6 +236,10 @@ resource "proxmox_virtual_environment_vm" "workers" {
     }
   }
 
+  agent {
+    enabled = true
+  }
+
   started = true
   on_boot = true
 }
@@ -245,6 +255,21 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
   machine = "q35"
   bios    = "ovmf"
 
+  # Secure Boot caveat: `pre_enrolled_keys = false` only controls the
+  # INITIAL contents of the EFI vars when the disk is first created. The
+  # underlying cloud image still ships with SB enabled in OVMF, and the
+  # bpg/proxmox provider does not expose a `secure_boot` toggle.
+  # NVIDIA out-of-tree kernel modules are not signed by Canonical, so
+  # SB-enabled = blocked drivers (see docs/runbooks/gpu-secureboot.md).
+  #
+  # To DISABLE Secure Boot after the EFI disk has been created (one-time):
+  #   ssh root@pve.wind.etherport.net \
+  #     'qm set 120 --delete efidisk0 && \
+  #      qm set 120 --efidisk0 local-zfs:0,efitype=4m,pre-enrolled-keys=0'
+  #   # then reboot VM 120 — OVMF rebuilds vars with SB off.
+  #
+  # Alternative: enroll NVIDIA's signing key via MOK (more maintenance burden
+  # on driver version bumps — not recommended for a homelab).
   efi_disk {
     datastore_id      = local.storage_name
     file_format       = "raw"
@@ -318,6 +343,10 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
         gateway = local.gateway_201
       }
     }
+  }
+
+  agent {
+    enabled = true
   }
 
   started = true
