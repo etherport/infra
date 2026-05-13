@@ -12,6 +12,10 @@ metadata:
 spec:
   releaseName: gpu-operator
   interval: 1h
+  # gpu-operator pulls in NFD validation CRDs that depend on cert-manager
+  # CA bundle injection. Without this, cold-start hits a retry storm.
+  dependsOn:
+    - name: cert-manager
   chart:
     spec:
       chart: gpu-operator

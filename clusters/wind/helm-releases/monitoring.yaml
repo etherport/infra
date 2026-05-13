@@ -12,6 +12,12 @@ metadata:
 spec:
   releaseName: monitoring
   interval: 1h
+  # kube-prometheus-stack ships ServiceMonitor/PodMonitor/Probe CRDs *and*
+  # consumes the cert-manager Certificate CRD for its admission webhook
+  # TLS. Without dependsOn, Flux retries on every reconcile until
+  # cert-manager finishes installing; this just makes cold-start clean.
+  dependsOn:
+    - name: cert-manager
   chart:
     spec:
       chart: kube-prometheus-stack
