@@ -143,8 +143,12 @@ cert_manager_enabled: false
 #   - "--dns01-recursive-nameservers-only=true"
 #   - "--dns01-recursive-nameservers=1.1.1.1:53,8.8.8.8:53"
 
-# MetalLB deployment
-metallb_enabled: false
+# MetalLB deployment.
+# Enabled so kubespray installs the controller + speaker DaemonSet declaratively.
+# IP pools (IPAddressPool, L2Advertisement) live in Flux under
+# platform/kubernetes/metallb/. Don't define `metallb_config.address_pools`
+# here — that creates duplicate pools and fights with the Flux-managed ones.
+metallb_enabled: true
 metallb_speaker_enabled: "{{ metallb_enabled }}"
 metallb_namespace: "metallb-system"
 # metallb_protocol: "layer2"

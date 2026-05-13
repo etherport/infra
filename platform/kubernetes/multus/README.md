@@ -57,11 +57,6 @@ Current VLANs:
 - `vlan204-iot`: 10.10.204.0/24 (IoT devices)
 - `vlan205-security`: 10.10.205.0/24 (Security devices)
 
-GPU Node Variants (k8s-gpu1 uses different interface naming):
-- `vlan202-client-gpu`: Uses `enp6s19` interface
-- `vlan204-iot-gpu`: Uses `enp6s20` interface
-- `vlan205-security-gpu`: Uses `enp6s21` interface
-
 ## Usage
 
 Annotate pods with network attachments using `namespace/name` syntax:
@@ -97,17 +92,22 @@ The pod will get:
 
 ## Important: VLAN Interface Configuration
 
-The parent interfaces used by Multus macvlan (`ens19/20/21` on worker nodes, `enp6s19/20/21` on GPU node) must be UP before Multus can create virtual interfaces.
+The parent interfaces used by Multus macvlan (`enp6s19/20/21` on all nodes, including the GPU node) must be UP before Multus can create virtual interfaces.
 
-**Issue:** After cluster reboot, these interfaces may be DOWN, causing all VLAN networking to fail.
-
-**Solution:** Configure interfaces in Netplan on all nodes. See runbook: `/docs/runbooks/vlan-interfaces-netplan.md`
+**Durable setup (now baked into infra):**
+- Packer template `9001` writes `/etc/netplan/51-vlan-interfaces.yaml` during build (`infra/packer/ubuntu-cloud-init/ubuntu-2404.pkr.hcl`), so every VM cloned from it has VLAN parents up automatically on first boot.
+- `infra/ansible/playbooks/k8s-node-fixes.yml` writes the same netplan idempotently for nodes that pre-date the Packer change (or for any node where the file went missing).
+- `infra/kubespray/inventory/group_vars/k8s_cluster/k8s-cluster.yml` sets `kube_network_plugin_multus: true` so a fresh kubespray install ships Multus.
+- `infra/kubespray/inventory/group_vars/k8s_cluster/k8s-net-cilium.yml` sets `cilium_cni_exclusive: false` so Cilium does not rename Multus's `/etc/cni/net.d/00-multus.conf` to `.cilium_bak`. Without this, Multus is installed but inert — pods never get their secondary interfaces.
 
 **Quick check:**
 ```bash
-# Verify interfaces are UP
-ssh graham@k8s-w1.wind.etherport.net "ip link show ens19 ens20 ens21 | grep UP"
+# Verify interfaces are UP on all nodes
+ansible -i infra/kubespray/inventory/inventory.ini k8s_cluster --private-key /tmp/auto-key -u ubuntu \
+  -m shell -a 'ip -br link show enp6s19 enp6s20 enp6s21'
 ```
+
+If interfaces are DOWN, see runbook: `/docs/runbooks/vlan-interfaces-netplan.md`
 
 ## Troubleshooting
 

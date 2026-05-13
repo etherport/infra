@@ -1,8 +1,28 @@
 # VLAN Interfaces Not Starting After Reboot
 
+## Status: largely automated as of 2026-05-12
+
+The netplan stanza below is now baked into:
+- `infra/packer/ubuntu-cloud-init/ubuntu-2404.pkr.hcl` — every new template clone has it on first boot
+- `infra/ansible/playbooks/k8s-node-fixes.yml` — idempotent recovery if the file is missing
+- Kubespray inventory enables Multus + disables `cilium_cni_exclusive`
+
+Run the ansible playbook to restore the netplan on existing nodes instead of editing them by hand:
+
+```bash
+cd infra/ansible
+ansible-playbook -i ../kubespray/inventory/inventory.ini \
+  playbooks/k8s-node-fixes.yml \
+  --limit k8s_cluster \
+  --private-key /tmp/auto-key -u ubuntu --become \
+  --start-at-task='Ensure VLAN parent interfaces are UP via netplan'
+```
+
+The manual steps below are kept for emergency use when ansible/SSH is broken.
+
 ## Problem
 
-After cluster reboot, VLAN network interfaces (`ens19`, `ens20`, `ens21` on worker nodes; `enp6s19/20/21` on GPU node) do not come up automatically, causing Multus networking to fail.
+After cluster reboot, VLAN network interfaces (`enp6s19/20/21` on every node) do not come up automatically, causing Multus networking to fail.
 
 **Symptoms:**
 - Home Assistant cannot reach Hue devices (VLAN 204 - IoT)
@@ -14,38 +34,9 @@ After cluster reboot, VLAN network interfaces (`ens19`, `ens20`, `ens21` on work
 
 The VLAN parent interfaces are not configured in Netplan, so they remain DOWN after system boot. Multus macvlan CNI requires these parent interfaces to be UP to create virtual interfaces for pods.
 
-## Solution
+## Manual recovery (emergency only)
 
-Configure the interfaces to auto-start in Netplan on all nodes.
-
-### Step 1: Create Netplan Configuration
-
-**For k8s-w1, k8s-w2, k8s-cp1:**
-
-```bash
-sudo tee /etc/netplan/51-vlan-interfaces.yaml > /dev/null <<'NETPLAN'
-network:
-  version: 2
-  ethernets:
-    ens19:
-      optional: true
-      dhcp4: no
-      dhcp6: no
-    ens20:
-      optional: true
-      dhcp4: no
-      dhcp6: no
-    ens21:
-      optional: true
-      dhcp4: no
-      dhcp6: no
-NETPLAN
-
-sudo chmod 600 /etc/netplan/51-vlan-interfaces.yaml
-sudo netplan apply
-```
-
-**For k8s-gpu1** (different interface names):
+Create the netplan file on the affected node and apply:
 
 ```bash
 sudo tee /etc/netplan/51-vlan-interfaces.yaml > /dev/null <<'NETPLAN'
@@ -70,13 +61,9 @@ sudo chmod 600 /etc/netplan/51-vlan-interfaces.yaml
 sudo netplan apply
 ```
 
-### Step 2: Verify Interfaces Are UP
+### Verify interfaces are UP
 
 ```bash
-# Worker nodes
-ip link show ens19 ens20 ens21 | grep "state UP"
-
-# GPU node
 ip link show enp6s19 enp6s20 enp6s21 | grep "state UP"
 ```
 

@@ -168,6 +168,38 @@ build {
     ]
   }
 
+  # VLAN parent interfaces for Multus macvlan. Workload VMs (K8s nodes)
+  # attach extra vNICs on VLAN 202/204/205 (visible as enp6s19/20/21);
+  # without this netplan stanza they boot DOWN and Multus macvlan pods
+  # cannot attach to them, breaking IoT (HA -> Hue/Tuya/Roomba) and
+  # security camera workloads. `optional: true` means the boot doesn't
+  # block waiting for them, and absence of the interface (e.g. the
+  # standalone-vms class with only 1 NIC) is silently fine. See
+  # docs/runbooks/vlan-interfaces-netplan.md.
+  provisioner "shell" {
+    inline = [
+      "sudo tee /etc/netplan/51-vlan-interfaces.yaml > /dev/null <<'NETPLAN'",
+      "network:",
+      "  version: 2",
+      "  ethernets:",
+      "    enp6s19:",
+      "      optional: true",
+      "      dhcp4: no",
+      "      dhcp6: no",
+      "    enp6s20:",
+      "      optional: true",
+      "      dhcp4: no",
+      "      dhcp6: no",
+      "    enp6s21:",
+      "      optional: true",
+      "      dhcp4: no",
+      "      dhcp6: no",
+      "NETPLAN",
+      "sudo chmod 600 /etc/netplan/51-vlan-interfaces.yaml",
+      "sudo netplan generate",
+    ]
+  }
+
   # Cleanup for templating - clear caches, machine-id, cloud-init state.
   # The next time this template is cloned, cloud-init runs fresh on first
   # boot and applies the new VM's identity.
