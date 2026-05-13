@@ -1,0 +1,102 @@
+name: Ansible K8s Node Fixes
+
+# Runs infra/ansible/playbooks/k8s-node-fixes.yml on every K8s node.
+#
+# This playbook applies the post-kubespray fixes that should survive any
+# cluster rebuild:
+#   1. /opt/cni/bin root:root 0755 (matches kubespray cni_bin_owner=root —
+#      this task is a no-op idempotent backstop if kubespray didn't get
+#      the override flag set)
+#   2. VLAN parent NICs (enp6s19/20/21) UP via netplan — Multus macvlan
+#      parents
+#   3. rbd kernel module loaded at boot + /etc/modules-load.d/ceph-rbd.conf
+#   4. Post-reboot stale pod cleanup systemd timer
+#
+# Runs after every kubespray cluster.yml workflow run (workflow_run trigger)
+# so that fresh nodes pick up the fixes automatically. Manual dispatch
+# also supported.
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Limit to specific hosts/groups (--limit value)'
+        required: false
+        default: 'k8s_cluster'
+      check_mode:
+        description: 'Run in --check mode (no changes applied)'
+        required: false
+        type: boolean
+        default: false
+  workflow_run:
+    workflows:
+      - Kubespray
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  WORKING_DIR: infra/ansible
+
+jobs:
+  fixes:
+    name: Apply k8s-node-fixes
+    # Skip on workflow_run if the upstream kubespray job failed.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    # Lifecycle runner (gh-runner VM, outside the K8s cluster) — required
+    # so node fixes can be applied even if cluster ARC is down.
+    runs-on: [self-hosted, lifecycle]
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install ansible on runner
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            python3 python3-pip python3-venv ansible
+
+      - name: Setup SSH key for cluster access
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          for ip in 10.10.201.50 10.10.201.51 10.10.201.52 10.10.201.53 10.10.201.54 10.10.201.55 10.10.201.56 10.10.201.60; do
+            ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts 2>/dev/null || true
+          done
+
+      - name: Run k8s-node-fixes playbook
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          CHECK=""
+          if [ "${{ inputs.check_mode }}" = "true" ]; then
+            CHECK="--check --diff"
+          fi
+          ansible-playbook \
+            -i ../kubespray/inventory/inventory.ini \
+            playbooks/k8s-node-fixes.yml \
+            --limit "${{ inputs.limit || 'k8s_cluster' }}" \
+            --private-key ~/.ssh/id_ed25519 \
+            -u ubuntu \
+            --become \
+            $CHECK
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## K8s Node Fixes"
+            echo ""
+            echo "- **Limit**: ${{ inputs.limit || 'k8s_cluster' }}"
+            echo "- **Check mode**: ${{ inputs.check_mode || 'false' }}"
+            echo "- **Trigger**: ${{ github.event_name }}"
+            echo "- **Job status**: ${{ job.status }}"
+          } >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,118 @@
+name: Post-Bootstrap (Flux + Velero restore)
+
+# Runs the post-kubespray bootstrap: creates Flux + sops-age secrets,
+# applies Flux components, triggers Velero restore.
+#
+# Currently runs from a checkout of infra/kubespray/post-bootstrap.sh.
+# Adapted from local-run defaults to use GH secrets so this becomes a
+# fully automatable DR path once the PAT has `Secrets: write`.
+#
+# REQUIRED SECRETS (some not yet provisioned — see TODOs):
+#   ANSIBLE_SSH_KEY    SSH private key for ubuntu@k8s-* nodes (existing)
+#   FLUX_DEPLOY_KEY    SSH private key for the Flux GitOps deploy key   (TODO)
+#   SOPS_AGE_KEY       Age private key for SOPS decryption              (TODO)
+#
+# Until FLUX_DEPLOY_KEY + SOPS_AGE_KEY are added (claude-cli PAT lacks
+# Secrets:write — see Task #6), this workflow will fail at the secret
+# read steps. That is intentional — the failure is loud + the workflow
+# tells you exactly what's missing instead of silently using stale or
+# default credentials.
+
+on:
+  workflow_dispatch:
+    inputs:
+      velero_backup:
+        description: 'Velero backup name to restore from (omit to skip restore)'
+        required: false
+        default: ''
+      skip_velero:
+        description: 'Skip the Velero restore step entirely'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  WORKING_DIR: infra/kubespray
+
+jobs:
+  post-bootstrap:
+    name: Post-bootstrap
+    # Lifecycle runner (gh-runner VM, outside the K8s cluster). Required
+    # because the cluster may not yet have any workloads scheduled when
+    # this runs.
+    runs-on: [self-hosted, lifecycle]
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install prerequisites on runner
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            curl wget jq python3 python3-pip
+          # kubectl
+          if ! command -v kubectl &>/dev/null; then
+            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            sudo install -m 0755 kubectl /usr/local/bin/kubectl
+            rm kubectl
+          fi
+          # velero CLI
+          if ! command -v velero &>/dev/null; then
+            VELERO_VERSION="v1.16.0"
+            curl -LO "https://github.com/vmware-tanzu/velero/releases/download/${VELERO_VERSION}/velero-${VELERO_VERSION}-linux-amd64.tar.gz"
+            tar -xzf "velero-${VELERO_VERSION}-linux-amd64.tar.gz"
+            sudo install -m 0755 "velero-${VELERO_VERSION}-linux-amd64/velero" /usr/local/bin/velero
+            rm -rf "velero-${VELERO_VERSION}-linux-amd64" "velero-${VELERO_VERSION}-linux-amd64.tar.gz"
+          fi
+
+      - name: Write SSH key for K8s + Flux + SOPS age key
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > ~/.ssh/k8s_key
+          chmod 600 ~/.ssh/k8s_key
+
+          # These secrets need Secrets:write on the PAT (Task #6).
+          # Workflow fails fast if they aren't set — that's intentional.
+          : "${{ secrets.FLUX_DEPLOY_KEY?Missing FLUX_DEPLOY_KEY secret — see Task #6}}"
+          : "${{ secrets.SOPS_AGE_KEY?Missing SOPS_AGE_KEY secret — see Task #6}}"
+
+          echo "${{ secrets.FLUX_DEPLOY_KEY }}" > ~/.ssh/flux_key
+          chmod 600 ~/.ssh/flux_key
+
+          mkdir -p ~/.config/sops/age
+          echo "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
+          chmod 600 ~/.config/sops/age/keys.txt
+
+          for ip in 10.10.201.50 10.10.201.51 10.10.201.52; do
+            ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts 2>/dev/null || true
+          done
+
+      - name: Run post-bootstrap
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          ANSIBLE_KEY: /home/runner/.ssh/k8s_key
+          FLUX_DEPLOY_KEY: /home/runner/.ssh/flux_key
+          SOPS_AGE_KEY_FILE: /home/runner/.config/sops/age/keys.txt
+        run: |
+          if [ "${{ inputs.skip_velero }}" = "true" ]; then
+            export VELERO_BACKUP=""
+          elif [ -n "${{ inputs.velero_backup }}" ]; then
+            export VELERO_BACKUP="${{ inputs.velero_backup }}"
+          fi
+          ./post-bootstrap.sh
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Post-Bootstrap"
+            echo ""
+            echo "- **Velero backup**: ${{ inputs.velero_backup || '(skipped or default)' }}"
+            echo "- **Skip restore**: ${{ inputs.skip_velero || 'false' }}"
+            echo "- **Job status**: ${{ job.status }}"
+          } >> $GITHUB_STEP_SUMMARY

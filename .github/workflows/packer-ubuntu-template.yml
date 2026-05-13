@@ -29,7 +29,9 @@ env:
 jobs:
   packer:
     name: Packer ${{ github.event.inputs.action || 'build' }}
-    runs-on: homelab-runner
+    # Lifecycle runner (gh-runner VM, outside the K8s cluster) — required
+    # so template rebuild works if the cluster is offline.
+    runs-on: [self-hosted, lifecycle]
 
     steps:
       - name: Checkout

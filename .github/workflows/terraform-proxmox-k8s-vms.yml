@@ -31,7 +31,9 @@ env:
 jobs:
   terraform:
     name: Terraform ${{ github.event.inputs.action || 'plan' }}
-    runs-on: homelab-runner
+    # Lifecycle runner (gh-runner VM, outside the K8s cluster) — required
+    # so VM lifecycle TF works if the cluster is offline.
+    runs-on: [self-hosted, lifecycle]
     container:
       image: hashicorp/terraform:1.14.3
       env:

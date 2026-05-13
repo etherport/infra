@@ -32,7 +32,10 @@ env:
 jobs:
   ansible:
     name: Ansible ${{ github.event.inputs.playbook }} (${{ github.event.inputs.action }})
-    runs-on: homelab-runner
+    # Lifecycle runner (gh-runner VM, outside the K8s cluster) — required
+    # so Proxmox/cluster-management workflows still work if the cluster
+    # is offline. `homelab-runner` runs inside K8s = chicken-and-egg.
+    runs-on: [self-hosted, lifecycle]
     container:
       image: cytopia/ansible:latest
       options: --user root
