@@ -71,21 +71,27 @@ jobs:
           fi
 
       - name: Write SSH key for K8s + Flux + SOPS age key
+        env:
+          ANSIBLE_SSH_KEY: ${{ secrets.ANSIBLE_SSH_KEY }}
+          FLUX_DEPLOY_KEY: ${{ secrets.FLUX_DEPLOY_KEY }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > ~/.ssh/k8s_key
+          printf '%s\n' "$ANSIBLE_SSH_KEY" > ~/.ssh/k8s_key
           chmod 600 ~/.ssh/k8s_key
 
           # These secrets need Secrets:write on the PAT (Task #6).
           # Workflow fails fast if they aren't set — that's intentional.
-          : "${{ secrets.FLUX_DEPLOY_KEY?Missing FLUX_DEPLOY_KEY secret — see Task #6}}"
-          : "${{ secrets.SOPS_AGE_KEY?Missing SOPS_AGE_KEY secret — see Task #6}}"
+          # `${VAR:?msg}` is bash parameter expansion (fail if unset/empty),
+          # evaluated AFTER the GitHub Actions context substitution above.
+          : "${FLUX_DEPLOY_KEY:?Missing FLUX_DEPLOY_KEY secret - see Task #6}"
+          : "${SOPS_AGE_KEY:?Missing SOPS_AGE_KEY secret - see Task #6}"
 
-          echo "${{ secrets.FLUX_DEPLOY_KEY }}" > ~/.ssh/flux_key
+          printf '%s\n' "$FLUX_DEPLOY_KEY" > ~/.ssh/flux_key
           chmod 600 ~/.ssh/flux_key
 
           mkdir -p ~/.config/sops/age
-          echo "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
+          printf '%s\n' "$SOPS_AGE_KEY" > ~/.config/sops/age/keys.txt
           chmod 600 ~/.config/sops/age/keys.txt
 
           for ip in 10.10.201.50 10.10.201.51 10.10.201.52; do

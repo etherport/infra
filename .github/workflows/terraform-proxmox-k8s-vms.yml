@@ -33,28 +33,28 @@ jobs:
     name: Terraform ${{ github.event.inputs.action || 'plan' }}
     # Lifecycle runner (gh-runner VM, outside the K8s cluster) — required
     # so VM lifecycle TF works if the cluster is offline.
+    # No `container:` block: the gh-runner VM doesn't have Docker. Install
+    # terraform on the runner directly via hashicorp/setup-terraform.
     runs-on: [self-hosted, lifecycle]
-    container:
-      image: hashicorp/terraform:1.14.3
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        AWS_DEFAULT_REGION: us-west-2
-        TF_VAR_proxmox_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
-        TF_VAR_proxmox_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: us-west-2
+      TF_VAR_proxmox_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
+      TF_VAR_proxmox_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
     defaults:
       run:
         working-directory: ${{ env.WORKING_DIR }}
 
     steps:
-      - name: Install git
-        run: apk add --no-cache git
-        working-directory: /
-
       - name: Checkout
-        run: |
-          git clone --depth 1 --branch ${{ github.ref_name }} https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git .
-        working-directory: ${{ github.workspace }}
+        uses: actions/checkout@v6
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.14.3
+          terraform_wrapper: false
 
       - name: Terraform Init
         run: terraform init -backend-config="profile=" -reconfigure

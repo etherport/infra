@@ -35,27 +35,26 @@ jobs:
     # Lifecycle runner (gh-runner VM, outside the K8s cluster) — required
     # so Proxmox/cluster-management workflows still work if the cluster
     # is offline. `homelab-runner` runs inside K8s = chicken-and-egg.
+    # No `container:` block: the gh-runner VM doesn't have Docker. Install
+    # ansible on the runner directly via apt.
     runs-on: [self-hosted, lifecycle]
-    container:
-      image: cytopia/ansible:latest
-      options: --user root
 
     steps:
-      - name: Install dependencies
-        run: |
-          apk add --no-cache git openssh-client
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-        working-directory: /
-
       - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install ansible
         run: |
-          git clone --depth 1 --branch ${{ github.ref_name }} https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git .
-        working-directory: ${{ github.workspace }}
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            python3 python3-pip python3-venv ansible openssh-client
 
       - name: Setup SSH key
+        env:
+          ANSIBLE_SSH_KEY: ${{ secrets.ANSIBLE_SSH_KEY }}
         run: |
-          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > ~/.ssh/id_ed25519
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$ANSIBLE_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H pve.wind.etherport.net >> ~/.ssh/known_hosts 2>/dev/null || true
 
@@ -86,9 +85,10 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          echo "## Ansible Proxmox" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Playbook**: ${{ github.event.inputs.playbook }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Action**: ${{ github.event.inputs.action }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Allow Reboot**: ${{ github.event.inputs.allow_reboot }}" >> $GITHUB_STEP_SUMMARY
-        working-directory: /
+          {
+            echo "## Ansible Proxmox"
+            echo ""
+            echo "- **Playbook**: ${{ github.event.inputs.playbook }}"
+            echo "- **Action**: ${{ github.event.inputs.action }}"
+            echo "- **Allow Reboot**: ${{ github.event.inputs.allow_reboot }}"
+          } >> $GITHUB_STEP_SUMMARY
