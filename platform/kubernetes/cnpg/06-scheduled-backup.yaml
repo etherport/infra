@@ -1,0 +1,15 @@
+# Daily Barman full backup. WAL archiving is continuous (every WAL
+# segment goes to S3 as it's written) — this CR triggers a periodic
+# pg_basebackup-style snapshot so PITR doesn't have to replay the
+# entire WAL history. retentionPolicy: 30d on the Cluster spec keeps
+# 30 days of backups + WALs.
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: postgres-cluster-daily
+  namespace: postgres
+spec:
+  schedule: "0 0 5 * * *"  # 05:00 UTC — same window as Velero ollama-daily
+  backupOwnerReference: self
+  cluster:
+    name: postgres-cluster

@@ -67,6 +67,28 @@ spec:
       secret:
         name: postgres-app-credentials
 
+  # Continuous WAL archiving + scheduled full backups to S3 via Barman
+  # Cloud. Pairs with the daily ScheduledBackup CR in 06-scheduled-backup.yaml.
+  # Restore via `bootstrap.recovery` referencing an externalCluster
+  # — see docs/runbooks/postgres-barman.md for the full restore flow.
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://postgres-barman.wind.etherport.net
+      s3Credentials:
+        accessKeyId:
+          name: barman-s3-credentials
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: barman-s3-credentials
+          key: SECRET_ACCESS_KEY
+      wal:
+        compression: gzip
+        encryption: AES256
+      data:
+        compression: gzip
+        encryption: AES256
+    retentionPolicy: "30d"
+
   # Monitoring
   monitoring:
     enablePodMonitor: true

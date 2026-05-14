@@ -112,8 +112,14 @@ resource "aws_s3_bucket_lifecycle_configuration" "archive" {
 
     filter {}
 
+    # Recovery window for accidental object deletion. Was 1 day (tight,
+    # set when testing/churn was high and Deep Archive storage cost was
+    # the concern). At steady state the archive bucket is write-once-
+    # read-rarely; bumping to 30 days gives a real "oh no I deleted that"
+    # recovery window at negligible additional cost (Deep Archive is
+    # ~$1/TB/month and noncurrent versions inherit that storage class).
     noncurrent_version_expiration {
-      noncurrent_days           = 1
+      noncurrent_days           = 30
       newer_noncurrent_versions = 1
     }
 

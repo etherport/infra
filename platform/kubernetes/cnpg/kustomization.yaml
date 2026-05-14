@@ -10,5 +10,9 @@ resources:
   # truly fresh install" case.
   - 03-static-pv-recovery.yaml
   - 04-pvc-pre-bind.yaml
-  - 01-cluster.yaml
+  # 02 + 05 are SOPS-encrypted Secrets; must exist before the Cluster
+  # references them (postgres-app-credentials, barman-s3-credentials).
   - 02-credentials.sops.yaml
+  - 05-barman-credentials.sops.yaml
+  - 01-cluster.yaml
+  - 06-scheduled-backup.yaml
