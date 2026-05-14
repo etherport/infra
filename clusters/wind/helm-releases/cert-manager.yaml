@@ -37,6 +37,24 @@ spec:
       enabled: true
       servicemonitor:
         enabled: false
+    # HA: 2 replicas across hosts. cert-manager controller uses leader
+    # election — only one replica is active at a time, but a second
+    # standby means cert renewals don't pause when a node reboots.
+    # podAntiAffinity ensures the two pods can't end up on the same node.
+    replicaCount: 2
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: cert-manager
+                  app.kubernetes.io/component: controller
     resources:
       requests:
         memory: "64Mi"
@@ -45,6 +63,10 @@ spec:
         memory: "256Mi"
         cpu: "200m"
     webhook:
+      replicaCount: 2
+      podDisruptionBudget:
+        enabled: true
+        minAvailable: 1
       resources:
         requests:
           memory: "32Mi"
@@ -53,6 +75,10 @@ spec:
           memory: "128Mi"
           cpu: "100m"
     cainjector:
+      replicaCount: 2
+      podDisruptionBudget:
+        enabled: true
+        minAvailable: 1
       resources:
         requests:
           memory: "64Mi"
