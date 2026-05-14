@@ -23,3 +23,8 @@ output "grahamsmith_name_servers" {
   description = "Name servers for grahamsmith.net"
   value       = aws_route53_zone.grahamsmith.name_servers
 }
+
+output "aws_etherport_zone_id" {
+  description = "Zone ID for aws.etherport.net (private)"
+  value       = aws_route53_zone.aws_etherport.zone_id
+}
