@@ -17,9 +17,11 @@ spec:
       labels:
         app: plex
     spec:
-      # Run on GPU node
+      # Run on a node with an NVIDIA GPU. Matches the label automatically
+      # set by gpu-operator's node-feature-discovery — no manual `gpu=true`
+      # labelling required. Same selector as Ollama.
       nodeSelector:
-        gpu: "true"
+        nvidia.com/gpu.present: "true"
       # Tolerate GPU node taint
       tolerations:
         - key: nvidia.com/gpu
