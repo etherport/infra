@@ -40,21 +40,14 @@ spec:
     alertmanager:
       enabled: true
       # HA: AlertManager dedupes alerts across replicas via gossip.
-      # podAntiAffinity (preferred) spreads replicas across hosts.
+      # The chart provides shortcut values for anti-affinity.
       podDisruptionBudget:
         enabled: true
         minAvailable: 1
       alertmanagerSpec:
         replicas: 2
-        affinity:
-          podAntiAffinity:
-            preferredDuringSchedulingIgnoredDuringExecution:
-              - weight: 100
-                podAffinityTerm:
-                  topologyKey: kubernetes.io/hostname
-                  labelSelector:
-                    matchLabels:
-                      app.kubernetes.io/name: alertmanager
+        podAntiAffinity: soft
+        podAntiAffinityTopologyKey: kubernetes.io/hostname
         # Select AlertmanagerConfig CRs from monitoring namespace
         alertmanagerConfigSelector:
           matchLabels:
@@ -83,22 +76,14 @@ spec:
       enabled: true
       # HA: 2 Prometheus replicas. Each scrapes everything independently,
       # so storage doubles (~16GB headroom + 2x retention overhead);
-      # Grafana queries the first available replica. podAntiAffinity
-      # spreads them across hosts.
+      # Grafana queries the first available replica.
       podDisruptionBudget:
         enabled: true
         minAvailable: 1
       prometheusSpec:
         replicas: 2
-        affinity:
-          podAntiAffinity:
-            preferredDuringSchedulingIgnoredDuringExecution:
-              - weight: 100
-                podAffinityTerm:
-                  topologyKey: kubernetes.io/hostname
-                  labelSelector:
-                    matchLabels:
-                      app.kubernetes.io/name: prometheus
+        podAntiAffinity: soft
+        podAntiAffinityTopologyKey: kubernetes.io/hostname
         serviceMonitorSelectorNilUsesHelmValues: false
         podMonitorSelectorNilUsesHelmValues: false
         resources:
