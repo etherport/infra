@@ -266,7 +266,8 @@ resource "aws_s3_bucket_policy" "logs" {
         }
         Action   = "s3:PutObject"
         Resource = "arn:aws:s3:::logs.grahamsmith.net/alb/AWSLogs/830881980142/*"
-      }
+      },
+      local.deny_bucket_destruction_statement_logs,
     ]
   })
 }
@@ -400,4 +401,133 @@ resource "aws_iam_user_policy" "postgres_barman" {
 
 resource "aws_iam_access_key" "postgres_barman" {
   user = aws_iam_user.postgres_barman.name
+}
+
+#------------------------------------------------------------------------------
+# Bucket-destruction guard
+#
+# `lifecycle.prevent_destroy = true` only blocks `terraform destroy`. Anyone
+# with AWS admin credentials (console, `aws s3 rb`, an unrelated TF state)
+# bypasses it entirely. The bucket policy below denies bucket-level
+# destruction at the AWS API layer — so even an admin clicking "Delete
+# bucket" in the console gets AccessDenied. Reversible: edit/remove the
+# policy first, then perform the destructive op.
+#
+# Object-level deletion is still allowed (lifecycle rules + IAM scoping
+# handle that). Versioning is left manageable so TF can configure it on
+# first apply; once stable, the protection here means accidentally
+# disabling versioning still requires deliberately removing this policy.
+#
+# Applied to every `prevent_destroy = true` bucket. `logs` has its own
+# pre-existing policy — its statement is folded into that via
+# `local.deny_bucket_destruction_statement_logs` above.
+#------------------------------------------------------------------------------
+
+locals {
+  destruction_actions = [
+    "s3:DeleteBucket",
+    "s3:DeleteBucketPolicy",
+  ]
+
+  # Local form for the `logs` bucket where the statement is embedded in
+  # an existing aws_s3_bucket_policy resource. ARN is hard-coded because
+  # the resource itself is part of the same module and the bucket is
+  # already created (referencing aws_s3_bucket.logs.arn here would be
+  # fine too, but locals can't depend on resources in a cycle-safe way
+  # when the policy is in the same module).
+  deny_bucket_destruction_statement_logs = {
+    Sid       = "DenyBucketDestruction"
+    Effect    = "Deny"
+    Principal = "*"
+    Action    = local.destruction_actions
+    Resource = [
+      aws_s3_bucket.logs.arn,
+      "${aws_s3_bucket.logs.arn}/*",
+    ]
+  }
+}
+
+resource "aws_s3_bucket_policy" "velero_protect" {
+  bucket = aws_s3_bucket.velero.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "DenyBucketDestruction"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = local.destruction_actions
+      Resource = [
+        aws_s3_bucket.velero.arn,
+        "${aws_s3_bucket.velero.arn}/*",
+      ]
+    }]
+  })
+}
+
+resource "aws_s3_bucket_policy" "archive_protect" {
+  bucket = aws_s3_bucket.archive.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "DenyBucketDestruction"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = local.destruction_actions
+      Resource = [
+        aws_s3_bucket.archive.arn,
+        "${aws_s3_bucket.archive.arn}/*",
+      ]
+    }]
+  })
+}
+
+resource "aws_s3_bucket_policy" "logs_archive_protect" {
+  bucket = aws_s3_bucket.logs_archive.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "DenyBucketDestruction"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = local.destruction_actions
+      Resource = [
+        aws_s3_bucket.logs_archive.arn,
+        "${aws_s3_bucket.logs_archive.arn}/*",
+      ]
+    }]
+  })
+}
+
+resource "aws_s3_bucket_policy" "email_fwd_protect" {
+  bucket = aws_s3_bucket.email_fwd.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "DenyBucketDestruction"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = local.destruction_actions
+      Resource = [
+        aws_s3_bucket.email_fwd.arn,
+        "${aws_s3_bucket.email_fwd.arn}/*",
+      ]
+    }]
+  })
+}
+
+resource "aws_s3_bucket_policy" "postgres_barman_protect" {
+  bucket = aws_s3_bucket.postgres_barman.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "DenyBucketDestruction"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = local.destruction_actions
+      Resource = [
+        aws_s3_bucket.postgres_barman.arn,
+        "${aws_s3_bucket.postgres_barman.arn}/*",
+      ]
+    }]
+  })
 }
