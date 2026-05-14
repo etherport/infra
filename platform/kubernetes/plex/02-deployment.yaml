@@ -41,6 +41,21 @@ spec:
               memory: 8Gi
               nvidia.com/gpu.shared: "1"
           env:
+            # NVIDIA Container Toolkit env vars for HW transcoding.
+            # The Plex image (and time-slicing mode) defaults
+            # NVIDIA_VISIBLE_DEVICES to "void" — that prevents the toolkit
+            # from injecting NVENC/NVDEC even though /dev/nvidia* is mounted
+            # by the device plugin. Override both:
+            #   * VISIBLE_DEVICES=all — let the nvidia-container runtime
+            #     bind the shared GPU device exposed by the device plugin.
+            #   * DRIVER_CAPABILITIES needs `video` for NVENC/NVDEC
+            #     (default is just `utility`, which gives nvidia-smi but
+            #     not encode/decode access). `compute` covers CUDA paths
+            #     Plex's HEVC decoder may use.
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: "all"
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "compute,video,utility"
             # Timezone
             - name: TZ
               value: "America/Los_Angeles"
