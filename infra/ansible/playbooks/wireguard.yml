@@ -475,6 +475,19 @@
             enable_script_security
           }
 
+          # Health check: verify wg0/wg1 interfaces are up. weight -50
+          # means a failed check drops effective priority from 100 to 50,
+          # below the K8s pod's 150 → MASTER stays on K8s as expected.
+          # Without this, vpn-local would advertise MASTER even if its
+          # own wg-quick services died, black-holing VPN traffic.
+          vrrp_script check_wg_local {
+            script "/usr/local/bin/check-wireguard.sh"
+            interval 2
+            weight -50
+            fall 3
+            rise 2
+          }
+
           vrrp_instance WG_VIP {
             state BACKUP
             interface {{ vpn_local.vip_interface }}
@@ -492,10 +505,30 @@
               {{ vpn_local.vip }}/24
             }
 
+            track_script {
+              check_wg_local
+            }
+
             notify /usr/local/bin/wg-failover.sh
           }
       when: inventory_hostname == 'vpn-local'
       notify: Restart Keepalived
+
+    - name: Install wireguard health-check script for keepalived
+      copy:
+        dest: /usr/local/bin/check-wireguard.sh
+        owner: root
+        group: root
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          # Returns 0 if both wg interfaces exist (matches the K8s pod's
+          # check). vpn-local is BACKUP — failing this drops priority
+          # below the K8s pod's 150, keeping MASTER on K8s.
+          ip link show wg0 >/dev/null 2>&1 || exit 1
+          ip link show wg1 >/dev/null 2>&1 || exit 1
+          exit 0
+      when: inventory_hostname == 'vpn-local'
 
     - name: Enable and start Keepalived
       systemd:

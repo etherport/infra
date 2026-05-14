@@ -305,6 +305,13 @@ spec:
                 virtual_router_id 51
                 priority 150
                 advert_int 1
+                # When the K8s pod returns after a failover, wait 5 min
+                # before reclaiming the VIP from vpn-local. Otherwise
+                # keepalived takes the VIP back the instant the pod is
+                # Ready, but wg-quick hasn't necessarily come up yet
+                # inside the pod — VIP moves to a node that can't
+                # terminate VPN traffic, ~30s blackhole window.
+                preempt_delay 300
 
                 authentication {
                   auth_type PASS
