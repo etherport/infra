@@ -96,45 +96,13 @@
               "metrics_collected": {
                 "mem": {
                   "measurement": [
-                    "mem_used_percent",
-                    "mem_available_percent",
-                    "mem_used",
-                    "mem_total"
+                    "mem_used_percent"
                   ],
                   "metrics_collection_interval": {{ metrics_collection_interval }}
                 },
                 "swap": {
                   "measurement": [
-                    "swap_used_percent",
-                    "swap_used",
-                    "swap_free"
-                  ],
-                  "metrics_collection_interval": {{ metrics_collection_interval }}
-                },
-                "disk": {
-                  "measurement": [
-                    "disk_used_percent",
-                    "disk_free",
-                    "disk_used"
-                  ],
-                  "resources": [
-                    "/"
-                  ],
-                  "metrics_collection_interval": {{ metrics_collection_interval }}
-                },
-                "cpu": {
-                  "measurement": [
-                    "cpu_usage_idle",
-                    "cpu_usage_user",
-                    "cpu_usage_system"
-                  ],
-                  "totalcpu": true,
-                  "metrics_collection_interval": {{ metrics_collection_interval }}
-                },
-                "netstat": {
-                  "measurement": [
-                    "tcp_established",
-                    "tcp_time_wait"
+                    "swap_used_percent"
                   ],
                   "metrics_collection_interval": {{ metrics_collection_interval }}
                 }

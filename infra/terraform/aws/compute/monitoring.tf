@@ -153,3 +153,81 @@ resource "aws_cloudwatch_metric_alarm" "dns_high_swap" {
     Module      = "compute"
   }
 }
+
+#------------------------------------------------------------------------------
+# Hard-failure auto-recovery
+#
+# Layered with the memory/swap alarms above:
+#   * mem/swap alarms (above)  -> ec2:reboot   - soft fault, agent published
+#   * status check alarms      -> ec2:recover  - hypervisor / OS unreachable
+#
+# Both actions keep the instance on the same hardware — no autoscaling,
+# no instance-type change, no cost impact. The recover action is
+# automatically supported on any EBS-backed instance.
+#
+# Uses AWS-provided metrics (StatusCheckFailed_System and _Instance)
+# which incur no MetricMonitorUsage charge. Both alarms are within the
+# 10 free standard-resolution alarms per region.
+#------------------------------------------------------------------------------
+
+resource "aws_cloudwatch_metric_alarm" "vpn_status_check_recover" {
+  alarm_name          = "EC2-StatusCheck-Recover-VPN"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
+  metric_name         = "StatusCheckFailed_System"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 1
+  treat_missing_data  = "missing"
+  alarm_description   = "Auto-recover VPN instance on hypervisor or system-status failure."
+
+  dimensions = {
+    InstanceId = aws_instance.vpn.id
+  }
+
+  # `ec2:recover` recreates the instance on equivalent hardware; same
+  # AMI, same volumes, same private/public IPs, same instance type.
+  alarm_actions = [
+    "arn:aws:automate:us-west-2:ec2:recover",
+    aws_sns_topic.ec2_alerts.arn,
+  ]
+
+  tags = {
+    Name        = "EC2-StatusCheck-Recover-VPN"
+    Environment = "homelab"
+    ManagedBy   = "terraform"
+    Module      = "compute"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "dns_status_check_recover" {
+  alarm_name          = "EC2-StatusCheck-Recover-DNS"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
+  metric_name         = "StatusCheckFailed_System"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 1
+  treat_missing_data  = "missing"
+  alarm_description   = "Auto-recover DNS instance on hypervisor or system-status failure."
+
+  dimensions = {
+    InstanceId = aws_instance.dns.id
+  }
+
+  alarm_actions = [
+    "arn:aws:automate:us-west-2:ec2:recover",
+    aws_sns_topic.ec2_alerts.arn,
+  ]
+
+  tags = {
+    Name        = "EC2-StatusCheck-Recover-DNS"
+    Environment = "homelab"
+    ManagedBy   = "terraform"
+    Module      = "compute"
+  }
+}

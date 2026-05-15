@@ -42,6 +42,22 @@ spec:
             summary: "High memory usage on {{ $labels.instance }}"
             description: "Memory usage on {{ $labels.instance }} is above 85%. Current: {{ $value | printf \"%.1f\" }}%"
 
+        # Elevated swap (early warning before the CW reboot alarm at 80%)
+        # Filtered to hosts that actually have swap configured so the
+        # alert doesn't fire on hosts without swap (which would produce
+        # NaN -> always >50 -> permanent firing).
+        - alert: ExternalHostElevatedSwap
+          expr: |
+            (node_memory_SwapTotal_bytes{job="external-nodes"} > 0)
+            and
+            ((1 - (node_memory_SwapFree_bytes{job="external-nodes"} / node_memory_SwapTotal_bytes{job="external-nodes"})) * 100 > 50)
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Elevated swap usage on {{ $labels.instance }}"
+            description: "Swap on {{ $labels.instance }} is >50% for 10m. The CloudWatch reboot alarm fires at 80% for 10m — investigate the memory pressure before it triggers."
+
         # Low disk space
         - alert: ExternalHostLowDisk
           expr: (1 - (node_filesystem_avail_bytes{job="external-nodes",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{job="external-nodes",fstype!~"tmpfs|overlay"})) * 100 > 80
