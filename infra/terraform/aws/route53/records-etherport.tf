@@ -131,3 +131,51 @@ resource "aws_route53_record" "etherport_dkim_3" {
 # - _f6abe49fcaf7ee83c8013566f97ee85a.etherport.net (CNAME) - *.etherport.net cert
 # - _8e381876b8967e8fa6ba2c810f7c420c.wind.etherport.net (CNAME) - *.wind.etherport.net cert
 # - _1ccc76b4b2b06ff626fc1c649b61ab26.ha.wind.etherport.net (CNAME) - ha.wind.etherport.net cert
+
+#------------------------------------------------------------------------------
+# Internal-only hostname sinkholes
+#
+# `*.wind.etherport.net` ALIASes to the private-infra ALB by default —
+# convenient for public HTTP services (ha, plex, chat) but ALSO catches
+# internal-only hostnames like pve.wind.etherport.net (Proxmox admin UI,
+# K8s API, etc.) that should NEVER be publicly resolvable.
+#
+# Two ways to handle this:
+#   1. Explicit sinkhole records below — override the wildcard for each
+#      internal-only host. Returns 127.0.0.1 publicly; technitium's
+#      authoritative wind.etherport.net zone returns the real local IP
+#      (split-horizon).
+#   2. Remove the wildcard entirely and add explicit records per public
+#      service (cleaner but more maintenance — each new public service
+#      needs a Route53 change).
+#
+# Option 1 (this file) is the pragmatic choice for a homelab. The
+# `private-infra-alb` already gates listed services via WAF + path
+# routing, so a request that hit the ALB with `Host: pve.wind...`
+# wouldn't actually reach Proxmox — but defense in depth: don't even
+# resolve the name publicly.
+#
+# 127.0.0.1 is the conventional sinkhole. Externally a curl returns
+# "Connection refused" (loopback). Internally, technitium returns the
+# real 10.10.200.41 (PVE host).
+#------------------------------------------------------------------------------
+
+locals {
+  # Internal-only hostnames under wind.etherport.net that should NOT
+  # resolve to the public ALB. Add new entries here as you add admin
+  # interfaces / Proxmox-tier services.
+  internal_only_hosts = [
+    "pve",  # Proxmox admin UI (8006)
+    "ceph", # Ceph dashboard, if exposed
+  ]
+}
+
+resource "aws_route53_record" "wind_internal_sinkhole" {
+  for_each = toset(local.internal_only_hosts)
+
+  zone_id = aws_route53_zone.etherport.zone_id
+  name    = "${each.key}.wind.etherport.net"
+  type    = "A"
+  ttl     = 300
+  records = ["127.0.0.1"]
+}
