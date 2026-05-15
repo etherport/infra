@@ -48,6 +48,8 @@
           - jq
           - git
           - libicu74  # required by .NET runtime in actions/runner
+          - unzip     # hashicorp/setup-terraform action unzips its download
+          - wget      # used by various install actions
         state: present
         update_cache: true
         cache_valid_time: 3600
