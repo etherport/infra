@@ -68,59 +68,59 @@ spec:
                     values:
                       - k8s-gpu1
       containers:
-      - name: home-assistant
-        image: ghcr.io/home-assistant/home-assistant:2026.5.1 # {"$imagepolicy": "flux-system:home-assistant"}
-        ports:
-        - name: http
-          containerPort: 8123
-          protocol: TCP
-        env:
-        - name: TZ
-          value: "America/Los_Angeles"
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "250m"
-          limits:
-            memory: "2Gi"
-            cpu: "1000m"
-        volumeMounts:
-        - name: config
-          mountPath: /config
-        - name: config-yaml
-          mountPath: /config/configuration.yaml
-          subPath: configuration.yaml
-          readOnly: true
-        - name: secrets
-          mountPath: /config/secrets.yaml
-          subPath: secrets.yaml
-          readOnly: true
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 8123
-            scheme: HTTP
-          initialDelaySeconds: 60
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 8123
-            scheme: HTTP
-          initialDelaySeconds: 30
-          periodSeconds: 5
-          timeoutSeconds: 3
-        securityContext:
-          privileged: true # Required for device access
+        - name: home-assistant
+          image: ghcr.io/home-assistant/home-assistant:2026.5.2 # {"$imagepolicy": "flux-system:home-assistant"}
+          ports:
+            - name: http
+              containerPort: 8123
+              protocol: TCP
+          env:
+            - name: TZ
+              value: "America/Los_Angeles"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: config-yaml
+              mountPath: /config/configuration.yaml
+              subPath: configuration.yaml
+              readOnly: true
+            - name: secrets
+              mountPath: /config/secrets.yaml
+              subPath: secrets.yaml
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8123
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8123
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 3
+          securityContext:
+            privileged: true # Required for device access
       volumes:
-      - name: config
-        persistentVolumeClaim:
-          claimName: home-assistant-config
-      - name: config-yaml
-        configMap:
-          name: home-assistant-config
-      - name: secrets
-        secret:
-          secretName: home-assistant-secrets
+        - name: config
+          persistentVolumeClaim:
+            claimName: home-assistant-config
+        - name: config-yaml
+          configMap:
+            name: home-assistant-config
+        - name: secrets
+          secret:
+            secretName: home-assistant-secrets
