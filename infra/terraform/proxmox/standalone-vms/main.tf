@@ -116,8 +116,15 @@ resource "proxmox_virtual_environment_vm" "standalone" {
         gateway = local.gateway_201
       }
     }
+    # Both technitium VIPs — no public DNS fallback. systemd-resolved
+    # silently rolls over to a public server if the primary stalls,
+    # which breaks split-horizon resolution (caused the gh-runner to
+    # resolve `pve.wind.etherport.net` to the public *.wind.etherport.net
+    # ALB ALIAS instead of the local PVE IP). If both technitiums die
+    # simultaneously, DNS breakage is correct — fail loud rather than
+    # silently giving public answers for internal hosts.
     dns {
-      servers = ["10.10.201.5", "1.1.1.1"]
+      servers = ["10.10.201.5", "10.10.201.6"]
     }
   }
 
