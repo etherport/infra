@@ -261,6 +261,50 @@
       register: kubelet_config
 
     # =========================================================================
+    # Fix 5: Hardware watchdog (Proxmox i6300esb)
+    #
+    # Pair with the `watchdog { ... }` block in TF k8s-vms/main.tf which
+    # attaches the emulated i6300esb PCI device to the VM. The guest
+    # `watchdog` daemon writes to /dev/watchdog0 every few seconds; if
+    # it stops (kernel hang, init death, runaway load that blocks the
+    # daemon's scheduler slot past the timeout), Proxmox forcibly resets
+    # the VM. Recovers from the K8s-VM-hang scenario that previously
+    # required manual intervention.
+    # =========================================================================
+    - name: Install watchdog package
+      apt:
+        name: watchdog
+        state: present
+        update_cache: false
+
+    - name: Configure watchdog daemon for i6300esb device
+      copy:
+        dest: /etc/watchdog.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Managed by ansible: infra/ansible/playbooks/k8s-node-fixes.yml
+          # The i6300esb device exposed by Proxmox surfaces as
+          # /dev/watchdog0 with a 30s default timeout.
+          watchdog-device     = /dev/watchdog0
+          watchdog-timeout    = 30
+          # Pet interval. Must be well under the timeout so a brief
+          # daemon stutter doesn't trigger a false reset.
+          interval            = 10
+          realtime            = yes
+          priority            = 1
+          # Only fire on hard hangs; don't kick the watchdog for load.
+          max-load-1          = 0
+      notify: Restart watchdog
+
+    - name: Enable + start watchdog daemon
+      systemd:
+        name: watchdog
+        enabled: yes
+        state: started
+
+    # =========================================================================
     # Verification
     # =========================================================================
     - name: Verify /opt/cni/bin permissions
@@ -285,3 +329,7 @@
     - name: Reload systemd
       systemd:
         daemon_reload: yes
+    - name: Restart watchdog
+      systemd:
+        name: watchdog
+        state: restarted

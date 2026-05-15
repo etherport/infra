@@ -161,6 +161,16 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
     enabled = true
   }
 
+  # Hardware watchdog: Proxmox attaches an emulated i6300esb device.
+  # The guest watchdog daemon pets it every few seconds; if the kernel
+  # or userspace hangs past the timeout, Proxmox forcibly resets the
+  # VM. Configured via the ansible task `Enable hardware watchdog` in
+  # infra/ansible/playbooks/k8s-node-fixes.yml.
+  watchdog {
+    model  = "i6300esb"
+    action = "reset"
+  }
+
   started = true
   on_boot = true
 }
@@ -238,6 +248,16 @@ resource "proxmox_virtual_environment_vm" "workers" {
 
   agent {
     enabled = true
+  }
+
+  # Hardware watchdog: Proxmox attaches an emulated i6300esb device.
+  # The guest watchdog daemon pets it every few seconds; if the kernel
+  # or userspace hangs past the timeout, Proxmox forcibly resets the
+  # VM. Configured via the ansible task `Enable hardware watchdog` in
+  # infra/ansible/playbooks/k8s-node-fixes.yml.
+  watchdog {
+    model  = "i6300esb"
+    action = "reset"
   }
 
   started = true
@@ -347,6 +367,16 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
 
   agent {
     enabled = true
+  }
+
+  # Hardware watchdog: Proxmox attaches an emulated i6300esb device.
+  # The guest watchdog daemon pets it every few seconds; if the kernel
+  # or userspace hangs past the timeout, Proxmox forcibly resets the
+  # VM. Configured via the ansible task `Enable hardware watchdog` in
+  # infra/ansible/playbooks/k8s-node-fixes.yml.
+  watchdog {
+    model  = "i6300esb"
+    action = "reset"
   }
 
   started = true

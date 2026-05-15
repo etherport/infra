@@ -163,8 +163,14 @@ build {
     inline = [
       "sudo DEBIAN_FRONTEND=noninteractive apt-get update",
       "sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y",
-      "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip curl wget git vim htop ca-certificates gnupg lsb-release open-iscsi nfs-common qemu-guest-agent",
+      # `watchdog` is the userspace daemon that pets the Proxmox-attached
+      # i6300esb device. Configured by ansible (k8s-node-fixes.yml) so the
+      # daemon is OFF by default in the template (no /dev/watchdog0 without
+      # the device attached) and the per-VM TF `watchdog {}` block is what
+      # actually wires it up.
+      "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip curl wget git vim htop ca-certificates gnupg lsb-release open-iscsi nfs-common qemu-guest-agent watchdog",
       "sudo systemctl enable --now qemu-guest-agent",
+      "sudo systemctl disable watchdog || true",
     ]
   }
 

@@ -121,6 +121,12 @@ resource "proxmox_virtual_environment_vm" "standalone" {
     }
   }
 
+  # Hardware watchdog (see k8s-vms/main.tf for rationale).
+  watchdog {
+    model  = "i6300esb"
+    action = "reset"
+  }
+
   started = true
   on_boot = true
 }
@@ -160,6 +166,15 @@ resource "proxmox_virtual_environment_vm" "imported" {
 
   agent {
     enabled = true
+  }
+
+  # Hardware watchdog (see k8s-vms/main.tf). Imported VMs need a stop+
+  # start to attach the device; will happen on the next planned outage
+  # (or a one-off `qm set <vmid> --watchdog model=i6300esb,action=reset`
+  # while the VM is running, which takes effect on next reboot).
+  watchdog {
+    model  = "i6300esb"
+    action = "reset"
   }
 
   started = true
