@@ -33,6 +33,44 @@ Per-service configuration is applied via Ansible playbooks in
 | vpn-local    | `wireguard.yml`  | Installs WG + Keepalived; loads peer keys from SOPS. Idempotent.   |
 | gh-runner    | `gh-runner.yml`  | Installs the GH Actions runner binary, registers with the repo.    |
 
+## Operator prerequisites
+
+Before running TF apply or any ansible playbook against these VMs,
+make sure these are in place on your workstation:
+
+| Prereq                            | Where it goes                          | Source                                                       |
+|-----------------------------------|----------------------------------------|--------------------------------------------------------------|
+| SSH private key                   | `/tmp/auto-key` (mode `0600`)          | 1Password — item "Homelab Automation SSH Key" → private key  |
+| SOPS age key                      | `~/.config/sops/age/keys.txt`          | 1Password — item "SOPS Age Key (homelab)" → key body         |
+| `sops` binary                     | on `$PATH`                             | `brew install sops`                                          |
+| `ansible-playbook` binary         | on `$PATH`                             | `brew install ansible` (or `pipx install ansible-core`)      |
+| `gh` CLI (only for GH Actions path) | on `$PATH`                           | `brew install gh` and `gh auth login`                        |
+| `terraform` binary (only for local-apply path) | on `$PATH`              | `brew install terraform`                                     |
+| AWS credentials (only for local-apply path) | env or profile             | 1Password — item "AWS — claude-admin IAM keys"               |
+| Proxmox API token (only for local-apply path) | env vars                | 1Password — item "Proxmox VE Terraform Token"                |
+
+Quick verification:
+
+```bash
+ls -la /tmp/auto-key                   # exists, mode 0600
+ls -la ~/.config/sops/age/keys.txt     # exists, mode 0600
+sops -d infra/ansible/playbooks/../../../platform/kubernetes/technitium/05-secret.sops.yaml >/dev/null && echo "sops ok"
+which ansible-playbook gh terraform
+```
+
+If you've previously SSH'd to a VM that was later destroyed + recreated
+(e.g. dns-fallback rebuild), clear the stale host key first or `ansible`
+will refuse to connect:
+
+```bash
+ssh-keygen -R 10.10.201.6   # dns-fallback
+ssh-keygen -R 10.10.201.15  # vpn-local
+ssh-keygen -R 10.10.201.30  # gh-runner
+```
+
+The inventory's `ansible_ssh_common_args` includes `StrictHostKeyChecking=accept-new`
+which auto-accepts *new* hosts, but rejects *changed* host keys for safety.
+
 ## Apply path: GitHub Actions (default)
 
 The standard apply path goes through the workflow
