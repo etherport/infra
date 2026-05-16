@@ -176,5 +176,5 @@ sudo ETCDCTL_API=3 etcdctl endpoint health \
 ## Related Documentation
 
 - [Disaster Recovery](disaster-recovery.md)
-- [Kubernetes HA Migration](k8s-ha-migration.md)
+- [Kubernetes HA Migration (archived — completed 2026-05-12)](../planning/archive/k8s-ha-migration.md)
 - [Kubespray documentation](https://kubespray.io/)
