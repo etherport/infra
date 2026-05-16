@@ -10,7 +10,7 @@ Home Assistant deployment with multi-VLAN support for device discovery.
 - **Storage**: Ceph RBD PVC for config persistence
 - **Networking**: Multus CNI for multi-VLAN access
 - **Ingress**: Traefik with automatic SSL via Cloudflare
-- **GitOps**: Configuration managed via ConfigMap generator (see [Flux Overview](../../docs/gitops/flux-overview.md))
+- **GitOps**: Configuration managed via ConfigMap generator (see [Flux Overview](../../../docs/setup/gitops/flux-overview.md))
 
 ## Architecture
 
@@ -70,14 +70,15 @@ See `infra/ansible/KUBESPRAY_MIGRATION.md` for deployment steps.
 
 ### 2. Node Network Configuration
 
-Each Kubernetes node needs VLAN interfaces configured. See `docs/kubernetes/node-vlan-setup.md` for details.
+Each Kubernetes node has the Multus VLAN parent interfaces
+(`enp6s19/20/21`) baked into the Packer template via netplan
+(`/etc/netplan/51-vlan-interfaces.yaml`). See
+[`docs/reference/node-vlan-setup.md`](../../../docs/reference/node-vlan-setup.md)
+for the per-node summary, and
+[`docs/runbooks/vlan-interfaces-netplan.md`](../../../docs/runbooks/vlan-interfaces-netplan.md)
+for emergency recovery.
 
-Summary:
-```bash
-# On each node (k8s-w1, k8s-w2, k8s-w3, k8s-gpu1)
-# Create systemd-networkd configs for eth1 (VLAN 202), eth2 (VLAN 204), eth3 (VLAN 205)
-# Restart systemd-networkd
-```
+Applies to all workers: k8s-w1, k8s-w2, k8s-w3, k8s-w4, k8s-gpu1.
 
 ### 3. Terraform Updates
 
@@ -148,7 +149,7 @@ flux reconcile kustomization flux-system
 kubectl rollout status deployment/home-assistant -n home-automation
 ```
 
-See [Making Changes to GitOps Apps](../../docs/gitops/making-changes.md) for detailed workflows.
+See [Making Changes to GitOps Apps](../../../docs/setup/gitops/making-changes.md) for detailed workflows.
 
 ### Manual Deployment (Not Recommended)
 
@@ -239,7 +240,7 @@ kubectl get pods -n home-automation
 kubectl exec -n home-automation -it <pod-name> -- ip addr
 
 # Should see:
-# - eth0: Cluster network (Calico)
+# - eth0: Cluster network (Cilium)
 # - net1: 10.10.202.25/24
 # - net2: 10.10.204.25/24
 # - net3: 10.10.205.25/24
@@ -361,7 +362,7 @@ kubectl logs -n home-automation -l app=home-assistant | grep -i "invalid\|error"
 - Using environment variables for sensitive data
 - Never commit real secrets to public repositories
 
-See [SOPS Setup](../../docs/SOPS-SETUP.md) for encrypted secret management.
+See [SOPS Setup](../../../docs/setup/secrets/SOPS-SETUP.md) for encrypted secret management.
 
 ### UI-Managed Files
 
@@ -383,8 +384,9 @@ See [SOPS Setup](../../docs/SOPS-SETUP.md) for encrypted secret management.
 
 ## Related Documentation
 
-- [Flux GitOps Overview](../../docs/gitops/flux-overview.md)
-- [Making Changes to GitOps Apps](../../docs/gitops/making-changes.md)
-- [SOPS Setup](../../docs/SOPS-SETUP.md)
+- [Flux GitOps Overview](../../../docs/setup/gitops/flux-overview.md)
+- [Making Changes to GitOps Apps](../../../docs/setup/gitops/making-changes.md)
+- [SOPS Setup](../../../docs/setup/secrets/SOPS-SETUP.md)
 - [Multus CNI](../multus/README.md)
-- [Node VLAN Setup](../../docs/kubernetes/node-vlan-setup.md)
+- [Node VLAN Setup](../../../docs/reference/node-vlan-setup.md)
+- [VLAN netplan runbook](../../../docs/runbooks/vlan-interfaces-netplan.md)

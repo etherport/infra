@@ -67,7 +67,7 @@ sudo netplan apply
 ip link show enp6s19 enp6s20 enp6s21 | grep "state UP"
 ```
 
-### Step 3: Verify Pod Connectivity
+### Verify pod connectivity
 
 ```bash
 # Test from Home Assistant pod
@@ -77,15 +77,11 @@ kubectl exec -n home-automation deployment/home-assistant -- \
 
 ## Manual Workaround (Temporary)
 
-If you need to bring interfaces up immediately without rebooting:
+If you need to bring interfaces up immediately without rebooting and
+without writing the netplan file:
 
 ```bash
-# On each node
-sudo ip link set ens19 up
-sudo ip link set ens20 up
-sudo ip link set ens21 up
-
-# Or on GPU node
+# All current K8s nodes use enp6s19/20/21 (post-Packer-9001 rebuild).
 sudo ip link set enp6s19 up
 sudo ip link set enp6s20 up
 sudo ip link set enp6s21 up

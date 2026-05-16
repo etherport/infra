@@ -101,6 +101,7 @@ AWS resources in us-west-2 connected to local homelab via WireGuard VPN. The inf
 | Inbound | All | All | 10.10.192.0/19 | Homelab (wind) network |
 | Inbound | All | All | 10.254.0.0/24 | Remote VPN clients |
 | Inbound | All | All | 10.255.255.0/29 | Site-to-site VPN clients |
+| Inbound | All | All | spoke VPCs (peered CIDRs) | AWS spoke VPCs reachable through this VPC (commit 8764631) |
 | Outbound | All | All | 0.0.0.0/0 | All outbound |
 
 ### SSH Access Security Group (`sg-0079fee23ee54417a`)
@@ -213,6 +214,7 @@ AWS resources in us-west-2 connected to local homelab via WireGuard VPN. The inf
 | ID | `ed2149c5-f335-4c97-9b1a-58d827cb00d9` |
 | Default Action | Allow |
 | DDoS Protection | Active under DDoS (ALB Low Reputation Mode) |
+| CloudWatch log retention | 7 days |
 
 ### WAF Rules (by priority)
 
@@ -494,6 +496,9 @@ infra/ansible/inventory/aws/
 - WireGuard keys in 1Password
 - Technitium zones synced via GitOps from YAML files
 - **EC2 instances are disposable** - no snapshots needed (Terraform + Ansible can recreate)
+- **CloudWatch agent** on EC2 instances now publishes only 2 metrics
+  (down from 15); host metrics moved to the Prometheus node_exporter
+  scraped over the VPN. See commit 69ac7dd.
 
 ## External Monitoring
 
@@ -553,9 +558,9 @@ All AWS infrastructure is now managed via Terraform. See `infra/terraform/aws/MI
 | `networking/` | `aws/networking/terraform.tfstate` | VPC, subnets, route tables, IGW, security groups, NACLs |
 | `compute/` | `aws/compute/terraform.tfstate` | EC2 instances, EIPs, IAM roles, CloudWatch alarms, SNS |
 | `load-balancing/` | `aws/load-balancing/terraform.tfstate` | ALB, listeners, target groups, certificates |
-| `route53/` | `aws/route53/terraform.tfstate` | Hosted zones (etherport.net, grahamsmith.net), DNS records |
+| `route53/` | `aws/route53/terraform.tfstate` | Hosted zones (etherport.net, grahamsmith.net) and the private hosted zone `aws.etherport.net` served to the homelab via Route53 Resolver inbound endpoint forwarders. See [`docs/runbooks/aws-private-dns.md`](../runbooks/aws-private-dns.md). |
 | `acm/` | `aws/acm/terraform.tfstate` | SSL/TLS certificates (us-west-2) |
-| `s3/` | `aws/s3/terraform.tfstate` | S3 buckets (velero, archive, logs, email-fwd) |
+| `s3/` | `aws/s3/terraform.tfstate` | S3 buckets (velero, archive, logs, email-fwd, `postgres-barman.wind.etherport.net` for CNPG Barman WAL/base backups). All buckets carry bucket-policy `Deny` statements on `s3:DeleteBucket` and `s3:DeleteBucketPolicy` for non-root principals. |
 | `ses/` | `aws/ses/terraform.tfstate` | SES domain/email identities, DKIM |
 
 ### Lambda Modules

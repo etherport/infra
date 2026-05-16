@@ -366,9 +366,11 @@ The deployment uses `plexinc/pms-docker:latest`. To update:
 kubectl rollout restart deployment/plex -n plex
 ```
 
-Or pin to specific version in `02-deployment.yaml`:
-```yaml
-image: plexinc/pms-docker:1.40.0.7998-c29d4c0c8
+The image tag is managed by Renovate against `plexinc/pms-docker` —
+prefer letting Renovate open a PR rather than pinning manually here. To
+force a redeploy of the current tag:
+```bash
+kubectl rollout restart deployment/plex -n plex
 ```
 
 ### Backup Configuration
@@ -432,5 +434,4 @@ kubectl top pod -n plex
 
 ---
 
-**Created**: 2025-12-31
 **Maintainer**: Graham Smith (grahamsm@gmail.com)

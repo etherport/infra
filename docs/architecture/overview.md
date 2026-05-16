@@ -7,17 +7,20 @@ High-level infrastructure design for the homelab environment.
 | Component | Details |
 |-----------|---------|
 | Hypervisor | Proxmox (`pve.wind.etherport.net`) |
-| Kubernetes | 1 control-plane + 4 workers |
+| Kubernetes | 3 CP HA (.50-.52) + 4 workers (.53-.56) + 1 GPU (.60) |
 
 ### Kubernetes Nodes
 
 | Node | IP Address | Role |
 |------|------------|------|
-| k8s-cp1 | 10.10.201.50 | Control Plane |
-| k8s-w1 | 10.10.201.51 | Worker |
-| k8s-w2 | 10.10.201.52 | Worker |
-| k8s-w3 | 10.10.201.53 | Worker |
-| k8s-gpu1 | 10.10.201.54 | GPU Worker (NVIDIA Tesla P40) |
+| k8s-cp1 | 10.10.201.50 | Control Plane (HA) |
+| k8s-cp2 | 10.10.201.51 | Control Plane (HA) |
+| k8s-cp3 | 10.10.201.52 | Control Plane (HA) |
+| k8s-w1 | 10.10.201.53 | Worker |
+| k8s-w2 | 10.10.201.54 | Worker |
+| k8s-w3 | 10.10.201.55 | Worker |
+| k8s-w4 | 10.10.201.56 | Worker |
+| k8s-gpu1 | 10.10.201.60 | GPU Worker (NVIDIA Tesla P40) |
 
 ## Networking
 
@@ -25,7 +28,7 @@ High-level infrastructure design for the homelab environment.
 |-----------|---------------|
 | Node network | VLAN 201 (10.10.201.0/24) |
 | LoadBalancer VIPs | MetalLB: 10.10.201.70-90 |
-| Ingress | Traefik (LoadBalancer IP, DNS-01 Route53) |
+| Ingress | Traefik (LoadBalancer IP); TLS via cert-manager wildcard `*.wind.etherport.net` + TLSStore default (see `platform/kubernetes/traefik/clusterissuer-letsencrypt.yaml`, `certificate-wildcard.yaml`, `tlsstore-default.yaml`) |
 
 ## Storage
 

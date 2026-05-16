@@ -46,19 +46,26 @@ Flux is a GitOps operator for Kubernetes that automatically synchronizes the sta
 
 ### Current GitOps Coverage
 
-As of this writing, approximately **48% of applications** are managed via Flux:
+**Nearly 100% of the cluster is Flux-managed.** All 11 HelmReleases in
+`clusters/wind/helm-releases/` reconcile cleanly, and the
+application/infrastructure kustomizations under `platform/kubernetes/`
+are all referenced from `clusters/wind/`.
 
-**Flux-Managed Apps** (in `clusters/wind/kustomization.yaml`):
-- **Infrastructure**: MetalLB, Traefik, Technitium DNS
-- **Applications**: Home Automation, Plex, iCloudPD, Rclone GDrive, Kopia
-- **Utilities**: Route53 DDNS
+**Flux-managed HelmReleases** (`clusters/wind/helm-releases/`):
+cert-manager, cnpg, github-actions-runner, gpu-operator, kured,
+monitoring (kube-prometheus-stack), pushgateway, tailscale-connector,
+tailscale-operator, traefik, velero.
 
-**Not Flux-Managed** (manual deployment):
-- Velero (Helm)
-- Kured (Helm)
-- Prometheus/Grafana (Helm)
-- Cert-Manager (Helm)
-- And others...
+**Flux-managed kustomizations** (selected — see
+`clusters/wind/kustomization.yaml` for the full list): MetalLB,
+Technitium DNS, Multus NADs, Home Automation, Plex, Ollama, Wiki.js,
+WireGuard, iCloudPD, Rclone GDrive, Kopia, Route53 DDNS, backups
+(Velero schedules), auto-remediation.
+
+**Out of band (intentional)**: the Flux bootstrap itself (the
+`flux-system` install was done with `flux bootstrap github`) and the
+underlying Proxmox VMs / kubespray-deployed cluster (Terraform +
+ansible, not GitOps).
 
 ### Directory Structure
 

@@ -13,10 +13,10 @@ High-level overview of the homelab infrastructure with links to detailed runbook
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                    Kubernetes Cluster (K8s)                          │   │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐       │   │
-│  │  │ k8s-cp1 │ │ k8s-w1  │ │ k8s-w2  │ │ k8s-w3  │ │ k8s-gpu1│       │   │
-│  │  │ control │ │ worker  │ │ worker  │ │ worker  │ │ GPU     │       │   │
-│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘       │   │
+│  │  Control Plane (HA):  k8s-cp1 (.50)  k8s-cp2 (.51)  k8s-cp3 (.52)   │   │
+│  │  Workers:             k8s-w1 (.53)   k8s-w2 (.54)                   │   │
+│  │                       k8s-w3 (.55)   k8s-w4 (.56)                   │   │
+│  │  GPU:                 k8s-gpu1 (.60) — NVIDIA Tesla P40             │   │
 │  │                                                                     │   │
 │  │  Updates: Kured + unattended-upgrades (automatic)                  │   │
 │  │  Apps: Flux GitOps + Helm                                          │   │
@@ -30,6 +30,11 @@ High-level overview of the homelab infrastructure with links to detailed runbook
 │  │  │ 10.10.201.6 │ │10.10.201.15 │ │ 10.10.100.5 │ │10.10.100.10 │   │   │
 │  │  │ Technitium  │ │ WireGuard   │ │ Technitium  │ │ WireGuard   │   │   │
 │  │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘   │   │
+│  │  ┌─────────────┐                                                    │   │
+│  │  │ gh-runner   │  GitHub Actions self-hosted runner (VM 1003,      │   │
+│  │  │10.10.201.x  │  10.10.201.x — see infra/ansible/playbooks/       │   │
+│  │  │ Actions     │  gh-runner.yml)                                   │   │
+│  │  └─────────────┘                                                    │   │
 │  │                                                                     │   │
 │  │  Updates: unattended-upgrades (automatic with staggered reboots)   │   │
 │  │  Config: Ansible playbooks                                         │   │
@@ -70,6 +75,8 @@ done
 dig @10.10.201.5 google.com +short
 
 # VPN
+# Note: vpn-local still uses the `graham` user; rebuild pending Task #4
+# (will move to ubuntu + /tmp/auto-key like the K8s nodes).
 ssh graham@10.10.201.15 "sudo wg show"
 ```
 

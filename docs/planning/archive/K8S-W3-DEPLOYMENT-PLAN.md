@@ -1,4 +1,10 @@
-# k8s-w3 Deployment Plan with IP Reorganization
+# k8s-w3 Deployment Plan with IP Reorganization (SUPERSEDED — ARCHIVED)
+
+> **Status: superseded.** This single-node addition plan was overtaken
+> by the full HA migration on 2026-05-12, which rebuilt the cluster as
+> 3 CP (.50/.51/.52) + 4 workers (.53-.56) + 1 GPU (.60). Kept for
+> historical context only. For current state see
+> `docs/architecture/overview.md`.
 
 **Date**: 2026-01-02
 **Objective**: Add third worker node (k8s-w3) and reorganize IPs for clean addressing

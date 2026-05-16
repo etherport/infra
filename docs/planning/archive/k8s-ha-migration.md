@@ -1,4 +1,10 @@
-# Kubernetes HA Migration Runbook
+# Kubernetes HA Migration Runbook (COMPLETED 2026-05-12 — ARCHIVED)
+
+> **Status: completed.** This migration shipped on 2026-05-12. The cluster
+> is now 3 CP (.50/.51/.52) + 4 workers (.53-.56) + 1 GPU (.60). This
+> document is kept for historical reference only; do not use as a live
+> runbook. For current state see `docs/architecture/overview.md`; for
+> future similar work see `docs/runbooks/proxmox-ha-expansion.md`.
 
 Migration from single control plane to 3-node HA cluster with expanded workers.
 
@@ -13,7 +19,8 @@ Migration from single control plane to 3-node HA cluster with expanded workers.
 
 ## Prerequisites
 
-- [ ] Packer template (VM 9000) built successfully
+- [ ] Packer template (VM 9001) built successfully (VM 9000 is the raw
+      cloud-image base; 9001 is the Packer-built template Terraform clones)
 - [ ] Terraform configs updated
 - [ ] Kubespray inventory updated
 - [ ] Velero backup completed
@@ -56,8 +63,8 @@ This avoids complex in-place etcd membership changes.
 ## Phase 1: Prepare Infrastructure
 
 ```bash
-# 1. Verify Packer template exists
-ssh graham@pve.wind.etherport.net "qm config 9000"
+# 1. Verify Packer template exists (9001 — the clone source)
+ssh graham@pve.wind.etherport.net "qm config 9001"
 
 # 2. Destroy old K8s VMs (after backup!)
 cd infra/terraform/proxmox/k8s-vms

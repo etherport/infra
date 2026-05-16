@@ -9,9 +9,9 @@ cnpg-system namespace (operator - Helm managed)
 └── cloudnative-pg controller
 
 postgres namespace (Flux managed)
-└── Cluster CRD → PostgreSQL pods
+└── Cluster CRD → PostgreSQL pods (instances: 3 — standard HA shape)
     ├── primary (read-write)
-    └── replicas (read-only, optional)
+    └── 2 sync replicas (read-only)
 ```
 
 ## Prerequisites
@@ -22,9 +22,17 @@ postgres namespace (Flux managed)
 
 ## Installation
 
-### 1. Install CloudNativePG Operator (Helm)
+### 1. Install CloudNativePG Operator (Flux HelmRelease)
 
-The operator is installed via Helm (not Flux-managed):
+The operator is installed via Flux at
+`clusters/wind/helm-releases/cnpg.yaml` (chart version pinned to the
+`0.22.x` track). To force an upgrade:
+
+```bash
+flux reconcile helmrelease cnpg -n flux-system
+```
+
+If you ever need to install/upgrade out of band:
 
 ```bash
 helm repo add cnpg https://cloudnative-pg.github.io/charts
@@ -33,7 +41,7 @@ helm repo update
 helm upgrade --install cnpg cnpg/cloudnative-pg \
   --namespace cnpg-system \
   --create-namespace \
-  --version 0.22.1 \
+  --version 0.22.x \
   -f platform/kubernetes/cnpg/operator-values.yaml
 ```
 
@@ -198,24 +206,15 @@ kubectl get cluster -n postgres postgres-cluster -o jsonpath='{.status.phase}'
 kubectl exec -n postgres postgres-cluster-1 -- psql -c '\dt'
 ```
 
-## Backup Configuration (Optional)
+## Backups (Barman → S3)
 
-To enable S3 backups, add to cluster spec:
-
-```yaml
-spec:
-  backup:
-    barmanObjectStore:
-      destinationPath: s3://bucket/postgres
-      s3Credentials:
-        accessKeyId:
-          name: s3-creds
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: s3-creds
-          key: ACCESS_SECRET_KEY
-    retentionPolicy: "30d"
-```
+Barman is **live**, not optional — see
+[`docs/runbooks/postgres-barman.md`](../../../docs/runbooks/postgres-barman.md)
+for activation steps and the `postgres-barman.wind.etherport.net` S3
+bucket configuration. The day-2 ops (failover testing, switchover,
+monitoring continuous-archiving lag) are still being written up; for now
+treat that runbook as the source of truth and ping when something is
+missing.
 
 ## Resources
 

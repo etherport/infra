@@ -322,10 +322,21 @@ done
 
 ## VPN (WireGuard) Operations
 
+> The primary site-to-site WireGuard now runs as a Kubernetes pod
+> (`wireguard/wireguard` deployment) with `vpn-local` as the VRRP backup.
+> "Restart WireGuard" on the K8s side means restarting that pod, not a
+> systemd unit. The `vpn-local`/`dns-fallback` VMs still use the `graham`
+> user; rebuild pending Task #4 (they'll move to `ubuntu` +
+> `/tmp/auto-key` like the K8s nodes).
+
 ### Check Status
 
 ```bash
-# Local VPN server
+# K8s WireGuard (primary)
+kubectl get pods -n wireguard
+kubectl exec -n wireguard deployment/wireguard -c wireguard -- wg show wg0
+
+# Local VPN server (backup - rebuild pending Task #4)
 ssh graham@vpn-local.wind.etherport.net "sudo wg show"
 
 # AWS VPN server
@@ -335,7 +346,10 @@ ssh ubuntu@10.10.100.10 "sudo wg show"
 ### Restart WireGuard
 
 ```bash
-# On vpn-local
+# K8s (primary) - restart the pod, not a systemd unit
+kubectl rollout restart deployment wireguard -n wireguard
+
+# On vpn-local (backup VM - rebuild pending Task #4)
 ssh graham@vpn-local.wind.etherport.net "sudo systemctl restart wg-quick@wg0"
 
 # On vpn-aws
@@ -533,20 +547,34 @@ kubectl exec -n gpu-operator-system -l app=nvidia-driver-daemonset -- nvidia-smi
 flux reconcile helmrelease gpu-operator -n flux-system
 ```
 
+## Platform Features (Quick Reference)
+
+| Feature | Where | Notes |
+|---------|-------|-------|
+| Hardware watchdog (i6300esb) | Per-VM, see `docs/runbooks/vm-watchdog.md` | Imported VMs need stop+start to reattach the watchdog device |
+| CNPG HA | `platform/kubernetes/cnpg/` | `instances: 3` is the standard; primary + 2 sync replicas |
+| Velero schedules | `platform/kubernetes/backups/velero/schedules/` | All 9 schedules are git-managed via kustomization (since commit 95b3755) |
+| Post-bootstrap script | `infra/kubespray/scripts/post-bootstrap.sh` | Run once after a fresh cluster bring-up; restores Multus NADs, applies cluster-only kustomizations |
+| Autonomous-run decisions | `infra/kubespray/scripts/autonomous-run.sh` | Wraps `kubespray.sh` for unattended retries; see commit b390dee |
+
 ## Emergency Procedures
 
 ### Cluster Recovery
 
-1. Check control plane: `ssh graham@k8s-cp1.wind.etherport.net`
+1. Check control plane: `ssh -i /tmp/auto-key ubuntu@k8s-cp1.wind.etherport.net`
+   (cp2/cp3 at .51/.52 — pick any healthy member)
 2. Check kubelet: `systemctl status kubelet`
 3. Check etcd: `kubectl get pods -n kube-system | grep etcd`
 
 ### VPN Down
 
 If site-to-site VPN is down:
-1. Check local VPN: `ssh graham@10.10.201.15 "sudo wg show"`
-2. Check AWS VPN: Access via AWS console if needed
-3. Restart WireGuard on both ends
+1. Check K8s WireGuard (primary): `kubectl get pods -n wireguard`
+2. Check vpn-local (VRRP backup): `ssh graham@10.10.201.15 "sudo wg show"`
+   (rebuild pending Task #4 — will move to `ubuntu` user)
+3. Check AWS VPN: Access via AWS console if needed
+4. Restart WireGuard on the appropriate side (pod restart for K8s; systemd
+   for vpn-local/vpn-aws)
 
 ### DNS Issues
 

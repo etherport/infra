@@ -3,7 +3,10 @@
 ## Repo layout
 - Kubespray is a git submodule: `infra/kubespray/kubespray`
 - Wrapper scripts: `infra/kubespray/kubespray.sh` and `infra/kubespray/setup.sh`
-- Your inventory lives in: `infra/kubespray/inventory/wind/`
+- Inventory lives in a single file at the kubespray dir root:
+  `infra/kubespray/inventory/inventory.ini` (with `group_vars/` and
+  `pre-flight.yml` alongside it). The legacy `inventory/wind/` layout
+  is no longer used.
 
 ## First-time Setup
 
@@ -31,11 +34,11 @@ cd ~/Projects/homelab-infra/infra/kubespray
 ## Kubeconfig on your Mac
 
 Preferred: store kubeconfig in repo *ignored* artifacts directory:
-- `infra/kubespray/inventory/wind/artifacts/admin.conf` (ignored by .gitignore)
+- `infra/kubespray/inventory/artifacts/admin.conf` (ignored by .gitignore)
 
 Set:
 ```bash
-export KUBECONFIG=$HOME/Projects/homelab-infra/infra/kubespray/inventory/wind/artifacts/admin.conf
+export KUBECONFIG=$HOME/Projects/homelab-infra/infra/kubespray/inventory/artifacts/admin.conf
 ```
 
 Verify:

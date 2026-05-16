@@ -71,6 +71,23 @@ The DNS cluster consists of:
 | `wind.etherport.net` | Primary | Homelab internal DNS |
 | `dns-cluster.wind.etherport.net` | Cluster catalog | Cluster sync |
 
+### Route53 sinkhole records under `wind.etherport.net` (commit d542853)
+
+`pve.wind.etherport.net` and `ceph.wind.etherport.net` are pinned to
+sinkhole (RFC5737) addresses in the public Route53 zone so that off-net
+clients (or anything that resolves via 1.1.1.1 instead of the Technitium
+cluster) can't accidentally reach our infrastructure UIs. The
+authoritative on-net answers still come from this Technitium cluster.
+
+### AWS private hosted zone `aws.etherport.net`
+
+AWS-side resources (Barman bucket endpoint, future VPC-internal
+services) are served by an AWS Route53 private hosted zone. Local
+clients reach it via the Route53 Resolver inbound endpoint, with
+Technitium forwarding `aws.etherport.net` to that endpoint. See
+[`docs/runbooks/aws-private-dns.md`](../../docs/runbooks/aws-private-dns.md)
+for the forwarder configuration and how to add records.
+
 ## Initial Setup (New Instance)
 
 After running the Ansible playbook:

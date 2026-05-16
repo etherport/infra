@@ -163,6 +163,16 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 - **Services**: WireGuard (wg0)
 - **Config stored in**: `platform/wireguard/servers/vpn-local.sops.yaml`
 
+> **Rebuild pending Task #4.** vpn-local is still on the legacy template
+> with the `graham` user; once rebuilt from the current Packer template
+> (VM 9001) it will switch to `ubuntu` + `/tmp/auto-key` like the K8s
+> nodes. SSH examples below reflect the pre-rebuild state.
+
+> **Watchdog reattach:** if you import this VM from a backup rather than
+> recreating via Terraform, the `i6300esb` hardware watchdog device is not
+> reattached on a hot `qm set`. Stop the VM, then start it again to pick
+> up the device. See `docs/runbooks/vm-watchdog.md`.
+
 ### Pre-Migration
 
 1. **Verify SOPS keys are current**
@@ -217,6 +227,15 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 - **IP**: 10.10.201.6 (VLAN 201)
 - **Services**: Technitium DNS Server
 - **Config**: Part of DNS cluster, syncs automatically
+
+> **Rebuild pending Task #4.** dns-fallback is still on the legacy template
+> with the `graham` user; once rebuilt from the current Packer template
+> (VM 9001) it will switch to `ubuntu` + `/tmp/auto-key` like the K8s
+> nodes. SSH examples below reflect the pre-rebuild state.
+
+> **Watchdog reattach:** as with vpn-local, imported VMs need a full
+> stop+start (not just reboot) to reattach the `i6300esb` watchdog
+> device. See `docs/runbooks/vm-watchdog.md`.
 
 ### Pre-Migration
 

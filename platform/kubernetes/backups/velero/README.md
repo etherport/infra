@@ -78,14 +78,23 @@ All schedules use file-system backup (Kopia) with 30-day retention.
 
 ### Schedule Files
 
-GitOps-managed schedules are in `schedules/`:
-- `postgres-daily.yaml` - PostgreSQL database backup
-- `wikijs-daily.yaml` - Wiki.js application backup
+All 9 schedules are GitOps-managed in `schedules/` (since commit
+95b3755) and applied via a single `kustomization.yaml` in that directory:
 
-Other schedules were created via CLI and can be exported:
-```bash
-kubectl get schedule -n velero -o yaml > all-schedules.yaml
-```
+- `critical-apps-daily.yaml`
+- `infrastructure-daily.yaml`
+- `kube-system-daily.yaml`
+- `monitoring-daily.yaml`
+- `ollama-daily.yaml`
+- `plex-daily.yaml`
+- `postgres-daily.yaml`
+- `technitium-daily.yaml`
+- `traefik-daily.yaml`
+- `wikijs-daily.yaml`
+
+To add a new schedule, drop a `<name>.yaml` next to the others and add
+it to `schedules/kustomization.yaml` — Flux will reconcile it on the
+next sync. No CLI `velero schedule create` needed.
 
 ## Installation
 

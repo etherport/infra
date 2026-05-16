@@ -1,4 +1,12 @@
-# Kubespray Configuration Migration
+# Kubespray Configuration Migration (HISTORICAL — completed 2026-01)
+
+> **Status: completed.** All migrations listed below shipped in early
+> 2026. The current cluster is the 3-CP-HA build from 2026-05-12 and
+> all of the add-ons described here (MetalLB, Multus, NFD, cert-manager)
+> are live and Flux- or kubespray-managed as documented. Keep this file
+> as a record of how we got here; do not use as a live runbook. For
+> current state see [`../kubespray/README.md`](../kubespray/README.md)
+> and [`../../docs/runbooks/PLATFORM-MANAGEMENT.md`](../../docs/runbooks/PLATFORM-MANAGEMENT.md).
 
 ## Overview
 

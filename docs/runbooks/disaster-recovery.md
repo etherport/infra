@@ -52,8 +52,8 @@ cd ~/Projects/homelab-infra/infra/kubespray
 **Recovery Steps:**
 
 ```bash
-# 1. Access control plane node directly
-ssh graham@10.10.201.50
+# 1. Access control plane node directly (any of cp1/cp2/cp3 — .50/.51/.52)
+ssh -i /tmp/auto-key ubuntu@10.10.201.50
 
 # 2. Check kubelet and container runtime
 sudo systemctl status kubelet
@@ -127,6 +127,15 @@ velero restore create restore-infra --from-backup infrastructure-daily-<latest>
 velero restore create restore-critical --from-backup critical-apps-daily-<latest>
 velero restore create restore-monitoring --from-backup monitoring-daily-<latest>
 
+# 7a. PostgreSQL: if the Ceph RBD pgdata image survived the rebuild,
+#     use the static-PV recovery pattern to ADOPT it instead of
+#     letting CNPG run initdb on empty storage (which a vanilla Velero
+#     restore of the PVC won't prevent). The manifests:
+#       platform/kubernetes/cnpg/03-static-pv-recovery.yaml
+#       platform/kubernetes/cnpg/04-pvc-pre-bind.yaml
+#     are wired into the kustomization and ordered before 01-cluster.yaml.
+#     See platform/kubernetes/cnpg/README.md §Disaster Recovery.
+
 # 8. Deploy Flux to resume GitOps
 flux bootstrap github \
   --owner=sparked-diamond \
@@ -178,7 +187,10 @@ velero restore create pvc-restore \
 
 ### 3.1 Technitium Cluster Degraded
 
-**Cluster nodes:** dns1, dns2 (K8s), dns-fallback (10.10.201.6), dns-aws (10.10.100.5)
+**Cluster nodes:** `technitium-0` (10.10.201.71) and `technitium-1` (10.10.201.72)
+running as the K8s StatefulSet, plus `dns-fallback` (10.10.201.6) and
+`dns-aws` (10.10.100.5) standalone VMs. Clients reach the in-cluster pair
+via MetalLB VIP 10.10.201.5.
 
 ```bash
 # Check cluster status
@@ -206,6 +218,8 @@ echo "nameserver 1.1.1.1" | sudo tee /etc/resolv.conf
 **Recovery:**
 ```bash
 # SSH to dns-fallback (standalone, always available)
+# Note: dns-fallback still uses the `graham` user; rebuild pending Task #4
+# (will move to ubuntu + /tmp/auto-key like the K8s nodes).
 ssh graham@10.10.201.6
 
 # Restart Technitium

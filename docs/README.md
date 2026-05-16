@@ -43,6 +43,7 @@ docs/
 | [disaster-recovery.md](runbooks/disaster-recovery.md) | Recovery procedures for failure scenarios |
 | [dns-resolution-issues.md](runbooks/dns-resolution-issues.md) | DNS troubleshooting |
 | [vlan-interfaces-netplan.md](runbooks/vlan-interfaces-netplan.md) | VLAN interface configuration |
+| [cert-manager-wildcard.md](runbooks/cert-manager-wildcard.md) | Wildcard cert issuance + Traefik TLSStore |
 | [auto-remediation/](runbooks/auto-remediation/) | Automated issue resolution system |
 
 ## Operations
@@ -113,7 +114,6 @@ docs/
 | Document | Description |
 |----------|-------------|
 | [PRODUCTION-READINESS-CHECKLIST.md](planning/PRODUCTION-READINESS-CHECKLIST.md) | Pre-production checklist |
-| [K8S-W3-DEPLOYMENT-PLAN.md](planning/K8S-W3-DEPLOYMENT-PLAN.md) | Worker node deployment plan |
 | [TODO-configmap-migration.md](planning/TODO-configmap-migration.md) | ConfigMap migration tracking |
 | [VERSIONING-STRATEGY.md](planning/VERSIONING-STRATEGY.md) | Container image versioning approach |
 | [sops-vs-ansible-vault.md](planning/sops-vs-ansible-vault.md) | SOPS vs Ansible-Vault comparison |

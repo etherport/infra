@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    "hashicorp.terraform",
+    "hashicorp.hcl",
+    "4ops.packer",
+    "redhat.ansible",
+    "redhat.vscode-yaml",
+    "signageos.signageos-vscode-sops",
+    "ms-kubernetes-tools.vscode-kubernetes-tools",
+    "github.vscode-github-actions",
+    "editorconfig.editorconfig"
+  ]
+}

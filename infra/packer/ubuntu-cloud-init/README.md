@@ -1,6 +1,11 @@
 # Ubuntu 24.04 Cloud-Init Template for Proxmox
 
-This Packer template creates a reusable Ubuntu 24.04 LTS VM template (VM ID 9000) in Proxmox that can be cloned by Terraform.
+This Packer template produces the reusable Ubuntu 24.04 LTS VM template
+(**VM ID 9001**) in Proxmox that Terraform clones for each workload VM.
+It is built by cloning a raw cloud-image base (**VM ID 9000**, created
+once by `scripts/setup-cloud-base.sh`) and then layering homelab packages,
+the netplan stanza for Multus VLAN parents, and the `ubuntu` cloud-init
+user with the homelab SSH key.
 
 ## Features
 
@@ -98,20 +103,25 @@ gh workflow run packer-ubuntu-template.yml -f action=build
 |----------|---------|-------------|
 | `proxmox_url` | `https://pve.wind.etherport.net:8006/api2/json` | Proxmox API URL |
 | `proxmox_node` | `pve` | Proxmox node name |
-| `template_vm_id` | `9000` | VM ID for the template |
+| `template_vm_id` | `9001` | VM ID for the Packer-built template (clone source for Terraform) |
 | `template_name` | `ubuntu-2404-cloud-init` | Template name |
 | `storage_pool` | `local-zfs` | Storage pool for VM disks |
-| `ssh_username` | `graham` | Default user in template |
+| `ssh_username` | `ubuntu` | Default cloud-init user baked into the template (with the homelab `/tmp/auto-key`) |
 
 ## What's Installed
 
 - **System**: Ubuntu 24.04 LTS, fully updated
+- **User**: `ubuntu` (cloud-init) with the homelab SSH key (`/tmp/auto-key`)
 - **Packages**:
   - `qemu-guest-agent` - VM management
   - `cloud-init`, `cloud-guest-utils` - Cloud provisioning
   - `python3`, `python3-pip` - Ansible requirement
   - `open-iscsi`, `nfs-common` - Storage connectivity
   - `curl`, `wget`, `git`, `vim`, `htop` - Utilities
+- **Netplan**: `/etc/netplan/51-vlan-interfaces.yaml` baked in to bring up
+  the `enp6s19/20/21` Multus VLAN parent interfaces on first boot (see
+  `docs/runbooks/vlan-interfaces-netplan.md` and
+  `platform/kubernetes/multus/README.md`).
 
 ## Integration with Terraform
 
@@ -119,7 +129,7 @@ The Terraform configs in `infra/terraform/proxmox/` clone from this template:
 
 ```hcl
 clone {
-  vm_id = 9000  # This template
+  vm_id = 9001  # This template (Packer-built; 9000 is the raw base)
   full  = true
 }
 ```

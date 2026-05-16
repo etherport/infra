@@ -74,6 +74,13 @@ kubectl apply -k platform/kubernetes/wireguard/
 | VRRP priority | 150 | Higher than vpn-local (100) |
 | VIP | 10.10.201.20 | Floating between K8s and vpn-local |
 
+> **VRRP failover correctness fix (commit b4999c9):** the keepalived
+> sidecar now releases the VIP cleanly on pod termination (preStop hook
+> + `garp_master_refresh`), so vpn-local takes over within VRRP's
+> advert-interval instead of waiting for the gratuitous-ARP cache to
+> age out. If you're debugging a stuck VIP, that commit is the
+> reference.
+
 ### Probes
 
 | Probe | Target | Initial Delay | Period |

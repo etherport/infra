@@ -1,9 +1,33 @@
 # Auto-Remediation Coverage Status
 
-**Last Updated**: January 4, 2026  
-**Total Services**: 17 deployments + 3 statefulsets  
-**Total Alerts**: 22 alert rules  
-**Coverage**: 100% of critical services
+**Last Updated**: 2026-05-16
+**Total alert rules in `comprehensive-alerts.yaml`**: 25
+**Alerts with `auto_remediate: "true"`**: 16
+**Coverage**: 100% of critical user-facing services; **gaps** below for
+recent additions.
+
+## Known gaps (not yet wired to auto-remediation)
+
+Added since the original audit and currently alert-only — manual
+intervention or follow-up needed if they fire:
+
+- **CNPG cluster health** (`postgres-cluster` in `postgres` ns): cluster
+  phase, replica lag, primary failover events. Operator handles failover
+  itself; auto-remediation should focus on stuck rolling updates.
+- **Barman continuous archiving** (`postgres` ns): WAL archive failures
+  and lag on the `postgres-barman.wind.etherport.net` S3 bucket. See
+  `docs/runbooks/postgres-barman.md`.
+- **GPU operator** (`gpu-operator-system`): driver daemonset readiness,
+  device-plugin advertisement on `k8s-gpu1`.
+- **cert-manager** (`cert-manager`): wildcard certificate renewal /
+  ClusterIssuer challenge failures (we have Down/webhook alerts but no
+  cert-expiry remediation).
+- **Velero schedule failures**: backup phase `Failed` /
+  `PartiallyFailed` with no `PodVolumeBackup` data. Listed in the
+  schedules under `platform/kubernetes/backups/velero/schedules/`.
+
+Re-audit the rule set whenever a new HelmRelease is added to
+`clusters/wind/helm-releases/`.
 
 ## Services Covered
 

@@ -8,7 +8,12 @@ Custom IngressRoute configurations for Traefik reverse proxy.
 
 This directory contains IngressRoute configurations for services that need custom routing beyond standard Ingress resources. The Traefik controller itself is installed via Helm (not managed by Flux), but these IngressRoutes **are** Flux-managed.
 
-- **Traefik Installation**: Managed via Helm (see `traefik-values.yaml`)
+- **Traefik Installation**: Flux HelmRelease at
+  `clusters/wind/helm-releases/traefik.yaml` (values in `traefik-values.yaml`);
+  HA with `replicas: 2`, no ACME PVC.
+- **TLS / Certificates**: cert-manager wildcard `*.wind.etherport.net`
+  (DNS-01 via Route53) + Traefik default `TLSStore`. All IngressRoutes
+  automatically pick up the wildcard — no per-route `certResolver` needed.
 - **IngressRoute Configuration**: Managed via Flux GitOps (this directory)
 - **Namespace**: `traefik`
 
@@ -18,9 +23,14 @@ This directory contains IngressRoute configurations for services that need custo
 |------|---------|
 | `ingressroute-infrastructure.yaml` | IngressRoutes for UPS and PDU web UIs with self-signed cert bypass |
 | `ingressroute-proxmox.yaml` | IngressRoute for Proxmox VE web UI (HTTPS passthrough) |
+| `clusterissuer-letsencrypt.yaml` | cert-manager ClusterIssuer (DNS-01 via Route53) |
+| `certificate-wildcard.yaml` | Wildcard certificate `*.wind.etherport.net` |
+| `tlsstore-default.yaml` | Traefik default TLSStore that serves the wildcard for every IngressRoute |
+| `route53-credentials.sops.yaml` | SOPS-encrypted AWS creds used by cert-manager DNS-01 |
 | `kustomization.yaml` | Kustomize configuration for Flux |
-| `traefik-values.yaml` | Helm values for Traefik installation (reference only, not applied by Flux) |
-| `pvc-traefik-ceph.yaml` | PVC for ACME certificates (reference, applied separately) |
+| `traefik-values.yaml` | Helm values for Traefik (HelmRelease defined in `clusters/wind/helm-releases/traefik.yaml`) |
+| `pvc-traefik-ceph.yaml` | **Legacy.** Was the ACME PVC; no longer referenced by the kustomization. Safe to remove once confirmed unbound. |
+| `traefik-acme-fix.yaml` | **Legacy.** Workaround for embedded-ACME issues; cert-manager replaces it. |
 
 ## Managed IngressRoutes
 
@@ -48,7 +58,7 @@ Provides HTTPS access to Proxmox hypervisors:
 │  External User   │
 │  (web browser)   │
 └────────┬─────────┘
-         │ HTTPS (valid cert from Route53)
+         │ HTTPS (wildcard cert from cert-manager + TLSStore default)
          ↓
 ┌──────────────────┐
 │  Traefik         │
@@ -62,21 +72,19 @@ Provides HTTPS access to Proxmox hypervisors:
 
 ## Traefik Installation
 
-The Traefik controller itself is installed via Helm:
+Traefik is installed via a Flux HelmRelease (since 2026-05-12):
+
+- `clusters/wind/helm-releases/traefik.yaml` — the HelmRelease itself
+- `platform/kubernetes/traefik/traefik-values.yaml` — Helm values (HA
+  `replicas: 2`, no ACME / no PVC, TLS served from cert-manager wildcard)
+
+To force a re-install/upgrade, reconcile the HelmRelease via Flux:
 
 ```bash
-# Add Traefik Helm repo
-helm repo add traefik https://traefik.github.io/charts
-helm repo update
-
-# Install Traefik (one-time)
-helm install traefik traefik/traefik \
-  -n traefik \
-  --create-namespace \
-  -f platform/kubernetes/traefik/traefik-values.yaml
+flux reconcile helmrelease traefik -n flux-system
 ```
 
-**Important**: The Helm installation is **not** managed by Flux. Only the IngressRoutes in this directory are Flux-managed.
+The legacy "helm install" path is no longer used.
 
 ## Deployment
 
@@ -116,8 +124,7 @@ spec:
         - name: switch1-external
           port: 443
           serversTransport: insecure-transport
-  tls:
-    certResolver: route53
+  tls: {}   # Wildcard from TLSStore default — no certResolver needed
 
 # Commit and push
 git add platform/kubernetes/traefik/ingressroute-infrastructure.yaml
@@ -276,7 +283,12 @@ This tells Traefik to skip TLS verification when connecting to backend devices, 
 
 ## Notes
 
-- **Helm vs Flux**: Traefik **installation** (via Helm) is manual, but IngressRoutes are Flux-managed
-- **Certificate Management**: Traefik handles ACME/Let's Encrypt certificates automatically via Route53 DNS-01 challenge
+- **Flux-managed**: Both the Traefik install (HelmRelease) and the
+  IngressRoutes/cert-manager objects in this directory are Flux-managed.
+- **Certificate Management**: cert-manager issues a wildcard
+  `*.wind.etherport.net` certificate via Route53 DNS-01
+  (`clusterissuer-letsencrypt.yaml` + `certificate-wildcard.yaml`), and
+  the Traefik default `TLSStore` (`tlsstore-default.yaml`) serves it for
+  every IngressRoute. Individual routes no longer need a `certResolver`.
 - **LoadBalancer IP**: Traefik gets its external IP from MetalLB (typically first available IP from pool)
 - **Namespace**: All IngressRoutes are in the `traefik` namespace, even if routing to services in other namespaces

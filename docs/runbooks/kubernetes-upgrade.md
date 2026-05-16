@@ -33,6 +33,9 @@ Before any upgrade:
 - [ ] Review deprecated APIs: `kubectl api-resources --api-group=<deprecated-group>`
 - [ ] Notify users of maintenance window
 - [ ] Ensure Proxmox has VM snapshots (optional safety net)
+- [ ] Take an etcd snapshot from one CP member (the 3-CP HA cluster is
+      backed up per the procedure in
+      [etcd-backup-restore.md §HA Cluster Restore](etcd-backup-restore.md))
 
 ---
 
@@ -142,7 +145,7 @@ kubectl get pods -n kube-system | grep -E 'apiserver|controller|scheduler'
 
 ```bash
 # Upgrade workers one at a time
-for node in k8s-w1 k8s-w2 k8s-w3 k8s-gpu1; do
+for node in k8s-w1 k8s-w2 k8s-w3 k8s-w4 k8s-gpu1; do
   echo "=== Upgrading $node ==="
 
   # Cordon node
@@ -246,8 +249,8 @@ flux install
 # Fix issues and re-run upgrade playbook
 
 # If control plane fails:
-# 1. SSH to control plane node
-ssh graham@10.10.201.50
+# 1. SSH to control plane node (cp1/cp2/cp3 — .50/.51/.52)
+ssh -i /tmp/auto-key ubuntu@10.10.201.50
 
 # 2. Check kubelet logs
 sudo journalctl -u kubelet -f
@@ -296,8 +299,8 @@ kubectl get nodes -o wide
 ### 5.2 API Server Unavailable
 
 ```bash
-# SSH to control plane
-ssh graham@10.10.201.50
+# SSH to control plane (any of cp1/cp2/cp3)
+ssh -i /tmp/auto-key ubuntu@10.10.201.50
 
 # Check API server container
 sudo crictl ps | grep kube-apiserver
@@ -314,8 +317,8 @@ sudo mv /tmp/kube-apiserver.yaml /etc/kubernetes/manifests/
 ### 5.3 etcd Issues
 
 ```bash
-# SSH to control plane
-ssh graham@10.10.201.50
+# SSH to control plane (any of cp1/cp2/cp3 — etcd is HA, 3 members)
+ssh -i /tmp/auto-key ubuntu@10.10.201.50
 
 # Check etcd health
 sudo ETCDCTL_API=3 etcdctl \
