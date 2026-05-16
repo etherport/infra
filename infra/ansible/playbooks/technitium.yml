@@ -5,16 +5,26 @@
 
   vars:
     technitium_version: "latest"
+    # Admin credentials sourced from the same SOPS secret that the K8s
+    # technitium pods consume. The `lookup('pipe', ...)` runs on the
+    # control node (always, regardless of play-level become or --limit)
+    # and uses the local age key to decrypt. Doing this here (vs a
+    # pre-play with `set_fact` + `delegate_facts`) means `--limit
+    # dns-fallback` doesn't accidentally skip credential loading.
+    # Repo root is THREE levels up from playbook_dir
+    # (infra/ansible/playbooks/.. → infra/ansible → infra → repo root).
+    technitium_admin_secret_file: "{{ playbook_dir }}/../../../platform/kubernetes/technitium/05-secret.sops.yaml"
+    _technitium_admin_secret: "{{ lookup('pipe', 'sops -d ' ~ (technitium_admin_secret_file | quote)) | from_yaml }}"
+    # Technitium's `DNS_SERVER_ADMIN_PASSWORD` env var ONLY sets the
+    # password for the built-in `admin` user. The `username` field in
+    # the SOPS secret is descriptive metadata (the K8s deployment also
+    # only consumes `password` — see 02-statefulset.yaml).
+    technitium_admin_user: "admin"
+    technitium_admin_password: "{{ _technitium_admin_secret.stringData.password }}"
     cluster_addresses:
       - "10.10.201.5"  # K8s cluster VIP
       - "10.10.201.6"  # Local fallback
       - "10.10.100.5"  # AWS remote
-    # Source of truth for the technitium admin credentials. Same SOPS
-    # secret backs the K8s technitium pods (DNS_SERVER_ADMIN_PASSWORD
-    # env var injected from this secret), so admin/password is identical
-    # across all instances. dns-sync-watcher then uses these creds to
-    # push records to all 4 servers.
-    technitium_admin_secret_file: "{{ playbook_dir }}/../../platform/kubernetes/technitium/05-secret.sops.yaml"
     # Bootstrap config — only applied when admin/admin defaults are
     # detected. After password change the playbook is idempotent on
     # subsequent runs (login uses the SOPS password).
@@ -35,6 +45,46 @@
   tasks:
     - name: Gather service facts
       service_facts:
+
+    # =========================================================================
+    # Pin /etc/resolv.conf to a static upstream BEFORE stopping the local
+    # DNS service.
+    #
+    # On a fresh Ubuntu cloud-init VM, /etc/resolv.conf is a symlink to
+    # /run/systemd/resolve/stub-resolv.conf (127.0.0.53). Stopping
+    # systemd-resolved leaves that stub address pointing at nothing →
+    # subsequent apt installs / downloads in this playbook fail with
+    # "Temporary failure resolving 'archive.ubuntu.com'". Bit us on
+    # 2026-05-16 during the dns-fallback rebuild.
+    #
+    # Fix: write a static /etc/resolv.conf naming the OTHER technitium
+    # peers (excluding `inventory_hostname`'s own IP — since this very
+    # host is what we're about to install Technitium on, it can't serve
+    # its own queries until the end of the playbook). After Technitium
+    # is up, the file stays as a permanent static config — Technitium
+    # will be reachable on 127.0.0.1 too, but resolving via peers
+    # is preferable during cold start.
+    # =========================================================================
+    - name: Compute upstream resolvers (cluster peers excluding self)
+      set_fact:
+        bootstrap_resolvers: "{{ cluster_addresses | reject('equalto', ip | default(ansible_host)) | list }}"
+
+    - name: Replace /etc/resolv.conf symlink with a static file
+      copy:
+        dest: /etc/resolv.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Managed by ansible (infra/ansible/playbooks/technitium.yml).
+          # Pinned away from systemd-resolved's stub because this host
+          # IS a DNS server — stopping resolved would orphan the stub.
+          {% for r in bootstrap_resolvers %}
+          nameserver {{ r }}
+          {% endfor %}
+          search wind.etherport.net
+      # Use force=yes equivalent to break the existing symlink first
+      register: resolv_conf_write
 
     # Stop existing DNS services that conflict with Technitium
     - name: Stop and disable Pi-hole FTL
@@ -88,15 +138,19 @@
         dest: /tmp/dotnet-install.sh
         mode: "0755"
 
-    - name: Install .NET 9.0 runtime
-      shell: /tmp/dotnet-install.sh --channel 9.0 --runtime dotnet --install-dir /usr/share/dotnet
+    # Technitium DNS Server bumped its target framework to .NET 10 around
+    # 2026-Q1. The dotnet-install.sh `--channel 10.0` resolves to the
+    # latest 10.0.x release. (Previous version on 9.0 — leaving the dir
+    # in place if already there since .NET runtimes are side-by-side.)
+    - name: Install .NET 10.0 runtime
+      shell: /tmp/dotnet-install.sh --channel 10.0 --runtime dotnet --install-dir /usr/share/dotnet
       args:
-        creates: /usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.0
+        creates: /usr/share/dotnet/shared/Microsoft.NETCore.App/10.0.0
 
-    - name: Install ASP.NET Core 9.0 runtime
-      shell: /tmp/dotnet-install.sh --channel 9.0 --runtime aspnetcore --install-dir /usr/share/dotnet
+    - name: Install ASP.NET Core 10.0 runtime
+      shell: /tmp/dotnet-install.sh --channel 10.0 --runtime aspnetcore --install-dir /usr/share/dotnet
       args:
-        creates: /usr/share/dotnet/shared/Microsoft.AspNetCore.App/9.0.0
+        creates: /usr/share/dotnet/shared/Microsoft.AspNetCore.App/10.0.0
 
     - name: Create dotnet symlink
       file:
@@ -124,29 +178,14 @@
         creates: /opt/technitium/DnsServerApp.dll
 
     # =========================================================================
-    # Admin credentials from SOPS (same source as the K8s technitium pods).
-    # Decrypt the secret on the ansible control node (localhost), parse
-    # username + password, and pass to Technitium via EnvironmentFile so
-    # DNS_SERVER_ADMIN_PASSWORD is set on first start. After admin user
-    # exists, Technitium ignores the env var — so this is safe to leave
-    # in place permanently.
+    # Admin credentials from SOPS — `technitium_admin_user` and
+    # `technitium_admin_password` are resolved lazily from `vars:` via the
+    # `lookup('pipe', 'sops -d ...')` pattern. Lookup runs on the control
+    # node so the playbook's `become: true` doesn't interfere. Used here
+    # to write an EnvironmentFile so DNS_SERVER_ADMIN_PASSWORD is set on
+    # first start. After the admin user exists, Technitium ignores the
+    # env var — safe to leave permanently.
     # =========================================================================
-    - name: Decrypt technitium admin secret from SOPS (on control node)
-      delegate_to: localhost
-      become: false
-      shell: |
-        sops -d {{ technitium_admin_secret_file }} \
-          | python3 -c 'import sys,yaml;d=yaml.safe_load(sys.stdin);print(d["stringData"]["username"]);print(d["stringData"]["password"])'
-      register: technitium_admin_creds
-      changed_when: false
-      no_log: true
-
-    - name: Parse admin user + password from SOPS output
-      set_fact:
-        technitium_admin_user: "{{ technitium_admin_creds.stdout_lines[0] }}"
-        technitium_admin_password: "{{ technitium_admin_creds.stdout_lines[1] }}"
-      no_log: true
-
     - name: Create /etc/technitium directory for env override file
       file:
         path: /etc/technitium
