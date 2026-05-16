@@ -9,6 +9,28 @@
       - "10.10.201.5"  # K8s cluster VIP
       - "10.10.201.6"  # Local fallback
       - "10.10.100.5"  # AWS remote
+    # Source of truth for the technitium admin credentials. Same SOPS
+    # secret backs the K8s technitium pods (DNS_SERVER_ADMIN_PASSWORD
+    # env var injected from this secret), so admin/password is identical
+    # across all instances. dns-sync-watcher then uses these creds to
+    # push records to all 4 servers.
+    technitium_admin_secret_file: "{{ playbook_dir }}/../../platform/kubernetes/technitium/05-secret.sops.yaml"
+    # Bootstrap config — only applied when admin/admin defaults are
+    # detected. After password change the playbook is idempotent on
+    # subsequent runs (login uses the SOPS password).
+    technitium_primary_zone: "wind.etherport.net"
+    technitium_upstream_forwarders:
+      - "1.1.1.1"
+      - "1.0.0.1"
+      - "8.8.8.8"
+    technitium_conditional_forwarders:
+      # AWS private hosted zone resolution + EC2 internal hostnames.
+      # The 52.40.219.113 / 10.10.100.5 IP is dns-aws (own EC2 nano
+      # running technitium pointed at AWS Route53 Resolver Inbound
+      # endpoint, when configured). Until then forwarding here is a
+      # no-op for non-AWS queries.
+      - { zone: "aws.etherport.net", forwarder: "10.10.100.5" }
+      - { zone: "us-west-2.compute.internal", forwarder: "10.10.100.5" }
 
   tasks:
     - name: Gather service facts
@@ -101,6 +123,49 @@
         remote_src: yes
         creates: /opt/technitium/DnsServerApp.dll
 
+    # =========================================================================
+    # Admin credentials from SOPS (same source as the K8s technitium pods).
+    # Decrypt the secret on the ansible control node (localhost), parse
+    # username + password, and pass to Technitium via EnvironmentFile so
+    # DNS_SERVER_ADMIN_PASSWORD is set on first start. After admin user
+    # exists, Technitium ignores the env var — so this is safe to leave
+    # in place permanently.
+    # =========================================================================
+    - name: Decrypt technitium admin secret from SOPS (on control node)
+      delegate_to: localhost
+      become: false
+      shell: |
+        sops -d {{ technitium_admin_secret_file }} \
+          | python3 -c 'import sys,yaml;d=yaml.safe_load(sys.stdin);print(d["stringData"]["username"]);print(d["stringData"]["password"])'
+      register: technitium_admin_creds
+      changed_when: false
+      no_log: true
+
+    - name: Parse admin user + password from SOPS output
+      set_fact:
+        technitium_admin_user: "{{ technitium_admin_creds.stdout_lines[0] }}"
+        technitium_admin_password: "{{ technitium_admin_creds.stdout_lines[1] }}"
+      no_log: true
+
+    - name: Create /etc/technitium directory for env override file
+      file:
+        path: /etc/technitium
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Write admin-password env override (mode 0600)
+      copy:
+        dest: /etc/technitium/admin-password.env
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          DNS_SERVER_ADMIN_PASSWORD={{ technitium_admin_password }}
+      no_log: true
+      notify: Restart technitium
+
     - name: Create systemd service file
       copy:
         dest: /etc/systemd/system/technitium.service
@@ -113,6 +178,10 @@
           [Service]
           Type=simple
           WorkingDirectory=/opt/technitium
+          # DNS_SERVER_ADMIN_PASSWORD only takes effect on FIRST start (when
+          # the admin user doesn't exist yet). After that Technitium ignores
+          # it — safe to leave configured.
+          EnvironmentFile=/etc/technitium/admin-password.env
           ExecStart=/usr/share/dotnet/dotnet /opt/technitium/DnsServerApp.dll
           Restart=always
           RestartSec=10
@@ -120,6 +189,7 @@
 
           [Install]
           WantedBy=multi-user.target
+      notify: Restart technitium
 
     - name: Reload systemd daemon
       systemd:
@@ -197,6 +267,75 @@
         state: started
       when: restore_backup | length > 0
 
+    # =========================================================================
+    # Bootstrap config (idempotent, skipped when restoring from backup)
+    # =========================================================================
+    # Three pieces, all via Technitium's HTTP API at localhost:5380:
+    #   1. Verify the admin password (set via env var on first boot)
+    #   2. Create the wind.etherport.net primary zone if missing —
+    #      dns-sync-watcher pushes RECORDS but won't create the zone
+    #      itself, so this is a hard prerequisite for the cluster's
+    #      DNS GitOps flow to work on a fresh install.
+    #   3. Configure upstream + conditional forwarders.
+    #
+    # All API calls are idempotent: zone creation checks existence first;
+    # forwarder settings are a wholesale set (PUTting the same value is
+    # a no-op). Safe to re-run the playbook indefinitely.
+    # =========================================================================
+
+    - name: Login to Technitium API
+      uri:
+        url: "http://localhost:5380/api/user/login?user={{ technitium_admin_user }}&pass={{ technitium_admin_password | urlencode }}&includeInfo=false"
+        method: GET
+        return_content: yes
+        body_format: json
+      register: technitium_login
+      until: technitium_login.json.status == "ok"
+      retries: 10
+      delay: 3
+      no_log: true
+      when: restore_backup | length == 0
+
+    - name: Set API token fact
+      set_fact:
+        technitium_token: "{{ technitium_login.json.token }}"
+      no_log: true
+      when: restore_backup | length == 0
+
+    - name: List existing zones
+      uri:
+        url: "http://localhost:5380/api/zones/list?token={{ technitium_token }}&pageNumber=1&zonesPerPage=100"
+        method: GET
+        return_content: yes
+      register: technitium_zones
+      when: restore_backup | length == 0
+      no_log: true
+
+    - name: Create primary zone {{ technitium_primary_zone }} if missing
+      uri:
+        url: "http://localhost:5380/api/zones/create?token={{ technitium_token }}&zone={{ technitium_primary_zone }}&type=Primary"
+        method: POST
+      when:
+        - restore_backup | length == 0
+        - technitium_primary_zone not in (technitium_zones.json.response.zones | default([]) | map(attribute='name') | list)
+
+    - name: Create conditional forwarder zones
+      uri:
+        url: "http://localhost:5380/api/zones/create?token={{ technitium_token }}&zone={{ item.zone }}&type=Forwarder&initializeForwarder=true&protocol=Udp&forwarder={{ item.forwarder }}"
+        method: POST
+      loop: "{{ technitium_conditional_forwarders }}"
+      loop_control:
+        label: "{{ item.zone }} → {{ item.forwarder }}"
+      when:
+        - restore_backup | length == 0
+        - item.zone not in (technitium_zones.json.response.zones | default([]) | map(attribute='name') | list)
+
+    - name: Configure upstream forwarders + server defaults
+      uri:
+        url: "http://localhost:5380/api/settings/set?token={{ technitium_token }}&forwarders={{ technitium_upstream_forwarders | join(',') }}&forwarderProtocol=Udp&dnssecValidation=true&logUsingLocalTime=true"
+        method: POST
+      when: restore_backup | length == 0
+
     - name: Display access information
       debug:
         msg: |
@@ -207,11 +346,17 @@
           {% if restore_backup | length > 0 %}
           Configuration restored from backup.
           {% else %}
-          Next steps:
-          1. Access the web UI and set admin password
-          2. Configure clustering with other Technitium instances
-          3. Import zones and blocklists
-
-          Or restore from backup:
-            ansible-playbook playbooks/technitium.yml -e "technitium_restore_backup=/path/to/backup.tar.gz"
+          Bootstrap complete:
+            - Admin user: {{ technitium_admin_user }} (password from SOPS)
+            - Primary zone: {{ technitium_primary_zone }} (records pushed by
+              dns-sync-watcher in the K8s `dns` namespace within ~5s)
+            - Upstream forwarders: {{ technitium_upstream_forwarders | join(', ') }}
+            - Conditional forwarders: {{ technitium_conditional_forwarders | map(attribute='zone') | join(', ') }}
           {% endif %}
+
+  handlers:
+    - name: Restart technitium
+      systemd:
+        name: technitium
+        state: restarted
+        daemon_reload: yes
