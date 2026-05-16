@@ -147,26 +147,23 @@ cilium_l2announcements: false
 # cilium_enable_host_firewall: false
 # cilium_policy_audit_mode: false
 
-# Hubble
-### Enable Hubble without install
-# cilium_enable_hubble: false
-### Enable Hubble-ui
-### Installed by default when hubble is enabled. To disable set to false
-# cilium_enable_hubble_ui: "{{ cilium_enable_hubble }}"
-### Enable Hubble Metrics
-# cilium_enable_hubble_metrics: false
-### if cilium_enable_hubble_metrics: true
-# cilium_hubble_metrics: {}
-# - dns
-# - drop
-# - tcp
-# - flow
-# - icmp
-# - http
-### Enable Hubble install
-# cilium_hubble_install: false
-### Enable auto generate certs if cilium_hubble_install: true
-# cilium_hubble_tls_generate: false
+# Hubble: enabled so we have flow-level observability before rolling
+# out enforced NetworkPolicies in Phase 2. The UI + auto-generated TLS
+# certs come along. Metrics export tied into Prometheus for the
+# "Hubble flows" dashboard.
+cilium_enable_hubble: true
+cilium_enable_hubble_ui: true
+cilium_hubble_install: true
+cilium_hubble_tls_generate: true
+cilium_enable_hubble_metrics: true
+cilium_hubble_metrics:
+  - dns:query;ignoreAAAA
+  - drop
+  - tcp
+  - flow
+  - port-distribution
+  - icmp
+  - http
 
 ### Tune cilium_hubble_event_buffer_capacity & cilium_hubble_event_queue_size values to avoid dropping events when hubble is under heavy load
 ### Capacity of Hubble events buffer. The provided value must be one less than an integer power of two and no larger than 65535
