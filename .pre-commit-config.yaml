@@ -1,0 +1,49 @@
+# pre-commit config for homelab-infra.
+#
+# Three hooks, intentionally minimal:
+#   1. terraform_fmt   — keep TF formatted
+#   2. yamllint        — catch broken YAML before it hits Flux
+#   3. sops-encryption — never commit a plaintext *.sops.yaml
+#
+# Install:
+#   brew install pre-commit
+#   pre-commit install
+#
+# Run on every tracked file:
+#   pre-commit run --all-files
+#
+# Bypass a single hook for one commit (use sparingly):
+#   SKIP=terraform_fmt git commit -m "..."
+
+# Exclude the kubespray submodule globally — it is upstream code we vendor,
+# not code we maintain. Linting it produces noise we cannot act on.
+exclude: '^infra/kubespray/kubespray/'
+
+repos:
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.96.1
+    hooks:
+      - id: terraform_fmt
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        # No --strict: warnings (e.g. long lines in dashboard JSON) remain
+        # warnings; errors still fail the hook. Production-standard balance.
+        args: ["-c", ".yamllint.yml"]
+        # SOPS payloads and templates are excluded via .yamllint.yml ignore list;
+        # the file regex below mirrors that for speed (skip them entirely).
+        exclude: '(^|/)(.*\.sops\.yaml(\.template)?)$'
+
+  - repo: local
+    hooks:
+      - id: sops-encryption-check
+        name: sops-encryption-check
+        description: Ensure *.sops.yaml files are SOPS-encrypted (not plaintext)
+        entry: scripts/pre-commit/check-sops-encryption.sh
+        language: script
+        # Match *.sops.yaml but not *.sops.yaml.template. The script also
+        # skips templates and the SOPS rule-config file (.sops.yaml).
+        files: '\.sops\.yaml$'
+        exclude: '\.sops\.yaml\.template$'

@@ -55,6 +55,30 @@ flux get helmreleases -A
 flux reconcile kustomization flux-system --with-source
 ```
 
+## Pre-commit hooks
+
+This repo uses [pre-commit](https://pre-commit.com/) to catch common
+foot-guns (unformatted Terraform, broken YAML, plaintext SOPS files) before
+they land in a commit.
+
+```bash
+# one-time setup
+brew install pre-commit
+pre-commit install
+
+# run all hooks against every tracked file
+pre-commit run --all-files
+
+# bypass a single hook for one commit (use sparingly)
+SKIP=terraform_fmt git commit -m "..."
+```
+
+Hooks configured (see `.pre-commit-config.yaml`):
+- **terraform_fmt** — `terraform fmt` on all `*.tf` files
+- **yamllint** — lenient YAML lint (config in `.yamllint.yml`)
+- **sops-encryption-check** — fail if any `*.sops.yaml` file is plaintext
+  (templates `*.sops.yaml.template` are exempt)
+
 ## Quick Links
 
 - [Architecture Overview](docs/architecture/overview.md)

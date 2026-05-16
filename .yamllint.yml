@@ -1,0 +1,69 @@
+# yamllint config for homelab-infra.
+#
+# Goal: catch egregious problems (broken YAML, accidental tabs, unclosed quotes)
+# without nitpicking style. K8s manifests, Helm values, and kubespray vars
+# routinely have long lines and embedded scripts that aren't worth reformatting.
+#
+# Tighten later — it is much easier to add rules than to remove them once
+# people have learned to ignore the noise.
+
+extends: default
+
+ignore: |
+  # vendored / generated
+  .terraform/
+  **/.terraform/
+  node_modules/
+  **/node_modules/
+  # kubespray is a submodule — not our code to lint
+  infra/kubespray/kubespray/
+  # SOPS-encrypted payloads contain long base64/ENC[] blobs
+  **/*.sops.yaml
+  # GitHub renovate dashboard / generated dirs
+  .github/renovate-cache/
+
+rules:
+  # K8s manifests embed scripts and long URLs; warn but don't fail.
+  line-length:
+    max: 200
+    level: warning
+    allow-non-breakable-words: true
+    allow-non-breakable-inline-mappings: true
+
+  # 2-space indent is the K8s/Helm convention.
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+    check-multi-line-strings: false
+
+  # `---` at the top of every file is noisy in Helm values / kustomize patches.
+  document-start: disable
+
+  # GitHub Actions uses `on:` which yamllint flags as truthy. Allow it.
+  truthy:
+    allowed-values: ["true", "false", "on", "off", "yes", "no"]
+    check-keys: false
+
+  # kubespray (and lots of K8s docs) write `#comment` without a leading space.
+  comments:
+    require-starting-space: false
+    min-spaces-from-content: 1
+
+  comments-indentation: disable
+
+  # Don't insist on a trailing newline being absent or present at a particular
+  # spacing; just require one.
+  empty-lines:
+    max: 2
+    max-start: 1
+    max-end: 1
+
+  # Helm values + Ansible vars frequently have keys with mixed types.
+  braces:
+    max-spaces-inside: 1
+  brackets:
+    max-spaces-inside: 1
+
+  # Quoting is a stylistic minefield in Ansible/Helm; leave it alone.
+  quoted-strings: disable
+  octal-values: disable
