@@ -13,6 +13,10 @@ resources:
   - ../../platform/kubernetes/storage/ceph-csi
   # Cluster utilities
   - ../../platform/kubernetes/auto-remediation
+  # Policy baseline (Pod Security Standards audit+warn, LimitRanges).
+  # Phase 1 of the NetworkPolicies+Quotas+PDBs plan — observation-only,
+  # no enforcement. See platform/kubernetes/policy-baseline/README.md.
+  - ../../platform/kubernetes/policy-baseline
   # Database (CloudNativePG cluster - operator installed via Helm)
   - ../../platform/kubernetes/cnpg
   # Applications

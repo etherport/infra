@@ -1,0 +1,109 @@
+# Pod Security Standards labels per namespace.
+#
+# audit + warn only — these do not block pod creation. Audit-log events
+# fire on pods that violate the baseline PSS profile; kubectl apply
+# warnings surface the same to developers.
+#
+# Tier labels:
+#   tier=data    → tenant application namespaces
+#   tier=system  → cluster infrastructure (privileged workloads expected)
+#
+# When graduating to enforce mode in Phase 2, only tier=data namespaces
+# get `pod-security.kubernetes.io/enforce: baseline` initially. tier=system
+# stays unrestricted because they legitimately need privileged access.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: home-automation
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: postgres
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: traefik
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dns
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wikijs
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ollama
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backups
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tailscale
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+---
+# Privileged-by-design namespaces — tier=system, no PSS enforcement.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: plex
+  labels:
+    tier: system  # GPU passthrough needs privileged
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wireguard
+  labels:
+    tier: system  # hostNetwork + NET_ADMIN for VPN tunnels
