@@ -70,7 +70,14 @@ spec:
     # --ocsp=true previously was a no-op with cert-manager-issued certs;
     # LE stopped serving OCSP in Aug 2025 and the wildcard cert uses the
     # `shortlived` profile (6-day rotation) which makes OCSP irrelevant.
-    additionalArguments: []
+    #
+    # Default middlewares on the websecure entrypoint: every HTTPS
+    # IngressRoute inherits these unless it explicitly overrides with its
+    # own `middlewares:` list at the route level. See
+    # platform/kubernetes/traefik/middlewares/secure-headers.yaml for the
+    # Middleware definition and opt-out instructions.
+    additionalArguments:
+      - "--entrypoints.websecure.http.middlewares=traefik-secure-headers@kubernetescrd"
     env: []
     ingressClass:
       enabled: true

@@ -11,3 +11,6 @@ resources:
   - clusterissuer-letsencrypt.yaml
   - certificate-wildcard.yaml
   - tlsstore-default.yaml
+  # Default middlewares wired to entrypoints via the HelmRelease
+  # (see clusters/wind/helm-releases/traefik.yaml additionalArguments)
+  - middlewares/secure-headers.yaml

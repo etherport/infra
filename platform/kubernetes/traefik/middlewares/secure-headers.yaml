@@ -1,0 +1,59 @@
+# Default secure-headers middleware applied to every IngressRoute on the
+# `websecure` entrypoint.
+#
+# Wiring: this middleware is attached to the websecure entrypoint via
+#   --entrypoints.websecure.http.middlewares=traefik-secure-headers@kubernetescrd
+# in clusters/wind/helm-releases/traefik.yaml (additionalArguments).
+#
+# Effect: every HTTPS IngressRoute inherits these headers automatically
+# unless it explicitly opts out — no per-IngressRoute changes needed.
+#
+# Headers set:
+#   * Strict-Transport-Security: max-age=31536000; includeSubDomains
+#     (stsPreload intentionally false — flip to true only when ready to
+#     submit hstspreload.org and commit to long-term HTTPS for all subdomains)
+#   * X-Frame-Options: DENY
+#   * X-Content-Type-Options: nosniff
+#   * Referrer-Policy: strict-origin-when-cross-origin
+#   * X-XSS-Protection: 1; mode=block (vestigial — harmless on modern browsers)
+#
+# Opt-out / override:
+#   An IngressRoute can override the entrypoint default by explicitly
+#   listing its own middlewares chain. Per Traefik's docs the route-level
+#   `middlewares:` does NOT merge with the entrypoint default — it
+#   REPLACES it. So to suppress secure-headers on a specific route:
+#
+#     spec:
+#       routes:
+#         - match: Host(`legacy.example.com`)
+#           kind: Rule
+#           middlewares: []   # empty list overrides the default chain
+#           services: [...]
+#
+#   To customise instead of suppress, define a route-specific Middleware
+#   (e.g. with frameDeny: false for an app that needs iframing) and list
+#   it under routes[].middlewares — that route will use the custom chain
+#   in place of the default.
+#
+# Reference: https://doc.traefik.io/traefik/middlewares/http/headers/
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: secure-headers
+  namespace: traefik
+spec:
+  headers:
+    # HSTS — 1 year, include subdomains, no preload yet
+    stsSeconds: 31536000
+    stsIncludeSubdomains: true
+    stsPreload: false
+    forceSTSHeader: true
+    # Clickjacking protection
+    frameDeny: true
+    # MIME-sniffing protection
+    contentTypeNosniff: true
+    # Conservative referrer policy
+    referrerPolicy: "strict-origin-when-cross-origin"
+    # Legacy XSS filter — vestigial but harmless
+    browserXssFilter: true
