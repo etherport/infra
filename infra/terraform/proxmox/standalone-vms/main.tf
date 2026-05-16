@@ -136,6 +136,17 @@ resource "proxmox_virtual_environment_vm" "standalone" {
 
   started = true
   on_boot = true
+
+  # Don't try to mutate the watchdog device on existing VMs. Attaching
+  # the i6300esb requires a VM stop+start, which is fatal for gh-runner
+  # (1003) when the apply is RUNNING ON gh-runner — the runner pauses
+  # mid-job, the job is cancelled, and state can corrupt. This bit us
+  # on 2026-05-16. Once the device is on, leave it; if we ever need to
+  # change action mode (reset/shutdown/poweroff), remove this guard
+  # temporarily AND run TF apply from outside gh-runner.
+  lifecycle {
+    ignore_changes = [watchdog]
+  }
 }
 
 # Imported VMs - pre-existing VMs adopted into Terraform
