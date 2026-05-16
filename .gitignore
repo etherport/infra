@@ -59,3 +59,4 @@ platform/kubernetes/route53-ddns/base/secret.yaml
 **/wg0.conf
 **/wg1.conf
 **/wg-private-*.key
+.vscode/
