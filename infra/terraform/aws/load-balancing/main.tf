@@ -46,10 +46,10 @@ resource "aws_lb" "main" {
   security_groups    = [data.aws_security_group.alb_public.id]
   subnets            = data.aws_subnets.public.ids
 
-  enable_deletion_protection   = false
-  enable_http2                 = true
-  preserve_host_header         = true
-  xff_header_processing_mode   = "preserve"
+  enable_deletion_protection = false
+  enable_http2               = true
+  preserve_host_header       = true
+  xff_header_processing_mode = "preserve"
 
   access_logs {
     bucket  = data.aws_s3_bucket.logs.id

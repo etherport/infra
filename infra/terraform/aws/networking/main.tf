@@ -8,32 +8,32 @@ locals {
   # Subnet configuration
   subnets = {
     public1 = {
-      cidr        = "10.10.100.0/25"
-      ipv6_cidr   = "2600:1f14:244d:2700::/64"
-      az          = "us-west-2a"
-      name        = "private-infra-subnet-public1-us-west-2a"
-      type        = "public"
+      cidr      = "10.10.100.0/25"
+      ipv6_cidr = "2600:1f14:244d:2700::/64"
+      az        = "us-west-2a"
+      name      = "private-infra-subnet-public1-us-west-2a"
+      type      = "public"
     }
     public2 = {
-      cidr        = "10.10.100.128/25"
-      ipv6_cidr   = "2600:1f14:244d:2701::/64"
-      az          = "us-west-2b"
-      name        = "private-infra-subnet-public2-us-west-2b"
-      type        = "public"
+      cidr      = "10.10.100.128/25"
+      ipv6_cidr = "2600:1f14:244d:2701::/64"
+      az        = "us-west-2b"
+      name      = "private-infra-subnet-public2-us-west-2b"
+      type      = "public"
     }
     private1 = {
-      cidr        = "10.10.101.0/24"
-      ipv6_cidr   = "2600:1f14:244d:2702::/64"
-      az          = "us-west-2a"
-      name        = "private-infra-subnet-private1-us-west-2a"
-      type        = "private"
+      cidr      = "10.10.101.0/24"
+      ipv6_cidr = "2600:1f14:244d:2702::/64"
+      az        = "us-west-2a"
+      name      = "private-infra-subnet-private1-us-west-2a"
+      type      = "private"
     }
     private2 = {
-      cidr        = "10.10.102.0/24"
-      ipv6_cidr   = "2600:1f14:244d:2703::/64"
-      az          = "us-west-2b"
-      name        = "private-infra-subnet-private2-us-west-2b"
-      type        = "private"
+      cidr      = "10.10.102.0/24"
+      ipv6_cidr = "2600:1f14:244d:2703::/64"
+      az        = "us-west-2b"
+      name      = "private-infra-subnet-private2-us-west-2b"
+      type      = "private"
     }
   }
 

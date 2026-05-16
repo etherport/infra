@@ -415,8 +415,8 @@ output "gpu_node" {
 output "cluster_summary" {
   value = {
     control_planes = 3
-    workers        = 5 # 4 standard + 1 GPU
-    total_vcpus    = 3 * 4 + 4 * 4 + 8  # 36 vCPUs
+    workers        = 5                   # 4 standard + 1 GPU
+    total_vcpus    = 3 * 4 + 4 * 4 + 8   # 36 vCPUs
     total_ram_gb   = 3 * 4 + 4 * 10 + 20 # 72 GB
   }
 }

@@ -76,7 +76,7 @@ resource "aws_route_table" "public" {
   dynamic "route" {
     for_each = var.enable_vpc_peering ? [1] : []
     content {
-      cidr_block                = "10.10.100.0/22"  # us-west-2 VPC
+      cidr_block                = "10.10.100.0/22" # us-west-2 VPC
       vpc_peering_connection_id = aws_vpc_peering_connection.to_hub[0].id
     }
   }
@@ -160,18 +160,18 @@ resource "aws_instance" "vpn" {
   subnet_id                   = aws_subnet.public.id
   vpc_security_group_ids      = [aws_security_group.vpn.id]
   associate_public_ip_address = true
-  source_dest_check           = false  # Required for VPN routing
+  source_dest_check           = false # Required for VPN routing
 
   key_name = var.key_pair_name
 
   user_data = base64encode(templatefile("${path.module}/user-data.sh.tpl", {
-    wg_private_key       = var.wg_private_key
-    wg_address           = var.wg_address
-    wg_peer_public_key   = var.wg_peer_public_key
-    wg_peer_endpoint     = var.wg_peer_endpoint
-    wg_peer_allowed_ips  = var.wg_peer_allowed_ips
-    client_public_key    = var.client_public_key
-    client_allowed_ips   = var.client_allowed_ips
+    wg_private_key      = var.wg_private_key
+    wg_address          = var.wg_address
+    wg_peer_public_key  = var.wg_peer_public_key
+    wg_peer_endpoint    = var.wg_peer_endpoint
+    wg_peer_allowed_ips = var.wg_peer_allowed_ips
+    client_public_key   = var.client_public_key
+    client_allowed_ips  = var.client_allowed_ips
   }))
 
   metadata_options {
@@ -211,11 +211,11 @@ resource "aws_eip" "vpn" {
 #------------------------------------------------------------------------------
 
 resource "aws_vpc_peering_connection" "to_hub" {
-  count         = var.enable_vpc_peering ? 1 : 0
-  vpc_id        = aws_vpc.vpn.id
-  peer_vpc_id   = var.hub_vpc_id
-  peer_region   = "us-west-2"
-  auto_accept   = false
+  count       = var.enable_vpc_peering ? 1 : 0
+  vpc_id      = aws_vpc.vpn.id
+  peer_vpc_id = var.hub_vpc_id
+  peer_region = "us-west-2"
+  auto_accept = false
 
   tags = merge(local.common_tags, {
     Name = "${local.name_prefix}-to-hub"

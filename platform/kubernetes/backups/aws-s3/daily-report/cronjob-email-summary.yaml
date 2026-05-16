@@ -24,7 +24,7 @@ spec:
             - name: report
               image: ghcr.io/sparked-diamond/aws-s3-sync:main
               imagePullPolicy: Always
-              command: ["/bin/bash","-lc"]
+              command: ["/bin/bash", "-lc"]
               args:
                 - |
                   /scripts/daily-report.sh

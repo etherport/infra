@@ -568,10 +568,10 @@ resource "aws_vpc_security_group_egress_rule" "internal_all_ipv6" {
 #------------------------------------------------------------------------------
 
 resource "aws_vpc_peering_connection" "to_hub" {
-  vpc_id        = aws_vpc.main.id
-  peer_vpc_id   = var.hub_vpc_id
-  peer_region   = "us-west-2"
-  auto_accept   = false
+  vpc_id      = aws_vpc.main.id
+  peer_vpc_id = var.hub_vpc_id
+  peer_region = "us-west-2"
+  auto_accept = false
 
   tags = merge(local.common_tags, {
     Name = "${local.name_prefix}-to-hub-peering"
@@ -644,16 +644,16 @@ resource "aws_eip_association" "vpn" {
 #------------------------------------------------------------------------------
 
 resource "aws_instance" "vpn" {
-  ami                         = data.aws_ami.ubuntu_arm.id
-  instance_type               = "t4g.nano"
-  subnet_id                   = aws_subnet.public1.id
-  vpc_security_group_ids      = [
+  ami           = data.aws_ami.ubuntu_arm.id
+  instance_type = "t4g.nano"
+  subnet_id     = aws_subnet.public1.id
+  vpc_security_group_ids = [
     aws_security_group.vpn_server.id,
     aws_security_group.allow_ssh.id,
     aws_security_group.internal_comms.id,
   ]
-  associate_public_ip_address = false  # Using Elastic IP
-  source_dest_check           = false  # Required for routing
+  associate_public_ip_address = false # Using Elastic IP
+  source_dest_check           = false # Required for routing
 
   key_name = data.aws_key_pair.main.key_name
 
@@ -666,10 +666,10 @@ resource "aws_instance" "vpn" {
     homelab_wg0_port       = var.homelab_wg0_port
     homelab_cidr           = var.homelab_cidr
     # wg1 - Remote access (shared keys with vpn-aws for endpoint switching)
-    wg1_private_key        = data.sops_file.wg1_keys.data["stringData.wg1_private_key"]
-    client_public_key      = local.client_public_key
-    aws_vpc_cidr           = var.hub_vpc_cidr
-    local_vpc_cidr         = var.vpc_cidr
+    wg1_private_key   = data.sops_file.wg1_keys.data["stringData.wg1_private_key"]
+    client_public_key = local.client_public_key
+    aws_vpc_cidr      = var.hub_vpc_cidr
+    local_vpc_cidr    = var.vpc_cidr
   }))
 
   metadata_options {

@@ -20,7 +20,7 @@ variable "key_pair_name" {
 variable "ssh_allowed_cidrs" {
   description = "CIDR blocks allowed for SSH access"
   type        = list(string)
-  default     = ["0.0.0.0/0"]  # Restrict in production
+  default     = ["0.0.0.0/0"] # Restrict in production
 }
 
 variable "use_elastic_ip" {

@@ -34,13 +34,13 @@ spec:
   entryPoints:
     - websecure
   routes:
-  - match: Host(`plex.wind.etherport.net`)
-    kind: Rule
-    middlewares:
-      - name: plex-headers
-      - name: plex-buffering
-    services:
-    - name: plex
-      port: 32400
-      passHostHeader: true
+    - match: Host(`plex.wind.etherport.net`)
+      kind: Rule
+      middlewares:
+        - name: plex-headers
+        - name: plex-buffering
+      services:
+        - name: plex
+          port: 32400
+          passHostHeader: true
   tls: {}

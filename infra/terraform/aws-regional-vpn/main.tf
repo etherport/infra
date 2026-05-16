@@ -55,7 +55,7 @@ terraform {
 variable "region" {
   description = "AWS region to deploy VPN"
   type        = string
-  default     = "me-central-1"  # UAE - Abu Dhabi
+  default     = "me-central-1" # UAE - Abu Dhabi
 }
 
 variable "region_short" {
@@ -85,14 +85,14 @@ variable "hub_vpc_id" {
 variable "hub_route_table_id" {
   description = "Public route table ID in us-west-2 hub"
   type        = string
-  default     = "rtb-0a3c3a2a4c8f5e123"  # Will get actual ID
+  default     = "rtb-0a3c3a2a4c8f5e123" # Will get actual ID
 }
 
 variable "ssh_public_key" {
   description = "SSH public key for EC2 access (contents of ~/.ssh/gs-ec2.pub)"
   type        = string
   sensitive   = true
-  default     = ""  # Set via TF_VAR_ssh_public_key or terraform.tfvars
+  default     = "" # Set via TF_VAR_ssh_public_key or terraform.tfvars
 }
 
 variable "wg0_tunnel_ip" {
@@ -108,26 +108,26 @@ variable "wg0_tunnel_ip" {
 variable "homelab_endpoint" {
   description = "Homelab WireGuard public endpoint (IP or hostname)"
   type        = string
-  default     = "47.159.189.5"  # Homelab public IP
+  default     = "47.159.189.5" # Homelab public IP
 }
 
 variable "homelab_wg0_port" {
   description = "Homelab WireGuard wg0 port (external port forwarded through UDM). Port 9820 is used to avoid conflict with Twilio range (10000-60000)."
   type        = number
-  default     = 9820  # UDM forwards 9820 → VIP:51820
+  default     = 9820 # UDM forwards 9820 → VIP:51820
 }
 
 variable "wg0_private_key" {
   description = "WireGuard wg0 private key for this regional instance. Generate with: wg genkey"
   type        = string
   sensitive   = true
-  default     = ""  # Set via TF_VAR_wg0_private_key or terraform.tfvars
+  default     = "" # Set via TF_VAR_wg0_private_key or terraform.tfvars
 }
 
 variable "wg0_public_key" {
   description = "WireGuard wg0 public key (derived from private key). Generate with: echo PRIVATE_KEY | wg pubkey"
   type        = string
-  default     = ""  # Set via TF_VAR_wg0_public_key or terraform.tfvars
+  default     = "" # Set via TF_VAR_wg0_public_key or terraform.tfvars
 }
 
 #------------------------------------------------------------------------------
@@ -265,11 +265,11 @@ resource "aws_subnet" "regional" {
 #------------------------------------------------------------------------------
 
 resource "aws_vpc_peering_connection" "to_hub" {
-  provider      = aws.regional
-  vpc_id        = aws_vpc.regional.id
-  peer_vpc_id   = var.hub_vpc_id
-  peer_region   = "us-west-2"
-  auto_accept   = false
+  provider    = aws.regional
+  vpc_id      = aws_vpc.regional.id
+  peer_vpc_id = var.hub_vpc_id
+  peer_region = "us-west-2"
+  auto_accept = false
 
   tags = {
     Name = "vpn-${var.region_short}-to-hub"
@@ -429,7 +429,7 @@ resource "aws_instance" "vpn" {
   subnet_id                   = aws_subnet.regional.id
   vpc_security_group_ids      = [aws_security_group.vpn.id]
   associate_public_ip_address = true
-  source_dest_check           = false  # Required for routing
+  source_dest_check           = false # Required for routing
 
   key_name = data.aws_key_pair.regional.key_name
 
@@ -442,9 +442,9 @@ resource "aws_instance" "vpn" {
     homelab_wg0_port       = var.homelab_wg0_port
     homelab_cidr           = "10.10.192.0/19"
     # wg1 - Remote access (shares keys with vpn-aws for seamless endpoint switching)
-    wg1_private_key        = data.sops_file.wg_keys.data["stringData.wg1_private_key"]
-    client_public_key      = local.client_public_key
-    aws_vpc_cidr           = "10.10.100.0/22"
+    wg1_private_key   = data.sops_file.wg_keys.data["stringData.wg1_private_key"]
+    client_public_key = local.client_public_key
+    aws_vpc_cidr      = "10.10.100.0/22"
   }))
 
   metadata_options {

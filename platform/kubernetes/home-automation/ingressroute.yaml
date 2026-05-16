@@ -7,12 +7,12 @@ spec:
   entryPoints:
     - websecure
   routes:
-  - match: Host(`ha.wind.etherport.net`)
-    kind: Rule
-    middlewares:
-    - name: home-assistant-headers
-    services:
-    - name: home-assistant
-      port: 8123
-      serversTransport: home-assistant-transport
+    - match: Host(`ha.wind.etherport.net`)
+      kind: Rule
+      middlewares:
+        - name: home-assistant-headers
+      services:
+        - name: home-assistant
+          port: 8123
+          serversTransport: home-assistant-transport
   tls: {}

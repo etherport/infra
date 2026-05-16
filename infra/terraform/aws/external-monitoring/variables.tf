@@ -38,7 +38,7 @@ variable "endpoints" {
   type = map(object({
     fqdn              = string
     port              = number
-    type              = string  # HTTP, HTTPS, TCP
+    type              = string # HTTP, HTTPS, TCP
     resource_path     = optional(string, "/")
     search_string     = optional(string, "")
     failure_threshold = optional(number, 3)
@@ -64,7 +64,7 @@ variable "endpoints" {
       resource_path     = "/api/health"
       failure_threshold = 3
       request_interval  = 30
-      enabled           = false  # Disabled - ALB/tunnel issue
+      enabled           = false # Disabled - ALB/tunnel issue
     }
     # Traefik ingress controller
     traefik = {
@@ -74,7 +74,7 @@ variable "endpoints" {
       resource_path     = "/ping"
       failure_threshold = 3
       request_interval  = 30
-      enabled           = false  # Disabled - ALB/tunnel issue
+      enabled           = false # Disabled - ALB/tunnel issue
     }
     # Plex media server
     plex = {
@@ -94,7 +94,7 @@ variable "endpoints" {
       resource_path     = "/"
       failure_threshold = 3
       request_interval  = 30
-      enabled           = false  # Disabled - ALB/tunnel issue
+      enabled           = false # Disabled - ALB/tunnel issue
     }
     # Open WebUI (Chat) - AI chat interface
     chat = {
