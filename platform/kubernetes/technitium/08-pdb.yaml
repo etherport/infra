@@ -1,0 +1,18 @@
+# PodDisruptionBudget for technitium.
+#
+# 2-replica StatefulSet; with minAvailable=1 a node drain can only
+# evict one technitium pod at a time. The remaining pod plus the
+# standalone dns-fallback (10.10.201.6) plus dns-aws (10.10.100.5)
+# keep DNS resolving cluster-wide. Without the PDB, `kubectl drain`
+# could evict both pods at once on a CP rolling update or node
+# failure cascade.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: technitium
+  namespace: dns
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: technitium

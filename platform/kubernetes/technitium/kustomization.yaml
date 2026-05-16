@@ -12,6 +12,7 @@ resources:
   - 05-secret.sops.yaml
   - 06-cluster-services.yaml
   - 07-dns-sync.yaml
+  - 08-pdb.yaml
 
 # Zone data ConfigMap - CronJob syncs this to Technitium every 5 min
 configMapGenerator:
