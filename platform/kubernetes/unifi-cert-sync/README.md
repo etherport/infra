@@ -34,6 +34,11 @@ cert-manager  →  Secret traefik/wildcard-wind-etherport-net-tls
 
 - **Source of truth:** cert-manager. Renews 60 days before expiry via
   Route53 DNS-01.
+- **Cert type:** RSA 2048. cert-manager issues an RSA-keyed wildcard
+  specifically for UniFi devices (`wildcard-wind-etherport-net-rsa`)
+  alongside the ECDSA wildcard Traefik uses. **UniFi OS unifi-core
+  silently rejects ECDSA certs and regenerates a self-signed
+  `unifi.local` default — discovered the hard way on 2026-05-17.**
 - **Cadence:** weekly (Mon 04:00 local). cert-manager renews every ~60d,
   but weekly cadence catches firmware-upgrade resets within 7d.
 - **Idempotent:** computes SHA256 of (crt+key) and skips push if remote

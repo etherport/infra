@@ -32,9 +32,9 @@ data:
     # =========================================================================
     # Step 1: Pull the wildcard cert from the cert-manager Secret
     # =========================================================================
-    log "Fetching wildcard cert from traefik/wildcard-wind-etherport-net-tls..."
-    kubectl -n traefik get secret wildcard-wind-etherport-net-tls -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/tls.crt
-    kubectl -n traefik get secret wildcard-wind-etherport-net-tls -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/tls.key
+    log "Fetching wildcard cert from traefik/wildcard-wind-etherport-net-rsa-tls..."
+    kubectl -n traefik get secret wildcard-wind-etherport-net-rsa-tls -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/tls.crt
+    kubectl -n traefik get secret wildcard-wind-etherport-net-rsa-tls -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/tls.key
     chmod 600 /tmp/tls.crt /tmp/tls.key
 
     if [[ ! -s /tmp/tls.crt || ! -s /tmp/tls.key ]]; then

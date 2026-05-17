@@ -1,0 +1,33 @@
+---
+# Parallel RSA-keyed wildcard for *.wind.etherport.net.
+#
+# WHY this exists in addition to the ECDSA cert (certificate-wildcard.yaml):
+# UniFi OS unifi-core (the web service on UDM Pro Max, UniFi Protect, UNAS Pro)
+# only accepts RSA-keyed certs. When given an ECDSA cert it silently rejects
+# and regenerates a default CN=unifi.local self-signed cert.
+#
+# This RSA-keyed cert is consumed exclusively by the unifi-cert-sync CronJob.
+# Traefik continues using the ECDSA cert for its ingress (better perf).
+#
+# Rate-limit note: Let's Encrypt has a per-(set-of-domains) duplicate-cert
+# limit (5 certs/week). We issue 2 distinct certs for the same domains here,
+# but they're different "certificates" from LE's perspective (different
+# privkey type), so this counts under the standard issuance limit, not the
+# duplicate limit. Comfortable under both.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-wind-etherport-net-rsa
+  namespace: traefik
+spec:
+  secretName: wildcard-wind-etherport-net-rsa-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: "*.wind.etherport.net"
+  dnsNames:
+    - "wind.etherport.net"
+    - "*.wind.etherport.net"
+  privateKey:
+    algorithm: RSA
+    size: 2048

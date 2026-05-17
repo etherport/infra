@@ -14,7 +14,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
-    resourceNames: ["wildcard-wind-etherport-net-tls"]
+    resourceNames: ["wildcard-wind-etherport-net-rsa-tls"]
     verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

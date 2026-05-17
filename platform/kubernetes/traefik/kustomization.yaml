@@ -10,6 +10,7 @@ resources:
   # cert-manager integration for OCSP stapling
   - clusterissuer-letsencrypt.yaml
   - certificate-wildcard.yaml
+  - certificate-wildcard-rsa.yaml  # RSA variant for unifi-cert-sync (UniFi OS only accepts RSA)
   - tlsstore-default.yaml
   # Default middlewares wired to entrypoints via the HelmRelease
   # (see clusters/wind/helm-releases/traefik.yaml additionalArguments)
