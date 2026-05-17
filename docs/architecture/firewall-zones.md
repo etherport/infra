@@ -25,7 +25,7 @@ The homelab network uses a **dual-router architecture** with routing responsibil
        │           │           │           │           │           │           │
        ▼           ▼           ▼           ▼           ▼           ▼           ▼
  ┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐
- │ VLAN 1   ││ VLAN 200 ││ VLAN 204 ││ VLAN 205 ││ VLAN 206 ││ VLAN 212 ││ VLAN 4040│
+ │ Untagged ││ VLAN 200 ││ VLAN 204 ││ VLAN 205 ││ VLAN 206 ││ VLAN 212 ││ VLAN 4040│
  │ Default  ││Management││   IoT    ││ Security ││  Guest   ││  Unifi   ││ Transit  │
  │  LEGACY  ││ TRUSTED  ││   IOT    ││ ISOLATED ││  GUEST   ││  INFRA   ││  INFRA   │
  │10.10.199 ││10.10.200 ││10.10.204 ││10.10.205 ││10.10.206 ││10.10.212 ││10.255.253│
@@ -193,7 +193,7 @@ The network is organized into six security zones based on trust level and functi
 
 > **Note**: Guest network should use UniFi's built-in Network Isolation feature rather than zone-based firewall rules. This provides complete isolation at a lower level and includes captive portal support.
 
-#### Legacy Zone (Default VLAN 1)
+#### Legacy Zone (Default — untagged native, 10.10.199.0/24)
 
 | Policy | Description |
 |--------|-------------|

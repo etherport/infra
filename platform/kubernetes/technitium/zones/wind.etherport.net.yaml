@@ -12,31 +12,54 @@ records:
   # Infrastructure - Core Services
   # =============================================================================
 
-  # Kubernetes Cluster
+  # Kubernetes Cluster — must match `infra/ansible/inventory/wind/inventory.ini`.
+  # Historical drift (pre-2026-05-17): zone had k8s-w1=.51, k8s-w2=.52, k8s-w3=.53;
+  # actual cluster is .53/.54/.55. The archived K8S-W3 deployment plan changed
+  # worker IPs but the zone was never updated. Fixed below.
   - name: k8s-cp1
     type: A
     value: 10.10.201.50
-    comment: Kubernetes control plane
+    comment: Kubernetes control plane 1
+
+  - name: k8s-cp2
+    type: A
+    value: 10.10.201.51
+    comment: Kubernetes control plane 2
+
+  - name: k8s-cp3
+    type: A
+    value: 10.10.201.52
+    comment: Kubernetes control plane 3
 
   - name: k8s-w1
     type: A
-    value: 10.10.201.51
+    value: 10.10.201.53
     comment: Kubernetes worker 1
 
   - name: k8s-w2
     type: A
-    value: 10.10.201.52
+    value: 10.10.201.54
     comment: Kubernetes worker 2
 
   - name: k8s-w3
     type: A
-    value: 10.10.201.53
+    value: 10.10.201.55
     comment: Kubernetes worker 3
+
+  - name: k8s-w4
+    type: A
+    value: 10.10.201.56
+    comment: Kubernetes worker 4
 
   - name: k8s-gpu1
     type: A
     value: 10.10.201.60
     comment: Kubernetes GPU worker
+
+  - name: gh-runner
+    type: A
+    value: 10.10.201.30
+    comment: GitHub Actions self-hosted runner
 
   # Traefik Ingress (LoadBalancer VIP)
   - name: traefik

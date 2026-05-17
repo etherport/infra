@@ -20,18 +20,21 @@ inline, and we'll sequence the fixes.
 | 202 | Clients | 10.10.202.1/24 | VLAN 202 Clients 10.10.202.0/24 | Match |
 | 204 | IoT | 10.10.204.1/24 | VLAN 204 IoT 10.10.204.0/24 | Match |
 | 205 | Security | 10.10.205.1/24 | VLAN 205 Security 10.10.205.0/24 | **Retirement candidate** — see next section |
+> GS: i was wrong about retirement here - this is for the simplisafe security system, not cameras. camera vlan (203) is the one that should be / should have been retired. important that 205 remains for now
 | 206 | Guest | 10.10.206.1/24 | VLAN 206 Guest 10.10.206.0/24 | Match |
 | 209 | vSAN | 10.10.209.1/24 | VLAN 209 vSAN 10.10.209.0/24 | Match |
 | 212 | Unifi | 10.10.212.1/24 | VLAN 212 Unifi 10.10.212.0/24 | Match |
 | 4040 | Inter-VLAN routing | 10.255.253.1/24 | VLAN 4040 Inter-VLAN 10.255.253.0/24 | Match |
 | n/a | WireGuard WAN 1 | 192.168.3.1/24 (remote-user-vpn) | **Not documented anywhere** | **GAP** — undocumented remote-user-vpn pool used by UDM-side WG client(s) |
+>GS: recently configured this as backup in the event homelab wg breaks, but it's not working so we'll need to diagnose
 | n/a | LTE | wan | **Not documented** in `firewall-zones.md` (only mentions WAN1/WAN2) | **GAP** — third WAN exists; port-forwards target `wan/wan2/wan3` |
+> GS: there was previously a LTE backup but not in use now, we can retire for the time being
 
 **Tailscale connector miscoding** (`platform/kubernetes/tailscale/connector/connector.yaml:26-32`): comment says "VLAN 192" for 10.10.192.0/24, "VLAN 200 = Servers", "VLAN 201 = Kubernetes", "VLAN 203 = Guest 10.10.203.0/24". All four are wrong vs. UDM truth:
 - 10.10.192.0/19 is the homelab supernet, not a VLAN.
 - VLAN 200 = Management (not Servers); 201 = Servers (not just K8s).
 - VLAN 203 / 10.10.203.0/24 does not exist on the UDM at all. Guest is VLAN 206.
-
+>GS: 203 was the old camera network and can be removed / retired
 ---
 
 ## VLAN 205 (retirement candidate): where it's referenced
@@ -59,7 +62,7 @@ file below needs an update or removal as part of the retirement.
 | `scripts/unifi/dump-state.sh` does not yet dump VLAN-port-profile assignments; UDM-side switch port profiles that tag 205 are not in this snapshot. | See L3-switch capture gap below. |
 
 UDM state still has `Security` network active with DHCP scope `.100-.254` — **not yet retired on the UDM**.
-
+>GS: see comment above - to remain for now
 ---
 
 ## Static IP assignments: drift between sources
@@ -83,8 +86,10 @@ Inventory source: `infra/ansible/inventory/wind/inventory.ini`. DNS source: `pla
 | traefik VIP | n/a | n/a (MetalLB, not DHCP) | 10.10.201.70 | OK — inside MetalLB pool |
 | Technitium DNS VIP | n/a | UDM has reservation `10.10.201.5` MAC `00:0c:29:c2:24:a6` (named "DNS 1") | 10.10.201.5 | **MAC stale** — MetalLB now owns .5; UDM reservation points at an old VM MAC (00:0c:29 = vmware). Either delete or update. |
 | Hue Bridges (`.51`,`.52` on VLAN 204) | not in inventory | UDM has `10.10.204.51` `00:17:88:7a:1f:3f` and `10.10.204.52` `ec:b5:fa:34:ab:ef` | not in zone | OK on UDM; add to zone (`hue1`, `hue2`) for documentability |
+>GS: hue bridges get a static reservation so they can communicate with other networks locally (compared to other iot devices with blocked inter vlan routing)
 | Sequoia NAS | not in inventory | UDM `10.10.209.10` MAC `e2:83:54:f9:17:57` | 10.10.209.10 | Match |
 | Canon printer (`print`) | not in inventory | UDM `10.10.202.50` `f4:a9:97:ca:ca:a4` | 10.10.202.20 ("print") | **DNS DRIFT** — DNS says .20, UDM reservation is .50 |
+>GS: print is differetnt - that's a raspberry pi print server which is currently turned off but should remain on the network. that's .20, canon to remain on .50
 | Workroom Mac Mini | not in inventory | UDM `10.10.202.101` | not in DNS | Optional add |
 | Grahams-MBP-WiFi | not in inventory | UDM `10.10.202.110` | not in DNS | OK |
 | UPS1/UPS2/PDU1/PDU2 | not in inventory | UDM `10.10.200.10/.11/.15/.16` | DNS `ups1..pdu2` all point at Traefik VIP `10.10.201.70`, comments mention real IPs | Match (comments correct) |
@@ -98,9 +103,11 @@ Inventory source: `infra/ansible/inventory/wind/inventory.ini`. DNS source: `pla
 | Entry (UDM) | Documented? |
 |-------------|-------------|
 | Twilio-Media-Signal UDP 10000-60000 → 10.10.199.1, src=Twilio Media IPs `168.86.128.0/18` | **No** — only references to Twilio in repo are explanations of why WG uses 9820 (`platform/wireguard/README.md:168`, `infra/terraform/aws-regional-vpn/main.tf:115`). Forward target `10.10.199.1` is the **legacy Default VLAN gateway** — implies a Twilio/Asterisk box living on the Default VLAN. PBX UDM reservation is at `10.10.201.25` though — possible config rot. |
+>GS: config rot here, there's no pbx device. twilio is configured via unifi talk on the UDM Pro and signaling should all happen there
 | Twilio-SIP UDP 6767 → 10.10.199.1 | **No** — same gap. Same suspicious 10.10.199.1 target. |
 | Wireguard Local UDP+TCP 9821 → 10.10.201.20 | **Yes** — `platform/wireguard/README.md:164` |
 | Wireguard Travel UDP 9820 → 10.10.201.20 (currently `enabled: false`) | **Partial** — `platform/wireguard/README.md:163` documents wg0/9820, but UDM rule is named "Wireguard Travel" and is **disabled** — repo docs assume it's active for regional VPN. **This is a real production gap** — Mumbai/eu-west-1 regional VPNs claim to be active in `docs/runbooks/regional-vpn-deployment.md:11` but the inbound port forward is off. |
+>GS: didn't we change the vpn config so we no longer require the port forwards? travel vpn connection should be established as site->aws rather than other way around
 
 ---
 
@@ -111,6 +118,7 @@ Inventory source: `infra/ansible/inventory/wind/inventory.ini`. DNS source: `pla
 - The L3 switch's static routes that `docs/architecture/firewall-zones.md:108-114` claims handle AWS routing.
 
 Firewall group `AWS Subnet` (`10.10.250.0/28`) is a curious singleton — **no other config in the repo references 10.10.250.0/28**. The repo treats AWS as `10.10.100.0/22` (us-west-2), `10.10.112.0/24` (mumbai), `10.10.116.0/24` (bahrain), `10.10.120.0/24` (planned ireland). 10.10.250.0/28 is mystery — either stale from a previous arch or an out-of-band management subnet.
+>GS: is this so we have one reference for all aws resources as a single subnet? not sure what we should do here, advise
 
 **Verdict:** Static routes are the single biggest config-as-code gap. Without dumping them, we cannot verify the cross-cloud topology claimed in `docs/architecture/firewall-zones.md`. Need to add API endpoint:
 - `GET /proxy/network/api/s/default/rest/routing` — UniFi static routes
@@ -134,27 +142,38 @@ Firewall group `AWS Subnet` (`10.10.250.0/28`) is a curious singleton — **no o
 5. After capture, fold into a `terraform import` plan for `unifi_port_profile` + a hand-rolled YAML inventory for switch ACLs (matches the Phase 3 recommendation in `docs/planning/ubiquiti-config-as-code-2026-05-16.md`).
 
 Firewall rules dump (0 entries) is a real finding, not an empty file: it means **all firewall policy is now in v10 zone matrix**, which exposes via a different endpoint (`/proxy/network/api/s/default/rest/firewallpolicy` and `/firewallzone`). Without those, `docs/architecture/firewall-zones.md` is unverifiable.
-
+>GS: figure out how to access / read / pull / configure all of the firewall zone records so we have a complete config
 ---
 
 ## Documented but absent
 
 - VLAN 1 ("Default") referenced 8x in `firewall-zones.md` — on UDM this is an **untagged native** network, not VLAN 1.
+>GS: propose any fix
 - VLAN 203 (Guest 10.10.203.0/24) — in `platform/kubernetes/tailscale/connector/connector.yaml:30` comment only; doesn't exist on UDM (Guest is 206).
+>GS: this is prob a doc error - guest vlan is 206 as you say and 203 cams being retired
 - "VLAN 192" — same Tailscale comment treats 10.10.192.0/24 as a VLAN; that's the homelab supernet.
+>GS: let me know what needs to change here
 - L3-switch static routes for `10.10.100.0/22`, `10.255.255.0/29`, `10.254.0.0/24` — claimed in `firewall-zones.md:111-114` but not in any UDM dump (which is consistent because they should live on the switch, but they're also not in any repo file).
+>GS: yes, these are configured by the udm but live on the switch so we'll need to work out how to best cater for this
 - Firewall rules per `firewall-zones.md` (Mgmt-to-Servers, Clients-to-Servers, IoT-to-DNS, NVR rules, Security-to-Internet block, etc.) — `firewall-rules.json` is empty. These rules are either UI-only in the zone-based firewall (which uses a different API path), or never deployed.
+>GS: these might be pre-configured in the UI so we should retain, but per above, we'll need to pull zone rules and ensure they're reflected
 
 ---
 
 ## Present but undocumented
 
 - `WireGuard WAN 1` remote-user-vpn network (192.168.3.0/24).
+>GS: see comment above
 - `LTE` failover WAN (the third interface — `wan3` is referenced by every port-forward).
+>GS: retire per above
 - Firewall group `AWS Subnet` (`10.10.250.0/28`) — origin unknown.
+>GS: not sure, propose a solution here per above
 - DHCP DNS: VLANs 200/201/202/204/209/212 all hand out `10.10.201.5/.6`. Default VLAN gives no DNS. Security VLAN explicitly gives `""` for both. Guest hands out `1.1.1.1/8.8.8.8`. None of this is in any repo doc.
+>GS: update docs and let me know if we should change any of those configuration. guest network hands out public dns bc private resources are not accessible. open to better solutions here
 - Default VLAN DHCP scope `.100-.254` is still active despite `firewall-zones.md` saying "should be empty" — and Twilio port forwards target `10.10.199.1` on this VLAN.
+>GS: see above per twilio / unifi talk
 - 14 of the 22 UDM fixed-IP reservations have no presence in inventory or DNS (Filesync, Deepstack, Veeam, Security VM, OpenVPN local/aws, PBX, AWS DataSync, TrueNAS, Workroom Mac Mini, Grahams MBP, Canon, Hue bridges, the unnamed .204.55).
+>GS: many of these have been retired and can be removed from the udm: filesynd, deepstack, veeam, security vm, open vpn (both), pbx, datasync, truenas. mac mini, mbp, canon, bridges should be in inventory
 
 ---
 
@@ -174,8 +193,14 @@ Firewall rules dump (0 entries) is a real finding, not an empty file: it means *
 ## Mark up here (open questions for review)
 
 - [ ] Is the legacy `10.10.199.1` Twilio target still serving traffic, or should those port-forwards be deleted?
+> GS: see above
 - [ ] Is the `AWS Subnet` firewall group (`10.10.250.0/28`) still needed?
+> GS: not sure, advise once we have all of our routes together in one place
 - [ ] Are Hue bridges + Sequoia + the unnamed device worth adding to DNS as named records?
+> GS: see above
 - [ ] Should `Wireguard Travel` be re-enabled, or is regional VPN reachable through a different path now?
+> GS: verify but i think our config here has been updated
 - [ ] Do you want to add the K8s VIPs to UDM reservations, or keep them MetalLB-only?
+> GS: open to suggestions here
 - [ ] Phase 2: add capture for static routes + port profiles + zone-firewall policies?
+> GS: yes

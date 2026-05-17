@@ -69,8 +69,9 @@ api_get() {
     -H "X-CSRF-Token: ${csrf}" \
     "https://${UDM_HOST}${path}" \
   | jq '.' > "${out}"
+  # Some endpoints return `{data: [...]}`, v2 endpoints return a bare array.
   local n
-  n=$(jq '.data | length // 0' < "${out}" 2>/dev/null || echo 0)
+  n=$(jq 'if type=="array" then length else (.data | length // 0) end' < "${out}" 2>/dev/null || echo 0)
   echo "    GET ${path} -> ${out} (${n} items)" >&2
 }
 
@@ -80,12 +81,23 @@ main() {
   login
 
   echo "==> Dumping UniFi state to ${OUT_DIR}" >&2
-  api_get "/proxy/network/api/s/${SITE}/rest/networkconf"   "${OUT_DIR}/networks.json"
-  api_get "/proxy/network/api/s/${SITE}/rest/portforward"   "${OUT_DIR}/port-forwards.json"
-  api_get "/proxy/network/api/s/${SITE}/rest/user"          "${OUT_DIR}/users.json"
-  api_get "/proxy/network/api/s/${SITE}/rest/firewallgroup" "${OUT_DIR}/firewall-groups.json"
-  api_get "/proxy/network/api/s/${SITE}/rest/firewallrule"  "${OUT_DIR}/firewall-rules.json"
-  api_get "/proxy/network/api/s/${SITE}/stat/sites"         "${OUT_DIR}/sites.json"
+  # Core resources (Phase 1 import targets)
+  api_get "/proxy/network/api/s/${SITE}/rest/networkconf"     "${OUT_DIR}/networks.json"
+  api_get "/proxy/network/api/s/${SITE}/rest/portforward"     "${OUT_DIR}/port-forwards.json"
+  api_get "/proxy/network/api/s/${SITE}/rest/user"            "${OUT_DIR}/users.json"
+  api_get "/proxy/network/api/s/${SITE}/rest/firewallgroup"   "${OUT_DIR}/firewall-groups.json"
+  api_get "/proxy/network/api/s/${SITE}/rest/firewallrule"    "${OUT_DIR}/firewall-rules.json"
+  api_get "/proxy/network/api/s/${SITE}/stat/sites"           "${OUT_DIR}/sites.json"
+  # Routes + switch port profiles + per-device config + v10 zone-based
+  # firewall. The v10 zone-matrix firewall lives at v2/api/site, NOT
+  # under rest/firewallrule (which is empty in v10). Added 2026-05-17.
+  api_get "/proxy/network/api/s/${SITE}/rest/routing"            "${OUT_DIR}/routing.json"
+  api_get "/proxy/network/api/s/${SITE}/rest/portconf"           "${OUT_DIR}/port-profiles.json"
+  api_get "/proxy/network/api/s/${SITE}/stat/device"             "${OUT_DIR}/devices.json"
+  api_get "/proxy/network/v2/api/site/${SITE}/firewall-policies" "${OUT_DIR}/firewall-policies.json"
+  # firewall-zones endpoint not yet discovered on UniFi Network 10.3.58 —
+  # the v2/api/.../firewall-zones path returns 404. Zone IDs are derivable
+  # from firewall-policies (source.zone_id + destination.zone_id) for now.
 
   # Derived view: only fixed-IP users (the candidates for unifi_user imports).
   jq '{data: [.data[] | select(.use_fixedip == true)]}' \

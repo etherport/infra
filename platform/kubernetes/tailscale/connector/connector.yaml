@@ -19,17 +19,23 @@ spec:
   # Subnet router configuration
   subnetRouter:
     advertiseRoutes:
-      # On-prem homelab network (wind)
+      # On-prem homelab supernet (wind site). The /19 covers
+      # 10.10.192.0–10.10.223.255 and includes every VLAN below.
+      # 10.10.192.0/19 is NOT a VLAN — it is the parent supernet that
+      # all internal VLANs are carved out of.
       - "10.10.192.0/19"
-      # AWS VPC now advertised directly by aws-vpn Tailscale node
-      # Include all VLANs:
-      #   10.10.192.0/24 - Management (VLAN 192)
-      #   10.10.200.0/24 - Servers (VLAN 200)
-      #   10.10.201.0/24 - Kubernetes (VLAN 201)
-      #   10.10.202.0/24 - Client (VLAN 202)
-      #   10.10.203.0/24 - Guest (VLAN 203)
-      #   10.10.204.0/24 - IoT (VLAN 204)
-      #   10.10.205.0/24 - Security (VLAN 205)
+      # AWS VPC is advertised directly by the aws-vpn Tailscale node.
+      # VLAN map (live UDM state as of 2026-05-17):
+      #   10.10.199.0/24 - Default (untagged native)
+      #   10.10.200.0/24 - Management        (VLAN 200)
+      #   10.10.201.0/24 - Servers           (VLAN 201)
+      #   10.10.202.0/24 - Clients           (VLAN 202)
+      #   10.10.204.0/24 - IoT               (VLAN 204)
+      #   10.10.205.0/24 - Security          (VLAN 205, SimpliSafe)
+      #   10.10.206.0/24 - Guest             (VLAN 206)
+      #   10.10.209.0/24 - vSAN              (VLAN 209)
+      #   10.10.212.0/24 - UniFi (incl cams) (VLAN 212)
+      # VLAN 203 retired 2026-05-17 (old camera network — cams moved to 212).
   # Tags applied to this connector (must match ACL tags in Tailscale)
   tags:
     - "tag:subnet-router"
