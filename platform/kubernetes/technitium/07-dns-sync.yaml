@@ -68,7 +68,7 @@ data:
         }
 
         # Sync records
-        added, updated, unchanged = 0, 0, 0
+        added, updated, unchanged, failed = 0, 0, 0, 0
         for rec in desired:
             name = rec["name"]
             domain = zone if name == "@" else f"{name}.{zone}" if not name.endswith(f".{zone}") else name
@@ -96,16 +96,25 @@ data:
             key = (domain, rec["type"])
             current_val = current.get(key, "")
 
-            if current_val == rec["value"]:
-                unchanged += 1
-            elif key in current:
-                api_request(base_url, "zones/records/add", token, params)
-                updated += 1
-            else:
-                api_request(base_url, "zones/records/add", token, params)
-                added += 1
+            try:
+                if current_val == rec["value"]:
+                    unchanged += 1
+                elif key in current:
+                    api_request(base_url, "zones/records/add", token, params)
+                    updated += 1
+                else:
+                    api_request(base_url, "zones/records/add", token, params)
+                    added += 1
+            except Exception as e:
+                # Don't let one bad record block the other 30+. Common case:
+                # type change (e.g. A → CNAME) where Technitium rejects the
+                # new type because the old record still exists. The
+                # individual failure is logged; total is reported at the end.
+                print(f"  ⚠ {rec.get('name','?')} {rec['type']}: {e}")
+                failed += 1
 
-        print(f"  → {added} added, {updated} updated, {unchanged} unchanged")
+        print(f"  → {added} added, {updated} updated, "
+              f"{unchanged} unchanged, {failed} failed")
         return added + updated
 
     def main():
