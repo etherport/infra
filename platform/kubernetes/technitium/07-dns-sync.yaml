@@ -339,7 +339,7 @@ spec:
             - name: DELETE_DRIFT
               value: "true"
             - name: DRY_RUN_DELETE
-              value: "true"   # toggle to "false" to actually delete drift
+              value: "false"  # set to "true" to log-only without deleting
             - name: MAX_DRIFT_DELETE
               value: "10"
           volumeMounts:
