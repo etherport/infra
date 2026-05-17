@@ -366,9 +366,12 @@
         - _technitium_admin_secret.stringData.username != "admin"
         - _technitium_admin_secret.stringData.username not in (technitium_users.json.response.users | default([]) | map(attribute='username') | list)
 
+    # Use /users/set (not /users/update) — the latter exists but ignores
+    # the memberOfGroups parameter in Technitium v13. The set endpoint is
+    # the authoritative full-update operation.
     - name: Add sync user to Administrators group
       uri:
-        url: "http://localhost:5380/api/admin/users/update?token={{ technitium_token }}&user={{ _technitium_admin_secret.stringData.username }}&memberOfGroups=Administrators"
+        url: "http://localhost:5380/api/admin/users/set?token={{ technitium_token }}&user={{ _technitium_admin_secret.stringData.username }}&memberOfGroups=Administrators"
         method: POST
       no_log: true
       when:
