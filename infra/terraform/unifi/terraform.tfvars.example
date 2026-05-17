@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars and fill in (or set as env vars via op read in CI).
+# DO NOT commit terraform.tfvars — it contains credentials.
+#
+# For local runs:
+#   export TF_VAR_unifi_username="$(op read 'op://Private/Windroute (tf-admin)/username')"
+#   export TF_VAR_unifi_password="$(op read 'op://Private/Windroute (tf-admin)/password')"
+#   terraform plan
+
+unifi_username = "tf-admin"
+unifi_password = "<from 1Password Windroute (tf-admin)>"
+unifi_api_url  = "https://10.10.200.1"
