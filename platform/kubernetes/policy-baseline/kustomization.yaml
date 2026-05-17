@@ -1,6 +1,9 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# LimitRange resources are owned here. Namespace PSS labels are applied
+# from clusters/wind/kustomization.yaml (so the patches can target the
+# Namespaces created by sibling kustomizations like helm-releases/
+# monitoring.yaml). See 00-namespace-labels.yaml for the patch payload.
 resources:
-  - 00-namespace-labels.yaml
   - limitranges/default-limits.yaml

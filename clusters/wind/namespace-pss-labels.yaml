@@ -1,4 +1,9 @@
-# Pod Security Standards labels per namespace.
+# Pod Security Standards labels per namespace (strategic-merge patches).
+#
+# IMPORTANT: This file is loaded via `patches:` in kustomization.yaml, not
+# `resources:`. The namespaces themselves are created elsewhere (HelmRelease
+# `createNamespace: true`, or per-app `00-namespace.yaml`); we just stamp the
+# PSS labels onto them at kustomize-build time.
 #
 # audit + warn only — these do not block pod creation. Audit-log events
 # fire on pods that violate the baseline PSS profile; kubectl apply

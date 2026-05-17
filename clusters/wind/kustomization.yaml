@@ -48,3 +48,11 @@ resources:
   - ../../platform/kubernetes/nordvpn-meshnet
   # CI/CD
   - ../../platform/kubernetes/github-actions-runner
+
+# Pod Security Standards labels — applied as patches at the top of the
+# kustomize build graph so they target Namespaces created by any nested
+# kustomization (helm-releases/monitoring, home-automation/namespace, etc.).
+# Patch file lives in this directory because kustomize forbids patch paths
+# above the kustomization root. See policy-baseline/README.md for rationale.
+patches:
+  - path: namespace-pss-labels.yaml
