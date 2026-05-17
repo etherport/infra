@@ -42,6 +42,11 @@ data:
             return rdata.get("text", "")
         return ""
 
+    # Drift-deletion safety knobs (consumed in sync_to_server below).
+    DELETE_DRIFT = os.environ.get("DELETE_DRIFT", "false").lower() == "true"
+    DRY_RUN_DELETE = os.environ.get("DRY_RUN_DELETE", "true").lower() == "true"
+    MAX_DRIFT_DELETE = int(os.environ.get("MAX_DRIFT_DELETE", "10"))
+
     def sync_to_server(base_url, user, password, zone, default_ttl, desired):
         """Sync records to a single Technitium server."""
         try:
@@ -113,9 +118,59 @@ data:
                 print(f"  ⚠ {rec.get('name','?')} {rec['type']}: {e}")
                 failed += 1
 
+        # =========================================================================
+        # Drift deletion (optional, defense-in-depth).
+        # When DELETE_DRIFT=true, remove records present on the server but
+        # absent from the zone file. This catches:
+        #   - UI-added records that someone forgot to commit
+        #   - Stale records (e.g. wan1/wan2 frozen at old IPs because
+        #     the DDNS Lambda updates Route53 but never Technitium)
+        # Safety:
+        #   - DRY_RUN_DELETE=true: log "would delete" but DON'T actually delete
+        #   - MAX_DRIFT_DELETE caps the number deleted in one run (default 10)
+        #   - SOA/NS are already excluded from `current` set above
+        # =========================================================================
+        deleted = 0
+        if DELETE_DRIFT:
+            desired_keys = set()
+            for rec in desired:
+                name = rec["name"]
+                fqdn = zone if name == "@" else (
+                    f"{name}.{zone}" if not name.endswith(f".{zone}") else name
+                )
+                desired_keys.add((fqdn, rec["type"]))
+
+            drift = [(name, rtype, value) for (name, rtype), value in current.items()
+                     if (name, rtype) not in desired_keys]
+
+            if len(drift) > MAX_DRIFT_DELETE:
+                print(f"  ⚠ refusing to delete {len(drift)} drift records "
+                      f"(exceeds safety cap MAX_DRIFT_DELETE={MAX_DRIFT_DELETE}). "
+                      f"Review or raise the cap.")
+                for name, rtype, value in drift[:MAX_DRIFT_DELETE]:
+                    print(f"    [skipped] {name} {rtype} → {value}")
+            elif drift and DRY_RUN_DELETE:
+                print(f"  [DRY-RUN] would delete {len(drift)} drift record(s):")
+                for name, rtype, value in drift:
+                    print(f"    - {name} {rtype} → {value}")
+            elif drift:
+                for name, rtype, value in drift:
+                    try:
+                        api_request(base_url, "zones/records/delete", token, {
+                            "domain": name, "zone": zone, "type": rtype,
+                            **({"ipAddress": value} if rtype in ("A", "AAAA") else {}),
+                            **({"cname": value} if rtype == "CNAME" else {}),
+                            **({"text": value} if rtype == "TXT" else {}),
+                        })
+                        print(f"  - deleted {name} {rtype} → {value}")
+                        deleted += 1
+                    except Exception as e:
+                        print(f"  ⚠ delete failed for {name} {rtype}: {e}")
+                        failed += 1
+
         print(f"  → {added} added, {updated} updated, "
-              f"{unchanged} unchanged, {failed} failed")
-        return added + updated
+              f"{unchanged} unchanged, {deleted} deleted, {failed} failed")
+        return added + updated + deleted
 
     def main():
         # Get all server URLs to sync to
@@ -279,6 +334,14 @@ spec:
               value: "5"
             - name: FULL_SYNC_INTERVAL
               value: "3600"  # 1h periodic full re-sync (safety net)
+            # Drift deletion — start DRY-RUN until reviewed, then flip.
+            # See sync.py for the safety model.
+            - name: DELETE_DRIFT
+              value: "true"
+            - name: DRY_RUN_DELETE
+              value: "true"   # toggle to "false" to actually delete drift
+            - name: MAX_DRIFT_DELETE
+              value: "10"
           volumeMounts:
             - name: script
               mountPath: /scripts
