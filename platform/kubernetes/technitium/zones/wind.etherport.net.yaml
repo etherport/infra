@@ -74,10 +74,22 @@ records:
   # Infrastructure - Network Equipment
   # =============================================================================
 
-  - name: windroute
+  # UDM Pro Max gateway. Canonical name is `gw` (production convention);
+  # `windroute` and `udm` are CNAMEs for back-compat + device-class lookup.
+  - name: gw
     type: A
     value: 10.10.200.1
-    comment: UDM Pro router
+    comment: UDM Pro Max gateway (canonical)
+
+  - name: windroute
+    type: CNAME
+    value: gw.wind.etherport.net
+    comment: Legacy alias for gw (pre-wildcard naming)
+
+  - name: udm
+    type: CNAME
+    value: gw.wind.etherport.net
+    comment: Device-class alias for the UniFi UDM
 
   - name: pve
     type: A
