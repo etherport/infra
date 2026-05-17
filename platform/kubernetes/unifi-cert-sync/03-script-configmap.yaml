@@ -67,7 +67,8 @@ data:
     # =========================================================================
     # Step 3: For each device — compare, push if needed, verify
     # =========================================================================
-    while IFS='|' read -r name target crt_path key_path restart_cmd; do
+    # Use FD 3 to avoid SSH stealing stdin from the while-read loop
+    while IFS='|' read -r name target crt_path key_path restart_cmd <&3; do
       # Skip comments + blanks
       [[ -z "$name" || "$name" =~ ^[[:space:]]*# ]] && continue
       log ""
@@ -129,7 +130,7 @@ data:
         log "  ⚠ verify mismatch: device serves ${REMOTE_CERT_SHA:0:16}… expected ${LOCAL_CERT_LEAF_SHA:0:16}…"
         device_status[$name]=2
       fi
-    done < /config/targets
+    done 3< /config/targets
 
     # =========================================================================
     # Step 4: Metrics

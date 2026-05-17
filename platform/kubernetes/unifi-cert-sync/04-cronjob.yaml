@@ -34,7 +34,7 @@ spec:
               args:
                 - |
                   set -e
-                  apk add --no-cache --quiet openssh-client jq coreutils >/dev/null
+                  apk add --no-cache --quiet openssh-client jq coreutils openssl >/dev/null
                   exec /bin/bash /scripts/sync.sh
               env:
                 - name: PUSHGATEWAY_URL
