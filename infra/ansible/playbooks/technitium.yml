@@ -341,6 +341,40 @@
       no_log: true
       when: restore_backup | length == 0
 
+    # =========================================================================
+    # Create the `graham` admin user so dns-sync-watcher (which auths as the
+    # SOPS `username` field) can push records to this replica. The K8s
+    # technitium pods get this user via a different bootstrap path; this
+    # task ensures standalone replicas also have it.
+    # =========================================================================
+    - name: List existing users
+      uri:
+        url: "http://localhost:5380/api/admin/users/list?token={{ technitium_token }}"
+        method: GET
+        return_content: yes
+      register: technitium_users
+      no_log: true
+      when: restore_backup | length == 0
+
+    - name: Create sync user (graham) if missing
+      uri:
+        url: "http://localhost:5380/api/admin/users/create?token={{ technitium_token }}&user={{ _technitium_admin_secret.stringData.username }}&pass={{ _technitium_admin_secret.stringData.password | urlencode }}"
+        method: POST
+      no_log: true
+      when:
+        - restore_backup | length == 0
+        - _technitium_admin_secret.stringData.username != "admin"
+        - _technitium_admin_secret.stringData.username not in (technitium_users.json.response.users | default([]) | map(attribute='username') | list)
+
+    - name: Add sync user to Administrators group
+      uri:
+        url: "http://localhost:5380/api/admin/users/update?token={{ technitium_token }}&user={{ _technitium_admin_secret.stringData.username }}&memberOfGroups=Administrators"
+        method: POST
+      no_log: true
+      when:
+        - restore_backup | length == 0
+        - _technitium_admin_secret.stringData.username != "admin"
+
     - name: List existing zones
       uri:
         url: "http://localhost:5380/api/zones/list?token={{ technitium_token }}&pageNumber=1&zonesPerPage=100"
