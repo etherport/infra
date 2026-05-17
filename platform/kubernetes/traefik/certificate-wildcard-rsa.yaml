@@ -22,7 +22,10 @@ metadata:
 spec:
   secretName: wildcard-wind-etherport-net-rsa-tls
   issuerRef:
-    name: letsencrypt-prod
+    # Use the "classic" profile issuer for legacy compatibility — includes
+    # Common Name in Subject + ~90-day validity. UniFi OS unifi-core
+    # requires these (the default `shortlived` profile breaks it).
+    name: letsencrypt-prod-classic
     kind: ClusterIssuer
   commonName: "*.wind.etherport.net"
   dnsNames:

@@ -1,0 +1,42 @@
+---
+# Classic-profile ClusterIssuer for legacy compatibility.
+#
+# WHY this exists in addition to letsencrypt-prod (shortlived profile):
+# UniFi OS unifi-core requires:
+#   1. Common Name (CN) in the cert's Subject — LE's "shortlived" profile
+#      omits CN; only SAN is populated
+#   2. RSA-keyed cert (handled by certificate-wildcard-rsa.yaml's
+#      privateKey.algorithm)
+#   3. ~90-day validity is preferred over 6-day for stability
+#
+# The "classic" profile retains the legacy behavior (CN + 90-day validity)
+# expected by older software like unifi-core. See:
+#   https://letsencrypt.org/2025/01/09/acme-profiles.html
+#
+# Use this ClusterIssuer ONLY for certs consumed by software that needs
+# the classic format. The default letsencrypt-prod (shortlived) is fine
+# for Traefik/cert-manager-aware consumers.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod-classic
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: dervish_guess_0n@icloud.com
+    profile: classic
+    privateKeySecretRef:
+      # Share the same ACME account as letsencrypt-prod — same registered
+      # email, same rate-limit bucket. No need for a separate account.
+      name: letsencrypt-prod-account-key
+    solvers:
+      - dns01:
+          route53:
+            region: us-west-2
+            hostedZoneID: Z03500581XDWV5SKF5PK8
+            accessKeyIDSecretRef:
+              name: route53-credentials
+              key: AWS_ACCESS_KEY_ID
+            secretAccessKeySecretRef:
+              name: route53-credentials
+              key: AWS_SECRET_ACCESS_KEY

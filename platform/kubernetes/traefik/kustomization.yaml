@@ -9,8 +9,9 @@ resources:
   - ingressroute-proxmox.yaml
   # cert-manager integration for OCSP stapling
   - clusterissuer-letsencrypt.yaml
+  - clusterissuer-letsencrypt-classic.yaml  # for legacy compatibility (UniFi OS needs CN + RSA)
   - certificate-wildcard.yaml
-  - certificate-wildcard-rsa.yaml  # RSA variant for unifi-cert-sync (UniFi OS only accepts RSA)
+  - certificate-wildcard-rsa.yaml            # RSA + classic profile for unifi-cert-sync
   - tlsstore-default.yaml
   # Default middlewares wired to entrypoints via the HelmRelease
   # (see clusters/wind/helm-releases/traefik.yaml additionalArguments)
