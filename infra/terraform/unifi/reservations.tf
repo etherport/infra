@@ -227,17 +227,20 @@ resource "unifi_user" "gh_runner" {
   note     = "GitHub Actions self-hosted runner (managed by TF; see proxmox/standalone-vms)"
 }
 
-# Sequoia (UNAS Pro / Supermicro host). Migrated from VMware ~2023; the
-# original DHCP reservation pointed at the old VMware MAC and was disabled
-# when use_fixedip got set to false. The new bare-metal NIC was getting a
-# DHCP-pool address (.100) until this entry pins it back at .10.
+# Sequoia (UNAS Pro / Supermicro host). Migrated from VMware ~2023.
 #
-# After this lands, bounce Sequoia's network interface to pick up the
-# new lease:
-#   ssh root@<sequoia-current-ip> 'systemctl restart networking' (or equivalent)
+# IMPORTANT: the MAC below is the LAG/bond system MAC, NOT the underlying
+# Supermicro NIC MAC. Sequoia's two 10G ports (enp0s1 + enp0s2) are
+# bonded into lag0 (LACP, 20 Gbps to Switch Rack 10G), and DHCP requests
+# come from this LAG MAC. The Supermicro motherboard MAC (8c:30:66:c4:8d:45)
+# is on the unused 1GbE port (enp0s0).
+#
+# Verified via `ssh root@sequoia 'cat /proc/net/bonding/lag0'`:
+#   actor system mac: e2:83:54:f9:17:57
+#   port states: 61 (collecting + distributing)
 resource "unifi_user" "sequoia" {
-  mac      = "8c:30:66:c4:8d:45"
+  mac      = "e2:83:54:f9:17:57"
   name     = "sequoia"
   fixed_ip = "10.10.209.10"
-  note     = "Sequoia UNAS Pro (Supermicro). Replaces 2023-era VMware Sequoia."
+  note     = "Sequoia UNAS Pro (Supermicro) — LAG/bond MAC, not the NIC MAC"
 }
