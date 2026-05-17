@@ -229,18 +229,17 @@ resource "unifi_user" "gh_runner" {
 
 # Sequoia (UNAS Pro / Supermicro host). Migrated from VMware ~2023.
 #
-# IMPORTANT: the MAC below is the LAG/bond system MAC, NOT the underlying
-# Supermicro NIC MAC. Sequoia's two 10G ports (enp0s1 + enp0s2) are
-# bonded into lag0 (LACP, 20 Gbps to Switch Rack 10G), and DHCP requests
-# come from this LAG MAC. The Supermicro motherboard MAC (8c:30:66:c4:8d:45)
-# is on the unused 1GbE port (enp0s0).
+# MAC: bond/lag0's L2 MAC (inherited from enp0s1, the first slave),
+# which is what DHCP requests originate from. Verified via:
+#   ssh root@sequoia 'cat /sys/class/net/lag0/address'
+#   → 8c:30:66:c4:8d:45
 #
-# Verified via `ssh root@sequoia 'cat /proc/net/bonding/lag0'`:
-#   actor system mac: e2:83:54:f9:17:57
-#   port states: 61 (collecting + distributing)
+# NOTE: the LACP "system MAC" (e2:83:54:f9:17:57 in /proc/net/bonding/lag0)
+# is a DIFFERENT concept — used only for LACP control-plane identification,
+# not for L2 data frames. Don't use that MAC for the reservation.
 resource "unifi_user" "sequoia" {
-  mac      = "e2:83:54:f9:17:57"
+  mac      = "8c:30:66:c4:8d:45"
   name     = "sequoia"
   fixed_ip = "10.10.209.10"
-  note     = "Sequoia UNAS Pro (Supermicro) — LAG/bond MAC, not the NIC MAC"
+  note     = "Sequoia UNAS Pro (Supermicro) — bond MAC = enp0s1 L2 MAC"
 }
