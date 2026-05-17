@@ -37,6 +37,15 @@ resource "unifi_network" "default" {
   dhcp_lease   = 86400
   domain_name  = "wind.etherport.net"
 
+
+  # Explicit defaults — provider would set these implicitly but having them
+  # in source means a drift in the UI shows up as a plan diff.
+  network_group                = "LAN"
+  igmp_snooping                = false
+  multicast_dns                = false
+  intra_network_access_enabled = true
+  internet_access_enabled      = true
+
   lifecycle {
     ignore_changes = [
       dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
@@ -65,6 +74,15 @@ resource "unifi_network" "management" {
   dhcp_dns     = ["10.10.201.5", "10.10.201.6", "52.40.219.113"]
   dhcp_lease   = 86400
   domain_name  = "wind.etherport.net"
+
+
+  # Explicit defaults — provider would set these implicitly but having them
+  # in source means a drift in the UI shows up as a plan diff.
+  network_group                = "LAN"
+  igmp_snooping                = false
+  multicast_dns                = false
+  intra_network_access_enabled = true
+  internet_access_enabled      = true
 
   lifecycle {
     ignore_changes = [
@@ -95,6 +113,15 @@ resource "unifi_network" "servers" {
   dhcp_lease   = 86400
   domain_name  = "wind.etherport.net"
 
+
+  # Explicit defaults — provider would set these implicitly but having them
+  # in source means a drift in the UI shows up as a plan diff.
+  network_group                = "LAN"
+  igmp_snooping                = false
+  multicast_dns                = false
+  intra_network_access_enabled = true
+  internet_access_enabled      = true
+
   lifecycle {
     ignore_changes = [
       dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
@@ -124,6 +151,15 @@ resource "unifi_network" "clients" {
   dhcp_lease   = 86400
   domain_name  = "wind.etherport.net"
 
+
+  # Explicit defaults — provider would set these implicitly but having them
+  # in source means a drift in the UI shows up as a plan diff.
+  network_group                = "LAN"
+  igmp_snooping                = false
+  multicast_dns                = false
+  intra_network_access_enabled = true
+  internet_access_enabled      = true
+
   lifecycle {
     ignore_changes = [
       dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
@@ -152,6 +188,15 @@ resource "unifi_network" "iot" {
   dhcp_dns     = ["10.10.201.5", "10.10.201.6", "52.40.219.113"]
   dhcp_lease   = 86400
   domain_name  = "wind.etherport.net"
+
+
+  # Explicit defaults — provider would set these implicitly but having them
+  # in source means a drift in the UI shows up as a plan diff.
+  network_group                = "LAN"
+  igmp_snooping                = false
+  multicast_dns                = false
+  intra_network_access_enabled = true
+  internet_access_enabled      = true
 
   lifecycle {
     ignore_changes = [
@@ -186,6 +231,15 @@ resource "unifi_network" "security" {
   dhcp_lease   = 86400
   domain_name  = "wind.etherport.net"
 
+
+  # Explicit defaults — provider would set these implicitly but having them
+  # in source means a drift in the UI shows up as a plan diff.
+  network_group                = "LAN"
+  igmp_snooping                = false
+  multicast_dns                = false
+  intra_network_access_enabled = true
+  internet_access_enabled      = true
+
   lifecycle {
     ignore_changes = [
       dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
@@ -215,6 +269,15 @@ resource "unifi_network" "guest" {
   dhcp_stop    = "10.10.206.254"
   dhcp_dns     = ["1.1.1.1", "8.8.8.8"]
   dhcp_lease   = 86400
+
+
+  # Explicit defaults — provider would set these implicitly but having them
+  # in source means a drift in the UI shows up as a plan diff.
+  network_group                = "LAN"
+  igmp_snooping                = false
+  multicast_dns                = false
+  intra_network_access_enabled = true
+  internet_access_enabled      = true
 
   lifecycle {
     # dhcp_dns added to ignore_changes — provider doesn't READ the field
@@ -249,6 +312,15 @@ resource "unifi_network" "vsan" {
   dhcp_lease   = 86400
   domain_name  = "wind.etherport.net"
 
+
+  # Explicit defaults — provider would set these implicitly but having them
+  # in source means a drift in the UI shows up as a plan diff.
+  network_group                = "LAN"
+  igmp_snooping                = false
+  multicast_dns                = false
+  intra_network_access_enabled = true
+  internet_access_enabled      = true
+
   lifecycle {
     ignore_changes = [
       dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
@@ -277,6 +349,15 @@ resource "unifi_network" "unifi" {
   dhcp_dns     = ["10.10.201.5", "10.10.201.6", "52.40.219.113"]
   dhcp_lease   = 86400
   domain_name  = "wind.etherport.net"
+
+
+  # Explicit defaults — provider would set these implicitly but having them
+  # in source means a drift in the UI shows up as a plan diff.
+  network_group                = "LAN"
+  igmp_snooping                = false
+  multicast_dns                = false
+  intra_network_access_enabled = true
+  internet_access_enabled      = true
 
   lifecycle {
     ignore_changes = [
