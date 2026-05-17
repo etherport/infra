@@ -226,3 +226,18 @@ resource "unifi_user" "gh_runner" {
   fixed_ip = "10.10.201.30"
   note     = "GitHub Actions self-hosted runner (managed by TF; see proxmox/standalone-vms)"
 }
+
+# Sequoia (UNAS Pro / Supermicro host). Migrated from VMware ~2023; the
+# original DHCP reservation pointed at the old VMware MAC and was disabled
+# when use_fixedip got set to false. The new bare-metal NIC was getting a
+# DHCP-pool address (.100) until this entry pins it back at .10.
+#
+# After this lands, bounce Sequoia's network interface to pick up the
+# new lease:
+#   ssh root@<sequoia-current-ip> 'systemctl restart networking' (or equivalent)
+resource "unifi_user" "sequoia" {
+  mac      = "8c:30:66:c4:8d:45"
+  name     = "sequoia"
+  fixed_ip = "10.10.209.10"
+  note     = "Sequoia UNAS Pro (Supermicro). Replaces 2023-era VMware Sequoia."
+}
