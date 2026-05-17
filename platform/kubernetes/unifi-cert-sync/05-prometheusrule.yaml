@@ -1,0 +1,56 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: unifi-cert-sync
+  namespace: unifi-cert-sync
+  labels:
+    app: unifi-cert-sync
+    # Prometheus operator picks up PrometheusRules with this label
+    release: monitoring
+spec:
+  groups:
+    - name: unifi-cert-sync
+      rules:
+        - alert: UnifiCertSyncDeviceFailed
+          # Any device with non-zero status (1=push failed, 2=verify failed)
+          expr: unifi_cert_sync_device_status > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "UniFi cert sync failed for {{ $labels.device }}"
+            description: |
+              The unifi-cert-sync CronJob reports a failure pushing the
+              wildcard cert to {{ $labels.device }}. Status code:
+              {{ $value }} (1=push, 2=verify). Check pod logs:
+              kubectl -n unifi-cert-sync logs -l app=unifi-cert-sync --tail=100
+
+        - alert: UnifiCertSyncStale
+          # No successful run for 14 days (covers 2x missed weekly runs +
+          # buffer for one bad run). cert-manager renews 60d before expiry,
+          # so 14d staleness still has plenty of margin.
+          expr: (time() - unifi_cert_sync_last_run_timestamp) > (14 * 86400)
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "UniFi cert sync hasn't run in >14 days"
+            description: |
+              Last successful run of unifi-cert-sync was
+              {{ $value | humanizeDuration }} ago. CronJob may be paused,
+              suspended, or in a crashloop.
+
+        - alert: UnifiWildcardCertExpiring
+          # Wildcard cert expires in <14 days and we haven't successfully
+          # synced. cert-manager should have renewed by now.
+          expr: (unifi_cert_sync_cert_not_after_seconds - time()) < (14 * 86400)
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "wildcard cert expires in <14 days"
+            description: |
+              The wildcard cert that unifi-cert-sync pushes to UDM /
+              Protect / UNAS expires in {{ $value | humanizeDuration }}.
+              cert-manager should have renewed it. Check:
+              kubectl -n traefik describe certificate wildcard-wind-etherport-net

@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: unifi-cert-sync
+
+resources:
+  - 00-namespace.yaml
+  - 01-rbac.yaml
+  # 02-secret.sops.yaml is excluded until the SSH bootstrap is complete.
+  # Steps to enable (see README.md "Initial bootstrap"):
+  #   1. Enable SSH on UDM + Protect + UNAS, install the cert-sync public key
+  #   2. ssh-keyscan the 3 hosts for known_hosts
+  #   3. Populate + SOPS-encrypt 02-secret.sops.yaml.template -> 02-secret.sops.yaml
+  #   4. Uncomment the line below + commit
+  # - 02-secret.sops.yaml
+  - 03-script-configmap.yaml
+  - 04-cronjob.yaml
+  - 05-prometheusrule.yaml

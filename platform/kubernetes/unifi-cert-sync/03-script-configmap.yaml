@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: unifi-cert-sync-script
+  namespace: unifi-cert-sync
+data:
+  # Device target list — name|ssh-user@host|crt-path|key-path|restart-cmd
+  # One per line. Lines starting with `#` are ignored.
+  #
+  # All three UniFi devices run UniFi OS, so the cert path + restart
+  # command are identical. If a future device differs, just add a row.
+  targets: |
+    udm|root@10.10.200.1|/data/unifi-core/config/unifi-core.crt|/data/unifi-core/config/unifi-core.key|systemctl restart unifi-core
+    protect|root@10.10.212.10|/data/unifi-core/config/unifi-core.crt|/data/unifi-core/config/unifi-core.key|systemctl restart unifi-core
+    sequoia|root@sequoia.wind.etherport.net|/data/unifi-core/config/unifi-core.crt|/data/unifi-core/config/unifi-core.key|systemctl restart unifi-core
+
+  sync.sh: |
+    #!/usr/bin/env bash
+    # Push the cert-manager wildcard cert to each UniFi device defined in
+    # /config/targets. Idempotent: skips push if remote SHA matches local.
+    set -uo pipefail
+
+    PUSHGATEWAY="${PUSHGATEWAY_URL:-http://pushgateway.monitoring.svc.cluster.local:9091}"
+    JOB="unifi_cert_sync"
+
+    # Metrics — pushed at end regardless of result.
+    declare -A device_status   # device -> 0 (ok) | 1 (push failed) | 2 (verify failed)
+    declare -A device_changed  # device -> 0 (no change) | 1 (pushed)
+
+    log() { echo "[$(date -Iseconds)] $*"; }
+
+    # =========================================================================
+    # Step 1: Pull the wildcard cert from the cert-manager Secret
+    # =========================================================================
+    log "Fetching wildcard cert from traefik/wildcard-wind-etherport-net-tls..."
+    kubectl -n traefik get secret wildcard-wind-etherport-net-tls -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/tls.crt
+    kubectl -n traefik get secret wildcard-wind-etherport-net-tls -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/tls.key
+    chmod 600 /tmp/tls.crt /tmp/tls.key
+
+    if [[ ! -s /tmp/tls.crt || ! -s /tmp/tls.key ]]; then
+      log "ERROR: cert or key empty after fetch — abort"
+      exit 1
+    fi
+
+    LOCAL_SHA=$(cat /tmp/tls.crt /tmp/tls.key | sha256sum | awk '{print $1}')
+    NOT_AFTER=$(openssl x509 -in /tmp/tls.crt -noout -enddate | cut -d= -f2)
+    NOT_AFTER_TS=$(date -d "${NOT_AFTER}" +%s)
+    log "Local cert SHA: ${LOCAL_SHA:0:16}… expires ${NOT_AFTER}"
+
+    # =========================================================================
+    # Step 2: SSH config — use the mounted key + known_hosts
+    # =========================================================================
+    mkdir -p /tmp/.ssh
+    cp /ssh/id_ed25519 /tmp/.ssh/id_ed25519
+    cp /ssh/known_hosts /tmp/.ssh/known_hosts
+    chmod 700 /tmp/.ssh
+    chmod 600 /tmp/.ssh/id_ed25519 /tmp/.ssh/known_hosts
+
+    SSH_OPTS=(
+      -i /tmp/.ssh/id_ed25519
+      -o UserKnownHostsFile=/tmp/.ssh/known_hosts
+      -o StrictHostKeyChecking=yes
+      -o ConnectTimeout=10
+      -o BatchMode=yes
+    )
+
+    # =========================================================================
+    # Step 3: For each device — compare, push if needed, verify
+    # =========================================================================
+    while IFS='|' read -r name target crt_path key_path restart_cmd; do
+      # Skip comments + blanks
+      [[ -z "$name" || "$name" =~ ^[[:space:]]*# ]] && continue
+      log ""
+      log "=== Device: ${name} (${target}) ==="
+      device_status[$name]=0
+      device_changed[$name]=0
+
+      # Get remote SHA (combined crt + key). Fail = unreachable; log + continue.
+      REMOTE_SHA=$(ssh "${SSH_OPTS[@]}" "$target" "cat $crt_path $key_path 2>/dev/null | sha256sum | awk '{print \$1}'" 2>/dev/null)
+      if [[ -z "$REMOTE_SHA" ]]; then
+        log "  ⚠ unable to read remote cert SHA — device unreachable or path wrong"
+        device_status[$name]=1
+        continue
+      fi
+      log "  Remote SHA: ${REMOTE_SHA:0:16}…"
+
+      if [[ "$LOCAL_SHA" == "$REMOTE_SHA" ]]; then
+        log "  ✓ already in sync — no push needed"
+        continue
+      fi
+
+      log "  → cert differs; pushing"
+      # SCP cert + key (use scp via ssh transport for consistency)
+      if ! scp -OqB "${SSH_OPTS[@]}" /tmp/tls.crt "${target}:${crt_path}.new"; then
+        log "  ✗ scp crt failed"
+        device_status[$name]=1
+        continue
+      fi
+      if ! scp -OqB "${SSH_OPTS[@]}" /tmp/tls.key "${target}:${key_path}.new"; then
+        log "  ✗ scp key failed"
+        device_status[$name]=1
+        continue
+      fi
+
+      # Atomic rename + restart
+      if ! ssh "${SSH_OPTS[@]}" "$target" "
+        mv ${crt_path}.new ${crt_path} &&
+        mv ${key_path}.new ${key_path} &&
+        chmod 600 ${key_path} &&
+        chmod 644 ${crt_path} &&
+        ${restart_cmd}
+      "; then
+        log "  ✗ install / restart failed"
+        device_status[$name]=1
+        continue
+      fi
+      log "  ✓ pushed + restarted"
+      device_changed[$name]=1
+
+      # Verify: HTTPS handshake from inside the cluster, check the cert SHA matches
+      sleep 5
+      host="${target#*@}"
+      REMOTE_CERT_SHA=$(echo | openssl s_client -connect "${host}:443" -servername "wind.etherport.net" 2>/dev/null \
+        | openssl x509 -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr 'A-Z' 'a-z')
+      LOCAL_CERT_LEAF_SHA=$(openssl x509 -in /tmp/tls.crt -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr 'A-Z' 'a-z')
+      if [[ "$REMOTE_CERT_SHA" == "$LOCAL_CERT_LEAF_SHA" ]]; then
+        log "  ✓ verified — device serving the new cert"
+      else
+        log "  ⚠ verify mismatch: device serves ${REMOTE_CERT_SHA:0:16}… expected ${LOCAL_CERT_LEAF_SHA:0:16}…"
+        device_status[$name]=2
+      fi
+    done < /config/targets
+
+    # =========================================================================
+    # Step 4: Metrics
+    # =========================================================================
+    {
+      echo "# TYPE unifi_cert_sync_last_run_timestamp gauge"
+      echo "unifi_cert_sync_last_run_timestamp $(date +%s)"
+      echo "# TYPE unifi_cert_sync_cert_not_after_seconds gauge"
+      echo "unifi_cert_sync_cert_not_after_seconds ${NOT_AFTER_TS}"
+      for d in "${!device_status[@]}"; do
+        echo "# TYPE unifi_cert_sync_device_status gauge"
+        echo "unifi_cert_sync_device_status{device=\"$d\"} ${device_status[$d]}"
+        echo "# TYPE unifi_cert_sync_device_changed gauge"
+        echo "unifi_cert_sync_device_changed{device=\"$d\"} ${device_changed[$d]}"
+      done
+    } | curl --max-time 5 --data-binary @- "${PUSHGATEWAY}/metrics/job/${JOB}" 2>/dev/null || \
+      log "warning: pushgateway push failed (non-fatal)"
+
+    # =========================================================================
+    # Step 5: Exit code reflects any device-level failure
+    # =========================================================================
+    overall=0
+    for d in "${!device_status[@]}"; do
+      [[ ${device_status[$d]} -ne 0 ]] && overall=1
+    done
+    log ""
+    log "Summary: $(declare -p device_status | sed 's/declare -A device_status=//')"
+    exit $overall
