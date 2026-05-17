@@ -152,6 +152,9 @@ data:
 
     ZONE_FILE = os.environ.get("ZONE_FILE", "/zones/zone.yaml")
     CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", "5"))  # seconds
+    # Periodic full re-sync — catches new replicas, drift, and push failures
+    # that no longer trigger via file-hash change. 0 disables.
+    FULL_SYNC_INTERVAL = int(os.environ.get("FULL_SYNC_INTERVAL", "3600"))  # seconds
 
     def get_file_hash(path):
         """Get MD5 hash of file contents."""
@@ -176,10 +179,13 @@ data:
         print(f"DNS GitOps Watcher starting...")
         print(f"Watching: {ZONE_FILE}")
         print(f"Check interval: {CHECK_INTERVAL}s")
+        print(f"Full re-sync interval: {FULL_SYNC_INTERVAL}s "
+              f"({'disabled' if FULL_SYNC_INTERVAL == 0 else 'enabled'})")
 
         # Initial sync on startup
         print("\n[Startup] Running initial sync...")
         last_hash = get_file_hash(ZONE_FILE)
+        last_full_sync = time.time()
         if last_hash:
             run_sync()
         else:
@@ -189,12 +195,26 @@ data:
         while True:
             time.sleep(CHECK_INTERVAL)
             current_hash = get_file_hash(ZONE_FILE)
+            now = time.time()
 
+            # File changed → sync
             if current_hash and current_hash != last_hash:
                 if run_sync():
                     last_hash = current_hash
+                    last_full_sync = now
                 else:
                     print("Sync failed, will retry on next check")
+            # Periodic full re-sync (safety net for new replicas / drift /
+            # silent push failures that no longer trigger via hash change)
+            elif (FULL_SYNC_INTERVAL > 0
+                  and current_hash
+                  and now - last_full_sync >= FULL_SYNC_INTERVAL):
+                print(f"\n[Periodic] {FULL_SYNC_INTERVAL}s elapsed since last "
+                      f"sync — forcing full re-sync to all targets...")
+                if run_sync():
+                    last_full_sync = now
+                else:
+                    print("Periodic sync failed, will retry on next interval")
             elif current_hash is None:
                 print(f"Warning: Zone file not found at {ZONE_FILE}")
 
@@ -248,6 +268,8 @@ spec:
               value: "/zones/zone.yaml"
             - name: CHECK_INTERVAL
               value: "5"
+            - name: FULL_SYNC_INTERVAL
+              value: "3600"  # 1h periodic full re-sync (safety net)
           volumeMounts:
             - name: script
               mountPath: /scripts
