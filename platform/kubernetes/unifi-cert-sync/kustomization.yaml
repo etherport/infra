@@ -12,7 +12,7 @@ resources:
   #   2. ssh-keyscan the 3 hosts for known_hosts
   #   3. Populate + SOPS-encrypt 02-secret.sops.yaml.template -> 02-secret.sops.yaml
   #   4. Uncomment the line below + commit
-  # - 02-secret.sops.yaml
+  - 02-secret.sops.yaml
   - 03-script-configmap.yaml
   - 04-cronjob.yaml
   - 05-prometheusrule.yaml

@@ -48,6 +48,8 @@ resources:
   - ../../platform/kubernetes/nordvpn-meshnet
   # CI/CD
   - ../../platform/kubernetes/github-actions-runner
+  # Certificate management
+  - ../../platform/kubernetes/unifi-cert-sync
 
 # Pod Security Standards labels — applied as patches at the top of the
 # kustomize build graph so they target Namespaces created by any nested
