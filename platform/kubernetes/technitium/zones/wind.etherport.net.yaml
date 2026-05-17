@@ -230,9 +230,34 @@ records:
   - name: print
     type: A
     value: 10.10.202.20
-    comment: Network printer
+    comment: Raspberry Pi print server (Pi, currently powered off)
+
+  - name: canon
+    type: A
+    value: 10.10.202.50
+    comment: Canon MF743C network printer
 
   - name: gdisplay
     type: A
     value: 10.10.202.45
     comment: Graham's display/workstation
+
+  - name: mac-workroom
+    type: A
+    value: 10.10.202.101
+    comment: Workroom Mac Mini
+
+  - name: mac-graham
+    type: A
+    value: 10.10.202.110
+    comment: Graham's MacBook Pro (WiFi)
+
+  - name: hue1
+    type: A
+    value: 10.10.204.51
+    comment: Philips Hue bridge 1 (Cabin)
+
+  - name: hue2
+    type: A
+    value: 10.10.204.52
+    comment: Philips Hue bridge 2 (Cabin)
