@@ -1,0 +1,76 @@
+name: UniFi Terraform
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/terraform/unifi/**'
+      - '.github/workflows/terraform-unifi.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/terraform/unifi/**'
+      - '.github/workflows/terraform-unifi.yml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  WORKING_DIR: infra/terraform/unifi
+
+jobs:
+  terraform:
+    name: Terraform ${{ github.event.inputs.action || 'plan' }}
+    # gh-runner VM (10.10.201.30) has L3 reach to the UDM at 10.10.200.1.
+    # The lifecycle runner is required so UniFi TF works whether the K8s
+    # cluster is up or not.
+    runs-on: [self-hosted, lifecycle]
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: us-west-2
+      # UniFi local admin (tf-admin) — see infra/terraform/unifi/README.md
+      # for how these secrets get populated from 1Password.
+      TF_VAR_unifi_username: ${{ secrets.UNIFI_USERNAME }}
+      TF_VAR_unifi_password: ${{ secrets.UNIFI_PASSWORD }}
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install unzip
+        run: |
+          if ! command -v unzip >/dev/null; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y unzip
+          fi
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.14.3
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init -backend-config="profile=" -reconfigure
+
+      - name: Terraform Plan
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.action == 'plan'
+        run: terraform plan -input=false -no-color
+
+      - name: Terraform Apply
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
+        run: terraform apply -auto-approve -input=false
