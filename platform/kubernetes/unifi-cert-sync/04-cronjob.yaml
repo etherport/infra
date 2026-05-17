@@ -25,19 +25,16 @@ spec:
           restartPolicy: Never
           containers:
             - name: sync
-              # alpine + openssh + kubectl + curl + openssl. Use an image
-              # we already have around if possible. Build a thin image
-              # later if this becomes a hot path; for now use bitnami's
-              # kubectl image which ships with bash + curl + openssl, then
-              # apk add openssh-client at runtime.
-              image: alpine:3.20
+              # alpine/k8s ships with kubectl + bash + curl + openssl pre-installed.
+              # Just need to add openssh-client + jq at runtime (~5s).
+              # See https://hub.docker.com/r/alpine/k8s
+              image: alpine/k8s:1.31.13
               imagePullPolicy: IfNotPresent
-              command: ["/bin/sh", "-lc"]
+              command: ["/bin/bash", "-lc"]
               args:
                 - |
                   set -e
-                  apk add --no-cache --quiet \
-                    bash openssh-client openssl curl coreutils kubectl
+                  apk add --no-cache --quiet openssh-client jq coreutils >/dev/null
                   exec /bin/bash /scripts/sync.sh
               env:
                 - name: PUSHGATEWAY_URL
