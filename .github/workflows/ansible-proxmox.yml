@@ -10,6 +10,7 @@ on:
         options:
           - proxmox-setup
           - proxmox
+          - pve-network
       action:
         description: 'Action to perform'
         required: true
@@ -18,10 +19,18 @@ on:
           - check
           - apply
       allow_reboot:
-        description: 'Allow reboot if needed'
+        description: 'Allow reboot if needed (proxmox playbook only)'
         required: false
         type: boolean
         default: false
+      pve_network_action:
+        description: 'pve-network: add_storage_vlan (default) or remove_workload_subif'
+        required: false
+        type: choice
+        default: add_storage_vlan
+        options:
+          - add_storage_vlan
+          - remove_workload_subif
 
 permissions:
   contents: read
@@ -58,27 +67,38 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H pve.wind.etherport.net >> ~/.ssh/known_hosts 2>/dev/null || true
 
+      - name: Build EXTRA_VARS
+        id: extra
+        run: |
+          EXTRA_VARS=""
+          if [ "${{ github.event.inputs.playbook }}" = "proxmox" ] && [ "${{ github.event.inputs.allow_reboot }}" = "true" ]; then
+            EXTRA_VARS="$EXTRA_VARS -e allow_reboot=true"
+          fi
+          if [ "${{ github.event.inputs.playbook }}" = "pve-network" ]; then
+            EXTRA_VARS="$EXTRA_VARS -e pve_network_action=${{ github.event.inputs.pve_network_action }}"
+          fi
+          echo "extra_vars=$EXTRA_VARS" >> "$GITHUB_OUTPUT"
+          echo "Resolved EXTRA_VARS: $EXTRA_VARS"
+
       - name: Run Ansible playbook (check mode)
         if: github.event.inputs.action == 'check'
         run: |
           ansible-playbook \
-            -i inventory/wind/ \
+            -i inventory/wind/inventory.ini \
             playbooks/${{ github.event.inputs.playbook }}.yml \
-            --check \
+            --check --diff \
+            ${{ steps.extra.outputs.extra_vars }} \
             -v
         working-directory: ${{ env.WORKING_DIR }}
 
       - name: Run Ansible playbook (apply)
         if: github.event.inputs.action == 'apply'
         run: |
-          EXTRA_VARS=""
-          if [ "${{ github.event.inputs.allow_reboot }}" = "true" ]; then
-            EXTRA_VARS="-e allow_reboot=true"
-          fi
           ansible-playbook \
-            -i inventory/wind/ \
+            -i inventory/wind/inventory.ini \
             playbooks/${{ github.event.inputs.playbook }}.yml \
-            $EXTRA_VARS \
+            --diff \
+            ${{ steps.extra.outputs.extra_vars }} \
             -v
         working-directory: ${{ env.WORKING_DIR }}
 
