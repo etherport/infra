@@ -86,8 +86,19 @@
               enp6s22:
                 # Ceph storage NIC (VLAN 210). DHCP picks up the per-MAC
                 # reservation in infra/terraform/unifi/reservations.tf.
+                #
+                # dhcp4-overrides: critical — without this, UniFi's DHCP on
+                # this VLAN pushes a default route via 10.10.210.1 AND host
+                # routes for the DNS servers (10.10.201.5/.6) via the Ceph
+                # gateway. That breaks routing to DNS + competes with the
+                # primary VLAN 201 default route. (2026-05-18 incident.)
+                # We only want this NIC for L2 traffic to the Ceph mon on
+                # this VLAN — never for default routing.
                 optional: true
                 dhcp4: yes
+                dhcp4-overrides:
+                  use-routes: no
+                  use-dns: no
                 dhcp6: no
                 mtu: 9000
       register: vlan_netplan
