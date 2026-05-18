@@ -1,0 +1,141 @@
+---
+# Proxmox VE host networking maintenance.
+#
+# Today's only purpose: remove the vestigial `vmbr0.201` sub-interface
+# (10.10.201.41 secondary IP) so the SDN module's `servers` VNet (VLAN
+# 201) can take over without colliding. Single-node PVE has no use for
+# a host IP on the workload VLAN; VMs reach PVE via the mgmt IP at
+# 10.10.200.41.
+#
+# IMPORTANT (lessons from 2026-05-18 incident):
+#   Any change to /etc/network/interfaces can lose the host's mgmt IP
+#   if applied incorrectly. ALWAYS:
+#     1. Have iKVM access ready (via IPMI at 10.10.200.21) before applying
+#     2. Run in `--check --diff` mode first to confirm the diff
+#     3. Verify mgmt IP still up post-change before exiting
+#
+# Usage:
+#   # Dry-run (shows what would change, no apply)
+#   ansible-playbook -i inventory/wind/ playbooks/pve-network.yml --check --diff
+#
+#   # Apply
+#   ansible-playbook -i inventory/wind/ playbooks/pve-network.yml --diff
+
+- name: Proxmox VE host network maintenance
+  hosts: proxmox_hosts
+  become: true
+  gather_facts: true
+  vars:
+    # Host IP we MUST still be able to reach after the change
+    pve_mgmt_ip: 10.10.200.41
+    # Sub-interface being removed
+    pve_obsolete_subif: vmbr0.201
+
+  tasks:
+    - name: Verify this is a Proxmox VE host
+      ansible.builtin.stat:
+        path: /usr/bin/pveversion
+      register: pve_check
+      failed_when: not pve_check.stat.exists
+
+    - name: Read /etc/network/interfaces
+      ansible.builtin.slurp:
+        src: /etc/network/interfaces
+      register: interfaces_raw
+
+    - name: Decode interfaces file
+      ansible.builtin.set_fact:
+        interfaces_content: "{{ interfaces_raw.content | b64decode }}"
+
+    - name: Verify vmbr0.200 stanza exists (mgmt is intact)
+      ansible.builtin.assert:
+        that:
+          - interfaces_content is search("(?m)^\\s*iface\\s+vmbr0\\.200\\b")
+        fail_msg: |
+          /etc/network/interfaces does not have a vmbr0.200 stanza — refusing
+          to touch the file. Mgmt IP appears to be configured differently than
+          expected; aborting before we could brick the host.
+
+    - name: Detect if vmbr0.201 stanza is present
+      ansible.builtin.set_fact:
+        has_vmbr0_201: "{{ interfaces_content is search('(?m)^\\s*(auto\\s+|allow-[a-z]+\\s+)?vmbr0\\.201\\b') or
+                           interfaces_content is search('(?m)^\\s*iface\\s+vmbr0\\.201\\b') }}"
+
+    - name: Skip if already clean
+      ansible.builtin.meta: end_play
+      when: not has_vmbr0_201
+
+    - name: Backup current interfaces file
+      ansible.builtin.copy:
+        src: /etc/network/interfaces
+        dest: "/etc/network/interfaces.bak-{{ ansible_date_time.iso8601_basic_short }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: '0644'
+
+    # Remove the `auto vmbr0.201` line and the `iface vmbr0.201 ...` block.
+    # The iface block spans until the next blank line OR the next stanza-starting
+    # directive (auto/allow-/iface/source). Use a single regex that matches:
+    #   (?m)^auto vmbr0\.201\n         -> the auto-line
+    #   (?m)^iface vmbr0\.201[^\n]*\n  -> the iface header
+    #   ((?:[ \t]+[^\n]*\n)*)           -> any number of indented continuation lines
+    - name: Remove vmbr0.201 'auto' line (if present)
+      ansible.builtin.replace:
+        path: /etc/network/interfaces
+        regexp: '(?m)^auto\s+vmbr0\.201\s*\n'
+        replace: ''
+      register: removed_auto
+
+    - name: Remove vmbr0.201 iface block (header + indented body)
+      ansible.builtin.replace:
+        path: /etc/network/interfaces
+        regexp: '(?m)^iface\s+vmbr0\.201\b[^\n]*\n(?:[ \t]+[^\n]*\n)*'
+        replace: ''
+      register: removed_iface
+
+    - name: Strip any resulting double-blank-line gap
+      ansible.builtin.replace:
+        path: /etc/network/interfaces
+        regexp: '\n{3,}'
+        replace: "\n\n"
+
+    - name: Apply network changes (ifreload -a)
+      # ifreload is idempotent — it only brings up/down interfaces that
+      # actually changed. vmbr0.200 (mgmt) and vmbr0 (bridge) are untouched
+      # by this play, so the mgmt IP should remain.
+      ansible.builtin.command: ifreload -a
+      when: removed_auto.changed or removed_iface.changed
+      register: ifreload_result
+      changed_when: true
+
+    - name: Pause for mgmt-plane to settle
+      ansible.builtin.pause:
+        seconds: 5
+      when: ifreload_result is changed
+
+    - name: Verify mgmt IP is still configured
+      ansible.builtin.shell: |
+        set -o pipefail
+        ip -4 addr show vmbr0.200 | awk '/inet /{print $2}'
+      args:
+        executable: /bin/bash
+      register: mgmt_ip_post
+      changed_when: false
+      failed_when: pve_mgmt_ip not in (mgmt_ip_post.stdout | default(''))
+
+    - name: Confirm vmbr0.201 is gone
+      ansible.builtin.shell: |
+        ip -br link show vmbr0.201 2>&1 | grep -q vmbr0.201 && echo present || echo absent
+      args:
+        executable: /bin/bash
+      register: vmbr0_201_status
+      changed_when: false
+      failed_when: vmbr0_201_status.stdout != 'absent'
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "vmbr0.200 (mgmt): {{ mgmt_ip_post.stdout }}"
+          - "vmbr0.201 status: {{ vmbr0_201_status.stdout }}"
+          - "Backup file: /etc/network/interfaces.bak-{{ ansible_date_time.iso8601_basic_short }}"
