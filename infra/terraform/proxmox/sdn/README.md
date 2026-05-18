@@ -29,13 +29,17 @@ DHCP for sandbox networks.
 | `iot`      | 204    | K8s Multus secondary NIC                                  |
 | `security` | 205    | K8s Multus secondary NIC + SimpliSafe (do NOT retire)     |
 | `vsan`     | 209    | UNAS LAG + future use                                     |
-| `mgmt`     | 200    | PVE host VLAN (no VM lives here; defined for completeness) |
 | `guest`    | 206    | Guest network (no VM today; defined for completeness)     |
 | `unifi`    | 212    | UniFi controller traffic (no VM today)                    |
 
-VLAN 4040 (UDM↔L3-switch inter-VLAN routing transit) is intentionally
-**not** modeled here — it's UI-only, never carries VM traffic, and exists
-purely as L3 next-hop infrastructure.
+### Excluded VLANs and why
+
+- **VLAN 200 (mgmt)** — PVE host has `vmbr0.200` carrying 10.10.200.41 (web UI / mgmt access). Modeling this VLAN as an SDN VNet creates a competing bridge in `/etc/network/interfaces.d/sdn` that `ifreload` honors over `vmbr0.200`, stealing the host's mgmt IP and requiring iKVM recovery (this is exactly what happened 2026-05-18). **Never model the host's mgmt VLAN here.**
+- **VLAN 4040 (intervl)** — UDM↔L3-switch inter-VLAN routing transit. UI-only L3 infrastructure, never carries VM traffic.
+
+### Pre-flight constraint for VLAN 201 (servers)
+
+PVE historically had a `vmbr0.201` sub-interface (vestigial 10.10.201.41 secondary IP). Single-node PVE doesn't need this — VMs reach PVE via the mgmt IP on VLAN 200 (DNS authoritative answer for `pve.wind.etherport.net`). **Before applying this module, the `vmbr0.201` stanza must be removed from `/etc/network/interfaces`** (via the Ansible `pve-network.yml` playbook). Otherwise the `servers` VNet collides with `vmbr0.201` and recreates the 2026-05-18 outage. See `docs/runbooks/proxmox-sdn-prep.md` (TODO).
 
 ## Provider
 

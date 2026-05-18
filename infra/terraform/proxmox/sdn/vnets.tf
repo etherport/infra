@@ -6,8 +6,21 @@
 #   - `id` must be 8 chars max, lowercase alphanumeric
 #   - `tag` is REQUIRED for VLAN zones (omit it and apply fails)
 #
-# VLAN 4040 (UDM↔L3-switch inter-VLAN routing transit) is intentionally
-# omitted — it's L3 routing infrastructure, no VM ever lives on it.
+# Hard constraint discovered 2026-05-18 incident:
+#   Any VLAN the PVE host itself has an `vmbr0.<N>` sub-interface on
+#   MUST NOT be modeled here. Defining an SDN VNet for that VLAN
+#   produces a `/etc/network/interfaces.d/sdn` stanza that conflicts
+#   with the existing manually-defined sub-interface, and `ifreload`
+#   tears down the host's mgmt IP. Recovery requires iKVM access.
+#
+# Currently excluded for this reason:
+#   - VLAN 200 (mgmt)   — vmbr0.200 holds 10.10.200.41 (PVE web UI)
+#   - VLAN 4040 (intervl) — UDM↔L3-switch inter-VLAN routing transit,
+#                          UI-only, never carries VM traffic
+#
+# Note on VLAN 201 (servers): we plan to delete the unnecessary
+# vmbr0.201 sub-interface (PVE's vestigial secondary IP 10.10.201.41)
+# BEFORE applying this module, so VLAN 201 is safe to model.
 locals {
   vnets = {
     servers = {
@@ -29,10 +42,6 @@ locals {
     vsan = {
       tag   = 209
       alias = "UNAS LAG and future use"
-    }
-    mgmt = {
-      tag   = 200
-      alias = "PVE host VLAN (defined for completeness)"
     }
     guest = {
       tag   = 206
