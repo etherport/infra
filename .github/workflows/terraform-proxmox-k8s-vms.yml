@@ -20,6 +20,11 @@ on:
         options:
           - plan
           - apply
+      target:
+        description: 'Optional -target resource (e.g. proxmox_virtual_environment_vm.workers["k8s-w4"]). Leave blank to apply all.'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -70,8 +75,23 @@ jobs:
 
       - name: Terraform Plan
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.action == 'plan'
-        run: terraform plan -input=false -no-color
+        env:
+          TARGET: ${{ github.event.inputs.target }}
+        run: |
+          if [ -n "$TARGET" ]; then
+            terraform plan -input=false -no-color -target="$TARGET"
+          else
+            terraform plan -input=false -no-color
+          fi
 
       - name: Terraform Apply
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
-        run: terraform apply -auto-approve -input=false
+        env:
+          TARGET: ${{ github.event.inputs.target }}
+        run: |
+          if [ -n "$TARGET" ]; then
+            echo "Applying with -target=$TARGET"
+            terraform apply -auto-approve -input=false -target="$TARGET"
+          else
+            terraform apply -auto-approve -input=false
+          fi
