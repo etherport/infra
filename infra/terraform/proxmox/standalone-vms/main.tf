@@ -30,10 +30,16 @@ locals {
   # - standalone_vms: Created fresh from cloud-init template
   # - imported_vms: Pre-existing VMs imported into Terraform (no clone block)
 
+  # Per-VM bridge + vlan_tag introduced 2026-05-18 (SDN migration PR 3+).
+  # When bridge is an SDN VNet (`servers`, `clients`, etc.), the VNet itself
+  # carries the VLAN tag — set vlan_tag = null to avoid double-tagging. For
+  # legacy VMs still on `vmbr0`, set bridge = "vmbr0" + vlan_tag = 201.
   standalone_vms = {
     dns-fallback = {
       vm_id       = 1001
       ip          = "10.10.201.6"
+      bridge      = "servers" # SDN VNet (VLAN 201) — migrated 2026-05-18
+      vlan_tag    = null      # VNet handles VLAN tagging
       vcpus       = 1
       memory_mb   = 1024
       disk_gb     = 20
@@ -43,6 +49,8 @@ locals {
     vpn-local = {
       vm_id       = 1002
       ip          = "10.10.201.15"
+      bridge      = "vmbr0"
+      vlan_tag    = 201
       vcpus       = 1
       memory_mb   = 512
       disk_gb     = 10
@@ -52,6 +60,8 @@ locals {
     gh-runner = {
       vm_id       = 1003
       ip          = "10.10.201.30"
+      bridge      = "vmbr0"
+      vlan_tag    = 201
       vcpus       = 2
       memory_mb   = 2048
       disk_gb     = 20
@@ -99,9 +109,9 @@ resource "proxmox_virtual_environment_vm" "standalone" {
   }
 
   network_device {
-    bridge  = local.bridge_name
+    bridge  = each.value.bridge
     model   = "virtio"
-    vlan_id = local.vlan_tag
+    vlan_id = each.value.vlan_tag
   }
 
   initialization {
@@ -177,9 +187,9 @@ resource "proxmox_virtual_environment_vm" "imported" {
   }
 
   network_device {
-    bridge  = local.bridge_name
+    bridge  = each.value.bridge
     model   = "virtio"
-    vlan_id = local.vlan_tag
+    vlan_id = each.value.vlan_tag
   }
 
   agent {
