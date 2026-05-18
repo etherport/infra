@@ -101,9 +101,10 @@ The homelab network uses a **dual-router architecture** with routing responsibil
 
 | VLAN | Name | Subnet | Zone | Purpose |
 |------|------|--------|------|---------|
-| 201 | Servers | 10.10.201.0/24 | Trusted | K8s nodes, DNS, infrastructure services (includes Ceph storage) |
+| 201 | Servers | 10.10.201.0/24 | Trusted | K8s nodes, DNS, infrastructure services |
 | 202 | Clients | 10.10.202.0/24 | Trusted | User laptops, phones |
 | 209 | vSAN | 10.10.209.0/24 | Infrastructure | Storage network (Proxmox/NAS) |
+| 210 | Ceph | 10.10.210.0/24 | Infrastructure | Dedicated Ceph storage network (PVE mon on .41, K8s nodes on .50-.60 via `enp6s22` MTU 9000). Migrated 2026-05-18 from VLAN 201. |
 
 ### Static Routes (via L3 Switch at 10.255.253.3)
 

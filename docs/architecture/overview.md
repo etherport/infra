@@ -26,7 +26,8 @@ High-level infrastructure design for the homelab environment.
 
 | Component | Configuration |
 |-----------|---------------|
-| Node network | VLAN 201 (10.10.201.0/24) |
+| Node network (primary) | VLAN 201 (10.10.201.0/24) — kubelet, API, pod-network underlay |
+| Storage network | VLAN 210 (10.10.210.0/24) — dedicated Ceph traffic; each K8s node has `enp6s22` at MTU 9000 (10.10.210.50-60) reaching the PVE Ceph mon at 10.10.210.41. Migrated 2026-05-18. |
 | LoadBalancer VIPs | MetalLB: 10.10.201.70-90 |
 | Ingress | Traefik (LoadBalancer IP); TLS via cert-manager wildcard `*.wind.etherport.net` + TLSStore default (see `platform/kubernetes/traefik/clusterissuer-letsencrypt.yaml`, `certificate-wildcard.yaml`, `tlsstore-default.yaml`) |
 
@@ -34,7 +35,7 @@ High-level infrastructure design for the homelab environment.
 
 | Type | Description |
 |------|-------------|
-| Default | Ceph-backed PVCs for persistent apps (Traefik, Grafana, etc.) |
+| Default | Ceph-backed PVCs for persistent apps (Traefik, Grafana, etc.). Ceph mon at `10.10.210.41:6789` on VLAN 210 (dedicated storage network); see [`docs/runbooks/ceph-vlan-migration.md`](runbooks/ceph-vlan-migration.md). |
 | Legacy | NFS tests retained only under `platform/kubernetes/tests/` |
 
 ## Related Documentation

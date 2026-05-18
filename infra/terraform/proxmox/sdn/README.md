@@ -89,10 +89,10 @@ terraform apply
 On PVE:
 
 ```bash
-ssh root@pve.wind.etherport.net 'ls /sys/class/net/ | grep -E "^(servers|clients|iot|security|vsan|mgmt|guest|unifi)$"'
-# Expected: all 8 bridge names present
+ssh root@pve.wind.etherport.net 'ls /sys/class/net/ | grep -E "^(servers|clients|iot|security|vsan|guest|unifi)$"'
+# Expected: all 7 bridge names present
 ssh root@pve.wind.etherport.net 'cat /etc/pve/sdn/vnets.cfg'
-# Expected: 8 vnet stanzas, one per VLAN
+# Expected: 7 vnet stanzas, one per VLAN
 ```
 
 ## Migration plan reference

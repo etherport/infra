@@ -18,10 +18,12 @@ provider "proxmox" {
 locals {
   node_name    = "pve"
   storage_name = "local-zfs"
-  bridge_name  = "vmbr0"
-  vlan_tag     = 201
   gateway_201  = "10.10.201.1"
   cpu_type     = "host"
+  # `bridge_name` + `vlan_tag` locals were removed 2026-05-18 after all
+  # standalone VMs migrated to per-VM bridge fields (SDN VNets). See
+  # `standalone_vms` map below — each entry now declares its own
+  # `bridge` and `vlan_tag`.
 
   # Standalone VMs - services outside of Kubernetes
   # VM IDs: 1000-1099 reserved for standalone services
