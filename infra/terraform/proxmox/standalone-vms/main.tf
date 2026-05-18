@@ -117,6 +117,12 @@ resource "proxmox_virtual_environment_vm" "standalone" {
     bridge  = each.value.bridge
     model   = "virtio"
     vlan_id = each.value.vlan_tag
+    # Jumbo frames to match bond0/vmbr0/SDN-zone MTU. Without this, the
+    # tap device defaults to MTU 1500, becoming the path bottleneck even
+    # though every other hop is 9000. Caught 2026-05-18 when gh-runner
+    # (just migrated to bridge="servers") couldn't complete TLS to PVE
+    # API — small packets (ICMP, SYN) worked, large ones got dropped.
+    mtu = 9000
   }
 
   initialization {
@@ -195,6 +201,12 @@ resource "proxmox_virtual_environment_vm" "imported" {
     bridge  = each.value.bridge
     model   = "virtio"
     vlan_id = each.value.vlan_tag
+    # Jumbo frames to match bond0/vmbr0/SDN-zone MTU. Without this, the
+    # tap device defaults to MTU 1500, becoming the path bottleneck even
+    # though every other hop is 9000. Caught 2026-05-18 when gh-runner
+    # (just migrated to bridge="servers") couldn't complete TLS to PVE
+    # API — small packets (ICMP, SYN) worked, large ones got dropped.
+    mtu = 9000
   }
 
   agent {
