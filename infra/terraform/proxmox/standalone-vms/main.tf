@@ -49,8 +49,8 @@ locals {
     vpn-local = {
       vm_id       = 1002
       ip          = "10.10.201.15"
-      bridge      = "vmbr0"
-      vlan_tag    = 201
+      bridge      = "servers" # SDN VNet (VLAN 201) — migrated 2026-05-18 (PR 4)
+      vlan_tag    = null      # VNet handles VLAN tagging
       vcpus       = 1
       memory_mb   = 512
       disk_gb     = 10
@@ -58,10 +58,15 @@ locals {
       tags        = ["terraform", "vpn", "standalone"]
     }
     gh-runner = {
-      vm_id       = 1003
-      ip          = "10.10.201.30"
-      bridge      = "vmbr0"
-      vlan_tag    = 201
+      vm_id    = 1003
+      ip       = "10.10.201.30"
+      bridge   = "servers" # SDN VNet (VLAN 201) — migrated 2026-05-18 (PR 4)
+      vlan_tag = null      # VNet handles VLAN tagging
+      # Self-touch caveat: bpg/proxmox hot-modifies the NIC (no VM stop+start)
+      # for bridge changes, so this apply CAN run via gh-runner workflow
+      # without self-killing. dns-fallback's PR 3 apply confirmed 0s apply
+      # time = hot-modify. If this stops working in a future provider
+      # version, fall back to local-apply.
       vcpus       = 2
       memory_mb   = 2048
       disk_gb     = 20
