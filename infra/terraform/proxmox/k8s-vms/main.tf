@@ -141,6 +141,15 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
     vlan_id = 205 # Security VLAN
   }
 
+  # Storage VLAN — Ceph mon + OSDs live on 10.10.210.0/24 (VLAN 210).
+  # MTU 9000 to match the underlying bond0/vmbr0 jumbo frames.
+  network_device {
+    bridge  = local.bridge_name
+    model   = "virtio"
+    vlan_id = 210
+    mtu     = 9000
+  }
+
   initialization {
     datastore_id = local.storage_name
     user_account {
@@ -230,6 +239,16 @@ resource "proxmox_virtual_environment_vm" "workers" {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = 205
+  }
+
+  # Storage VLAN — Ceph mon + OSDs live on 10.10.210.0/24 (VLAN 210).
+  # MTU 9000 to match the underlying bond0/vmbr0 jumbo frames.
+  # See docs/runbooks/ceph-vlan-migration.md for the migration story.
+  network_device {
+    bridge  = local.bridge_name
+    model   = "virtio"
+    vlan_id = 210
+    mtu     = 9000
   }
 
   initialization {
@@ -342,6 +361,15 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = 205
+  }
+
+  # Storage VLAN — Ceph mon + OSDs live on 10.10.210.0/24 (VLAN 210).
+  # MTU 9000 to match the underlying bond0/vmbr0 jumbo frames.
+  network_device {
+    bridge  = local.bridge_name
+    model   = "virtio"
+    vlan_id = 210
+    mtu     = 9000
   }
 
   hostpci {
