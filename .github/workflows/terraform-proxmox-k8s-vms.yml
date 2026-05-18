@@ -141,9 +141,13 @@ jobs:
             echo "ERROR: state-rebuild requires both target and import_id inputs"
             exit 1
           fi
-          echo "Removing $TARGET from state..."
-          terraform state rm "$TARGET" || echo "(not in state, continuing)"
-          echo "Re-importing $TARGET from PVE (id=$IMPORT_ID)..."
-          terraform import -input=false "$TARGET" "$IMPORT_ID"
+          # NOTE: $TARGET contains [] and " (e.g. workers["k8s-w4"]). Wrap in
+          # outer single quotes via heredoc/array so the shell doesn't word-
+          # split them. Pass through xargs -0 with explicit null delimiter to
+          # guarantee args.
+          echo "Removing target from state: $TARGET"
+          printf '%s\0' state rm -- "$TARGET" | xargs -0 terraform || echo "(not in state, continuing)"
+          echo "Re-importing target from PVE (import_id=$IMPORT_ID)..."
+          printf '%s\0' import -input=false -- "$TARGET" "$IMPORT_ID" | xargs -0 terraform
           echo "--- Post-import plan ---"
-          terraform plan -input=false -no-color -target="$TARGET"
+          printf '%s\0' plan -input=false -no-color -target="$TARGET" | xargs -0 terraform
