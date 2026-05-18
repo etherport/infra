@@ -10,5 +10,11 @@ resource "proxmox_sdn_zone_vlan" "wind" {
   id     = "wind"
   bridge = "vmbr0"
   nodes  = [local.node_name]
-  mtu    = 1500
+  # Jumbo frames to match the underlying bond0 + vmbr0 (both MTU 9000).
+  # If left at 1500 (provider default), TLS handshakes and other large
+  # packets from VMs (whose NICs are MTU 9000 from the cloud image)
+  # get blackholed because path MTU drops to 1500 at the SDN bridge.
+  # Discovered 2026-05-18 when gh-runner couldn't reach PVE API after
+  # being migrated to bridge="servers".
+  mtu = 9000
 }
