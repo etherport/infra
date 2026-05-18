@@ -21,8 +21,14 @@ on:
           - plan
           - apply
           - refresh-only
+          - state-rebuild
       target:
         description: 'Optional -target resource (e.g. proxmox_virtual_environment_vm.workers["k8s-w4"]). Leave blank to apply all.'
+        required: false
+        type: string
+        default: ''
+      import_id:
+        description: 'Required only for state-rebuild action. Import ID for the target resource (bpg/proxmox VM: <node>/<vm_id>, e.g. pve/102).'
         required: false
         type: string
         default: ''
@@ -114,3 +120,30 @@ jobs:
           else
             terraform apply -refresh-only -auto-approve -input=false
           fi
+
+      # `state-rebuild` action: state rm + import for a single target. Use
+      # when refresh-only fails to detect drift (e.g., bpg/proxmox provider
+      # not detecting missing array elements). state rm removes the resource
+      # from state (doesn't touch PVE). import reads from PVE and rebuilds
+      # state. After this, a normal plan should show real drift, and apply
+      # will reconcile.
+      #
+      # Required inputs:
+      #   target    — resource address (e.g. proxmox_virtual_environment_vm.control_planes["k8s-cp3"])
+      #   import_id — import ID (e.g. pve/102 for bpg/proxmox VM)
+      - name: Terraform State Rebuild
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'state-rebuild'
+        env:
+          TARGET: ${{ github.event.inputs.target }}
+          IMPORT_ID: ${{ github.event.inputs.import_id }}
+        run: |
+          if [ -z "$TARGET" ] || [ -z "$IMPORT_ID" ]; then
+            echo "ERROR: state-rebuild requires both target and import_id inputs"
+            exit 1
+          fi
+          echo "Removing $TARGET from state..."
+          terraform state rm "$TARGET" || echo "(not in state, continuing)"
+          echo "Re-importing $TARGET from PVE (id=$IMPORT_ID)..."
+          terraform import -input=false "$TARGET" "$IMPORT_ID"
+          echo "--- Post-import plan ---"
+          terraform plan -input=false -no-color -target="$TARGET"
