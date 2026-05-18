@@ -17,7 +17,7 @@ Add a second PVE host when:
   even an old desktop with 32+ GB RAM works fine)
 - You want true host-failure recovery (PVE node crash → VMs migrate
   + restart elsewhere automatically)
-- Storage is already shared (Ceph at 10.10.201.41/24 already is)
+- Storage is already shared (Ceph at 10.10.210.41 on dedicated VLAN 210 already is)
 
 ## Expansion plan
 
@@ -130,8 +130,9 @@ kubectl get nodes   # the affected node briefly NotReady, then re-Ready on new h
 - Cluster network requires <1ms latency between PVE nodes (typically
   the same gigabit LAN is fine; corosync is sensitive to packet
   loss). Don't run PVE cluster across a flaky VPN.
-- The existing external Ceph (10.10.201.41) is shared storage — VMs
-  can live-migrate without storage replication.
+- The existing external Ceph (10.10.210.41 on VLAN 210, dedicated storage
+  network) is shared storage — VMs can live-migrate without storage
+  replication.
 - QDevice (3rd vote) avoids the "2-node split-brain" problem; a tiny
   always-on box on the network ($30 Raspberry Pi or VM elsewhere)
   suffices.

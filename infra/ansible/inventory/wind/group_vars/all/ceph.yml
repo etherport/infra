@@ -1,9 +1,12 @@
 ---
 ceph_cluster_id: "4de37616-ef82-4295-8ff0-7309d4b34812"
 
-# v1 MON endpoint for pve
+# v1 MON endpoint for pve. Migrated 2026-05-18 from 10.10.201.41
+# (vmbr0.201 sub-interface, deprecated) to 10.10.210.41 on the dedicated
+# Ceph storage VLAN 210. Mirrors platform/kubernetes/storage/ceph-csi/
+# csi-config-map.yaml. See docs/runbooks/ceph-vlan-migration.md.
 ceph_monitors:
-  - "10.10.201.41:6789"
+  - "10.10.210.41:6789"
 
 ceph_k8s_user: "k8s"
 ceph_k8s_key: "AQBwejhp7lzSBBAAxa8TJhMRakcjYeOgMigqtg=="
