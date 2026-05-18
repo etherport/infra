@@ -1,0 +1,71 @@
+---
+# Proxmox VE host sshd tuning.
+#
+# Why: all S2S VPN clients reach PVE through a single source-NAT'd IP
+# (the K8s WireGuard pod's host). When multiple clients race SSH from
+# the same perceived source IP, sshd's default `MaxStartups 10:30:100`
+# starts refusing 30% of new pre-auth connections at 10 in-flight, and
+# `LoginGraceTime 120` makes stuck connections clog slots for 2 min.
+# Bumping the limits + shortening the grace eliminates the intermittent
+# SSH timeouts we hit during the 2026-05-18 maintenance window.
+#
+# Idempotent.
+#
+# Usage:
+#   ansible-playbook -i inventory/wind/inventory.ini playbooks/pve-sshd.yml --check --diff
+#   ansible-playbook -i inventory/wind/inventory.ini playbooks/pve-sshd.yml --diff
+
+- name: Proxmox VE sshd tuning
+  hosts: proxmox_hosts
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Verify this is a Proxmox VE host
+      ansible.builtin.stat:
+        path: /usr/bin/pveversion
+      register: pve_check
+      failed_when: not pve_check.stat.exists
+
+    - name: Drop sshd MaxStartups + LoginGraceTime tuning
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/10-maxstartups.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          # MANAGED BY ANSIBLE — playbooks/pve-sshd.yml
+          #
+          # Tuned for K8s-WireGuard-NAT source-IP collapse: all VPN clients
+          # appear from the same K8s WG pod IP (currently k8s-w1 = 10.10.201.53
+          # when the WG pod is scheduled there). Default MaxStartups (10) is
+          # hit quickly when several SSH sessions race. LoginGraceTime
+          # shortened so stuck pre-auth slots clear in 30s, not 120s.
+          MaxStartups 30:50:200
+          LoginGraceTime 30
+      register: sshd_dropin
+
+    - name: Validate sshd config
+      ansible.builtin.command: sshd -t
+      changed_when: false
+      when: sshd_dropin is changed
+
+    - name: Reload sshd
+      ansible.builtin.systemd:
+        name: ssh
+        state: reloaded
+      when: sshd_dropin is changed
+
+    - name: Show effective sshd values
+      ansible.builtin.shell: |
+        sshd -T | grep -E '^(maxstartups|logingracetime|maxsessions)'
+      args:
+        executable: /bin/bash
+      register: sshd_effective
+      changed_when: false
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "changed:    {{ sshd_dropin is changed }}"
+          - "{{ sshd_effective.stdout_lines }}"

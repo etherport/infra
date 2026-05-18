@@ -11,6 +11,7 @@ on:
           - proxmox-setup
           - proxmox
           - pve-network
+          - pve-sshd
       action:
         description: 'Action to perform'
         required: true

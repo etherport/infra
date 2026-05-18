@@ -35,7 +35,10 @@ DHCP for sandbox networks.
 ### Excluded VLANs and why
 
 - **VLAN 200 (mgmt)** — PVE host has `vmbr0.200` carrying 10.10.200.41 (web UI / mgmt access). Modeling this VLAN as an SDN VNet creates a competing bridge in `/etc/network/interfaces.d/sdn` that `ifreload` honors over `vmbr0.200`, stealing the host's mgmt IP and requiring iKVM recovery (this is exactly what happened 2026-05-18). **Never model the host's mgmt VLAN here.**
+- **VLAN 210 (ceph)** — PVE host has `vmbr0.210` carrying 10.10.210.41 (Ceph mon + OSDs after the 2026-05-18 migration). Same conflict mode as VLAN 200. Storage networks should always stay manually-configured.
 - **VLAN 4040 (intervl)** — UDM↔L3-switch inter-VLAN routing transit. UI-only L3 infrastructure, never carries VM traffic.
+
+**General rule:** any VLAN with a `vmbr0.<N>` host sub-interface in `/etc/network/interfaces` is forbidden here. Check before adding new VNets.
 
 ### Pre-flight constraint for VLAN 201 (servers)
 
