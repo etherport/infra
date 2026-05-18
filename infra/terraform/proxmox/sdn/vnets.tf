@@ -12,7 +12,7 @@ locals {
   vnets = {
     servers = {
       tag   = 201
-      alias = "K8s + standalone VMs"
+      alias = "K8s and standalone VMs"
     }
     clients = {
       tag   = 202
@@ -24,11 +24,11 @@ locals {
     }
     security = {
       tag   = 205
-      alias = "K8s Multus secondary NIC + SimpliSafe"
+      alias = "K8s Multus secondary NIC and SimpliSafe"
     }
     vsan = {
       tag   = 209
-      alias = "UNAS LAG + future use"
+      alias = "UNAS LAG and future use"
     }
     mgmt = {
       tag   = 200
