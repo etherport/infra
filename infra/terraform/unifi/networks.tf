@@ -375,6 +375,56 @@ import {
   id = "67461c442eac4e0cafee495e"
 }
 
+# Ceph storage VLAN. Created 2026-05-18 to migrate Ceph cluster off VLAN 201,
+# where it was colocated with general K8s/VM workload traffic. The PVE host
+# had a `vmbr0.201` sub-interface (10.10.201.41) bound for Ceph mon + OSD
+# traffic, which prevented modeling VLAN 201 as a Proxmox SDN VNet.
+#
+# Router: Switch Rack PoE (US624P) — L3 forwarding offloaded to that switch
+# instead of the UDM, for lower latency on storage traffic. The "Router"
+# selection is a UI-only setting (paultyng/unifi provider does not currently
+# expose per-network L3 device assignment), so it must be verified manually
+# after import.
+#
+# DHCP enabled with reserved range 100-254. Static IPs 1-99 for the storage
+# fabric (PVE host, K8s nodes via Multus secondary NIC, etc.).
+resource "unifi_network" "ceph" {
+  name    = "Ceph"
+  purpose = "corporate"
+  vlan_id = 210
+  subnet  = "10.10.210.0/24"
+
+  dhcp_enabled = true
+  dhcp_start   = "10.10.210.100"
+  dhcp_stop    = "10.10.210.254"
+  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "52.40.219.113"]
+  dhcp_lease   = 86400
+  domain_name  = "wind.etherport.net"
+
+  # Explicit defaults — provider would set these implicitly but having them
+  # in source means a drift in the UI shows up as a plan diff.
+  network_group                = "LAN"
+  igmp_snooping                = false
+  multicast_dns                = false
+  intra_network_access_enabled = true
+  internet_access_enabled      = true
+
+  lifecycle {
+    ignore_changes = [
+      dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
+      dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
+      ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
+      ipv6_ra_preferred_lifetime, ipv6_ra_priority, ipv6_ra_valid_lifetime,
+      ipv6_static_subnet, wan_dhcp_v6_pd_size,
+    ]
+  }
+}
+
+import {
+  to = unifi_network.ceph
+  id = "6a0b267a5433d627dfcf5ae1"
+}
+
 # Inter-VLAN routing transit network. Special purpose: holds the L3 nexthop
 # (10.255.253.3) that VLANs use to reach the UDM for upstream routing.
 # DHCP disabled (static peers only).
