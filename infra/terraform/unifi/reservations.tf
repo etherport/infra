@@ -243,3 +243,78 @@ resource "unifi_user" "sequoia" {
   fixed_ip = "10.10.209.10"
   note     = "Sequoia UNAS Pro (Supermicro) — bond MAC = enp0s1 L2 MAC"
 }
+
+# =============================================================================
+# K8s storage NICs (VLAN 210 / Ceph) — enp6s22 on each K8s VM.
+#
+# Added 2026-05-18 as part of the Ceph→VLAN-210 migration. Each K8s VM has
+# a 5th virtio NIC tagged VLAN 210; this reserves a static IP for each
+# off the DHCP pool (1-99 range; pool is 100-254).
+#
+# The last octet mirrors the VM's primary IP on VLAN 201 (e.g. k8s-cp1 =
+# .201.50 → .210.50) for operator predictability.
+# =============================================================================
+
+resource "unifi_user" "k8s_cp1_storage" {
+  mac        = "bc:24:11:f0:72:2d"
+  name       = "k8s-cp1-storage"
+  fixed_ip   = "10.10.210.50"
+  network_id = unifi_network.ceph.id
+  note       = "k8s-cp1 enp6s22 (Ceph storage NIC)"
+}
+
+resource "unifi_user" "k8s_cp2_storage" {
+  mac        = "bc:24:11:b3:78:be"
+  name       = "k8s-cp2-storage"
+  fixed_ip   = "10.10.210.51"
+  network_id = unifi_network.ceph.id
+  note       = "k8s-cp2 enp6s22 (Ceph storage NIC)"
+}
+
+resource "unifi_user" "k8s_cp3_storage" {
+  mac        = "bc:24:11:65:d7:b4"
+  name       = "k8s-cp3-storage"
+  fixed_ip   = "10.10.210.52"
+  network_id = unifi_network.ceph.id
+  note       = "k8s-cp3 enp6s22 (Ceph storage NIC)"
+}
+
+resource "unifi_user" "k8s_w1_storage" {
+  mac        = "bc:24:11:45:c6:11"
+  name       = "k8s-w1-storage"
+  fixed_ip   = "10.10.210.53"
+  network_id = unifi_network.ceph.id
+  note       = "k8s-w1 enp6s22 (Ceph storage NIC)"
+}
+
+resource "unifi_user" "k8s_w2_storage" {
+  mac        = "bc:24:11:5b:7c:51"
+  name       = "k8s-w2-storage"
+  fixed_ip   = "10.10.210.54"
+  network_id = unifi_network.ceph.id
+  note       = "k8s-w2 enp6s22 (Ceph storage NIC)"
+}
+
+resource "unifi_user" "k8s_w3_storage" {
+  mac        = "bc:24:11:85:54:6d"
+  name       = "k8s-w3-storage"
+  fixed_ip   = "10.10.210.55"
+  network_id = unifi_network.ceph.id
+  note       = "k8s-w3 enp6s22 (Ceph storage NIC)"
+}
+
+resource "unifi_user" "k8s_w4_storage" {
+  mac        = "bc:24:11:f9:de:e3"
+  name       = "k8s-w4-storage"
+  fixed_ip   = "10.10.210.56"
+  network_id = unifi_network.ceph.id
+  note       = "k8s-w4 enp6s22 (Ceph storage NIC)"
+}
+
+resource "unifi_user" "k8s_gpu1_storage" {
+  mac        = "bc:24:11:64:3c:2e"
+  name       = "k8s-gpu1-storage"
+  fixed_ip   = "10.10.210.60"
+  network_id = unifi_network.ceph.id
+  note       = "k8s-gpu1 enp6s22 (Ceph storage NIC)"
+}

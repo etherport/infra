@@ -46,11 +46,19 @@
         group: root
 
     # =========================================================================
-    # Fix 1b: VLAN parent interfaces UP for Multus macvlan
-    # The extra vNICs on VLAN 202/204/205 (enp6s19/20/21) ship DOWN out of
-    # the cloud image unless they're declared in netplan. Without them UP,
-    # Multus macvlan can't attach virtual interfaces to pods, and HA loses
-    # access to Hue/Tuya/Roomba/Tesla on IoT VLAN 204.
+    # Fix 1b: VLAN parent interfaces + Ceph storage NIC via netplan
+    #
+    # Multus parent NICs (enp6s19/20/21 on VLANs 202/204/205) ship DOWN out
+    # of the cloud image. Multus brings them up per-pod via macvlan, so
+    # they just need to be declared `optional: true; dhcp4: no` so netplan
+    # doesn't fail on boot.
+    #
+    # enp6s22 is the Ceph storage NIC (VLAN 210, added 2026-05-18). Needs
+    # to be UP with a DHCP-leased IP so ceph-csi (hostNetwork=true) can
+    # reach Ceph mon at 10.10.210.41. MTU 9000 matches the bond0/vmbr0
+    # jumbo frames for storage perf. UniFi has a per-MAC reservation for
+    # each VM's enp6s22 MAC pinning IPs to 10.10.210.5X-60.
+    #
     # Idempotent: file written once, netplan apply only on change.
     # =========================================================================
     - name: Ensure VLAN parent interfaces are UP via netplan
@@ -75,6 +83,13 @@
                 optional: true
                 dhcp4: no
                 dhcp6: no
+              enp6s22:
+                # Ceph storage NIC (VLAN 210). DHCP picks up the per-MAC
+                # reservation in infra/terraform/unifi/reservations.tf.
+                optional: true
+                dhcp4: yes
+                dhcp6: no
+                mtu: 9000
       register: vlan_netplan
 
     - name: Apply netplan if VLAN config changed
