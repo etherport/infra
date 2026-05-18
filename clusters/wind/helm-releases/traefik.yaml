@@ -77,6 +77,16 @@ spec:
     # platform/kubernetes/traefik/middlewares/secure-headers.yaml for the
     # Middleware definition and opt-out instructions.
     additionalArguments:
+      # allowCrossNamespace lets the entrypoint default middleware
+      # (which lives in `traefik` namespace) be referenced by routers
+      # in other namespaces (`monitoring/grafana`, etc.). Without this,
+      # Traefik logs `middleware "traefik-secure-headers@kubernetescrd"
+      # does not exist` and returns 503 for those routers. Caught
+      # 2026-05-18 when grafana/traefik dashboards started returning
+      # 503; the secure-headers Middleware was added 2026-05-16 with
+      # commit 6d64c55 but cross-namespace defaulting only worked
+      # until a subsequent Traefik restart re-read the args.
+      - "--providers.kubernetescrd.allowCrossNamespace=true"
       - "--entrypoints.websecure.http.middlewares=traefik-secure-headers@kubernetescrd"
     env: []
     ingressClass:
