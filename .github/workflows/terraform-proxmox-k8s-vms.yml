@@ -20,6 +20,7 @@ on:
         options:
           - plan
           - apply
+          - refresh-only
       target:
         description: 'Optional -target resource (e.g. proxmox_virtual_environment_vm.workers["k8s-w4"]). Leave blank to apply all.'
         required: false
@@ -94,4 +95,22 @@ jobs:
             terraform apply -auto-approve -input=false -target="$TARGET"
           else
             terraform apply -auto-approve -input=false
+          fi
+
+      # `apply -refresh-only` commits drift it finds during refresh into the
+      # state file WITHOUT changing any remote infra. Use this when state and
+      # the real PVE infra have drifted (e.g. a prior apply committed state
+      # without finishing the PVE mutation, and provider refresh has stopped
+      # detecting the drift). After a successful refresh-only, run a normal
+      # `plan` — it should now show the real drift, and `apply` will reconcile.
+      - name: Terraform Apply Refresh-Only
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'refresh-only'
+        env:
+          TARGET: ${{ github.event.inputs.target }}
+        run: |
+          if [ -n "$TARGET" ]; then
+            echo "Refresh-only with -target=$TARGET"
+            terraform apply -refresh-only -auto-approve -input=false -target="$TARGET"
+          else
+            terraform apply -refresh-only -auto-approve -input=false
           fi
