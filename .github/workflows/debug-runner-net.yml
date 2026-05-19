@@ -49,3 +49,20 @@ jobs:
           echo
           echo "## ARP table"
           ip neigh show
+          echo
+          echo "## Repeated TCP/22 to PVE (10 trials, 2s timeout each)"
+          for i in $(seq 1 10); do
+            t0=$(date +%s%3N)
+            out=$(nc -zvw 2 10.10.200.41 22 2>&1)
+            rc=$?
+            t1=$(date +%s%3N)
+            printf "trial=%2d rc=%d elapsed=%4dms %s\n" "$i" "$rc" "$((t1-t0))" "$out"
+          done
+          echo
+          echo "## Full SSH handshake test (ssh -vvv ... bash -c true, ConnectTimeout=15)"
+          # No agent / no key — we only care whether the TCP+banner exchange completes.
+          # Expect: 'Connection timed out' if blocked at L3/L4, 'Permission denied' if
+          # banner exchanged + auth rejected (which is success for OUR diagnosis).
+          ssh -vvv -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=no \
+              -o PreferredAuthentications=none -o PubkeyAuthentication=no \
+              graham@pve.wind.etherport.net true 2>&1 | tail -30 || true
