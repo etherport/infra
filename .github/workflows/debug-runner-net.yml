@@ -1,0 +1,51 @@
+name: Debug gh-runner Network
+
+# Ad-hoc diagnostic: prints network state from gh-runner's POV.
+# Dispatch when gh-runner -> PVE SSH starts timing out (task #27 / #19 SDN
+# migration after-effects). Delete after the root cause is committed.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: [self-hosted, lifecycle]
+    timeout-minutes: 5
+    steps:
+      - name: Network state dump
+        run: |
+          set +e
+          echo "## L2/L3"
+          ip -4 -o addr show
+          echo
+          echo "## Routes"
+          ip route
+          echo
+          echo "## Route to PVE mgmt (10.10.200.41)"
+          ip route get 10.10.200.41
+          echo
+          echo "## DNS resolves for pve.wind.etherport.net"
+          getent ahosts pve.wind.etherport.net | head -5
+          dig +short +time=2 +tries=1 pve.wind.etherport.net @10.10.201.5
+          dig +short +time=2 +tries=1 pve.wind.etherport.net @10.10.100.5
+          echo
+          echo "## Ping PVE (mgmt IP)"
+          ping -c 3 -W 2 10.10.200.41 || true
+          echo
+          echo "## TCP/22 to PVE (mgmt IP)"
+          nc -zvw 5 10.10.200.41 22 2>&1 || true
+          echo
+          echo "## TCP/22 to PVE (hostname)"
+          nc -zvw 5 pve.wind.etherport.net 22 2>&1 || true
+          echo
+          echo "## TCP/8006 to PVE API"
+          nc -zvw 5 10.10.200.41 8006 2>&1 || true
+          echo
+          echo "## Traceroute (UDP, may be slow)"
+          traceroute -n -w 2 -q 1 -m 6 10.10.200.41 2>&1 || true
+          echo
+          echo "## ARP table"
+          ip neigh show
