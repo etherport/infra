@@ -41,11 +41,16 @@ run_check "UDM ping (10.10.200.1)" \
 run_check "UDM HTTPS responding" \
   "curl -sk --max-time 5 https://10.10.200.1 -o /dev/null -w '%{http_code}' | grep -qE '^(200|301|302|404)$'"
 
-# Layer 2: Internal DNS (both replicas)
+# Layer 2: Internal DNS (homelab + AWS replicas)
+# WireGuard pushes 10.10.100.5 (AWS) first, then 10.10.201.5/.6 (homelab) —
+# all three must resolve internal records identically. See
+# platform/wireguard/clients/graham-tcp.conf.template for the rationale.
 run_check "DNS @.5 resolves k8s-cp1" \
   "[ \"\$(dig @10.10.201.5 +short +timeout=2 k8s-cp1.wind.etherport.net)\" = '10.10.201.50' ]"
 run_check "DNS @.6 resolves k8s-cp1" \
   "[ \"\$(dig @10.10.201.6 +short +timeout=2 k8s-cp1.wind.etherport.net)\" = '10.10.201.50' ]"
+run_check "DNS @100.5 (AWS) resolves k8s-cp1" \
+  "[ \"\$(dig @10.10.100.5 +short +timeout=2 k8s-cp1.wind.etherport.net)\" = '10.10.201.50' ]"
 run_check "DNS @.5 resolves gw" \
   "[ \"\$(dig @10.10.201.5 +short +timeout=2 gw.wind.etherport.net)\" = '10.10.200.1' ]"
 
@@ -77,10 +82,25 @@ run_check "gh-runner (.30) reachable" \
   "ping -c 1 -W 2 10.10.201.30"
 run_check "Proxmox (200.41) reachable" \
   "ping -c 1 -W 2 10.10.200.41"
+run_check "Sequoia NAS (209.10) reachable" \
+  "ping -c 1 -W 2 10.10.209.10"
 
 # Layer 6: UniFi API (proves tf-admin still works, dump-state still works)
 run_check "UDM API: tf-admin auth still works" \
   "test -s /tmp/unifi-state/.cookies && curl -sk --max-time 5 -b /tmp/unifi-state/.cookies -H \"X-CSRF-Token: \$(cat /tmp/unifi-state/.csrf)\" 'https://10.10.200.1/proxy/network/api/s/default/rest/networkconf' | jq -e '.data | length > 0' >/dev/null"
+# UniFi adopted devices (UDM, switches, APs) all connected (state == 1).
+# Skips silently if no cached cookies — `scripts/unifi/dump-state.sh` refreshes them.
+run_check "UniFi adopted devices all connected" \
+  "test -s /tmp/unifi-state/.cookies && curl -sk --max-time 5 -b /tmp/unifi-state/.cookies -H \"X-CSRF-Token: \$(cat /tmp/unifi-state/.csrf)\" 'https://10.10.200.1/proxy/network/api/s/default/stat/device' | jq -e '[.data[] | select(.adopted == true) | .state] | length > 0 and all(. == 1)' >/dev/null"
+
+# Layer 7: Storage (Ceph). The Ceph mon at 10.10.210.41 lives on the
+# dedicated storage VLAN 210 which is intentionally NOT routed to clients
+# or WG users — so ICMP from the laptop won't reach it. Instead, verify
+# the K8s ceph-csi configmap points at the correct mon IP. A regression
+# here means a kustomize/Flux mistake re-introduced the old .201.41 IP
+# (caught 2026-05-18 during the VLAN-210 Ceph migration).
+run_check "ceph-csi mon IP is 210.41 (storage VLAN)" \
+  "kubectl --request-timeout=5s -n default get cm ceph-csi-config -o jsonpath='{.data.config\\.json}' 2>/dev/null | grep -q '10.10.210.41:6789'"
 
 echo ""
 echo "=== Result: ${PASS} passed, ${FAIL} failed ==="
