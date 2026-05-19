@@ -36,13 +36,28 @@
         content: |
           # MANAGED BY ANSIBLE — playbooks/pve-sshd.yml
           #
-          # Tuned for K8s-WireGuard-NAT source-IP collapse: all VPN clients
-          # appear from the same K8s WG pod IP (currently k8s-w1 = 10.10.201.53
-          # when the WG pod is scheduled there). Default MaxStartups (10) is
-          # hit quickly when several SSH sessions race. LoginGraceTime
-          # shortened so stuck pre-auth slots clear in 30s, not 120s.
-          MaxStartups 30:50:200
-          LoginGraceTime 30
+          # Why: zombie preauth slots can pile up faster than sshd reclaims them
+          # and trip MaxStartups random-drop on the NEXT legitimate SSH attempt.
+          # Two scenarios we hit repeatedly:
+          #   1. K8s-WireGuard-NAT source-IP collapse — all S2S VPN clients
+          #      appear from the same WG-pod IP (k8s-wN). Default MaxStartups
+          #      10:30:100 fills in a handful of races.
+          #   2. TCP-probe storms (CI diagnostic workflows or port scanners)
+          #      open TCP, never send a banner; sshd holds the preauth slot for
+          #      LoginGraceTime seconds even though the client is gone. With
+          #      LoginGraceTime=120 (default), 10 probes occupy slots for 2 min.
+          # Mitigations:
+          #   - MaxStartups 100:30:300: huge headroom; "drop start" at 100
+          #     concurrent unauth, not 10.
+          #   - LoginGraceTime 10: zombie banner-less probes reclaim in 10s.
+          #   - PerSourceMaxStartups 20 (OpenSSH 8.5+): one bad actor cannot
+          #     exhaust the whole pool. The K8s WG pod's source IP can still
+          #     burst to 20 in-flight (more than enough for ansible's serial
+          #     workflow), but a flood from one IP no longer DoSes everything.
+          MaxStartups 100:30:300
+          LoginGraceTime 10
+          PerSourceMaxStartups 20
+          PerSourceNetBlockSize 32
       register: sshd_dropin
 
     - name: Validate sshd config
