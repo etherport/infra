@@ -15,6 +15,26 @@ jobs:
     runs-on: [self-hosted, lifecycle]
     timeout-minutes: 5
     steps:
+      - name: Setup ANSIBLE_SSH_KEY (same as ansible-proxmox.yml)
+        env:
+          ANSIBLE_SSH_KEY: ${{ secrets.ANSIBLE_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$ANSIBLE_SSH_KEY" > ~/.ssh/id_ed25519_ansible
+          chmod 600 ~/.ssh/id_ed25519_ansible
+          ssh-keyscan -H pve.wind.etherport.net >> ~/.ssh/known_hosts 2>/dev/null || true
+          echo "Key fingerprint:"; ssh-keygen -l -f ~/.ssh/id_ed25519_ansible 2>&1 | head -3
+          echo "Key file size:"; wc -c ~/.ssh/id_ed25519_ansible
+
+      - name: SSH with ANSIBLE_SSH_KEY (verbose)
+        run: |
+          set +e
+          echo "## ssh -vvv graham@pve with -i ~/.ssh/id_ed25519_ansible"
+          ssh -vvv -i ~/.ssh/id_ed25519_ansible -o IdentitiesOnly=yes \
+              -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=no \
+              -o PreferredAuthentications=publickey -o PubkeyAuthentication=yes \
+              graham@pve.wind.etherport.net 'echo OK; hostname; whoami' 2>&1 | tail -40
+
       - name: Network state dump
         run: |
           set +e
