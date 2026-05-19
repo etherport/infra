@@ -11,7 +11,16 @@
 [Interface]
 PrivateKey = <YOUR_PRIVATE_KEY_HERE>
 Address = 10.254.0.10/32
-DNS = 10.10.201.5, 10.10.201.6, 10.10.100.5, 1.1.1.1
+DNS = 10.10.100.5, 10.10.201.5, 10.10.201.6
+# IMPORTANT — do NOT add public resolvers (1.1.1.1 etc.) here.
+# macOS getaddrinfo() races all pushed resolvers in parallel. A public
+# resolver responds first (local hop ~5ms) before our internal one
+# (over the tunnel ~75ms), and `*.wind.etherport.net` resolves to the
+# AWS ALB public IP instead of the internal MetalLB VIP — splits DNS
+# the wrong way and breaks Grafana/Traefik/PVE WebUI from the laptop.
+# Caught 2026-05-18 after the migration window. AWS-side technitium
+# (.100.5) holds the internal records via WG; falling back to homelab
+# .201.5/.6 if AWS is unreachable.
 
 [Peer]
 PublicKey = Aav0cNl4osaEEISQLyKLt88foAPwdVYaeTuyLF/PNTo=
