@@ -54,10 +54,21 @@
           #     exhaust the whole pool. The K8s WG pod's source IP can still
           #     burst to 20 in-flight (more than enough for ansible's serial
           #     workflow), but a flood from one IP no longer DoSes everything.
+          #   - PerSourcePenaltyExemptList: 2026-05-19 root cause. OpenSSH
+          #     9.8 (PVE 9.x ships 9.6/9.7+) enabled PerSourcePenalties by
+          #     default — `noauth:1` accrues every TCP-only probe (port
+          #     scanners, monitoring agents, our own diagnostic scripts) and
+          #     `min:15` rounds the per-source block UP TO 15s minimum.
+          #     Result: any source that opens 2-3 SSH connections without
+          #     completing auth gets temp-banned for 15s+, with the ban
+          #     growing as more probes hit. Symptoms: "Connection timed out
+          #     during banner exchange" and SYN-drop intermittently. Exempt
+          #     the entire homelab /16 — we trust our own automation; this
+          #     does NOT affect public-internet penalties.
           MaxStartups 100:30:300
           LoginGraceTime 10
           PerSourceMaxStartups 20
-          PerSourceNetBlockSize 32
+          PerSourcePenaltyExemptList 10.10.0.0/16,10.254.0.0/16,10.255.0.0/16
       register: sshd_dropin
 
     - name: Validate sshd config
