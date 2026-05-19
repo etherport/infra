@@ -116,10 +116,15 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
     ssd          = true
   }
 
+  # MTU 9000 on every NIC to match bond0/vmbr0/SDN-zone jumbo frames.
+  # Without explicit mtu, taps default to 1500 — bottleneck for TLS,
+  # rbd, kubelet pulls. Caught 2026-05-18 with standalone-VMs flip to
+  # SDN bridges. Preventive here for PR 5 (K8s VMs → bridge="servers").
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = local.vlan_tag
+    mtu     = 9000
   }
 
   # Additional VLANs for multi-network support
@@ -127,18 +132,21 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = 202 # Client VLAN
+    mtu     = 9000
   }
 
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = 204 # IoT VLAN
+    mtu     = 9000
   }
 
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = 205 # Security VLAN
+    mtu     = 9000
   }
 
   # Storage VLAN — Ceph mon + OSDs live on 10.10.210.0/24 (VLAN 210).
@@ -217,28 +225,34 @@ resource "proxmox_virtual_environment_vm" "workers" {
     ssd          = true
   }
 
+  # MTU 9000 on every NIC to match bond0/vmbr0/SDN-zone jumbo frames.
+  # See note in control_plane resource.
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = local.vlan_tag
+    mtu     = 9000
   }
 
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = 202
+    mtu     = 9000
   }
 
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = 204
+    mtu     = 9000
   }
 
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = 205
+    mtu     = 9000
   }
 
   # Storage VLAN — Ceph mon + OSDs live on 10.10.210.0/24 (VLAN 210).
@@ -339,28 +353,34 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
     ssd          = true
   }
 
+  # MTU 9000 on every NIC to match bond0/vmbr0/SDN-zone jumbo frames.
+  # See note in control_plane resource.
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = local.vlan_tag
+    mtu     = 9000
   }
 
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = 202
+    mtu     = 9000
   }
 
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = 204
+    mtu     = 9000
   }
 
   network_device {
     bridge  = local.bridge_name
     model   = "virtio"
     vlan_id = 205
+    mtu     = 9000
   }
 
   # Storage VLAN — Ceph mon + OSDs live on 10.10.210.0/24 (VLAN 210).
