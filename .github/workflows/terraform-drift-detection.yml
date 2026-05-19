@@ -1,0 +1,191 @@
+name: Terraform Drift Detection
+
+# Daily scheduled `terraform plan` across all AWS modules. If any
+# module's plan shows changes (exit code 2), opens or refreshes a
+# GitHub Issue with the offending modules. Manual dispatch supported
+# for ad-hoc audits.
+#
+# Limited to AWS modules: ubuntu-latest hosts, AWS_ACCESS_KEY_ID +
+# AWS_SECRET_ACCESS_KEY secrets, AWS region us-west-2 or per-module
+# override. PVE/UniFi modules are excluded because their state needs
+# the gh-runner VM (cluster-internal, intermittent SSH); add them
+# later when self-hosted runner stability is fully proven (task #27).
+
+on:
+  schedule:
+    # Daily at 14:00 UTC (07:00 PT / 10:00 ET) — outside CI maintenance
+    # windows but during waking hours so a fired issue is seen quickly.
+    - cron: '0 14 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  TF_VERSION: '1.14.3'
+  TF_IN_AUTOMATION: 'true'
+
+jobs:
+  plan:
+    name: ${{ matrix.module.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - { name: route53,             dir: infra/terraform/aws/route53,              region: us-west-2 }
+          - { name: s3,                  dir: infra/terraform/aws/s3,                   region: us-west-2 }
+          - { name: networking,          dir: infra/terraform/aws/networking,           region: us-west-2 }
+          - { name: compute,             dir: infra/terraform/aws/compute,              region: us-west-2 }
+          - { name: load-balancing,      dir: infra/terraform/aws/load-balancing,       region: us-west-2 }
+          - { name: acm,                 dir: infra/terraform/aws/acm,                  region: us-west-2 }
+          - { name: ses,                 dir: infra/terraform/aws/ses,                  region: us-west-2 }
+          - { name: ddns-lambda,         dir: infra/terraform/aws/ddns-lambda,          region: us-west-2 }
+          - { name: dns-restrict-ip,     dir: infra/terraform/aws/dns-restrict-ip,      region: us-west-2 }
+          - { name: email-forward,       dir: infra/terraform/aws/email-forward,        region: us-west-2 }
+          - { name: external-monitoring, dir: infra/terraform/aws/external-monitoring,  region: us-west-2 }
+          - { name: homeassistant-alexa, dir: infra/terraform/aws/homeassistant-alexa,  region: us-east-1 }
+          - { name: aws-us-east-1,       dir: infra/terraform/aws-us-east-1,            region: us-east-1 }
+          - { name: aws-regional-vpn,    dir: infra/terraform/aws-regional-vpn,         region: us-west-2 }
+    defaults:
+      run:
+        working-directory: ${{ matrix.module.dir }}
+    outputs:
+      drifted: ${{ steps.plan.outputs.drifted }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ matrix.module.region }}
+
+      - name: Per-module env (TF_VAR_*)
+        run: |
+          {
+            [ -n "${{ secrets.ALERT_EMAIL }}" ]    && echo "TF_VAR_alert_email=${{ secrets.ALERT_EMAIL }}"
+            [ -n "${{ secrets.HA_ACCESS_TOKEN }}" ] && echo "TF_VAR_ha_access_token=${{ secrets.HA_ACCESS_TOKEN }}"
+          } >> "$GITHUB_ENV"
+
+      - name: terraform init
+        run: terraform init -backend-config="profile=" -reconfigure -input=false
+
+      - name: terraform plan -detailed-exitcode
+        id: plan
+        run: |
+          set +e
+          terraform plan -input=false -no-color -lock=false -detailed-exitcode \
+            $( [ -f variables.tf ] && grep -q '"aws_profile"' variables.tf && echo '-var=aws_profile=' ) \
+            > plan.txt 2>&1
+          rc=$?
+          set -e
+          # detailed-exitcode: 0 = no changes, 1 = error, 2 = changes
+          echo "rc=$rc"
+          {
+            echo "## ${{ matrix.module.name }} (rc=$rc)"
+            echo
+            echo '```'
+            tail -c 8000 plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          case "$rc" in
+            0) echo "drifted=false" >> "$GITHUB_OUTPUT" ;;
+            1) echo "drifted=error" >> "$GITHUB_OUTPUT"; exit 1 ;;
+            2) echo "drifted=true"  >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Upload plan artifact
+        if: steps.plan.outputs.drifted == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: plan-${{ matrix.module.name }}
+          path: ${{ matrix.module.dir }}/plan.txt
+          retention-days: 14
+
+  report:
+    name: Report drift
+    needs: plan
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: plan-*
+        continue-on-error: true
+
+      - name: Compose drift summary
+        id: compose
+        run: |
+          set +e
+          drifted=$(ls artifacts 2>/dev/null | sed 's/^plan-//' | sort | paste -sd, -)
+          echo "drifted=$drifted" >> "$GITHUB_OUTPUT"
+          if [ -z "$drifted" ]; then
+            echo "No drift detected." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "# Drift detected"
+            echo
+            echo "Modules with non-zero plan: \`$drifted\`"
+            echo
+            for d in artifacts/plan-*; do
+              [ -d "$d" ] || continue
+              name=$(basename "$d" | sed 's/^plan-//')
+              echo "## $name"
+              echo
+              echo '<details><summary>Plan output</summary>'
+              echo
+              echo '```'
+              tail -c 6000 "$d/plan.txt"
+              echo '```'
+              echo
+              echo '</details>'
+            done
+          } > drift.md
+          cat drift.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open / refresh drift issue
+        if: steps.compose.outputs.drifted != ''
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('drift.md', 'utf8');
+            const title = `Terraform drift: ${{ steps.compose.outputs.drifted }}`;
+            // Find existing open drift issue (label `tf-drift`)
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'tf-drift',
+              per_page: 1,
+            });
+            if (existing.length) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing[0].number,
+                title,
+                body,
+              });
+              core.info(`Updated issue #${existing[0].number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['tf-drift'],
+              });
+              core.info(`Opened issue #${created.data.number}`);
+            }
