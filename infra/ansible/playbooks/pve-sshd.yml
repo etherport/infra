@@ -20,12 +20,38 @@
   become: true
   gather_facts: false
 
+  vars:
+    # Public keys authorized to log in as `graham` on PVE.
+    # ed25519 only — bound to a specific 1Password item per line.
+    #
+    # NOTE on bootstrap: this playbook itself runs as `graham` over SSH,
+    # so the very first time a new key is added here someone with
+    # existing access (or root via console/iKVM) has to seed it. After
+    # that, this list is the source of truth and any out-of-band keys
+    # are removed by `exclusive: yes`.
+    pve_graham_authorized_keys:
+      - >-
+        ssh-ed25519
+        AAAAC3NzaC1lZDI1NTE5AAAAIHJaxovJWESV+EyzJVzx120nYxIfG3DIYp24J8bzlR6s
+        graham-mac
+      - >-
+        ssh-ed25519
+        AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR
+        automation@homelab
+
   tasks:
     - name: Verify this is a Proxmox VE host
       ansible.builtin.stat:
         path: /usr/bin/pveversion
       register: pve_check
       failed_when: not pve_check.stat.exists
+
+    - name: Manage graham@pve authorized_keys
+      ansible.posix.authorized_key:
+        user: graham
+        state: present
+        exclusive: true
+        key: "{{ pve_graham_authorized_keys | join('\n') }}"
 
     - name: Drop sshd MaxStartups + LoginGraceTime tuning
       ansible.builtin.copy:
