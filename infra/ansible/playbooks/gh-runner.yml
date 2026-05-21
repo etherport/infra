@@ -50,9 +50,23 @@
           - libicu74  # required by .NET runtime in actions/runner
           - unzip     # hashicorp/setup-terraform action unzips its download
           - wget      # used by various install actions
+          - docker.io # required for workflows that use `container:` (ansible-proxmox, etc.)
         state: present
         update_cache: true
         cache_valid_time: 3600
+
+    - name: Add runner user to docker group (for container: support)
+      ansible.builtin.user:
+        name: "{{ runner_user }}"
+        groups: docker
+        append: true
+      notify: Restart runner
+
+    - name: Enable + start docker
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: true
 
     - name: Create runner home directory
       ansible.builtin.file:
@@ -144,3 +158,11 @@
         state: started
         enabled: true
         daemon_reload: true
+
+  handlers:
+    # Adding the runner user to the docker group requires a runner-service
+    # restart for the new GID to take effect on subsequent workflow runs.
+    - name: Restart runner
+      ansible.builtin.systemd:
+        name: "actions.runner.sparked-diamond-infra.{{ runner_name }}.service"
+        state: restarted
