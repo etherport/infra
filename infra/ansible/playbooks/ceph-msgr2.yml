@@ -3,20 +3,35 @@
 #
 # Why: PVE's Ceph mon currently listens only on 6789 (msgr v1). msgr2
 # (Ceph Nautilus+ default) supports encryption-in-transit and is
-# preferred by modern Ceph clients. The K8s ceph-csi driver picks the
-# first endpoint in its configmap; listing :3300 first means encrypted
-# RBD traffic without changing client code.
+# preferred by modern Ceph clients.
 #
-# Risk: restarting the mon briefly pauses I/O on connected clients. With
-# a single-mon cluster (mon.pve), there is NO HA — clients see a ~10s
-# pause while the mon comes back up. Sidecars retry; K8s PVCs may report
-# transient unbound errors. Run during a maintenance window.
+# Two-part fix:
+#   1. Set `ms_bind_msgr2 = true` in ceph.conf [global]. This is the
+#      runtime-binding flag; required for new mon starts.
+#   2. Run `ceph mon enable-msgr2` to update the cluster monmap so
+#      the mon's `public_addrs` advertises both v1 and v2 addresses.
+#      Without this, the monmap stays v1-only even after restart and
+#      clients won't discover the v2 endpoint.
 #
-# Verification: after apply, `ss -tlnp | grep 3300` on PVE shows the mon
-# listening. Update `platform/kubernetes/storage/ceph-csi/csi-config-map.yaml`
-# to include `10.10.210.41:3300` in `monitors` before this list (Flux will
-# reconcile, then the ceph-csi pods pick up the new mon address on next
-# RBD mount).
+# DISCOVERY 2026-05-21: inspecting ceph.conf showed `mon_host = 10.10.210.41`
+# (no `[v2:...]` prefix), confirming the monmap is v1-only. ms_bind_msgr2
+# is unset (defaults true on Pacific+), but the addrvec was never
+# upgraded. `ceph mon enable-msgr2` is idempotent — safe to run.
+#
+# Risk: `ceph mon enable-msgr2` triggers a mon restart. Single-mon
+# cluster (mon.pve) = NO HA → clients see a ~10s I/O pause. Sidecars
+# retry; K8s PVCs may report transient bind errors. Run in a window.
+#
+# Verification:
+#   - `ss -tlnp | grep 3300` on PVE → mon listening on :3300
+#   - `ceph mon dump --format json | jq '.mons[0].public_addrs.addrvec'`
+#     → array contains both `{type: "v2", port: 3300}` and `{type: "v1", port: 6789}`
+#
+# Follow-up (NOT done by this playbook):
+#   - Update platform/kubernetes/storage/ceph-csi/csi-config-map.yaml to
+#     list `10.10.210.41:3300` ahead of `10.10.210.41:6789` so new RBD
+#     mounts prefer msgr2. Flux reconciles; existing connections keep
+#     using v1 until next pod restart.
 #
 # Usage:
 #   gh workflow run ansible-proxmox.yml -f playbook=ceph-msgr2 -f action=check
@@ -77,18 +92,40 @@
         backup: true
         mode: '0644'
 
-    - name: Restart ceph-mon (only if config changed)
+    - name: Inspect current monmap for v2 endpoint
+      ansible.builtin.shell: |
+        ceph mon dump --format json 2>/dev/null \
+          | jq -e '.mons[].public_addrs.addrvec[] | select(.type == "v2")' >/dev/null \
+          && echo "MONMAP_HAS_V2" || echo "MONMAP_V1_ONLY"
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: monmap_state
+
+    - name: Enable msgr2 in the monmap (idempotent — no-op if already v2)
+      # ceph mon enable-msgr2 walks every mon in the monmap and upgrades
+      # any v1-only address to a v1+v2 addrvec. Safe to re-run.
+      # On a single-mon cluster this WILL restart the mon (brief I/O pause).
+      ansible.builtin.command: ceph mon enable-msgr2
+      when:
+        - ceph_conf_changed is changed or monmap_state.stdout == "MONMAP_V1_ONLY"
+      register: enable_msgr2_result
+      changed_when: enable_msgr2_result.rc == 0
+
+    - name: Restart ceph-mon (only if config changed but monmap was already v2)
       ansible.builtin.systemd:
         name: ceph-mon@pve
         state: restarted
-      when: ceph_conf_changed is changed
+      when:
+        - ceph_conf_changed is changed
+        - monmap_state.stdout == "MONMAP_HAS_V2"
 
     - name: Wait for port 3300 to come up (max 30s)
       ansible.builtin.wait_for:
         port: 3300
         host: 10.10.210.41
         timeout: 30
-      when: ceph_conf_changed is changed
+      when: ceph_conf_changed is changed or enable_msgr2_result is changed
 
     - name: Probe port 3300 listening AFTER change
       ansible.builtin.shell: |
