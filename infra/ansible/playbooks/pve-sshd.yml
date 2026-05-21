@@ -58,11 +58,16 @@
       register: pve_check
       failed_when: not pve_check.stat.exists
 
-    - name: Manage root@pve authorized_keys
+    - name: Manage root@pve authorized_keys (additive)
       ansible.posix.authorized_key:
         user: root
         state: present
-        exclusive: true
+        # NOT exclusive: PVE auto-generates a `ssh-rsa root@pve` host
+        # key on install and adds it to /root/.ssh/authorized_keys for
+        # internal self-SSH operations (pmxcfs, backup, cluster join).
+        # Stripping it would break Proxmox internals. Out-of-band root
+        # keys must be removed by hand.
+        exclusive: false
         key: "{{ pve_root_authorized_keys | join('\n') }}"
 
     - name: Manage graham@pve authorized_keys
