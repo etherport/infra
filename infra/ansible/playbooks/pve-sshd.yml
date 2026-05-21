@@ -100,10 +100,14 @@
           #   - MaxStartups 100:30:300: huge headroom; "drop start" at 100
           #     concurrent unauth, not 10.
           #   - LoginGraceTime 10: zombie banner-less probes reclaim in 10s.
-          #   - PerSourceMaxStartups 20 (OpenSSH 8.5+): one bad actor cannot
-          #     exhaust the whole pool. The K8s WG pod's source IP can still
-          #     burst to 20 in-flight (more than enough for ansible's serial
-          #     workflow), but a flood from one IP no longer DoSes everything.
+          #   - PerSourceMaxStartups 100 (OpenSSH 8.5+): one bad actor cannot
+          #     exhaust the whole pool. Originally set to 20 (2026-05-19) but
+          #     ansible-proxmox.yml runs that did 5–6 rapid SSH connections
+          #     tripped the counter at 06:17 UTC 2026-05-21 — `drop connection
+          #     #0 ... Maxstartups` in PVE's journal. Possibly an OpenSSH 10.0
+          #     counter-leak after SIGHUP reload; bumped to 100 for headroom
+          #     (still bounded enough to deny a real flood). A clean restart
+          #     of ssh after applying this config also resets stuck counters.
           #   - PerSourcePenaltyExemptList: 2026-05-19 root cause. OpenSSH
           #     9.8 (PVE 9.x ships 9.6/9.7+) enabled PerSourcePenalties by
           #     default — `noauth:1` accrues every TCP-only probe (port
@@ -117,7 +121,7 @@
           #     does NOT affect public-internet penalties.
           MaxStartups 100:30:300
           LoginGraceTime 10
-          PerSourceMaxStartups 20
+          PerSourceMaxStartups 100
           PerSourcePenaltyExemptList 10.10.0.0/16,10.254.0.0/16,10.255.0.0/16
       register: sshd_dropin
 
@@ -126,11 +130,15 @@
       changed_when: false
       when: sshd_dropin is changed
 
-    - name: Reload sshd
+    - name: Restart sshd (full restart, not reload — resets internal counters)
       ansible.builtin.systemd:
         name: ssh
-        state: reloaded
+        state: restarted
       when: sshd_dropin is changed
+      # Note: this drops the in-progress ansible SSH connection. Ansible
+      # transparently reconnects on the next task. The 2026-05-21 incident
+      # taught us SIGHUP reload doesn't reset PerSourceMaxStartups counters
+      # on OpenSSH 10.0 — a fresh master process avoids stuck counters.
 
     - name: Show effective sshd values
       ansible.builtin.shell: |
