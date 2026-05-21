@@ -46,19 +46,22 @@ jobs:
     # Lifecycle runner (gh-runner VM, outside the K8s cluster) — required
     # so Proxmox/cluster-management workflows still work if the cluster
     # is offline. `homelab-runner` runs inside K8s = chicken-and-egg.
-    # No `container:` block: the gh-runner VM doesn't have Docker. Install
-    # ansible on the runner directly via apt.
+    #
+    # Container: pre-baked ansible-runner image. Built by
+    # .github/workflows/ansible-runner-image.yml from
+    # infra/ci/ansible-runner/Dockerfile. Pre-bake replaces the previous
+    # `apt-get update + install ansible` step that was saturating the
+    # gh-runner VM's outbound network and breaking the first ansible
+    # SSH to PVE (2026-05-21 incident — debug-runner-net workflow
+    # confirmed bare TCP probes succeed while the post-apt ansible SSH
+    # times out from the same source IP).
     runs-on: [self-hosted, lifecycle]
+    container:
+      image: ghcr.io/sparked-diamond/ansible-runner:main
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - name: Install ansible
-        run: |
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            python3 python3-pip python3-venv ansible openssh-client
 
       - name: Setup SSH key
         env:

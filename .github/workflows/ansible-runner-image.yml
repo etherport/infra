@@ -1,0 +1,60 @@
+name: Build ansible-runner image
+
+# Builds the CI ansible-runner container image and pushes to GHCR.
+# Used by .github/workflows/ansible-proxmox.yml via `container:`.
+#
+# Trigger: any push to main that touches the Dockerfile or this workflow.
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "infra/ci/ansible-runner/**"
+      - ".github/workflows/ansible-runner-image.yml"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "infra/ci/ansible-runner/**"
+      - ".github/workflows/ansible-runner-image.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: infra/ci/ansible-runner
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/sparked-diamond/ansible-runner:main
+            ghcr.io/sparked-diamond/ansible-runner:sha-${{ github.sha }}
+
+      - name: Make package public
+        if: github.event_name != 'pull_request'
+        run: |
+          curl -X PATCH \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/orgs/sparked-diamond/packages/container/ansible-runner \
+            -d '{"visibility":"public"}'
