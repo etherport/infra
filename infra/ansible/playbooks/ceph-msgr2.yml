@@ -1,0 +1,115 @@
+---
+# Re-enable Ceph msgr2 (v2 wire protocol) on port 3300.
+#
+# Why: PVE's Ceph mon currently listens only on 6789 (msgr v1). msgr2
+# (Ceph Nautilus+ default) supports encryption-in-transit and is
+# preferred by modern Ceph clients. The K8s ceph-csi driver picks the
+# first endpoint in its configmap; listing :3300 first means encrypted
+# RBD traffic without changing client code.
+#
+# Risk: restarting the mon briefly pauses I/O on connected clients. With
+# a single-mon cluster (mon.pve), there is NO HA — clients see a ~10s
+# pause while the mon comes back up. Sidecars retry; K8s PVCs may report
+# transient unbound errors. Run during a maintenance window.
+#
+# Verification: after apply, `ss -tlnp | grep 3300` on PVE shows the mon
+# listening. Update `platform/kubernetes/storage/ceph-csi/csi-config-map.yaml`
+# to include `10.10.210.41:3300` in `monitors` before this list (Flux will
+# reconcile, then the ceph-csi pods pick up the new mon address on next
+# RBD mount).
+#
+# Usage:
+#   gh workflow run ansible-proxmox.yml -f playbook=ceph-msgr2 -f action=check
+#   gh workflow run ansible-proxmox.yml -f playbook=ceph-msgr2 -f action=apply
+
+- name: PVE Ceph msgr2 re-enable
+  hosts: proxmox_hosts
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Verify this is a Proxmox VE host with Ceph
+      ansible.builtin.stat:
+        path: /etc/ceph/ceph.conf
+      register: ceph_conf
+      failed_when: not ceph_conf.stat.exists
+
+    - name: Read current ceph.conf
+      ansible.builtin.slurp:
+        src: /etc/ceph/ceph.conf
+      register: ceph_conf_content
+
+    - name: Show current ms_bind_msgr2 state
+      ansible.builtin.debug:
+        msg: >-
+          ms_bind_msgr2 currently:
+          {{ 'EXPLICITLY SET — ' + (ceph_conf_content.content | b64decode | regex_search('ms_bind_msgr2\s*=\s*\S+')) if (ceph_conf_content.content | b64decode | regex_search('ms_bind_msgr2'))
+             else 'NOT SET (defaults to true on Pacific+, but port 3300 not listening — investigate)' }}
+
+    - name: Probe port 3300 (msgr2) listening BEFORE change
+      ansible.builtin.shell: |
+        ss -tln | awk '$4 ~ /:3300$/ {print "LISTENING:", $4; found=1} END {if (!found) print "NOT LISTENING"}'
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: msgr2_before
+
+    - name: BEFORE state
+      ansible.builtin.debug:
+        msg: "{{ msgr2_before.stdout }}"
+
+    - name: Ensure [global] ms_bind_msgr2 = true in ceph.conf
+      community.general.ini_file:
+        path: /etc/ceph/ceph.conf
+        section: global
+        option: ms_bind_msgr2
+        value: 'true'
+        backup: true
+        mode: '0644'
+      register: ceph_conf_changed
+
+    - name: Ensure [global] ms_bind_msgr1 = true in ceph.conf (keep v1 for legacy clients)
+      community.general.ini_file:
+        path: /etc/ceph/ceph.conf
+        section: global
+        option: ms_bind_msgr1
+        value: 'true'
+        backup: true
+        mode: '0644'
+
+    - name: Restart ceph-mon (only if config changed)
+      ansible.builtin.systemd:
+        name: ceph-mon@pve
+        state: restarted
+      when: ceph_conf_changed is changed
+
+    - name: Wait for port 3300 to come up (max 30s)
+      ansible.builtin.wait_for:
+        port: 3300
+        host: 10.10.210.41
+        timeout: 30
+      when: ceph_conf_changed is changed
+
+    - name: Probe port 3300 listening AFTER change
+      ansible.builtin.shell: |
+        ss -tln | awk '$4 ~ /:3300$/ {print "LISTENING:", $4; found=1} END {if (!found) print "NOT LISTENING"}'
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: msgr2_after
+
+    - name: AFTER state
+      ansible.builtin.debug:
+        msg: "{{ msgr2_after.stdout }}"
+
+    - name: Show ceph mon dump (verify v2 endpoint registered)
+      ansible.builtin.command: ceph mon dump --format json
+      changed_when: false
+      register: mon_dump
+      failed_when: false
+
+    - name: Parse mon dump for v2 endpoints
+      ansible.builtin.debug:
+        msg: >-
+          {{ (mon_dump.stdout | from_json).mons | map(attribute='public_addrs.addrvec') | list }}
+      when: mon_dump.rc == 0

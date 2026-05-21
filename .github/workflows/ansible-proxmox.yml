@@ -12,6 +12,7 @@ on:
           - proxmox
           - pve-network
           - pve-sshd
+          - ceph-msgr2
       action:
         description: 'Action to perform'
         required: true
