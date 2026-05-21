@@ -149,4 +149,7 @@
       ansible.builtin.debug:
         msg: >-
           {{ (mon_dump.stdout | from_json).mons | map(attribute='public_addrs.addrvec') | list }}
-      when: mon_dump.rc == 0
+      when:
+        - mon_dump is not skipped
+        - mon_dump.rc | default(1) == 0
+        - mon_dump.stdout | default('') | length > 0
