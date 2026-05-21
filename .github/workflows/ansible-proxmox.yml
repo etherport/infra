@@ -66,7 +66,11 @@ jobs:
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf '%s\n' "$ANSIBLE_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H pve.wind.etherport.net >> ~/.ssh/known_hosts 2>/dev/null || true
+          # No ssh-keyscan: ansible.cfg already sets StrictHostKeyChecking=no
+          # and ansible_ssh_common_args uses accept-new. Pre-seeding known_hosts
+          # adds a redundant `noauth` SSH connection that trips OpenSSH 9.8+
+          # PerSourcePenalties on PVE (see playbooks/pve-sshd.yml). Skipping it
+          # prevents the gh-runner from accruing source-IP penalty every CI run.
 
       - name: Build EXTRA_VARS
         id: extra

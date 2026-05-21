@@ -351,10 +351,38 @@ spec:
                   - /bin/bash
                   - -c
                   - |
-                    # Remove VIP before pod terminates
+                    # Graceful VRRP master release.
+                    #
+                    # Order matters:
+                    #   1. SIGTERM keepalived. It sends a priority-0 VRRP
+                    #      advertisement on graceful shutdown — vpn-local
+                    #      (the BACKUP) elects itself MASTER within one
+                    #      advert_int (~1s) and claims the VIP via
+                    #      gratuitous ARP. NO wait-for-VRRP-timeout (~3s)
+                    #      blackhole.
+                    #   2. Wait up to 5s for keepalived to exit; if it
+                    #      hangs, SIGKILL it.
+                    #   3. Only THEN strip the VIP from our local NIC,
+                    #      as a final cleanup. By this point the BACKUP
+                    #      already owns the VIP on its own NIC — leaving
+                    #      our copy creates a duplicate-IP situation that
+                    #      the cleanup DaemonSet handles, but doing it
+                    #      here is faster.
+                    #
+                    # Previous version: ip-addr-del BEFORE pkill, which
+                    # left a ~3s blackhole because keepalived noticed the
+                    # VIP gone and tried to re-add it before we killed it,
+                    # and there was no priority-0 advert sent.
+                    set +e
                     PRIMARY_IF=$(ip -o -4 addr show | grep -v '127.0.0.1' | head -1 | awk '{print $2}')
-                    ip addr del 10.10.201.20/24 dev $PRIMARY_IF 2>/dev/null || true
-                    pkill keepalived || true
+                    pkill -TERM keepalived
+                    for i in 1 2 3 4 5; do
+                      pgrep keepalived >/dev/null || break
+                      sleep 1
+                    done
+                    pkill -KILL keepalived 2>/dev/null
+                    ip addr del 10.10.201.20/24 dev "$PRIMARY_IF" 2>/dev/null
+                    exit 0
           resources:
             requests:
               memory: "64Mi"

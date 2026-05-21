@@ -47,6 +47,30 @@
         "cloudwatch:UntagResource"
       ],
       "Resource": "arn:aws:cloudwatch:*:830881980142:alarm:homelab-*"
+    },
+    {
+      "Sid": "BudgetsManagement",
+      "Effect": "Allow",
+      "Action": [
+        "budgets:CreateBudget",
+        "budgets:DeleteBudget",
+        "budgets:ModifyBudget",
+        "budgets:ViewBudget",
+        "budgets:DescribeBudget",
+        "budgets:DescribeBudgets",
+        "budgets:DescribeNotificationsForBudget",
+        "budgets:DescribeSubscribersForNotification",
+        "budgets:CreateNotification",
+        "budgets:DeleteNotification",
+        "budgets:UpdateNotification",
+        "budgets:CreateSubscriber",
+        "budgets:DeleteSubscriber",
+        "budgets:UpdateSubscriber",
+        "budgets:TagResource",
+        "budgets:UntagResource",
+        "budgets:ListTagsForResource"
+      ],
+      "Resource": "arn:aws:budgets::830881980142:budget/homelab-*"
     }
   ]
 }

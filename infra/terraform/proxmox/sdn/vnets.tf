@@ -15,6 +15,12 @@
 #
 # Currently excluded for this reason:
 #   - VLAN 200 (mgmt)   — vmbr0.200 holds 10.10.200.41 (PVE web UI)
+#   - VLAN 210 (storage) — vmbr0.210 holds 10.10.210.41 (PVE Ceph mon),
+#                          added 2026-05-18 during the Ceph VLAN
+#                          migration. K8s VMs reach VLAN 210 via the
+#                          legacy `vmbr0` + `vlan_id=210` pattern on
+#                          NIC 5 (enp6s22), NOT via an SDN VNet. PR 5
+#                          of the SDN migration migrates NICs 1-4 only.
 #   - VLAN 4040 (intervl) — UDM↔L3-switch inter-VLAN routing transit,
 #                          UI-only, never carries VM traffic
 #

@@ -25,6 +25,12 @@ variable "alert_email_backup" {
   default     = "grahamsm@gmail.com"
 }
 
+variable "monthly_budget_usd" {
+  description = "Monthly AWS spend budget (USD) — triggers SNS+email at 80%/100% actual and 100% forecasted."
+  type        = number
+  default     = 75
+}
+
 variable "homelab_domain" {
   description = "Primary homelab domain"
   type        = string

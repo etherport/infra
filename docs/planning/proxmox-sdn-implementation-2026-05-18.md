@@ -154,12 +154,26 @@ ssh -i /tmp/auto-key ubuntu@10.10.201.6 'ip -br a; ping -c2 10.10.201.1'
 
 **Edits to `/Users/grahamsmith/code/infra/infra/terraform/proxmox/k8s-vms/main.tf`:**
 
-For each `network_device` block (4 per VM × 8 VMs = 32 blocks), change:
+**Plan revised 2026-05-19:** today's Ceph VLAN migration added a 5th NIC
+(enp6s22) on VLAN 210 to every K8s VM, and the PVE host now owns
+`vmbr0.210` for its own Ceph mon. Since SDN VLAN-zone VNets must NOT
+overlap with existing vmbr0.<N> sub-interfaces (the 2026-05-18 mgmt
+VNet incident proved this), **NIC 5 keeps the legacy `vmbr0` +
+`vlan_id=210` shape** and is NOT migrated to an SDN VNet in PR 5. The
+storage VNet is intentionally absent from `sdn/vnets.tf` (see comment
+there).
+
+For each of the FIRST FOUR `network_device` blocks per VM (4 × 8 VMs =
+32 blocks), change:
 - `bridge = local.bridge_name` → `bridge = "servers"` (VLAN 201)
 - `vlan_id = local.vlan_tag` → DELETE
 - Block 2: `bridge = "clients"`, drop `vlan_id = 202`
 - Block 3: `bridge = "iot"`, drop `vlan_id = 204`
 - Block 4: `bridge = "security"`, drop `vlan_id = 205`
+
+Block 5 (`vlan_id = 210`, MTU 9000): leave as-is. Continues to use
+`bridge = "vmbr0"` + `vlan_id = 210` until PVE moves Ceph off the host
+itself (out of scope for this migration).
 
 Per-VM workflow:
 ```bash

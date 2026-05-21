@@ -81,7 +81,12 @@ The client config uses the `vpn-travel.etherport.net` DNS name, so it automatica
 [Interface]
 PrivateKey = <your private key>
 Address = 10.254.0.10/32
-DNS = 10.10.100.5, 1.1.1.1
+DNS = 10.10.100.5, 10.10.201.5, 10.10.201.6
+# IMPORTANT: do NOT add public resolvers (1.1.1.1 etc.) here.
+# macOS getaddrinfo() races all pushed resolvers in parallel; the
+# public resolver wins and `*.wind.etherport.net` resolves to the
+# AWS ALB public IP instead of the internal MetalLB VIP. Caught
+# 2026-05-18 — see platform/wireguard/clients/graham-tcp.conf.template.
 
 [Peer]
 PublicKey = Aav0cNl4osaEEISQLyKLt88foAPwdVYaeTuyLF/PNTo=
@@ -246,9 +251,15 @@ This allows a single client config to work across all regions.
 
 | DNS Setting | Use Case |
 |-------------|----------|
-| `10.10.100.5, 1.1.1.1` | Recommended - dns-aws + public fallback |
+| `10.10.100.5, 10.10.201.5, 10.10.201.6` | **Recommended** — dns-aws primary, homelab fallback. NO public resolvers (see below). |
 | `10.10.201.5, 10.10.201.6` | Homelab only (breaks if tunnel down) |
-| `1.1.1.1, 8.8.8.8` | Public only (no internal names) |
+| `1.1.1.1, 8.8.8.8` | Public only (no internal names) — NOT recommended |
+
+> **Do not mix internal + public resolvers** (e.g., `10.10.100.5, 1.1.1.1`).
+> macOS `getaddrinfo()` races resolvers in parallel; the public resolver
+> wins for `*.wind.etherport.net` because it returns the AWS ALB IP
+> faster than the internal one returns the MetalLB VIP, splitting DNS
+> the wrong way. Caught 2026-05-18 after the SDN migration.
 
 ## Cost Summary
 

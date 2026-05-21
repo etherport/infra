@@ -45,9 +45,11 @@ jobs:
           - { name: dns-restrict-ip,     dir: infra/terraform/aws/dns-restrict-ip,      region: us-west-2 }
           - { name: email-forward,       dir: infra/terraform/aws/email-forward,        region: us-west-2 }
           - { name: external-monitoring, dir: infra/terraform/aws/external-monitoring,  region: us-west-2 }
-          - { name: homeassistant-alexa, dir: infra/terraform/aws/homeassistant-alexa,  region: us-east-1 }
-          - { name: aws-us-east-1,       dir: infra/terraform/aws-us-east-1,            region: us-east-1 }
-          - { name: aws-regional-vpn,    dir: infra/terraform/aws-regional-vpn,         region: us-west-2 }
+          - { name: homeassistant-alexa, dir: infra/terraform/aws/homeassistant-alexa,  region: us-east-1, needs_sops: false }
+          - { name: aws-us-east-1,       dir: infra/terraform/aws-us-east-1,            region: us-east-1, needs_sops: true  }
+          # aws-regional-vpn is deploy-on-demand (travel VPN); requires
+          # `-var=region=X -var=region_short=Y -var=wg0_tunnel_ip=Z` and has no
+          # persistent state to drift-check. Exclude.
     defaults:
       run:
         working-directory: ${{ matrix.module.dir }}
@@ -74,6 +76,16 @@ jobs:
             [ -n "${{ secrets.ALERT_EMAIL }}" ]    && echo "TF_VAR_alert_email=${{ secrets.ALERT_EMAIL }}"
             [ -n "${{ secrets.HA_ACCESS_TOKEN }}" ] && echo "TF_VAR_ha_access_token=${{ secrets.HA_ACCESS_TOKEN }}"
           } >> "$GITHUB_ENV"
+
+      - name: Install SOPS + age key (only when needed)
+        if: matrix.module.needs_sops
+        run: |
+          curl -fsSL -o /tmp/sops https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64
+          sudo mv /tmp/sops /usr/local/bin/sops
+          sudo chmod +x /usr/local/bin/sops
+          mkdir -p ~/.config/sops/age
+          echo "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
+          chmod 600 ~/.config/sops/age/keys.txt
 
       - name: terraform init
         run: terraform init -backend-config="profile=" -reconfigure -input=false
