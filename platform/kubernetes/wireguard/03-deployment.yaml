@@ -274,7 +274,12 @@ spec:
               set -e
 
               echo "Installing keepalived..."
-              apt-get update && apt-get install -y keepalived iproute2
+              # procps required for pkill/pgrep used by the preStop hook —
+              # without it, the hook silently fails (FailedPreStopHook event
+              # in `kubectl -n wireguard get events`), no priority-0 VRRP
+              # advert is sent, and vpn-local takes ~3.6s of master_down_interval
+              # to detect the gap. Caught 2026-05-22 during PR 5 of SDN migration.
+              apt-get update && apt-get install -y keepalived iproute2 procps
 
               # Detect primary network interface (first non-lo interface with an IP)
               PRIMARY_IF=$(ip -o -4 addr show | grep -v '127.0.0.1' | head -1 | awk '{print $2}')
@@ -297,20 +302,33 @@ spec:
                 weight -50
                 fall 3
                 rise 2
+                # init_fail: keep the script's "failed" state at startup so
+                # we don't go MASTER before wg-quick has brought up wg0/wg1.
+                # Without this, the pod went MASTER 4s after process start
+                # (preempt_delay is silently discarded for state MASTER —
+                # see below) and immediately stole the VIP from vpn-local
+                # while its own tunnels were still being installed.
+                # Caught 2026-05-22 during SDN migration.
+                init_fail
               }
 
               vrrp_instance WG_VIP {
-                state MASTER
+                # state BACKUP (not MASTER) so preempt_delay is honored.
+                # Keepalived silently clears preempt_delay when state=MASTER:
+                #   "(WG_VIP) Warning - preempt delay will not work with
+                #    initial state MASTER - clearing"
+                # With state BACKUP + higher priority (150 vs vpn-local's
+                # 100), we still win the election — but now we wait
+                # preempt_delay seconds before promoting, AND init_fail
+                # on check_wg gates that promotion on wg0/wg1 being ready.
+                state BACKUP
                 interface $PRIMARY_IF
                 virtual_router_id 51
                 priority 150
                 advert_int 1
                 # When the K8s pod returns after a failover, wait 5 min
-                # before reclaiming the VIP from vpn-local. Otherwise
-                # keepalived takes the VIP back the instant the pod is
-                # Ready, but wg-quick hasn't necessarily come up yet
-                # inside the pod — VIP moves to a node that can't
-                # terminate VPN traffic, ~30s blackhole window.
+                # before reclaiming the VIP from vpn-local — gives
+                # wg-quick + Multus + Cilium time to fully settle.
                 preempt_delay 300
 
                 authentication {
