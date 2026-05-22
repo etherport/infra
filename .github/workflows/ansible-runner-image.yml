@@ -49,12 +49,12 @@ jobs:
             ghcr.io/sparked-diamond/ansible-runner:main
             ghcr.io/sparked-diamond/ansible-runner:sha-${{ github.sha }}
 
-      - name: Make package public
-        if: github.event_name != 'pull_request'
-        run: |
-          curl -X PATCH \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/orgs/sparked-diamond/packages/container/ansible-runner \
-            -d '{"visibility":"public"}'
+      # No automated make-public: the GitHub API endpoint requires
+      # PAT scope `delete:packages` (or admin:packages, which a workflow's
+      # GITHUB_TOKEN does NOT receive even when `permissions: packages:
+      # write` is set). User-owned namespaces (sparked-diamond is a user,
+      # not an org) also use /users/, not /orgs/ — the previous PATCH
+      # silently 404'd. Manual one-time flip via
+      # https://github.com/users/sparked-diamond/packages/container/ansible-runner/settings
+      # is sufficient since GHCR package visibility persists across image
+      # rebuilds.
