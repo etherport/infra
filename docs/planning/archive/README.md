@@ -25,6 +25,7 @@ current state is documented.
 | `k8s-ha-migration.md` | Pre-existing — completed migration. | Cluster topology / runbooks |
 | `K8S-W3-DEPLOYMENT-PLAN.md` | Pre-existing — completed deployment. | n/a |
 | `proxmox-sdn-implementation-2026-05-18.md` | PRs 1-6 all shipped 2026-05-18 to 2026-05-22 (#19 in canonical, ✅). | `docs/planning/outstanding-work.md` H26 + commit history |
+| `TODO-configmap-migration-2026-05-22.md` | Migration described already implemented; per-share + global excludes wired via `configMapGenerator` in `platform/kubernetes/backups/aws-s3/{base,shares/*}`. Verified via kubectl kustomize on 2026-05-22. M3 in canonical. | Each share's `kustomization.yaml` + `excludes-share.txt`; `base/excludes-global.txt` |
 
 ## Future archive convention
 
