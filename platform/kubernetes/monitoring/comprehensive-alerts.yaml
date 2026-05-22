@@ -265,29 +265,40 @@ spec:
   # Generic Pod Health
   - name: pod-health
     rules:
+    # PodCrashLooping: severity=info (won't email under the
+    # critical-only route in 03-alertmanager-config.yaml). Tuned
+    # 2026-05-22 — the old `rate > 0 / for: 5m` fired on any single
+    # restart anywhere. Now requires 2+ restarts in a 15-min window
+    # sustained for 30 minutes — that's actual crashloop behavior,
+    # not a one-off OOM or node bounce.
     - alert: PodCrashLooping
-      expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
-      for: 5m
+      expr: increase(kube_pod_container_status_restarts_total[15m]) > 2
+      for: 30m
       labels:
-        severity: warning
+        severity: info
       annotations:
         summary: "Pod {{ $labels.pod }} is crash looping"
-        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is restarting frequently"
+        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted >2 times in 15 min, sustained 30 min"
 
+    # PodOOMKilled: severity=info. One-off OOM isn't critical — the
+    # pod gets restarted by the kubelet and the workload usually
+    # recovers. Sustained pattern would also trigger PodCrashLooping.
     - alert: PodOOMKilled
       expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
       for: 1m
       labels:
-        severity: warning
+        severity: info
       annotations:
         summary: "Pod {{ $labels.pod }} was OOM killed"
         description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} was terminated due to out of memory"
 
+    # PodNotReady: severity=info, longer `for`. 30 min of NotReady
+    # is meaningful; 10 min frequently catches normal rollouts.
     - alert: PodNotReady
       expr: kube_pod_status_ready{condition="false"} == 1
-      for: 10m
+      for: 30m
       labels:
-        severity: warning
+        severity: info
       annotations:
         summary: "Pod {{ $labels.pod }} is not ready"
-        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been not ready for 10 minutes"
+        description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been not ready for 30 minutes"

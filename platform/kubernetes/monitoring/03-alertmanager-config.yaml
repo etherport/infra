@@ -64,3 +64,21 @@ spec:
         - name: severity
           value: warning
       equal: ['alertname', 'namespace']
+    # If a Deployment's replicas don't match (KubeDeploymentReplicasMismatch),
+    # we expect cascading KubeContainerWaiting / KubePodNotReady alerts on
+    # pods of that deployment. Suppress the noise — the root cause already
+    # has its own alert. Added 2026-05-22.
+    - sourceMatch:
+        - name: alertname
+          value: KubeDeploymentReplicasMismatch
+      targetMatch:
+        - name: alertname
+          value: KubeContainerWaiting
+      equal: ['namespace']
+    - sourceMatch:
+        - name: alertname
+          value: KubeDeploymentReplicasMismatch
+      targetMatch:
+        - name: alertname
+          value: KubePodNotReady
+      equal: ['namespace']
