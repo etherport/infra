@@ -82,6 +82,15 @@ jobs:
           # adds a redundant `noauth` SSH connection that trips OpenSSH 9.8+
           # PerSourcePenalties on PVE (see playbooks/pve-sshd.yml). Skipping it
           # prevents the gh-runner from accruing source-IP penalty every CI run.
+          echo "--- key sanity ---"
+          echo "HOME=$HOME"
+          ls -la ~/.ssh/
+          ssh-keygen -lf ~/.ssh/id_ed25519 || echo "key fingerprint failed"
+          echo "--- SSH probe (publickey only) ---"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+              -o PreferredAuthentications=publickey \
+              -i ~/.ssh/id_ed25519 \
+              root@pve.wind.etherport.net 'echo OK; whoami' || echo "ssh probe failed (rc=$?)"
 
       - name: Build EXTRA_VARS
         id: extra
