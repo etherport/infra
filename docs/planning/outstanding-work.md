@@ -57,14 +57,21 @@ revision use the next free ID per tier. Status legend:
 
 ### ⏳ H6. Hardcoded WAN IPs in AWS security groups
 - **Source:** `archive/outstanding-work-2026-05-16.md` H6
+- **Concrete plan** (2026-05-22 audit): three hardcoded entries in `infra/terraform/aws/networking/security_groups.tf`:
+  - `aws_security_group.allow_ssh` port 22 from `47.34.215.233/32` ("remote location")
+  - `aws_security_group.dns_server` port 53 UDP+TCP from `66.215.210.75/32` + `47.159.189.5/32` ("homelab WAN")
+- A `dns-restrict-ip` Lambda already exists (`infra/terraform/aws/dns-restrict-ip/`) — it watches Route53 record changes and rewrites `security_group_id` ingress rules. Currently targets one SG (`sg-08d12e417159c18d2`). Plan:
+  1. Add Route53 A records for the three IPs above (or reuse `wan1.wind.etherport.net` / `wan2` if they're the same source).
+  2. Extend `dns-restrict-ip` to accept a list of `(security_group_id, port, protocol)` rule specs and update each from its corresponding DNS record.
+  3. Remove the three hardcoded TF entries.
+- Effort: M. Needs careful state migration (the Lambda must own each rule entirely; partial overlap with TF state → drift).
 - Periodic rotation via Lambda exists but bootstrap IPs are hardcoded.
 
 ### ✅ H7. Doc drift cleanup
 - **Done:** 2026-05-19 to 2026-05-21 in multiple commits. Architecture/overview/network/firewall-zones docs reflect VLAN 210, enp6s22, SDN bridges, RSA wildcard cert. `node-vlan-setup.md` updated 4→5 interfaces. `regional-vpn-deployment.md` drops 1.1.1.1 from DNS push.
 
-### ⏳ H8. Archive completed migration docs
-- **Source:** `archive/outstanding-work-2026-05-16.md` H8
-- Several files in `docs/planning/` are now historical (e.g. `migration-questions-2026-05-12.md`). Move to `docs/planning/archive/`.
+### ✅ H8. Archive completed migration docs
+- **Done:** 2026-05-22. Eleven planning docs moved to `docs/planning/archive/` with a `README.md` table listing why each was archived. Includes the just-completed `proxmox-sdn-implementation-2026-05-18.md` (PRs 1-6 all shipped). Top-level `docs/planning/` now holds only the canonical tracker + active design docs + ADRs.
 
 ### ⏳ H9. Deploy swap + CloudWatch agent on vpn-aws / dns-aws
 - **Source:** `archive/outstanding-work-2026-05-16.md` H9

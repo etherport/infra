@@ -24,6 +24,7 @@ current state is documented.
 | `proxmox-sdn-migration-2026-05-17.md` | Explicitly superseded by `proxmox-sdn-implementation-2026-05-18.md`. | `docs/planning/proxmox-sdn-implementation-2026-05-18.md` |
 | `k8s-ha-migration.md` | Pre-existing — completed migration. | Cluster topology / runbooks |
 | `K8S-W3-DEPLOYMENT-PLAN.md` | Pre-existing — completed deployment. | n/a |
+| `proxmox-sdn-implementation-2026-05-18.md` | PRs 1-6 all shipped 2026-05-18 to 2026-05-22 (#19 in canonical, ✅). | `docs/planning/outstanding-work.md` H26 + commit history |
 
 ## Future archive convention
 
