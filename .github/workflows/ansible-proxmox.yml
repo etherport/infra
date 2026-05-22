@@ -107,6 +107,11 @@ jobs:
 
       - name: Run Ansible playbook (check mode)
         if: github.event.inputs.action == 'check'
+        env:
+          # Explicit key path — container HOME is /github/home; ansible's
+          # default SSH lookup doesn't seem to find ~/.ssh/id_ed25519 in
+          # this environment even though plain ssh -i does. Be explicit.
+          ANSIBLE_PRIVATE_KEY_FILE: /github/home/.ssh/id_ed25519
         run: |
           ansible-playbook \
             -i inventory/wind/inventory.ini \
@@ -118,6 +123,8 @@ jobs:
 
       - name: Run Ansible playbook (apply)
         if: github.event.inputs.action == 'apply'
+        env:
+          ANSIBLE_PRIVATE_KEY_FILE: /github/home/.ssh/id_ed25519
         run: |
           ansible-playbook \
             -i inventory/wind/inventory.ini \
