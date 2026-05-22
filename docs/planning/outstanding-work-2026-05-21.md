@@ -130,14 +130,16 @@ revision use the next free ID per tier. Status legend:
 - **PR 6** (cleanup `local.bridge_name`/`local.vlan_tag`): pending PR 5.
 - Tracked as task #19.
 
-### 📋 H27. Re-enable Ceph msgr2 (v2 protocol) on port 3300
-- **Status:** Playbook `infra/ansible/playbooks/ceph-msgr2.yml` drafted; check-mode validated; latest apply (2026-05-21) hit the per-source-counter bug (#H14 follow-up). After PerSourceMaxStartups bump + sshd restart, re-dispatch:
-  ```
-  gh workflow run ansible-proxmox.yml -f playbook=ceph-msgr2 -f action=apply
-  ```
-- Discovery: monmap was v1-only — `ceph mon enable-msgr2` upgrades the addrvec.
-- Follow-up landed: `platform/kubernetes/storage/ceph-csi/csi-config-map.yaml` now lists `10.10.210.41:3300` ahead of `:6789`. Flux reconciles; existing pod RBD mounts keep v1 until restart.
-- Tracked as task #30.
+### ✅ H27. Re-enable Ceph msgr2 (v2 protocol) on port 3300
+- **Done:** 2026-05-22. Applied via the new containerized CI path (see H28). Verified post-apply: `ss -tlnp` shows ceph-mon LISTENING on 10.10.210.41:**3300** and :6789, monmap upgraded by `ceph mon enable-msgr2`, mon back in quorum (HEALTH_OK), all OSDs up. K8s ceph-csi configmap now lists `:3300` ahead of `:6789`; existing pod RBD mounts keep v1 until restart, new mounts prefer msgr2. Tracked as task #30.
+
+### ✅ H28. Containerized ansible CI (gh-runner reliability fix)
+- **Done:** 2026-05-22. Root cause for repeated CI flakiness on `ansible-proxmox.yml`: per-run `apt-get update + install ansible` was saturating gh-runner's outbound network, leaving the immediate-next ansible SSH to PVE timing out at the TCP layer. Fix:
+  - `infra/ci/ansible-runner/Dockerfile` — Ubuntu 24.04 + ansible + openssh-client + python3 + jq + git, with community.general + ansible.posix collections.
+  - `.github/workflows/ansible-runner-image.yml` — builds and pushes `ghcr.io/sparked-diamond/ansible-runner:main` on Dockerfile changes (public package; one-time flip via UI).
+  - `.github/workflows/ansible-proxmox.yml` — adds `container:` block pointing at the image; drops the apt-install step entirely. Sets `ANSIBLE_PRIVATE_KEY_FILE` explicitly because the container's `HOME=/github/home` isn't picked up by ansible's default key lookup.
+  - `infra/ansible/playbooks/gh-runner.yml` — installs `docker.io` and adds the runner user to the docker group as part of the standard runner provisioning (durable across rebuilds; a one-shot `debug-install-docker.yml` workflow bootstrapped today's runner past the chicken-and-egg, then was removed).
+- Side benefit: pattern generalizes — terraform/kubectl/etc. can be pre-baked the same way in future image variants.
 
 ---
 
@@ -239,6 +241,8 @@ For history. Anything ticked above has a brief inline note; this is the index.
 | H23 | Disable UniFi auto-update | 2026-05-16 |
 | H24 | USW LAG quirk | 2026-05-16 |
 | H25 | Ceph VLAN 210 migration | 2026-05-18 |
+| H27 | Ceph msgr2 v2 re-enable | 2026-05-22 |
+| H28 | Containerized ansible CI | 2026-05-22 |
 
 ---
 
