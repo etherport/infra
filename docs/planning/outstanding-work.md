@@ -44,9 +44,8 @@ revision use the next free ID per tier. Status legend:
 ### ✅ H1. GPU Secure Boot disable on VM 120
 - **Done:** 2026-05-16. Plex + Ollama now running on GPU. Tracked as task #13.
 
-### ⏳ H2. Pin Kubespray submodule to release tag
-- **Source:** `archive/outstanding-work-2026-05-16.md` H2
-- `.gitmodules` still tracks `main`. Effort: S.
+### ✅ H2. Pin Kubespray submodule to release tag
+- **Done:** 2026-05-22 (commit `6bfd964`). `.gitmodules` now pins to `release-2.30` branch (currently at v2.30.0 commit). Receives v2.30.x patches without jumping minor/major. Bump to release-2.31 only after a DR-rebuild test against the new release. **Source:** `archive/outstanding-work-2026-05-16.md` H2.
 
 ### 🟡 H3. NetworkPolicies + ResourceQuotas + PDBs (Phase 1 — audit-only)
 - **Source:** `archive/outstanding-work-2026-05-16.md` H3; task #2 (in_progress)
@@ -205,8 +204,8 @@ revision use the next free ID per tier. Status legend:
 ### ✅ M19. MetalLB not advertising technitium aggregator LB IP (.201.5)
 - **Done:** 2026-05-22. `kubectl -n metallb-system rollout restart daemonset/speaker` re-emitted gratuitous ARP for `.5`; DNS resolution via `10.10.201.5` now works (verified `dig @.5 pve.wind.etherport.net = 10.10.200.41`). Resolved the cascading Teleport→DNS→Traefik blank-page issue. Source: task #33 (✅).
 
-### ⏳ M20. safety-check: relax single-ping flakiness over WG
-- `scripts/network/safety-check.sh` uses `ping -c 1 -W 2` which is flaky over WG paths from remote clients. Change to `ping -c 3 -W 5` (declare success if any 1/3 replies). Source: task #35.
+### ✅ M20. safety-check: relax single-ping flakiness over WG
+- **Done:** 2026-05-22 (commit `70be67e`). All internal-host pings bumped from `-c 1 -W 2` to `-c 3 -W 5` (declare success if any 1/3 packets reply within 5s). UDM hop kept at `-c 2` — never flaky. Source: task #35 (✅).
 
 ### ✅ M21. WG K8s pod preStop / VRRP failover broken in practice
 - **Done:** 2026-05-22. Three compounding fixes shipped to `platform/kubernetes/wireguard/03-deployment.yaml`: (a) `state MASTER` → `state BACKUP` (priority 150 still wins election, but preempt_delay 300 is now honored); (b) `init_fail` added to the `check_wg` vrrp_script so MASTER promotion is gated on wg0/wg1 readiness; (c) `procps` added to the keepalived container's apt-get install line so the preStop hook can actually find `pkill`. Net effect: on drain, old pod's preStop sends priority-0 advert → vpn-local elects MASTER in ~1s. New pod starts BACKUP, waits for wg-quick, then preempt_delay 300s before reclaiming. Source: task #36 (✅). Verification on next pod rollout.
