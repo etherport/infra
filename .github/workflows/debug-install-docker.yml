@@ -1,0 +1,29 @@
+name: One-shot — install Docker on gh-runner
+# Bootstraps Docker so subsequent workflows can use `container:`.
+# Delete after first successful run.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: [self-hosted, lifecycle]
+    steps:
+      - name: apt install docker.io + add ubuntu to docker group
+        run: |
+          set -e
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io
+          sudo usermod -aG docker ubuntu
+          sudo systemctl enable --now docker
+          docker --version
+          getent group docker
+          echo "Runner service will pick up the new docker group on next restart."
+          # Self-restarting the runner from inside the runner job would kill
+          # this job mid-flight. Restart triggered separately below.
+
+      - name: Schedule runner restart in 5s (after this job exits)
+        run: |
+          sudo bash -c '(sleep 5 && systemctl restart actions.runner.sparked-diamond-infra.gh-runner.service) &' </dev/null >/dev/null 2>&1
+          disown -a || true
+          echo "Restart scheduled."
