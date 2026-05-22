@@ -52,9 +52,8 @@ revision use the next free ID per tier. Status legend:
 ### ✅ H4. `Secrets: write` on claude-cli PAT
 - **Done:** 2026-05-16. PAT scope updated, `FLUX_DEPLOY_KEY` + `SOPS_AGE_KEY` populated. Tracked as task #6.
 
-### ⏳ H5. Increase replica counts → enable PDBs
-- **Source:** `archive/outstanding-work-2026-05-16.md` H5
-- Traefik already at replicas=2 (cluster/wind/helm-releases/traefik.yaml). cert-manager + Prometheus still single-replica.
+### ✅ H5. Increase replica counts → enable PDBs
+- **Done:** 2026-05-22 (commit `0851d26`). Prometheus + Alertmanager both bumped to `replicas=2` with podAntiAffinity in `kube-prometheus-stack-values.yaml`. cert-manager + cert-manager-cainjector + cert-manager-webhook were already 2/2 per kubectl (no change needed). Traefik was already 2/2. Grafana stays at 1 (RWO PVC + sticky session — HA needs external DB).
 
 ### ⏳ H6. Hardcoded WAN IPs in AWS security groups
 - **Source:** `archive/outstanding-work-2026-05-16.md` H6
