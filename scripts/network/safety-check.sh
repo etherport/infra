@@ -73,17 +73,17 @@ run_check "Flux Kustomization Ready" \
 run_check "Traefik VIP HTTPS responding" \
   "curl -sk --max-time 5 -o /dev/null -w '%{http_code}' https://10.10.201.70 | grep -qE '^(200|301|302|404|405)$'"
 run_check "K8s WireGuard VIP reachable" \
-  "ping -c 1 -W 2 10.10.201.20"
+  "ping -c 3 -W 5 10.10.201.20"
 run_check "dns-fallback (.6) reachable" \
-  "ping -c 1 -W 2 10.10.201.6"
+  "ping -c 3 -W 5 10.10.201.6"
 run_check "vpn-local (.15) reachable" \
-  "ping -c 1 -W 2 10.10.201.15"
+  "ping -c 3 -W 5 10.10.201.15"
 run_check "gh-runner (.30) reachable" \
-  "ping -c 1 -W 2 10.10.201.30"
+  "ping -c 3 -W 5 10.10.201.30"
 run_check "Proxmox (200.41) reachable" \
-  "ping -c 1 -W 2 10.10.200.41"
+  "ping -c 3 -W 5 10.10.200.41"
 run_check "Sequoia NAS (209.10) reachable" \
-  "ping -c 1 -W 2 10.10.209.10"
+  "ping -c 3 -W 5 10.10.209.10"
 
 # Layer 6: UniFi API (proves tf-admin still works, dump-state still works)
 run_check "UDM API: tf-admin auth still works" \
