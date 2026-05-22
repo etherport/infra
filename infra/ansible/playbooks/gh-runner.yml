@@ -55,7 +55,7 @@
         update_cache: true
         cache_valid_time: 3600
 
-    - name: Add runner user to docker group (for container: support)
+    - name: "Add runner user to docker group (for container: support)"
       ansible.builtin.user:
         name: "{{ runner_user }}"
         groups: docker

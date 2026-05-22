@@ -1,6 +1,9 @@
-# Outstanding Work — Consolidated Priority List (2026-05-21)
+# Outstanding Work — Consolidated Priority List
 
-Successor to `outstanding-work-2026-05-16.md`. Resets the priority lattice
+Latest revision: 2026-05-22 (file renamed from `outstanding-work-2026-05-21.md`
+to drop the date suffix — canonical name is stable; predecessors live in `archive/`).
+
+Successor to `archive/outstanding-work-2026-05-16.md`. Resets the priority lattice
 after a multi-day session covering SDN migration, Ceph VLAN move, post-
 migration cleanup, and IaC durability hardening.
 
@@ -20,7 +23,7 @@ revision use the next free ID per tier. Status legend:
 ## CRITICAL — production outage / data-loss risk
 
 ### ⏳ C1. CNPG continuous backup (Barman) not configured cluster-wide
-- **Source:** `outstanding-work-2026-05-16.md` C1; `long-term-stability-review-2026-05-12.md`
+- **Source:** `archive/outstanding-work-2026-05-16.md` C1; `archive/long-term-stability-review-2026-05-12.md`
 - Velero FS backup of a live Postgres pod is not crash-consistent. Without Barman + ScheduledBackup we have no PITR; a corrupt pgdata = data loss.
 - **Effort:** M
 - **Blockers:** None — S3 bucket already exists; just wire the Cluster manifest.
@@ -29,7 +32,7 @@ revision use the next free ID per tier. Status legend:
 - **Done:** 2026-05-16. Both standalone VMs recreated from the new Packer template; TF in sync with live state. Tracked as task #4.
 
 ### ⏳ C3. Encrypt Ceph key in plaintext inventory
-- **Source:** `outstanding-work-2026-05-16.md` C3
+- **Source:** `archive/outstanding-work-2026-05-16.md` C3
 - `infra/kubespray/inventory/wind/group_vars/all/ceph.yml` still contains plaintext `ceph_k8s_key`. Move to SOPS to match existing pattern.
 - **Effort:** S
 - **Blockers:** None.
@@ -42,11 +45,11 @@ revision use the next free ID per tier. Status legend:
 - **Done:** 2026-05-16. Plex + Ollama now running on GPU. Tracked as task #13.
 
 ### ⏳ H2. Pin Kubespray submodule to release tag
-- **Source:** `outstanding-work-2026-05-16.md` H2
+- **Source:** `archive/outstanding-work-2026-05-16.md` H2
 - `.gitmodules` still tracks `main`. Effort: S.
 
 ### 🟡 H3. NetworkPolicies + ResourceQuotas + PDBs (Phase 1 — audit-only)
-- **Source:** `outstanding-work-2026-05-16.md` H3; task #2 (in_progress)
+- **Source:** `archive/outstanding-work-2026-05-16.md` H3; task #2 (in_progress)
 - Phase 1: LimitRanges + audit-only CNPs + conservative quotas already deployed via `platform/kubernetes/policy-baseline/`. Phase 2/3 (enforcement) pending Hubble observation window.
 - **Effort:** L for Phase 2+3 (observation + tuning).
 
@@ -54,22 +57,22 @@ revision use the next free ID per tier. Status legend:
 - **Done:** 2026-05-16. PAT scope updated, `FLUX_DEPLOY_KEY` + `SOPS_AGE_KEY` populated. Tracked as task #6.
 
 ### ⏳ H5. Increase replica counts → enable PDBs
-- **Source:** `outstanding-work-2026-05-16.md` H5
+- **Source:** `archive/outstanding-work-2026-05-16.md` H5
 - Traefik already at replicas=2 (cluster/wind/helm-releases/traefik.yaml). cert-manager + Prometheus still single-replica.
 
 ### ⏳ H6. Hardcoded WAN IPs in AWS security groups
-- **Source:** `outstanding-work-2026-05-16.md` H6
+- **Source:** `archive/outstanding-work-2026-05-16.md` H6
 - Periodic rotation via Lambda exists but bootstrap IPs are hardcoded.
 
 ### ✅ H7. Doc drift cleanup
 - **Done:** 2026-05-19 to 2026-05-21 in multiple commits. Architecture/overview/network/firewall-zones docs reflect VLAN 210, enp6s22, SDN bridges, RSA wildcard cert. `node-vlan-setup.md` updated 4→5 interfaces. `regional-vpn-deployment.md` drops 1.1.1.1 from DNS push.
 
 ### ⏳ H8. Archive completed migration docs
-- **Source:** `outstanding-work-2026-05-16.md` H8
+- **Source:** `archive/outstanding-work-2026-05-16.md` H8
 - Several files in `docs/planning/` are now historical (e.g. `migration-questions-2026-05-12.md`). Move to `docs/planning/archive/`.
 
 ### ⏳ H9. Deploy swap + CloudWatch agent on vpn-aws / dns-aws
-- **Source:** `outstanding-work-2026-05-16.md` H9
+- **Source:** `archive/outstanding-work-2026-05-16.md` H9
 - Ansible playbooks `swap.yml` + `cloudwatch-agent.yml` exist; never run against AWS VMs.
 
 ### ✅ H10. Inventory consolidation (ansible vs kubespray)
@@ -146,34 +149,34 @@ revision use the next free ID per tier. Status legend:
 ## MEDIUM — quality / hygiene
 
 ### ⏳ M1. Static-PV recovery pattern in `disaster-recovery.md`
-- Source: `outstanding-work-2026-05-16.md` M1.
+- Source: `archive/outstanding-work-2026-05-16.md` M1.
 
 ### ⏳ M2. cert-manager wildcard runbook (renewal + rotation)
-- Source: `outstanding-work-2026-05-16.md` M2.
+- Source: `archive/outstanding-work-2026-05-16.md` M2.
 
 ### ⏳ M3. Kustomize ConfigMapGenerator for S3-sync excludes
-- Source: `outstanding-work-2026-05-16.md` M3.
+- Source: `archive/outstanding-work-2026-05-16.md` M3.
 
 ### ⏳ M4. Pin container images + Helm charts; document Renovate policy
-- Source: `outstanding-work-2026-05-16.md` M4. Renovate is wired but policy doc is missing.
+- Source: `archive/outstanding-work-2026-05-16.md` M4. Renovate is wired but policy doc is missing.
 
 ### ⏳ M5. Velero schedule kustomization ordering + ResourceQuota CR
-- Source: `outstanding-work-2026-05-16.md` M5.
+- Source: `archive/outstanding-work-2026-05-16.md` M5.
 
 ### ⏳ M6. Packer + ansible netplan dedup (F1.3)
-- Source: `outstanding-work-2026-05-16.md` M6.
+- Source: `archive/outstanding-work-2026-05-16.md` M6.
 
 ### ⏳ M7. More `dependsOn` declarations across Flux HRs (F4.2)
-- Source: `outstanding-work-2026-05-16.md` M7.
+- Source: `archive/outstanding-work-2026-05-16.md` M7.
 
 ### ⏳ M8. Auto-remediation COVERAGE.md refresh
-- Source: `outstanding-work-2026-05-16.md` M8.
+- Source: `archive/outstanding-work-2026-05-16.md` M8.
 
 ### ⏳ M9. Etcd backup automation + DR drill schedule
-- Source: `outstanding-work-2026-05-16.md` M9.
+- Source: `archive/outstanding-work-2026-05-16.md` M9.
 
 ### ⏳ M10. Lifecycle / `ignore_changes` on Proxmox K8s VMs (F1.5)
-- Source: `outstanding-work-2026-05-16.md` M10.
+- Source: `archive/outstanding-work-2026-05-16.md` M10.
 
 ### ⏳ M11. DR runbook with measured RTO/RPO targets
 - Source: task #23. Needs your judgment on targets before measurement.
@@ -196,18 +199,30 @@ revision use the next free ID per tier. Status legend:
 ### ⏳ M17. Twilio Talk: migrate SIP trunk UDP → TLS+sRTP
 - Source: task #22. Out-of-band.
 
+### ⏳ M18. Evaluate UniFi eBGP + MetalLB BGP mode
+- UniFi Network ≥10 added eBGP peering. Switch MetalLB from L2Advertisement to BGP mode with UDM as peer. Eliminates ARP-based advertisement quirks (see M19 / task #33). Cost: UDM BGP config, MetalLB BGPPeer/BGPAdvertisement CRs, private ASN allocation. Evaluate after SDN migration complete; weigh value vs effort against fixing M19 standalone. Source: task #34.
+
+### ✅ M19. MetalLB not advertising technitium aggregator LB IP (.201.5)
+- **Done:** 2026-05-22. `kubectl -n metallb-system rollout restart daemonset/speaker` re-emitted gratuitous ARP for `.5`; DNS resolution via `10.10.201.5` now works (verified `dig @.5 pve.wind.etherport.net = 10.10.200.41`). Resolved the cascading Teleport→DNS→Traefik blank-page issue. Source: task #33 (✅).
+
+### ⏳ M20. safety-check: relax single-ping flakiness over WG
+- `scripts/network/safety-check.sh` uses `ping -c 1 -W 2` which is flaky over WG paths from remote clients. Change to `ping -c 3 -W 5` (declare success if any 1/3 replies). Source: task #35.
+
+### ⏳ M21. WG K8s pod preStop / VRRP failover broken in practice
+- Root cause investigated 2026-05-22 (see task #36): (a) `state MASTER` + `preempt_delay 300` in `platform/kubernetes/wireguard/03-deployment.yaml` is silently discarded by keepalived — new pod preempts vpn-local immediately while its own wg0/wg1 aren't up; (b) preStop hook FAILED (FailedPreStopHook event) — likely missing `procps` in keepalived container, so `pkill` not found. Fixes (do all): state MASTER → state BACKUP (keep priority 150); add `init_fail` to vrrp_script so MASTER promotion is gated on wg-quick readiness; install `procps` in container; verify vpn-local keepalived is actually running. Recovery: user switched to UDM Teleport (separate VPN path) during the 5+ min outage. **Bumping this to H-tier when migration completes — durable VPN failover matters.**
+
 ---
 
 ## LOW
 
 ### ⏳ L1. Proxmox HA cluster expansion
-- Source: `outstanding-work-2026-05-16.md` L1. Blocked on adding a 2nd PVE node.
+- Source: `archive/outstanding-work-2026-05-16.md` L1. Blocked on adding a 2nd PVE node.
 
 ---
 
 ## DROP — outdated or already done
 
-(Carried forward from `outstanding-work-2026-05-16.md`; nothing new in this revision.)
+(Carried forward from `archive/outstanding-work-2026-05-16.md`; nothing new in this revision.)
 
 - **D1.** `INFRASTRUCTURE-HARDENING-CHECKLIST.md` §6 "HA Control Plane (Future)" — done 2026-05-12.
 - **D2.** `INFRASTRUCTURE-HARDENING-CHECKLIST.md` §8 "Etcd Backup Documentation" — done; runbook at `docs/runbooks/etcd-backup-restore.md`. Automation tracked as M9.
