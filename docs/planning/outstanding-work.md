@@ -208,8 +208,8 @@ revision use the next free ID per tier. Status legend:
 ### ⏳ M20. safety-check: relax single-ping flakiness over WG
 - `scripts/network/safety-check.sh` uses `ping -c 1 -W 2` which is flaky over WG paths from remote clients. Change to `ping -c 3 -W 5` (declare success if any 1/3 replies). Source: task #35.
 
-### ⏳ M21. WG K8s pod preStop / VRRP failover broken in practice
-- Root cause investigated 2026-05-22 (see task #36): (a) `state MASTER` + `preempt_delay 300` in `platform/kubernetes/wireguard/03-deployment.yaml` is silently discarded by keepalived — new pod preempts vpn-local immediately while its own wg0/wg1 aren't up; (b) preStop hook FAILED (FailedPreStopHook event) — likely missing `procps` in keepalived container, so `pkill` not found. Fixes (do all): state MASTER → state BACKUP (keep priority 150); add `init_fail` to vrrp_script so MASTER promotion is gated on wg-quick readiness; install `procps` in container; verify vpn-local keepalived is actually running. Recovery: user switched to UDM Teleport (separate VPN path) during the 5+ min outage. **Bumping this to H-tier when migration completes — durable VPN failover matters.**
+### ✅ M21. WG K8s pod preStop / VRRP failover broken in practice
+- **Done:** 2026-05-22. Three compounding fixes shipped to `platform/kubernetes/wireguard/03-deployment.yaml`: (a) `state MASTER` → `state BACKUP` (priority 150 still wins election, but preempt_delay 300 is now honored); (b) `init_fail` added to the `check_wg` vrrp_script so MASTER promotion is gated on wg0/wg1 readiness; (c) `procps` added to the keepalived container's apt-get install line so the preStop hook can actually find `pkill`. Net effect: on drain, old pod's preStop sends priority-0 advert → vpn-local elects MASTER in ~1s. New pod starts BACKUP, waits for wg-quick, then preempt_delay 300s before reclaiming. Source: task #36 (✅). Verification on next pod rollout.
 
 ---
 
