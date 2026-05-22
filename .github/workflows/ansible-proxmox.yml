@@ -58,6 +58,13 @@ jobs:
     runs-on: [self-hosted, lifecycle]
     container:
       image: ghcr.io/sparked-diamond/ansible-runner:main
+      # GHCR package is currently private (the make-public PATCH in
+      # ansible-runner-image.yml targets /orgs/sparked-diamond which
+      # returns 404 because sparked-diamond is a user, not an org).
+      # Auth-pull with the workflow's GITHUB_TOKEN until that's fixed.
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout
