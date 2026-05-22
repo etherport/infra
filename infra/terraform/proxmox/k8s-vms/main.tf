@@ -18,8 +18,11 @@ provider "proxmox" {
 locals {
   node_name    = "pve"
   storage_name = "local-zfs"
+  # bridge_name retained for NIC 5 (VLAN 210 storage) which still uses
+  # vmbr0+vlan_id=210 — see comment block above network_device blocks.
+  # local.vlan_tag was removed in PR 6 of the SDN migration (2026-05-22);
+  # NICs 1-4 now use SDN VNets directly (bridge="servers"/"clients"/etc.).
   bridge_name  = "vmbr0"
-  vlan_tag     = 201
   gateway_201  = "10.10.201.1"
   cpu_type     = "host"
 
