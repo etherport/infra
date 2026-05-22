@@ -40,6 +40,20 @@
   environment:
     KUBECONFIG: "{{ kubeconfig_path }}"
   tasks:
+    # ceph_k8s_key lives in the SOPS-encrypted sibling of the plaintext
+    # inventory file (group_vars/all/ceph-k8s-secret.sops.yaml).
+    # Decryption happens locally with the controller's age key (in 1P);
+    # the value is then referenced as `ceph_secret.ceph_k8s_key` below.
+    # The plaintext inventory entry was removed 2026-05-22 (C3 in
+    # docs/planning/outstanding-work.md).
+    - name: Load Ceph K8s user key from SOPS
+      community.sops.load_vars:
+        file: "{{ playbook_dir }}/../../inventory/wind/group_vars/all/ceph-k8s-secret.sops.yaml"
+        name: ceph_secret
+      delegate_to: localhost
+      become: false
+      run_once: true
+
     - name: Ensure ceph-csi namespace exists
       shell: kubectl create namespace ceph-csi --dry-run=client -o yaml | kubectl apply -f -
 
@@ -120,7 +134,7 @@
             namespace: ceph-csi
           stringData:
             userID: "{{ ceph_k8s_user }}"
-            userKey: "{{ ceph_k8s_key }}"
+            userKey: "{{ ceph_secret.ceph_k8s_key }}"
     - name: Apply RBD Secret
       shell: kubectl apply -f /tmp/csi-rbd-secret.yaml
 

@@ -9,4 +9,7 @@ ceph_monitors:
   - "10.10.210.41:6789"
 
 ceph_k8s_user: "k8s"
-ceph_k8s_key: "AQBwejhp7lzSBBAAxa8TJhMRakcjYeOgMigqtg=="
+# ceph_k8s_key lives in `ceph-k8s-secret.sops.yaml` (same dir), loaded
+# at runtime by playbooks/ceph/ceph-k8s.upstream-reference.yml via
+# `community.sops.load_vars`. DO NOT put the plaintext value back here.
+# Moved out of plaintext on 2026-05-22 (outstanding-work.md C3).
