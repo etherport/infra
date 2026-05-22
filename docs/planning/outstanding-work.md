@@ -159,8 +159,8 @@ revision use the next free ID per tier. Status legend:
 ### ⏳ M3. Kustomize ConfigMapGenerator for S3-sync excludes
 - Source: `archive/outstanding-work-2026-05-16.md` M3.
 
-### ⏳ M4. Pin container images + Helm charts; document Renovate policy
-- Source: `archive/outstanding-work-2026-05-16.md` M4. Renovate is wired but policy doc is missing.
+### ✅ M4. Pin container images + Helm charts; document Renovate policy
+- **Done:** 2026-05-22 (commit `6cdcc1a`). New runbook at `docs/runbooks/image-pinning-policy.md` documents the three buckets: A (Flux ImagePolicy / image-update-automation — base images + apps), B (Renovate — workflows + Terraform + Helm charts), C (internally-built GHCR images on `:main` with `:sha-<sha>` as the immutable companion). Tabulates which images live in which bucket today, anti-patterns to flag in review, and the steps to add a new image. Also aligned the new service-status-report cronjob to `python:3.14-slim` with the `flux-system:python-slim` ImagePolicy marker so Flux owns its bump cadence. Source: `archive/outstanding-work-2026-05-16.md` M4.
 
 ### ⏳ M5. Velero schedule kustomization ordering + ResourceQuota CR
 - Source: `archive/outstanding-work-2026-05-16.md` M5.
