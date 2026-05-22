@@ -31,11 +31,8 @@ revision use the next free ID per tier. Status legend:
 ### ✅ C2. Rebuild `dns-fallback` (1001) + `vpn-local` (1002) from VM 9001 template
 - **Done:** 2026-05-16. Both standalone VMs recreated from the new Packer template; TF in sync with live state. Tracked as task #4.
 
-### ⏳ C3. Encrypt Ceph key in plaintext inventory
-- **Source:** `archive/outstanding-work-2026-05-16.md` C3
-- `infra/kubespray/inventory/wind/group_vars/all/ceph.yml` still contains plaintext `ceph_k8s_key`. Move to SOPS to match existing pattern.
-- **Effort:** S
-- **Blockers:** None.
+### ✅ C3. Encrypt Ceph key in plaintext inventory
+- **Done:** 2026-05-22 (commit `88e34d2`). Moved `ceph_k8s_key` from plaintext `infra/ansible/inventory/wind/group_vars/all/ceph.yml` to SOPS-encrypted sibling `ceph-k8s-secret.sops.yaml`. Loaded at runtime in `playbooks/ceph/ceph-k8s.upstream-reference.yml` via `community.sops.load_vars` (same pattern as wireguard.yml). The kubespray-side `infra/kubespray/inventory/group_vars/all/ceph.sops.yaml` was already encrypted. **Source:** `archive/outstanding-work-2026-05-16.md` C3.
 
 ---
 
