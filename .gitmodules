@@ -1,3 +1,9 @@
 [submodule "infra/kubespray/kubespray"]
 	path = infra/kubespray/kubespray
 	url = https://github.com/kubernetes-sigs/kubespray.git
+	# Pinned to upstream release-2.30 branch — receives v2.30.x patches
+	# (security backports) but never jumps minor/major. Currently at the
+	# v2.30.0 tagged commit. Bump branch (e.g. → release-2.31) after a
+	# full DR-rebuild test against the new release. Without this pin a
+	# `git submodule update --remote` would drag in upstream master.
+	branch = release-2.30
