@@ -168,7 +168,13 @@ revision use the next free ID per tier. Status legend:
 ### ⏳ M6. Packer + ansible netplan dedup (F1.3)
 - Source: `archive/outstanding-work-2026-05-16.md` M6.
 
-### ⏳ M7. More `dependsOn` declarations across Flux HRs (F4.2)
+### ✅ M7. More `dependsOn` declarations across Flux HRs (F4.2)
+- **Done:** 2026-05-22. Audited all 10 HelmReleases under `clusters/wind/helm-releases/`. Pre-existing dependsOn: `monitoring`, `gpu-operator`, `pushgateway`, `github-actions-runner` (4). Added on this pass:
+  - `traefik` → `cert-manager` — Traefik consumes the cert-manager-issued wildcard via the default TLSStore; without cert-manager Ready first, Traefik comes up serving its built-in self-signed during cold-start until the wildcard exists. (1 added.)
+- Skipped (no useful dependency exists):
+  - `cert-manager` — foundation; no upstream HR.
+  - `cnpg`, `kured`, `tailscale-operator` — standalone operators; no HR dependencies. (tailscale-operator's only external dependency is a SOPS-decrypted Secret, which Flux's source controller produces — not a HR.)
+  - `velero` — `serviceMonitor.enabled: false`, so no monitoring CRD dependency. If serviceMonitor is ever enabled, add `dependsOn: monitoring` at that time.
 - Source: `archive/outstanding-work-2026-05-16.md` M7.
 
 ### ✅ M8. Auto-remediation COVERAGE.md refresh

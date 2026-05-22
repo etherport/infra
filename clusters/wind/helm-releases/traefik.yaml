@@ -12,6 +12,13 @@ metadata:
 spec:
   releaseName: traefik
   interval: 1h
+  # Traefik consumes the cert-manager-issued wildcard via the default
+  # TLSStore. Without cert-manager Ready first, Traefik comes up serving
+  # its built-in self-signed cert until the wildcard appears — which
+  # makes every HTTPS route return a cert error during a cold-start
+  # window. Ordering keeps cold-start clean.
+  dependsOn:
+    - name: cert-manager
   chart:
     spec:
       chart: traefik
