@@ -27,6 +27,16 @@ spec:
           - name: alertname
             value: Watchdog
         receiver: 'null'
+      # Auto-remediation webhook receives ALL alerts (no matchers) so
+      # the controller can decide which alertnames have a rule defined
+      # in platform/kubernetes/auto-remediation/configmap.yaml. The
+      # controller's own 15-min cooldown prevents restart loops. The
+      # `continue: true` flag lets matching alerts still flow into the
+      # severity-based email routes below — webhook + email are not
+      # mutually exclusive. Wired 2026-05-22 (M8 follow-up: prior to
+      # this commit, all 22 remediation rules were dormant).
+      - receiver: auto-remediation
+        continue: true
       # InfoInhibitor from kube-state-metrics — silent by design
       - matchers:
           - name: alertname
@@ -44,6 +54,10 @@ spec:
         repeatInterval: 6h
   receivers:
     - name: 'null'
+    - name: auto-remediation
+      webhookConfigs:
+        - url: http://remediation-webhook.auto-remediation.svc.cluster.local:8080/webhook
+          sendResolved: false
     - name: email-alerts
       emailConfigs:
         - to: graham.m.smith@me.com

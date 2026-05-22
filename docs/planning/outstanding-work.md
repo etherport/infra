@@ -171,8 +171,8 @@ revision use the next free ID per tier. Status legend:
 ### ⏳ M7. More `dependsOn` declarations across Flux HRs (F4.2)
 - Source: `archive/outstanding-work-2026-05-16.md` M7.
 
-### ⏳ M8. Auto-remediation COVERAGE.md refresh
-- Source: `archive/outstanding-work-2026-05-16.md` M8.
+### ✅ M8. Auto-remediation COVERAGE.md refresh
+- **Done:** 2026-05-22. Wrote `platform/kubernetes/auto-remediation/COVERAGE.md`: inventories all 22 defined rules, identifies what's covered, what isn't (CNPG, ceph-csi-provisioner, WG K8s pod, MetalLB speakers, Multus DS), and the big-finger discovery — **the webhook receiver isn't wired in alertmanager**, so all rules are dormant until that's fixed. Includes the exact YAML diff to wire it. Source: `archive/outstanding-work-2026-05-16.md` M8.
 
 ### ⏳ M9. Etcd backup automation + DR drill schedule
 - Source: `archive/outstanding-work-2026-05-16.md` M9.
