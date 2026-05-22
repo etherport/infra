@@ -213,6 +213,27 @@ revision use the next free ID per tier. Status legend:
 ### ✅ M21. WG K8s pod preStop / VRRP failover broken in practice
 - **Done:** 2026-05-22. Three compounding fixes shipped to `platform/kubernetes/wireguard/03-deployment.yaml`: (a) `state MASTER` → `state BACKUP` (priority 150 still wins election, but preempt_delay 300 is now honored); (b) `init_fail` added to the `check_wg` vrrp_script so MASTER promotion is gated on wg0/wg1 readiness; (c) `procps` added to the keepalived container's apt-get install line so the preStop hook can actually find `pkill`. Net effect: on drain, old pod's preStop sends priority-0 advert → vpn-local elects MASTER in ~1s. New pod starts BACKUP, waits for wg-quick, then preempt_delay 300s before reclaiming. Source: task #36 (✅). Verification on next pod rollout.
 
+### ✅ M22. Consolidated Grafana service-status dashboard
+- **Done:** 2026-05-22 (commit `cc70da4`). New dashboard at `platform/kubernetes/monitoring/dashboards/service-status.yaml` (UID `service-status`). Four top-level counters (Healthy / Down / Unknown / Firing alerts) + per-category stat panel rows for ~28 services across Core platform, GitOps, Networking, Storage/data, DNS, Backup, Apps, External edge. Bottom panel is a firing-alerts table filtered on `ALERTS{alertstate="firing"}`. Auto-discovered by Grafana via the `grafana_dashboard: "1"` sidecar label. Source: task #37 (✅).
+
+### ✅ M23. Daily service-status email digest
+- **Done:** 2026-05-22 (commit `cc70da4`). New CronJob `service-status-report` in monitoring/ namespace, fires at 07:00 PT daily (staggered after the s3-sync 06:00 PT report). Queries Prometheus for deployment/statefulset/daemonset readiness across the same inventory as the dashboard (M22), fetches firing alerts from Alertmanager `/api/v2/alerts`, sends styled HTML via SMTP using the existing `alertmanager-smtp-config` secret (no new credentials, no AWS CLI dependency). Subject line is suffixed with overall status (`Homelab status — all healthy` / `… — 2 down`). Runs `python:3.13-slim` with the script mounted via ConfigMap so changes don't require a Docker rebuild. Source: task #38 (✅).
+
+### ✅ M24. Modernize s3-sync daily-report HTML
+- **Done:** 2026-05-22 (commit `cc70da4`). Replaced the bootstrap-y card grid in `platform/kubernetes/backups/aws-s3/image/scripts/daily-report.sh` with a refined neutral palette (CSS vars), `prefers-color-scheme` dark-mode support, tabular numerics, status pills with currentColor-dotted indicator instead of full pill bg, monospace timestamps, and a responsive 2-col grid on narrow viewports. Targets Apple Mail (iCloud) primarily — other clients degrade gracefully. Source: task #39 (✅).
+
+### ⏳ M25. UDM / UniFi config audit — zones, inter-VLAN routing, modern features
+- **Source:** user ask 2026-05-22 (this revision).
+- Three-part audit:
+  1. **Network docs vs. live UDM config.** Walk `docs/architecture/firewall-zones.md` + `docs/architecture/network.md` against the current zone-based firewall in UniFi Network ≥10 (Settings → Security → Firewall). Verify that the zone assignments documented match what's actually configured. Verify inter-VLAN routing restrictions (which VLANs can talk to which) are codified the way the docs describe them. Capture deltas as either a doc update or a UniFi config change — whichever is wrong, fix the wrong one.
+  2. **Modern UniFi features evaluation.** UniFi Network ≥10 introduced "object-oriented" networking (named port groups, IP groups, zone groups), eBGP peering (already tracked separately as M18), VPN client-side hostname routing, and refactored firewall rule semantics. Identify which we should adopt and the migration effort for each. Output: short evaluation doc with adopt/skip recommendations per feature.
+  3. **UDM best-practices sweep.** Items to confirm or fix: backup automation (Talk runbook flags no automated UDM backup — see `docs/runbooks/unifi-talk.md`), guest network isolation, IDS/IPS settings, DNS filtering, RADIUS/802.1X candidates, port-isolation on edge switches, threat-management posture, log retention + remote syslog.
+- **Effort:** L (1-2 days). Worth doing once SDN/Ceph migration settles to a known-stable baseline.
+- **Related outstanding UniFi items already in this tracker:**
+  - **M13** Delete `/data/udm-le.removed-*` on UDM/Protect/Sequoia — the "old cert manager" remnants the user is thinking of (udm-le predates cert-manager-on-K8s for the wildcard); just needs SSH creds + a one-shot cleanup
+  - **M18** Evaluate UniFi eBGP + MetalLB BGP mode (overlaps with audit part 2)
+  - **M15-M17** Twilio Talk hygiene items (911 address, orphan DID, SIP UDP→TLS+sRTP) — out-of-band UDM Talk console
+
 ---
 
 ## LOW
