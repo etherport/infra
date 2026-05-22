@@ -5,6 +5,20 @@ prometheus:
     # Discover all ServiceMonitors regardless of labels
     serviceMonitorSelectorNilUsesHelmValues: false
     podMonitorSelectorNilUsesHelmValues: false
+    # HA: 2 replicas with podAntiAffinity. Each replica scrapes
+    # independently; queries hit either via the Service. Storage is
+    # per-replica (Ceph RBD PVC) so we use 2x10Gi. Combined with the
+    # PDB the prom-operator creates by default, node drains tolerate
+    # one Prometheus out — required for the SDN-migration-style
+    # rolling cluster maintenance we did 2026-05-22.
+    replicas: 2
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: prometheus
+            topologyKey: kubernetes.io/hostname
     storageSpec:
       volumeClaimTemplate:
         spec:
@@ -17,6 +31,17 @@ prometheus:
 alertmanager:
   enabled: true
   alertmanagerSpec:
+    # HA: 2 replicas — alertmanagers gossip with each other so an
+    # alert fires once even across replicas. PDB created by default
+    # by the operator.
+    replicas: 2
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: alertmanager
+            topologyKey: kubernetes.io/hostname
     storage:
       volumeClaimTemplate:
         spec:
