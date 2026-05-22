@@ -153,8 +153,8 @@ revision use the next free ID per tier. Status legend:
 ### ⏳ M1. Static-PV recovery pattern in `disaster-recovery.md`
 - Source: `archive/outstanding-work-2026-05-16.md` M1.
 
-### ⏳ M2. cert-manager wildcard runbook (renewal + rotation)
-- Source: `archive/outstanding-work-2026-05-16.md` M2.
+### ✅ M2. cert-manager wildcard runbook (renewal + rotation)
+- **Done:** 2026-05-22 (commit `6c896ee`). `docs/runbooks/cert-manager-wildcard.md` rewritten from the thin prior version. Now covers the dual-cert architecture (ECDSA shortlived for Traefik vs RSA classic for UniFi-OS — unifi-core silently rejects ECDSA and certs without CN-in-Subject), automatic renewal cadence (day-4 / day-60), manual rotation procedures (per-cert renew, Route53 cred rotation, ACME account key regen), failure modes (dns01 challenge failure, LE rate-limit, stale Traefik secret, unifi-cert-sync auth break), and a what-NOT-to-do list. Source: `archive/outstanding-work-2026-05-16.md` M2.
 
 ### ⏳ M3. Kustomize ConfigMapGenerator for S3-sync excludes
 - Source: `archive/outstanding-work-2026-05-16.md` M3.
@@ -221,6 +221,13 @@ revision use the next free ID per tier. Status legend:
 
 ### ✅ M24. Modernize s3-sync daily-report HTML
 - **Done:** 2026-05-22 (commit `cc70da4`). Replaced the bootstrap-y card grid in `platform/kubernetes/backups/aws-s3/image/scripts/daily-report.sh` with a refined neutral palette (CSS vars), `prefers-color-scheme` dark-mode support, tabular numerics, status pills with currentColor-dotted indicator instead of full pill bg, monospace timestamps, and a responsive 2-col grid on narrow viewports. Targets Apple Mail (iCloud) primarily — other clients degrade gracefully. Source: task #39 (✅).
+
+### ⏳ M26. Grafana sidecar admin-API auth is broken — locks out admin user
+- **Source:** discovered 2026-05-22 while verifying the new service-status dashboard.
+- The `grafana-sc-dashboard` sidecar calls `POST /api/admin/provisioning/dashboards/reload` after writing each ConfigMap-sourced dashboard to `/tmp/dashboards/`. Auth is failing with 401 every minute (chart values has `adminPassword: "ChangeMe123!"` but the live admin password is different). Net effect: Grafana reports `too many consecutive incorrect login attempts for user - login for user temporarily blocked` on a rolling basis — the admin user is effectively unusable for human login via the UI.
+- **Not a blocker for dashboards**: Grafana's file provisioner scans `/tmp/dashboards/` every 30s (see `/etc/grafana/provisioning/dashboards/*.yaml`, `updateIntervalSeconds: 30`) and loads valid JSON regardless of whether the reload API succeeds. So new dashboards still appear; this is just noisy and breaks human admin login.
+- **Fix:** point both the sidecar and the chart at a real admin password. Options: (a) re-baseline the `monitoring-grafana` Secret with the password from `platform/kubernetes/monitoring/grafana-admin-secret.sops.yaml` (if it's the source of truth) + `admin.existingSecret` in chart values; (b) just update the chart-values plaintext to match the live secret (worse; not durable). Either way also rotate the admin password since it's been used in a thousand failed-login attempts.
+- **Effort:** S.
 
 ### ⏳ M25. UDM / UniFi config audit — zones, inter-VLAN routing, modern features
 - **Source:** user ask 2026-05-22 (this revision).
