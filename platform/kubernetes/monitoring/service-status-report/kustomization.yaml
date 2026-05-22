@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: monitoring
+
+resources:
+  - serviceaccount.yaml
+  - cronjob.yaml
+
+# The python script is mounted into the pod via this ConfigMap. Updating
+# the .py file regenerates the ConfigMap on next apply; the next CronJob
+# fire picks up the change.
+configMapGenerator:
+  - name: service-status-report-script
+    files:
+      - service-status-report.py
+  - name: service-status-email
+    envs:
+      - email.env
+
+generatorOptions:
+  disableNameSuffixHash: true

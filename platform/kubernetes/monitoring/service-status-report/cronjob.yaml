@@ -1,0 +1,78 @@
+---
+# Daily service-status digest email.
+# Queries Prometheus for deployment/statefulset/daemonset readiness +
+# Alertmanager for firing alerts, then emails a styled HTML report via
+# SMTP (the same SES relay alertmanager already uses, so no extra
+# credentials live in this namespace).
+#
+# The script lives in a ConfigMap rather than baked into a custom image
+# so iterating on the report doesn't require a Docker build.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: service-status-report
+  namespace: monitoring
+spec:
+  schedule: "0 7 * * *"  # 7am PT, staggered after the s3-sync 6am report
+  timeZone: "America/Los_Angeles"
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          serviceAccountName: service-status-report
+          restartPolicy: Never
+          containers:
+            - name: report
+              image: python:3.13-slim
+              imagePullPolicy: IfNotPresent
+              command: ["python3", "/work/service-status-report.py"]
+              env:
+                - name: PROM_URL
+                  value: "http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
+                - name: ALERTMANAGER_URL
+                  value: "http://monitoring-kube-prometheus-alertmanager.monitoring.svc.cluster.local:9093"
+                - name: REPORT_TITLE
+                  value: "Homelab status"
+                - name: SMTP_SMARTHOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: alertmanager-smtp-config
+                      key: smtp_smarthost
+                - name: SMTP_FROM
+                  valueFrom:
+                    secretKeyRef:
+                      name: alertmanager-smtp-config
+                      key: smtp_from
+                - name: SMTP_AUTH_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: alertmanager-smtp-config
+                      key: smtp_auth_username
+                - name: SMTP_AUTH_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: alertmanager-smtp-config
+                      key: smtp_auth_password
+              envFrom:
+                - configMapRef:
+                    name: service-status-email
+              volumeMounts:
+                - name: script
+                  mountPath: /work
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 96Mi
+                limits:
+                  memory: 192Mi
+          volumes:
+            - name: script
+              configMap:
+                name: service-status-report-script
+                defaultMode: 0755

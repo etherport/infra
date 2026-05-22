@@ -14,3 +14,4 @@ resources:
   - alertmanager-secret.sops.yaml
   - nvidia-gpu-dashboard.yaml
   - dashboards
+  - service-status-report

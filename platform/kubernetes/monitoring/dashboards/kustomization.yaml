@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - node-overview.yaml
   - kubernetes-overview.yaml
+  - service-status.yaml

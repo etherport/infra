@@ -354,234 +354,280 @@ total_errors = sum(1 for e in executions if e.get('job_status') in ['failed', 'u
 total_files = sum(e.get('files', 0) for e in executions)
 total_bytes = sum(e.get('bytes', 0) for e in executions)
 
-# Generate HTML
-html = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-body {{
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-    line-height: 1.6;
-    color: #333;
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 20px;
-    background-color: #f5f5f5;
-}}
-.header {{
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-}}
-.header h1 {{
-    margin: 0 0 8px 0;
-    font-size: 28px;
-    font-weight: 600;
-}}
-.header .meta {{
-    color: #666;
-    font-size: 14px;
-}}
-.summary {{
-    margin-bottom: 20px;
-}}
-.summary-period {{
-    font-size: 16px;
-    margin-bottom: 16px;
-    color: #333;
-}}
-.metrics-grid {{
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 16px;
-    margin-bottom: 20px;
-}}
-.metric-card {{
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    text-align: center;
-    border: 1px solid #e0e0e0;
-}}
-.metric-card.completed {{
-    background-color: #d4edda;
-    border-color: #c3e6cb;
-}}
-.metric-card.in-progress {{
-    background-color: #fff3cd;
-    border-color: #ffeaa7;
-}}
-.metric-card.errors {{
-    background-color: #f8d7da;
-    border-color: #f5c6cb;
-}}
-.metric-label {{
-    font-size: 14px;
-    color: #666;
-    margin-bottom: 8px;
-}}
-.metric-value {{
-    font-size: 32px;
-    font-weight: 600;
-    color: #333;
-}}
-.task-card {{
-    background: white;
-    padding: 24px;
-    border-radius: 8px;
-    margin-bottom: 16px;
-    border: 1px solid #e0e0e0;
-}}
-.task-header {{
-    font-size: 20px;
-    font-weight: 600;
-    margin-bottom: 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}}
-.status-badge {{
-    display: inline-block;
-    padding: 4px 12px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: lowercase;
-}}
-.status-succeeded {{
-    background-color: #d4edda;
-    color: #155724;
-}}
-.status-running {{
-    background-color: #fff3cd;
-    color: #856404;
-}}
-.status-error {{
-    background-color: #f8d7da;
-    color: #721c24;
-}}
-.task-details {{
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-}}
-.detail-row {{
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid #f0f0f0;
-}}
-.detail-label {{
-    color: #666;
-    font-size: 14px;
-}}
-.detail-value {{
-    color: #333;
-    font-weight: 500;
-    font-size: 14px;
-}}
-</style>
-</head>
-<body>
-
-<div class="header">
-    <h1>S3 Backup Executions</h1>
-    <div class="meta">Run time: {now_pt.strftime('%Y-%m-%d %H:%M:%S')} PT</div>
-</div>
-
-<div class="summary">
-    <div class="summary-period">Summary period: {start_pt.strftime('%Y-%m-%d %H:%M')} PT – {now_pt.strftime('%Y-%m-%d %H:%M')} PT</div>
-
-    <div class="metrics-grid">
-        <div class="metric-card">
-            <div class="metric-label">Executions</div>
-            <div class="metric-value">{total_executions}</div>
-        </div>
-        <div class="metric-card{' completed' if total_completed > 0 else ''}">
-            <div class="metric-label">Completed</div>
-            <div class="metric-value">{total_completed}</div>
-        </div>
-        <div class="metric-card{' in-progress' if total_in_progress > 0 else ''}">
-            <div class="metric-label">In progress</div>
-            <div class="metric-value">{total_in_progress}</div>
-        </div>
-        <div class="metric-card{' errors' if total_errors > 0 else ''}">
-            <div class="metric-label">Errors</div>
-            <div class="metric-value">{total_errors}</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">Total files transferred</div>
-            <div class="metric-value">{total_files:,}</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">Total data transferred</div>
-            <div class="metric-value">{format_bytes(total_bytes)}</div>
-        </div>
-    </div>
-</div>
-"""
+# Determine overall status pill
+if total_errors > 0:
+    overall_pill_class = 'err'
+    overall_pill_text = f"{total_errors} error{'s' if total_errors != 1 else ''}"
+elif total_in_progress > 0:
+    overall_pill_class = 'warn'
+    overall_pill_text = f"{total_in_progress} in progress"
+elif total_executions == 0:
+    overall_pill_class = 'warn'
+    overall_pill_text = "No runs in window"
+else:
+    overall_pill_class = 'ok'
+    overall_pill_text = f"All {total_completed} completed"
 
 # Sort executions by start time (most recent first)
-sorted_executions = sorted(executions, key=lambda x: x.get('start_time') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+sorted_executions = sorted(
+    executions,
+    key=lambda x: x.get('start_time') or datetime.min.replace(tzinfo=timezone.utc),
+    reverse=True,
+)
 
+# Build per-execution task cards
+tasks_html_parts = []
 for execution in sorted_executions:
     share = execution['share']
     job_status = execution.get('job_status', 'unknown')
     success = execution.get('success', 0)
 
-    # Determine status and badge
     if job_status == 'running':
-        status_text = 'in progress'
-        status_class = 'running'
+        status_text, status_class = 'in progress', 'warn'
     elif job_status == 'succeeded' and success == 1:
-        status_text = 'completed'
-        status_class = 'succeeded'
+        status_text, status_class = 'completed', 'ok'
     else:
-        status_text = 'error'
-        status_class = 'error'
+        status_text, status_class = 'error', 'err'
 
-    start_time = execution.get('start_time')
-    end_time = execution.get('end_time')
-    start_pt = to_pt(start_time) if start_time else None
-    end_pt = to_pt(end_time) if end_time else None
+    start_time_v = execution.get('start_time')
+    end_time_v = execution.get('end_time')
+    start_pt_v = to_pt(start_time_v) if start_time_v else None
+    end_pt_v = to_pt(end_time_v) if end_time_v else None
 
-    html += f"""
-<div class="task-card">
-    <div class="task-header">
-        <span>Sequoia to S3 - {share.title()}</span>
-        <span class="status-badge status-{status_class}">{status_text}</span>
-    </div>
-    <div class="task-details">
-        <div class="detail-row">
-            <span class="detail-label">Files transferred</span>
-            <span class="detail-value">{execution.get('files', 0):,}</span>
-        </div>
-        <div class="detail-row">
-            <span class="detail-label">Data transferred</span>
-            <span class="detail-value">{format_bytes(execution.get('bytes', 0))}</span>
-        </div>
-        <div class="detail-row">
-            <span class="detail-label">Start time (PT)</span>
-            <span class="detail-value">{start_pt.strftime('%H:%M') if start_pt else '-'}</span>
-        </div>
-        <div class="detail-row">
-            <span class="detail-label">End time (PT)</span>
-            <span class="detail-value">{end_pt.strftime('%H:%M') if end_pt else '-'}</span>
-        </div>
-        <div class="detail-row">
-            <span class="detail-label">Duration</span>
-            <span class="detail-value">{format_duration(execution.get('duration', 0))}</span>
-        </div>
-    </div>
+    tasks_html_parts.append(f"""
+        <div class="task">
+            <div class="task-head">
+                <span class="task-name">{share.title()}</span>
+                <span class="pill pill-{status_class}"><span class="dot"></span>{status_text}</span>
+            </div>
+            <div class="task-body">
+                <div class="kv"><div class="kv-label">Files</div><div class="kv-value">{execution.get('files', 0):,}</div></div>
+                <div class="kv"><div class="kv-label">Data</div><div class="kv-value">{format_bytes(execution.get('bytes', 0))}</div></div>
+                <div class="kv"><div class="kv-label">Start</div><div class="kv-value mono">{start_pt_v.strftime('%H:%M') if start_pt_v else '—'}</div></div>
+                <div class="kv"><div class="kv-label">End</div><div class="kv-value mono">{end_pt_v.strftime('%H:%M') if end_pt_v else '—'}</div></div>
+                <div class="kv kv-wide"><div class="kv-label">Duration</div><div class="kv-value">{format_duration(execution.get('duration', 0))}</div></div>
+            </div>
+        </div>""")
+
+tasks_html = '\n'.join(tasks_html_parts) if tasks_html_parts else \
+    '<div class="empty">No executions in this window.</div>'
+
+# Render the full email. Targets Apple Mail (iCloud) primarily — modern
+# CSS (vars, grid, prefers-color-scheme) is supported there. Other
+# clients degrade to plainer layout but content stays legible.
+html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>Sequoia → S3 backup report</title>
+<style>
+  :root {{
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --border: #e5e7eb;
+    --border-soft: #eef0f3;
+    --ok: #047857;       --ok-bg: #ecfdf5;
+    --warn: #b45309;     --warn-bg: #fffbeb;
+    --err: #b91c1c;      --err-bg: #fef2f2;
+    --accent: #1f2937;
+  }}
+  @media (prefers-color-scheme: dark) {{
+    :root {{
+      --bg: #0b1220;
+      --surface: #131c2e;
+      --text: #e8eaf0;
+      --text-muted: #94a3b8;
+      --border: #243049;
+      --border-soft: #1b2538;
+      --ok: #34d399;     --ok-bg: rgba(16,185,129,0.12);
+      --warn: #fbbf24;   --warn-bg: rgba(217,119,6,0.15);
+      --err: #f87171;    --err-bg: rgba(220,38,38,0.16);
+      --accent: #f1f5f9;
+    }}
+  }}
+  body {{
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -webkit-text-size-adjust: 100%;
+  }}
+  .wrap {{ max-width: 680px; margin: 0 auto; padding: 36px 20px 56px; }}
+  .eyebrow {{
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }}
+  h1 {{
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    margin: 0 0 6px;
+    color: var(--accent);
+  }}
+  .subhead {{
+    color: var(--text-muted);
+    font-size: 14px;
+    margin: 0 0 22px;
+  }}
+  .pill {{
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+  }}
+  .pill .dot {{
+    width: 7px; height: 7px; border-radius: 50%; background: currentColor;
+    display: inline-block;
+  }}
+  .pill-ok   {{ background: var(--ok-bg);   color: var(--ok);   }}
+  .pill-warn {{ background: var(--warn-bg); color: var(--warn); }}
+  .pill-err  {{ background: var(--err-bg);  color: var(--err);  }}
+  .hero-status {{ margin: 0 0 32px; }}
+  .section-label {{
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }}
+  .metrics {{
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 0 0 32px;
+  }}
+  @media (max-width: 520px) {{
+    .metrics {{ grid-template-columns: repeat(2, 1fr); }}
+  }}
+  .metric {{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }}
+  .metric-label {{
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0 0 6px;
+  }}
+  .metric-value {{
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.15;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }}
+  .metric.tone-ok   .metric-value {{ color: var(--ok); }}
+  .metric.tone-warn .metric-value {{ color: var(--warn); }}
+  .metric.tone-err  .metric-value {{ color: var(--err); }}
+  .task {{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin: 0 0 10px;
+    overflow: hidden;
+  }}
+  .task-head {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border-soft);
+  }}
+  .task-name {{ font-weight: 600; font-size: 15px; color: var(--text); }}
+  .task-body {{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }}
+  .kv {{
+    padding: 12px 18px;
+    border-top: 1px solid var(--border-soft);
+    border-right: 1px solid var(--border-soft);
+  }}
+  .kv:nth-child(even) {{ border-right: none; }}
+  .kv:nth-child(-n+2) {{ border-top: none; }}
+  .kv-wide {{ grid-column: 1 / -1; border-right: none; }}
+  .kv-label {{
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0 0 3px;
+  }}
+  .kv-value {{
+    font-size: 14px;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }}
+  .kv-value.mono {{
+    font-family: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace;
+    font-size: 13px;
+  }}
+  .empty {{
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    color: var(--text-muted);
+    text-align: center;
+  }}
+  .footer {{
+    margin-top: 36px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+  }}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Homelab · backups</div>
+  <h1>Sequoia → S3 backup report</h1>
+  <p class="subhead">{start_pt.strftime('%a %b %-d')} {start_pt.strftime('%H:%M')} – {now_pt.strftime('%a %b %-d %H:%M')} PT</p>
+
+  <div class="hero-status">
+    <span class="pill pill-{overall_pill_class}"><span class="dot"></span>{overall_pill_text}</span>
+  </div>
+
+  <div class="section-label">Summary</div>
+  <div class="metrics">
+    <div class="metric"><div class="metric-label">Runs</div><div class="metric-value">{total_executions}</div></div>
+    <div class="metric{' tone-ok' if total_completed > 0 else ''}"><div class="metric-label">Completed</div><div class="metric-value">{total_completed}</div></div>
+    <div class="metric{' tone-warn' if total_in_progress > 0 else ''}"><div class="metric-label">In progress</div><div class="metric-value">{total_in_progress}</div></div>
+    <div class="metric{' tone-err' if total_errors > 0 else ''}"><div class="metric-label">Errors</div><div class="metric-value">{total_errors}</div></div>
+    <div class="metric"><div class="metric-label">Files</div><div class="metric-value">{total_files:,}</div></div>
+    <div class="metric"><div class="metric-label">Data</div><div class="metric-value">{format_bytes(total_bytes)}</div></div>
+  </div>
+
+  <div class="section-label">Executions</div>
+{tasks_html}
+
+  <div class="footer">Generated {now_pt.strftime('%Y-%m-%d %H:%M:%S')} PT</div>
 </div>
-"""
-
-html += """
 </body>
-</html>
-"""
+</html>"""
 
 print(html)
 PYTHON
