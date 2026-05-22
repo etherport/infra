@@ -13,6 +13,10 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
+      # GC Job records after 1h — prevents stale KubeJobFailed alerts
+      # accumulating across all share variants. Caught 2026-05-22 after
+      # ~4k alertmanager emails traced to stuck-Job alert spam.
+      ttlSecondsAfterFinished: 3600
       template:
         metadata:
           annotations:

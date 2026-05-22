@@ -16,6 +16,8 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 2
+      # GC Job records after 1h — prevents stale KubeJobFailed alerts.
+      ttlSecondsAfterFinished: 3600
       template:
         metadata:
           labels:

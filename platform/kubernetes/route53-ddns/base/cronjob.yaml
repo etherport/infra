@@ -11,6 +11,11 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 2
+      # GC failed/successful Job records after 1h. Without this, every
+      # failed Job lingers indefinitely and KubeJobFailed re-fires every
+      # 4h per unique job_name label — produced ~300 spurious
+      # alertmanager emails/day until 2026-05-22.
+      ttlSecondsAfterFinished: 3600
       template:
         metadata:
           labels:
