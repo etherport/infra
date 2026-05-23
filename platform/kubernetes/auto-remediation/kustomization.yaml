@@ -8,5 +8,8 @@ resources:
   - rbac.yaml
   - configmap.yaml
   - controller-configmap.yaml
+  - advisor-prompt-configmap.yaml
+  - anthropic-api-key.sops.yaml
+  - smtp-credentials.sops.yaml
   - deployment.yaml
   - service.yaml

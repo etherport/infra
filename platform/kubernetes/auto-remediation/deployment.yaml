@@ -26,11 +26,52 @@ spec:
         ports:
         - containerPort: 8080
           name: webhook
+        env:
+          # AI Advisor (M41 Phase 1 — advisory-only). Set
+          # AI_ADVISOR_ENABLED=true to turn on after populating both
+          # the anthropic-api-key and SMTP secrets.
+          - name: AI_ADVISOR_ENABLED
+            value: "false"
+          - name: AI_ADVISOR_DAILY_COST_USD_CAP
+            value: "0.50"
+          - name: AI_ADVISOR_MAX_INPUT_TOKENS
+            value: "8000"
+          - name: AI_ADVISOR_MODEL
+            value: "claude-sonnet-4-6"
+          - name: EMAIL_TO
+            value: "graham.m.smith@me.com"
+          - name: EMAIL_FROM
+            value: "ai-advisor@etherport.net"
+          - name: SMTP_HOST
+            value: "email-smtp.us-west-2.amazonaws.com"
+          - name: SMTP_PORT
+            value: "587"
+          - name: LOKI_URL
+            value: "http://loki.monitoring.svc.cluster.local:3100"
+          - name: PROMETHEUS_URL
+            value: "http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
+          - name: ANTHROPIC_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: ai-advisor-anthropic-key
+                key: api_key
+          - name: SMTP_USER
+            valueFrom:
+              secretKeyRef:
+                name: ai-advisor-smtp
+                key: smtp_auth_username
+          - name: SMTP_PASS
+            valueFrom:
+              secretKeyRef:
+                name: ai-advisor-smtp
+                key: smtp_auth_password
         volumeMounts:
         - name: script
           mountPath: /scripts
         - name: rules
           mountPath: /etc/remediation
+        - name: prompts
+          mountPath: /etc/prompts
         resources:
           requests:
             memory: "128Mi"
@@ -46,3 +87,6 @@ spec:
       - name: rules
         configMap:
           name: remediation-rules
+      - name: prompts
+        configMap:
+          name: ai-advisor-prompt

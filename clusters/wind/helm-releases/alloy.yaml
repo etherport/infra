@@ -163,6 +163,47 @@ spec:
               source_labels = ["app_name"]
               target_label  = "app"
             }
+
+            // Friendly-name remapping for noisy device hostnames so the
+            // Grafana Service Browser / label selector is readable.
+            // ASRock Rack BMC ships its mac-derived hostname; UniFi APs
+            // and switches use the CamelCase name set in the controller
+            // UI. Specific rewrites first, then a final lowercase pass.
+            rule {
+              source_labels = ["host"]
+              regex         = "^AMI.*"
+              target_label  = "host"
+              replacement   = "pve-bmc"
+              action        = "replace"
+            }
+            rule {
+              source_labels = ["host"]
+              regex         = "^UDM-Pro-Max$"
+              target_label  = "host"
+              replacement   = "udm"
+              action        = "replace"
+            }
+            rule {
+              source_labels = ["host"]
+              regex         = "^AP(.+)"
+              target_label  = "host"
+              replacement   = "ap-${1}"
+              action        = "replace"
+            }
+            rule {
+              source_labels = ["host"]
+              regex         = "^Switch(.+)"
+              target_label  = "host"
+              replacement   = "switch-${1}"
+              action        = "replace"
+            }
+            // Final pass: lowercase everything so {host="ap-deck"}
+            // works regardless of which device generated it.
+            rule {
+              source_labels = ["host"]
+              target_label  = "host"
+              action        = "lowercase"
+            }
           }
 
           loki.source.syslog "udp" {

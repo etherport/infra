@@ -15,6 +15,16 @@ rules:
 - apiGroups: [""]
   resources: ["pods/log"]
   verbs: ["get"]
+# Events: used by the AI advisor's _build_context() to fetch the
+# recent K8s event stream for the alert's target pod. Read-only.
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "list"]
+# Nodes: in case a node-level alert (NodeNotReady etc) gets handed
+# to the advisor — it'll want to read node conditions.
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list"]
 - apiGroups: ["apps"]
   resources: ["deployments", "daemonsets", "statefulsets"]
   verbs: ["get", "list", "patch"]
