@@ -1,0 +1,240 @@
+---
+# Grafana Alloy — unified collector (DaemonSet). Replaces Promtail.
+#
+# Two responsibilities:
+#   1. Tail every container log on each node (/var/log/pods/...) and
+#      forward to Loki with Kubernetes pod/namespace/container labels.
+#   2. Listen on UDP+TCP 514 for syslog from network gear (UDM-Pro, APs,
+#      switches) and forward to Loki under job=syslog.
+#
+# Why DaemonSet (not Deployment): pod log scraping needs hostPath to
+# /var/log/pods and /var/lib/docker/containers, which only works
+# node-local. The syslog receiver is also bound here (one pod per node
+# all listen on :514, but only the pod backing the LoadBalancer's
+# externalTrafficPolicy=Local node receives traffic — see service block
+# at bottom).
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: alloy
+  namespace: flux-system
+spec:
+  releaseName: alloy
+  interval: 1h
+  # Loki has to exist before Alloy starts pushing — otherwise Alloy
+  # spins retries and the syslog receiver buffers fill until OOM-kill.
+  dependsOn:
+    - name: loki
+  chart:
+    spec:
+      chart: alloy
+      version: "0.x"
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+  targetNamespace: monitoring
+  timeout: 10m
+  install:
+    timeout: 10m
+    remediation:
+      retries: 3
+  upgrade:
+    timeout: 10m
+    remediation:
+      retries: 3
+  values:
+    alloy:
+      # River config — the only thing Alloy executes. See
+      # https://grafana.com/docs/alloy/latest/reference/components/
+      configMap:
+        create: true
+        content: |
+          // ---------- Loki write target ----------
+          loki.write "default" {
+            endpoint {
+              url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+            }
+            external_labels = {
+              cluster = "wind",
+            }
+          }
+
+          // ---------- Kubernetes pod log scraping ----------
+          discovery.kubernetes "pods" {
+            role = "pod"
+          }
+
+          // Build a label set from pod metadata.
+          discovery.relabel "pod_logs" {
+            targets = discovery.kubernetes.pods.targets
+
+            // Only scrape pods on this node (DaemonSet — each Alloy
+            // pod tails only its own node's containers).
+            rule {
+              source_labels = ["__meta_kubernetes_pod_node_name"]
+              target_label  = "__host__"
+            }
+
+            rule {
+              source_labels = ["__meta_kubernetes_namespace"]
+              target_label  = "namespace"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_name"]
+              target_label  = "pod"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_container_name"]
+              target_label  = "container"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+              target_label  = "app"
+            }
+            // Path on the host for kubelet's per-container symlinked logs.
+            rule {
+              source_labels = [
+                "__meta_kubernetes_pod_uid",
+                "__meta_kubernetes_pod_container_name",
+              ]
+              target_label  = "__path__"
+              separator     = "/"
+              replacement   = "/var/log/pods/*$1/*.log"
+            }
+            rule {
+              action = "replace"
+              target_label = "job"
+              replacement  = "kubernetes-pods"
+            }
+          }
+
+          local.file_match "pod_logs" {
+            path_targets = discovery.relabel.pod_logs.output
+          }
+
+          loki.source.file "pod_logs" {
+            targets    = local.file_match.pod_logs.targets
+            forward_to = [loki.process.pod_logs.receiver]
+          }
+
+          // CRI-format log lines: "2024-01-01T... stdout F <msg>".
+          // Parse the timestamp + stream + drop the framing.
+          loki.process "pod_logs" {
+            forward_to = [loki.write.default.receiver]
+
+            stage.cri { }
+          }
+
+          // ---------- Syslog receiver (UDP+TCP 514) ----------
+          // RFC3164 (BSD) — what UDM-Pro, USW, USG, most home gear
+          // emit by default. RFC5424 is newer but few SOHO devices
+          // speak it. Alloy's loki.source.syslog handles both.
+          loki.source.syslog "udp" {
+            listener {
+              address               = "0.0.0.0:514"
+              protocol              = "udp"
+              labels                = { job = "syslog", protocol = "udp" }
+              use_incoming_timestamp = true
+            }
+            forward_to = [loki.write.default.receiver]
+          }
+
+          loki.source.syslog "tcp" {
+            listener {
+              address               = "0.0.0.0:514"
+              protocol              = "tcp"
+              labels                = { job = "syslog", protocol = "tcp" }
+              use_incoming_timestamp = true
+            }
+            forward_to = [loki.write.default.receiver]
+          }
+
+      # The DaemonSet must run on every node and needs hostPath access
+      # to /var/log/pods + /var/lib/docker/containers (symlink targets).
+      mounts:
+        varlog: true
+        dockercontainers: true
+      # Required for syslog receiver to bind :514 — privileged port.
+      # NET_BIND_SERVICE is the minimal capability; we don't need root.
+      securityContext:
+        capabilities:
+          add: ["NET_BIND_SERVICE"]
+        runAsUser: 0  # log files are root:root on the host
+        runAsNonRoot: false
+
+      resources:
+        requests:
+          memory: "128Mi"
+          cpu: "50m"
+        limits:
+          memory: "512Mi"
+          cpu: "500m"
+
+      # Bind the syslog receivers on the host so the pod's :514 maps
+      # cleanly when the LoadBalancer Service hits this node. The
+      # cluster Service (below) round-robins between pods, but
+      # externalTrafficPolicy=Local pins traffic to the receiving node
+      # so syslog source IPs are preserved (UDM rate-based DNS).
+      extraPorts:
+        - name: syslog-udp
+          port: 514
+          targetPort: 514
+          protocol: UDP
+        - name: syslog-tcp
+          port: 514
+          targetPort: 514
+          protocol: TCP
+
+    # DaemonSet controller mode — one pod per node.
+    controller:
+      type: daemonset
+      tolerations:
+        # Run on control-plane nodes too so their logs ship.
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+
+    # Internal Service (ClusterIP) for the Alloy HTTP UI / metrics.
+    service:
+      enabled: true
+      type: ClusterIP
+
+    # Separate LoadBalancer Service for syslog ingestion. MetalLB
+    # assigns 10.10.201.73 — see report; pool is 10.10.201.70-90,
+    # .70=Traefik, .71/.72=Technitium cluster, so .73 is the next free.
+    # externalTrafficPolicy=Local preserves the source IP so syslog
+    # records show the actual device address, not a CNI-translated one.
+    serviceMonitor:
+      enabled: false  # avoid duplicate Alloy ServiceMonitor
+
+    # Loki ServiceMonitor (chart key: serviceMonitor) is for Alloy's
+    # own metrics; we leave it off to keep the kube-prometheus-stack
+    # scrape simple (Alloy exposes /metrics anyway, can opt in later).
+
+    # Custom syslog Service rendered via the chart's extraObjects hook.
+    extraObjects:
+      - apiVersion: v1
+        kind: Service
+        metadata:
+          name: alloy-syslog
+          namespace: monitoring
+          labels:
+            app.kubernetes.io/name: alloy
+            app.kubernetes.io/component: syslog-receiver
+        spec:
+          type: LoadBalancer
+          loadBalancerIP: 10.10.201.73
+          # Preserve source IP for syslog; rules+dashboards filter on it.
+          externalTrafficPolicy: Local
+          selector:
+            app.kubernetes.io/name: alloy
+            app.kubernetes.io/instance: alloy
+          ports:
+            - name: syslog-udp
+              port: 514
+              targetPort: 514
+              protocol: UDP
+            - name: syslog-tcp
+              port: 514
+              targetPort: 514
+              protocol: TCP

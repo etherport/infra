@@ -13,5 +13,6 @@ resources:
   - grafana-admin-secret.sops.yaml
   - alertmanager-secret.sops.yaml
   - nvidia-gpu-dashboard.yaml
+  - loki-datasource.yaml
   - dashboards
   - service-status-report

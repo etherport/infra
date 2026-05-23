@@ -13,4 +13,7 @@ resources:
   - tailscale-operator.yaml
   - tailscale-connector.yaml
   - github-actions-runner.yaml
+  # Logging (Loki single-binary + Alloy DaemonSet for k8s + syslog)
+  - loki.yaml
+  - alloy.yaml
   # Note: cilium is managed by kubespray, not Flux

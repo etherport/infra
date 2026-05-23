@@ -1,0 +1,145 @@
+---
+# Loki — single-binary log store, Ceph RBD for hot chunks + index.
+#
+# Scope: homelab. ~50-100 GB/month log volume cap. 30 d retention. Single
+# tenant (no multitenancy auth). Internal-only ClusterIP service; Grafana
+# (same namespace) is the only intended reader, Alloy the only writer.
+#
+# Future: when log volume or query history outgrows local PVC, flip the
+# storage stanza to s3 with our existing Velero S3 user. Schema is already
+# tsdb so the migration is "add s3 config, leave existing chunks on PVC
+# as a sealed period". Not done now — out of scope.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: loki
+  namespace: flux-system
+spec:
+  releaseName: loki
+  interval: 1h
+  chart:
+    spec:
+      chart: loki
+      version: "6.x"
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+  targetNamespace: monitoring
+  timeout: 15m
+  install:
+    timeout: 15m
+    remediation:
+      retries: 3
+  upgrade:
+    timeout: 15m
+    remediation:
+      retries: 3
+  values:
+    # Single-binary deployment mode: read+write+backend in one pod. The
+    # chart still ships the SimpleScalable (read/write split) and
+    # Distributed (ingester/querier/etc.) modes — both are overkill at our
+    # scale and either way require object storage. Single-binary with a
+    # filesystem-backed object store is the supported "small" footprint.
+    deploymentMode: SingleBinary
+
+    loki:
+      auth_enabled: false  # single tenant — no X-Scope-OrgID required
+      # Tell Loki it's the `fake` tenant (auth_enabled=false default).
+      commonConfig:
+        replication_factor: 1
+      schemaConfig:
+        configs:
+          - from: "2024-04-01"
+            store: tsdb
+            object_store: filesystem
+            schema: v13
+            index:
+              prefix: loki_index_
+              period: 24h
+      storage:
+        type: filesystem
+        # Filesystem object store path inside the pod; mapped onto the
+        # Ceph RBD PVC via singleBinary.persistence below.
+        filesystem:
+          chunks_directory: /var/loki/chunks
+          rules_directory: /var/loki/rules
+      # Retention enforced by the compactor. 30 d = 720 h.
+      limits_config:
+        retention_period: 720h
+        # Conservative ingest rate caps — homelab won't hit these but
+        # they cap blast radius from a runaway log producer.
+        ingestion_rate_mb: 10
+        ingestion_burst_size_mb: 20
+        # Reject log lines older than 12 h (default 168 h). Tightens
+        # the window an Alloy backlog or clock-skewed source can write
+        # into past index periods.
+        reject_old_samples: true
+        reject_old_samples_max_age: 12h
+      compactor:
+        retention_enabled: true
+        delete_request_store: filesystem
+        working_directory: /var/loki/compactor
+      # Privacy: opt out of Grafana Labs' anonymous usage stats. Loki
+      # otherwise phones home cluster/version metadata daily.
+      analytics:
+        reporting_enabled: false
+
+    # Single-binary pod sizing + storage.
+    singleBinary:
+      replicas: 1
+      resources:
+        requests:
+          memory: "256Mi"
+          cpu: "100m"
+        limits:
+          memory: "1Gi"
+          cpu: "1000m"
+      persistence:
+        enabled: true
+        storageClass: ceph-rbd
+        accessModes:
+          - ReadWriteOnce
+        size: 20Gi
+      # Recreate so the old pod releases the RWO PVC before the new one
+      # tries to attach (same pattern as Grafana in monitoring.yaml).
+      extraArgs: []
+
+    # Disable the components we don't use in SingleBinary mode. The
+    # chart still renders empty Deployments/Services for these by
+    # default; explicit replicas:0 keeps the namespace tidy.
+    read:
+      replicas: 0
+    write:
+      replicas: 0
+    backend:
+      replicas: 0
+
+    # The chart wants to pull in a MinIO subchart for object storage by
+    # default. We're on filesystem — disable the dependency entirely.
+    minio:
+      enabled: false
+
+    # No nginx gateway needed; Grafana queries the loki-gateway-less
+    # singleBinary Service directly at http://loki:3100.
+    gateway:
+      enabled: false
+
+    # Skip the bundled monitoring (which would deploy its own Grafana
+    # Agent + Mimir + Tempo). We have kube-prometheus-stack already.
+    monitoring:
+      selfMonitoring:
+        enabled: false
+        grafanaAgent:
+          installOperator: false
+      lokiCanary:
+        enabled: false
+      serviceMonitor:
+        enabled: true  # let kube-prometheus-stack scrape loki itself
+    test:
+      enabled: false
+
+    # Chunk + result cache — keep in-pod, no separate Memcached pods.
+    chunksCache:
+      enabled: false
+    resultsCache:
+      enabled: false

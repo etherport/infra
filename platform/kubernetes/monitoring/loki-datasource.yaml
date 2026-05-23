@@ -1,0 +1,43 @@
+---
+# Auto-provision Loki as a Grafana datasource.
+#
+# How it works: the kube-prometheus-stack Grafana pod runs a sidecar that
+# watches for ConfigMaps with the label grafana_datasource=1 (see
+# clusters/wind/helm-releases/monitoring.yaml — sidecar.datasources is
+# left at chart defaults which include this watch). On apply, the sidecar
+# drops the file into /etc/grafana/provisioning/datasources/ and reloads.
+#
+# Sidecar picks up changes asynchronously, so there's no hard ordering
+# dep between this ConfigMap and the loki HelmRelease — Grafana will
+# show "datasource down" until Loki is Ready, then the panel goes green
+# without a pod restart.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource-loki
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  loki-datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        access: proxy
+        # Single-binary Service in the same namespace. The chart names
+        # the Service after the release: `loki` (port 3100 = HTTP API).
+        url: http://loki.monitoring.svc.cluster.local:3100
+        # Loki is single-tenant (auth_enabled=false), but Grafana still
+        # has to send a tenant header on some endpoints. `fake` is the
+        # documented default tenant ID for unauth Loki.
+        jsonData:
+          httpHeaderName1: X-Scope-OrgID
+          timeout: 60
+          maxLines: 1000
+        secureJsonData:
+          httpHeaderValue1: fake
+        # Don't make Loki the default — Prometheus stays default so
+        # existing dashboards keep working unchanged.
+        isDefault: false
+        editable: false
