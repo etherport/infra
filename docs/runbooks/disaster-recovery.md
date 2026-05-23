@@ -181,6 +181,96 @@ velero restore create pvc-restore \
   --include-resources persistentvolumeclaims,persistentvolumes
 ```
 
+### 2.3 Static-PV adoption (orphaned RBD image → new cluster)
+
+**When to use this pattern:** the K8s cluster has been rebuilt (rebuild,
+DR drill, migration), but the underlying Ceph RBD pool wasn't destroyed
+— the images that backed your old PVs still exist. A vanilla Velero
+restore re-creates the PVC and dynamically provisions a NEW empty RBD
+image, throwing away the surviving data. To adopt the existing image
+instead, pre-create a static PV that references it directly and a
+pre-bound PVC pointing at that PV.
+
+This is more reliable than Velero filesystem restore for large
+datasets (no copy time, no risk of partial restore) and is the only
+sane recovery for databases that wrote inside the volume after the
+last filesystem backup window.
+
+**The pattern (3 manifests, applied in order):**
+
+1. **`PersistentVolume`** with `claimRef` to the future PVC and
+   `volumeAttributes.staticVolume: "true"` (tells the ceph-csi driver
+   not to try to provision; just mount).
+2. **`PersistentVolumeClaim`** with `volumeName` pinned to that PV
+   plus whatever app-specific labels/annotations are needed to
+   convince the operator it's a real pre-existing PVC. CNPG needs
+   `cnpg.io/pvcStatus: ready`; Helm chart-managed PVCs usually need
+   `helm.sh/resource-policy: keep` on the chart.
+3. **The workload** — operator / Deployment / StatefulSet — comes up
+   *after* the PVC is Bound. The PVC stays put because the PV's
+   `persistentVolumeReclaimPolicy: Retain` keeps it across delete
+   churn.
+
+**Worked example (CNPG postgres, shipping in-repo):**
+
+```
+platform/kubernetes/cnpg/03-static-pv-recovery.yaml  # PV → RBD image
+platform/kubernetes/cnpg/04-pvc-pre-bind.yaml        # PVC pre-bound
+platform/kubernetes/cnpg/01-cluster.yaml             # CNPG Cluster
+```
+
+The `kustomization.yaml` orders 03 and 04 before 01 so the CNPG
+operator finds a `ready` PVC and adopts the existing pgdata instead
+of running `bootstrap.initdb` over empty storage. See
+[`platform/kubernetes/cnpg/README.md`](../../platform/kubernetes/cnpg/README.md)
+§Disaster Recovery for full context.
+
+**Finding the right RBD image name for a recovered workload:**
+
+```bash
+# 1. Connect to a Ceph mon (from any k8s node with toolbox, or from
+#    the external Ceph cluster directly):
+ceph osd pool ls
+rbd ls -p k8s-ceph
+
+# 2. Each image holds metadata about which PVC it backed. Match by
+#    PVC name from the pre-rebuild cluster:
+for img in $(rbd ls -p k8s-ceph); do
+    echo "=== $img ==="
+    rbd image-meta list "k8s-ceph/$img" 2>/dev/null | grep -E "csi.storage.k8s.io/(pvc/name|pvc/namespace)"
+done
+
+# 3. The matching image's name (e.g. csi-vol-0ef4fde9-...) is what
+#    goes into volumeAttributes.imageName + volumeHandle in the PV.
+```
+
+**Apps where this pattern applies (anything with a ReadWriteOnce
+ceph-rbd PVC that you can't afford to lose):**
+
+- `home-automation/home-assistant` — config DB + integration state
+- `plex/plex` — library metadata (re-scanning the media library from
+  scratch is hours)
+- `ollama/ollama` — model cache (`ollama-data-recovery` already
+  uses this pattern; see the PVC's claimRef)
+- `wikijs/wikijs` — content store
+- Any postgres database via CNPG
+
+**Apps where vanilla Velero restore is fine:**
+
+- Anything stateless (Grafana settings live in K8s, dashboards via
+  ConfigMap; Traefik is config-as-code; cert-manager re-issues from
+  the cluster issuer; etc.)
+- Anything with a fresh-bootstrap path that's faster than rebuilding
+  the dataset (kopia repo data — Velero backup is the right copy)
+
+**Operator-specific adoption gotchas:**
+
+| Operator | What to set on the PVC | Why |
+|---|---|---|
+| CNPG (cnpg.io) | `annotations: cnpg.io/pvcStatus: ready` + `cnpg.io/instanceName` label | Operator scans for `ready` PVCs before deciding to initdb |
+| stateful Helm charts | `annotations: helm.sh/resource-policy: keep` | Stops Helm from deleting the PVC on uninstall/upgrade |
+| StatefulSets | None — STS reuses PVCs by name match | Just make sure the PVC name matches the STS volumeClaimTemplate naming convention (`<vct-name>-<sts-name>-<ordinal>`) |
+
 ---
 
 ## 3. DNS Recovery

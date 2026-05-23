@@ -150,8 +150,8 @@ revision use the next free ID per tier. Status legend:
 
 ## MEDIUM — quality / hygiene
 
-### ⏳ M1. Static-PV recovery pattern in `disaster-recovery.md`
-- Source: `archive/outstanding-work-2026-05-16.md` M1.
+### ✅ M1. Static-PV recovery pattern in `disaster-recovery.md`
+- **Done:** 2026-05-23 (commit follows). Added §2.3 "Static-PV adoption (orphaned RBD image → new cluster)" covering: when to use the pattern, the 3-manifest shape (PV + pre-bound PVC + workload), the CNPG worked example shipping in `platform/kubernetes/cnpg/`, how to find the right RBD image name via `rbd image-meta list`, the list of apps where this pattern applies (HA, plex, ollama, wikijs, postgres) vs. apps where vanilla Velero restore is fine, and operator-specific adoption gotchas (CNPG `pvcStatus: ready`, Helm `resource-policy: keep`, STS reuse-by-name). Source: `archive/outstanding-work-2026-05-16.md` M1.
 
 ### ✅ M2. cert-manager wildcard runbook (renewal + rotation)
 - **Done:** 2026-05-22 (commit `6c896ee`). `docs/runbooks/cert-manager-wildcard.md` rewritten from the thin prior version. Now covers the dual-cert architecture (ECDSA shortlived for Traefik vs RSA classic for UniFi-OS — unifi-core silently rejects ECDSA and certs without CN-in-Subject), automatic renewal cadence (day-4 / day-60), manual rotation procedures (per-cert renew, Route53 cred rotation, ACME account key regen), failure modes (dns01 challenge failure, LE rate-limit, stale Traefik secret, unifi-cert-sync auth break), and a what-NOT-to-do list. Source: `archive/outstanding-work-2026-05-16.md` M2.
