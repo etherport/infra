@@ -176,34 +176,20 @@
     # ---------------------------------------------------------------------
     # ipmievd is shipped with ipmitool. It watches the BMC's System
     # Event Log and writes new entries to local syslog with programname
-    # "ipmievd". Combined with the rsyslog forwarder below, this gets
-    # every sensor threshold assertion and SEL entry to Loki in real
-    # time without depending on the BMC's own remote syslog.
-    - name: Ensure ipmievd systemd unit is present
-      ansible.builtin.copy:
-        dest: /etc/systemd/system/ipmievd.service
-        owner: root
-        group: root
-        mode: "0644"
-        content: |
-          [Unit]
-          Description=IPMI event log monitor (ipmitool ipmievd)
-          Documentation=man:ipmievd(8)
-          After=network-online.target
-          Wants=network-online.target
+    # "ipmievd". Debian's ipmitool package ALREADY installs
+    # /usr/lib/systemd/system/ipmievd.service — just enable + start it.
+    # An earlier draft of this playbook installed a custom unit with
+    # Type=forking + ExecStart=/usr/sbin/ipmievd -O /run/ipmievd.pid sel
+    # which hung in "activating (start)" forever because -O selects the
+    # IPMI interface type, NOT a pid file — ipmievd never forked, never
+    # wrote a pidfile, and systemd waited for the fork that never came.
+    - name: Remove obsolete custom ipmievd unit override (cleanup)
+      ansible.builtin.file:
+        path: /etc/systemd/system/ipmievd.service
+        state: absent
+      notify: daemon-reload
 
-          [Service]
-          Type=forking
-          PIDFile=/run/ipmievd.pid
-          ExecStart=/usr/sbin/ipmievd -O /run/ipmievd.pid sel
-          Restart=on-failure
-          RestartSec=10
-
-          [Install]
-          WantedBy=multi-user.target
-      notify: Restart ipmievd
-
-    - name: Enable + start ipmievd
+    - name: Enable + start packaged ipmievd
       ansible.builtin.systemd:
         name: ipmievd
         enabled: true
@@ -301,10 +287,8 @@
         daemon_reload: true
 
   handlers:
-    - name: Restart ipmievd
+    - name: daemon-reload
       ansible.builtin.systemd:
-        name: ipmievd
-        state: restarted
         daemon_reload: true
 
     - name: Restart rsyslog
