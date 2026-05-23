@@ -86,6 +86,18 @@ spec:
         podAntiAffinityTopologyKey: kubernetes.io/hostname
         serviceMonitorSelectorNilUsesHelmValues: false
         podMonitorSelectorNilUsesHelmValues: false
+        # Wire the prometheus-additional-scrape-configs Secret (defined
+        # in platform/kubernetes/monitoring/01-external-scrape-config.yaml)
+        # so the `external-nodes` job — node_exporter on dns-fallback,
+        # vpn-local, dns-aws, vpn-aws — actually loads. Without this,
+        # the Secret exists but is never referenced; the four hosts show
+        # as UNKNOWN in the service-status dashboard + email and the
+        # ExternalHostDown / TechnitiumDNSDown / VPNGatewayDown alerts
+        # could never fire. Caught 2026-05-23.
+        additionalScrapeConfigsSecret:
+          enabled: true
+          name: prometheus-additional-scrape-configs
+          key: additional-scrape-configs.yaml
         resources:
           requests:
             memory: "512Mi"
