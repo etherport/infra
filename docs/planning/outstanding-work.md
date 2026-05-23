@@ -73,22 +73,13 @@ revision use the next free ID per tier. Status legend:
 ### ✅ H8. Archive completed migration docs
 - **Done:** 2026-05-22. Eleven planning docs moved to `docs/planning/archive/` with a `README.md` table listing why each was archived. Includes the just-completed `proxmox-sdn-implementation-2026-05-18.md` (PRs 1-6 all shipped). Top-level `docs/planning/` now holds only the canonical tracker + active design docs + ADRs.
 
-### 🟡 H9. Deploy swap + CloudWatch agent + node_exporter on external VMs
-- **Status 2026-05-23:** Local hosts complete; both AWS hosts blocked on the same SSH-key problem.
-- **New workflow:** `.github/workflows/ansible-vm-fleet.yml` runs base.yml / swap.yml / cloudwatch-agent.yml against any subset of dns-fallback / vpn-local / dns-aws / vpn-aws.
-- **Done (local hosts):** base, swap, cloudwatch-agent all applied to dns-fallback + vpn-local. node_exporter v1.8.2 confirmed scraping (UP in dashboard + email). swap isn't strictly needed on local hosts (8GB RAM) but applied for consistency.
-- **⏳ Blocked on BOTH AWS hosts:** ansible SSH to `ubuntu@10.10.100.5` (dns-aws) + `ubuntu@10.10.100.10` (vpn-aws) returns `Permission denied (publickey)`. The gh-runner's ANSIBLE_SSH_KEY pubkey isn't authorized on either AWS host. (dns-aws was UP in the dashboard because node_exporter was installed manually pre-Ansible; vpn-aws was never set up.) One-shot fix from your laptop using the `GS-EC2` AWS key:
-  ```
-  PUBKEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab'
-  for h in 10.10.100.5 10.10.100.10; do
-    ssh ubuntu@$h "grep -qF '$PUBKEY' ~/.ssh/authorized_keys || echo '$PUBKEY' >> ~/.ssh/authorized_keys"
-  done
-  # Then re-dispatch ansible against both AWS hosts:
-  for p in base swap cloudwatch-agent; do
-    gh workflow run ansible-vm-fleet.yml -f playbook=$p -f inventory=aws -f action=apply
-  done
-  ```
-- **Durable IaC follow-up (M28 below):** add the homelab automation pubkey to the AWS VMs' cloud-init `user_data` so future-recreates have it baked in.
+### ✅ H9. Deploy swap + CloudWatch agent + node_exporter on external VMs
+- **Done:** 2026-05-23. All four external VMs now have node_exporter + swap + (AWS-only) cloudwatch-agent installed and reporting healthy in the service-status dashboard + email.
+- **New IaC:** `.github/workflows/ansible-vm-fleet.yml` — generic dispatch wrapper that runs base.yml / swap.yml / cloudwatch-agent.yml against any subset of dns-fallback / vpn-local / dns-aws / vpn-aws on the self-hosted gh-runner (mirrors ansible-proxmox.yml pattern).
+- **Per-host status:**
+  - dns-fallback, vpn-local: base + swap applied via workflow. (swap is overkill on 8GB local VMs but applied for consistency.)
+  - dns-aws, vpn-aws: base + swap + cloudwatch-agent applied via workflow. Initial dispatch blocked on missing `automation@homelab` pubkey on `~ubuntu/.ssh/authorized_keys`; pubkey appended via SSH from laptop, then re-dispatched cleanly.
+- **Durable fix landed (M28 ✅ below):** cloud-init `user_data` on `aws_instance.{vpn,dns}` bakes the pubkey on first boot of any future recreate. `lifecycle.ignore_changes = [user_data]` prevents source diffs from touching existing instances.
 
 ### ✅ H10. Inventory consolidation (ansible vs kubespray)
 - **Done:** 2026-05-16. Tracked as task #5.
@@ -241,11 +232,8 @@ revision use the next free ID per tier. Status legend:
 ### ✅ M24. Modernize s3-sync daily-report HTML
 - **Done:** 2026-05-22 (commit `cc70da4`). Replaced the bootstrap-y card grid in `platform/kubernetes/backups/aws-s3/image/scripts/daily-report.sh` with a refined neutral palette (CSS vars), `prefers-color-scheme` dark-mode support, tabular numerics, status pills with currentColor-dotted indicator instead of full pill bg, monospace timestamps, and a responsive 2-col grid on narrow viewports. Targets Apple Mail (iCloud) primarily — other clients degrade gracefully. Source: task #39 (✅).
 
-### ⏳ M28. Bake homelab automation pubkey into AWS VMs' user_data
-- **Source:** discovered 2026-05-23 during H9 (both dns-aws + vpn-aws rejected the gh-runner SSH key).
-- Currently `aws_instance.dns` and `aws_instance.vpn` in `infra/terraform/aws/compute/main.tf` provision with `key_name = aws_key_pair.gs_ec2.key_name` only (your personal SSH key). The homelab automation pubkey (the one stored in 1Password as `Homelab Automation SSH Key`) was never added to `~ubuntu/.ssh/authorized_keys` on those VMs, so the gh-runner can't ansible them. Today's workaround is a manual `ssh ... >> authorized_keys` from your laptop (see H9 above).
-- Durable fix: add a `user_data` block to each `aws_instance` resource that drops the automation pubkey into `/home/ubuntu/.ssh/authorized_keys` via cloud-init. Only takes effect on instance recreate (both VMs have `lifecycle.prevent_destroy = true`, so cloud-init only fires on a fresh deploy — but it's the right safety net for any future rebuild).
-- Effort: S.
+### ✅ M28. Bake homelab automation pubkey into AWS VMs' user_data
+- **Done:** 2026-05-23 (commit `47aa528`). Added `local.aws_vm_cloud_init` to `infra/terraform/aws/compute/main.tf` — cloud-init payload that appends the automation pubkey to `ubuntu`'s `authorized_keys` on first boot. Wired to both `aws_instance.vpn` and `aws_instance.dns` with `lifecycle.ignore_changes = [user_data]` so the source change doesn't trip the existing running instances' `prevent_destroy`. Has zero effect on what's running today; future recreate gets the key baked in so the ansible-vm-fleet workflow works on day one.
 
 ### ⏳ M29. kube-proxy metrics not scrapable (TargetDown warning)
 - **Source:** discovered 2026-05-23 during alert audit.
