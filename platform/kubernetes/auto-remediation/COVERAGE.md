@@ -81,7 +81,6 @@ automatically).
 - **CNPG** (`cnpg-system/cnpg-cloudnative-pg`) — Postgres operator. Failures here block all stateful apps.
 - **ceph-csi RBD provisioner** (`default/csi-rbdplugin-provisioner`) — if this is down, no new PVCs.
 - **WireGuard K8s pod** (`wireguard/wireguard`) — single replica, VRRP backup is vpn-local. The 2026-05-22 incident showed VRRP failover IS automatic but slow without preStop fixes.
-- **NordVPN meshnet** (`nordvpn-meshnet/nordvpn-meshnet`) — external connectivity layer.
 - **Multus DS** (`kube-system/kube-multus-ds-amd64`) — secondary NIC attachments.
 - **MetalLB speakers** (currently only `MetalLBControllerDown` covered; speaker DS not). Speakers were the cause of the technitium aggregator advertisement bug (#33).
 

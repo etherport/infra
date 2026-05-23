@@ -45,7 +45,6 @@ resources:
   # VPN / Remote Access
   - ../../platform/kubernetes/tailscale
   - ../../platform/kubernetes/wireguard
-  - ../../platform/kubernetes/nordvpn-meshnet
   # CI/CD
   - ../../platform/kubernetes/github-actions-runner
   # Certificate management

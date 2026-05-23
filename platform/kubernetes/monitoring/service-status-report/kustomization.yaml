@@ -7,13 +7,20 @@ resources:
   - serviceaccount.yaml
   - cronjob.yaml
 
-# The python script is mounted into the pod via this ConfigMap. Updating
-# the .py file regenerates the ConfigMap on next apply; the next CronJob
-# fire picks up the change.
+# The python script + the shared `services` inventory module are
+# mounted into the pod via this ConfigMap. The script imports SERVICES
+# from services.py at runtime, so editing the inventory regenerates
+# the ConfigMap on next apply and the next CronJob fire picks up the
+# change.
+#
+# `gen-dashboard.py` is committed alongside but NOT mounted — it's a
+# repo-side helper to regenerate the dashboard YAML from the same
+# services.py.
 configMapGenerator:
   - name: service-status-report-script
     files:
       - service-status-report.py
+      - services.py
   - name: service-status-email
     envs:
       - email.env

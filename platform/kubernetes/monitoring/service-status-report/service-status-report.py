@@ -35,6 +35,14 @@ from datetime import datetime, timezone
 from email.message import EmailMessage
 from zoneinfo import ZoneInfo
 
+# Inventory is the single source of truth at ./services.py — both this
+# script and gen-dashboard.py import the same SERVICES list. Both files
+# are mounted into this pod via the service-status-report-script
+# ConfigMap (see kustomization.yaml), and /work is on sys.path because
+# the script lives there.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from services import SERVICES  # noqa: E402
+
 PROM_URL = os.environ.get("PROM_URL", "").rstrip("/")
 ALERTMANAGER_URL = os.environ.get("ALERTMANAGER_URL", "").rstrip("/")
 REPORT_TITLE = os.environ.get("REPORT_TITLE", "Homelab status")
@@ -54,63 +62,6 @@ if not STDOUT_ONLY:
 PACIFIC = ZoneInfo("America/Los_Angeles")
 NOW = datetime.now(timezone.utc)
 NOW_PT = NOW.astimezone(PACIFIC)
-
-# Service inventory. Each row is:
-#   (category, display_name, kind, namespace, target)
-# where kind ∈ {deployment, statefulset, daemonset, external}, and target
-# is the deployment/statefulset/daemonset name OR the external-nodes
-# instance prefix.
-#
-# When a target doesn't exist in Prometheus, status renders as "unknown"
-# rather than failing the report. Add or remove rows as the inventory
-# evolves — the report is intentionally explicit, not auto-discovered, so
-# the list itself doubles as documentation of what we expect to be up.
-SERVICES = [
-    # Core platform
-    ("Core platform", "Grafana",                "deployment", "monitoring",     "monitoring-grafana"),
-    ("Core platform", "Prometheus",             "statefulset","monitoring",     "prometheus-monitoring-kube-prometheus-prometheus"),
-    ("Core platform", "Alertmanager",           "statefulset","monitoring",     "alertmanager-monitoring-kube-prometheus-alertmanager"),
-    ("Core platform", "Traefik",                "deployment", "traefik",        "traefik"),
-    ("Core platform", "cert-manager",           "deployment", "cert-manager",   "cert-manager"),
-    ("Core platform", "cert-manager webhook",   "deployment", "cert-manager",   "cert-manager-webhook"),
-    ("Core platform", "cert-manager cainjector","deployment", "cert-manager",   "cert-manager-cainjector"),
-
-    # GitOps
-    ("GitOps", "Flux helm-controller",         "deployment", "flux-system",    "helm-controller"),
-    ("GitOps", "Flux kustomize-controller",    "deployment", "flux-system",    "kustomize-controller"),
-    ("GitOps", "Flux source-controller",       "deployment", "flux-system",    "source-controller"),
-    ("GitOps", "Flux notification-controller", "deployment", "flux-system",    "notification-controller"),
-
-    # Networking + VPN
-    ("Networking", "MetalLB controller", "deployment", "metallb-system",      "controller"),
-    ("Networking", "MetalLB speakers",   "daemonset",  "metallb-system",      "speaker"),
-    ("Networking", "Multus CNI",         "daemonset",  "kube-system",         "kube-multus-ds-amd64"),
-    ("Networking", "WireGuard",          "deployment", "wireguard",           "wireguard"),
-    ("Networking", "NordVPN meshnet",    "deployment", "nordvpn-meshnet",     "nordvpn-meshnet"),
-
-    # Storage / data
-    ("Storage / data", "CNPG operator",         "deployment", "cnpg-system", "cnpg-cloudnative-pg"),
-    ("Storage / data", "Ceph CSI provisioner",  "deployment", "default",     "csi-rbdplugin-provisioner"),
-
-    # DNS
-    ("DNS", "Technitium DNS", "statefulset", "dns", "technitium"),
-
-    # Backup
-    ("Backup", "Velero", "deployment", "velero",  "velero"),
-    ("Backup", "Kopia",  "deployment", "backups", "kopia"),
-
-    # Apps
-    ("Apps", "Home Assistant", "deployment", "home-automation", "home-assistant"),
-    ("Apps", "Plex",           "deployment", "plex",            "plex"),
-    ("Apps", "Ollama",         "deployment", "ollama",          "ollama"),
-
-    # External edge (probed via external-nodes scrape job)
-    ("External edge", "dns-fallback", "external", "external-nodes", "dns-fallback"),
-    ("External edge", "dns-aws",      "external", "external-nodes", "dns-aws"),
-    ("External edge", "vpn-local",    "external", "external-nodes", "vpn-local"),
-    ("External edge", "vpn-aws",      "external", "external-nodes", "vpn-aws"),
-]
-
 
 def prom_query(query: str):
     """Return the `data.result` array, or [] on any error."""
