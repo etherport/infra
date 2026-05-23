@@ -36,17 +36,18 @@ variable "rule_specs" {
       port              = 53
       protocols         = ["tcp", "udp"]
     },
-    # FUTURE: allow_ssh SG (sg-0079fee23ee54417a), port 22 TCP. Gated
-    # on confirming whether `86.98.93.115/32` (currently in the SG, UAE
-    # IP, no description) should be preserved or is safe to drop on
-    # the next Lambda run. Once confirmed, uncomment to enable Lambda
-    # ownership of SSH ingress + remove the matching hardcoded TF
-    # ingress rules in networking/security_groups.tf.
-    # {
-    #   security_group_id = "sg-0079fee23ee54417a"
-    #   port              = 22
-    #   protocols         = ["tcp"]
-    # },
+    # allow_ssh SG: port 22 TCP. Enabled 2026-05-23 after user
+    # confirmation that the stale entries (47.34.215.233 old "remote
+    # location", 47.159.189.230 old TF var default, 146.70.238.13
+    # + 146.70.238.0/24 NordVPN remnants, 86.98.93.115/32 UAE IP) are
+    # all safe to drop. Lambda will reconcile to whatever wan1/wan2
+    # currently resolve to. Note: /24 entries are out of scope (Lambda
+    # only manages /32s) — those need manual cleanup.
+    {
+      security_group_id = "sg-0079fee23ee54417a"
+      port              = 22
+      protocols         = ["tcp"]
+    },
   ]
 }
 

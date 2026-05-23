@@ -175,22 +175,19 @@ resource "aws_security_group" "allow_ssh" {
   })
 }
 
-resource "aws_vpc_security_group_ingress_rule" "ssh_restricted" {
-  security_group_id = aws_security_group.allow_ssh.id
-  description       = "Allow SSH access from homelab WAN"
-  ip_protocol       = "tcp"
-  from_port         = 22
-  to_port           = 22
-  cidr_ipv4         = var.ssh_allowed_ip
+# SSH ingress from homelab WAN is now managed by the dns-restrict-ip
+# Lambda (rule_specs include allow_ssh:22:tcp as of 2026-05-23). The
+# Lambda keeps SG state in sync with wan1/wan2.wind.etherport.net
+# Route53 records; hardcoded TF rules below would fight it on every
+# WAN-IP change. Same pattern as the DNS rules transferred in H6 first
+# half (commit d0f3a36).
+removed {
+  from = aws_vpc_security_group_ingress_rule.ssh_restricted
+  lifecycle { destroy = false }
 }
-
-resource "aws_vpc_security_group_ingress_rule" "ssh_remote" {
-  security_group_id = aws_security_group.allow_ssh.id
-  description       = "Allow SSH access from remote location"
-  ip_protocol       = "tcp"
-  from_port         = 22
-  to_port           = 22
-  cidr_ipv4         = "47.34.215.233/32"
+removed {
+  from = aws_vpc_security_group_ingress_rule.ssh_remote
+  lifecycle { destroy = false }
 }
 
 resource "aws_vpc_security_group_egress_rule" "ssh_all_ipv4" {
