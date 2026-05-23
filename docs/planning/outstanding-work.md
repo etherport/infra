@@ -129,15 +129,12 @@ revision use the next free ID per tier. Status legend:
 ### ✅ H25. Ceph migration to dedicated VLAN 210
 - **Done:** 2026-05-18. Mon on `10.10.210.41:6789`, K8s VMs got `enp6s22` (MTU 9000) with netplan `dhcp4-overrides` to prevent bad-route injection. Tracked as task #26.
 
-### 🟡 H26. Proxmox SDN migration — Phase 1
-- **Status:** PRs 1–4 done; PR 5 (K8s VMs) paused; PR 6 (cleanup) blocked on PR 5.
-- **PR 1** (TF module + workflow): done.
-- **PR 2** (zone + VNets, mgmt + storage VNets intentionally absent): done.
-- **PR 3** (dns-fallback canary): done 2026-05-18.
-- **PR 4** (vpn-local + gh-runner): done 2026-05-18.
-- **PR 5** (K8s VMs, 8 VMs, 4–6h drain-and-migrate): **pending**, needs supervision per CP. Plan revised: NIC 5 (VLAN 210) stays on `vmbr0+vlan_id=210` because the storage VNet would conflict with PVE's own vmbr0.210.
-- **PR 6** (cleanup `local.bridge_name`/`local.vlan_tag`): pending PR 5.
-- Tracked as task #19.
+### ✅ H26. Proxmox SDN migration — Phase 1
+- **Done:** 2026-05-22. All 6 PRs shipped:
+  - PR 1 (TF module + workflow), PR 2 (zone + VNets), PR 3 (dns-fallback canary 2026-05-18), PR 4 (vpn-local + gh-runner 2026-05-18).
+  - PR 5 (8 K8s VMs migrated NICs 1-4 to SDN bridges `servers`/`clients`/`iot`/`security`; NIC 5 stays on `vmbr0+vlan_id=210` to avoid conflict with PVE's own vmbr0.210).
+  - PR 6 (cleanup `local.vlan_tag` removed; `local.bridge_name` retained for NIC 5).
+- The companion implementation doc has already been archived at `docs/planning/archive/proxmox-sdn-implementation-2026-05-18.md`. Tracked as task #19.
 
 ### ✅ H27. Re-enable Ceph msgr2 (v2 protocol) on port 3300
 - **Done:** 2026-05-22. Applied via the new containerized CI path (see H28). Verified post-apply: `ss -tlnp` shows ceph-mon LISTENING on 10.10.210.41:**3300** and :6789, monmap upgraded by `ceph mon enable-msgr2`, mon back in quorum (HEALTH_OK), all OSDs up. K8s ceph-csi configmap now lists `:3300` ahead of `:6789`; existing pod RBD mounts keep v1 until restart, new mounts prefer msgr2. Tracked as task #30.
