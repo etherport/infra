@@ -228,6 +228,13 @@ revision use the next free ID per tier. Status legend:
 ### ✅ M24. Modernize s3-sync daily-report HTML
 - **Done:** 2026-05-22 (commit `cc70da4`). Replaced the bootstrap-y card grid in `platform/kubernetes/backups/aws-s3/image/scripts/daily-report.sh` with a refined neutral palette (CSS vars), `prefers-color-scheme` dark-mode support, tabular numerics, status pills with currentColor-dotted indicator instead of full pill bg, monospace timestamps, and a responsive 2-col grid on narrow viewports. Targets Apple Mail (iCloud) primarily — other clients degrade gracefully. Source: task #39 (✅).
 
+### ⏳ M27. Wire service-status inventory drift-check into CI
+- **Source:** introduced 2026-05-23 alongside the SOT refactor.
+- The service-status pair (dashboard + email) now reads from a single inventory at `platform/kubernetes/monitoring/service-status-report/services.py`, with `gen-dashboard.py` regenerating the dashboard YAML and `scripts/check-service-status-inventory.py` flagging STALE entries (in inventory, not in cluster) and optionally UNTRACKED (in cluster, not in inventory). The check exits 1 on stale.
+- **Missing:** CI integration. Add a weekly GitHub Actions workflow that runs the check against the cluster (via the gh-runner that already has kubectl creds) and opens an issue when STALE > 0. Mirror the pattern used by `.github/workflows/` for the existing daily terraform drift detector (H16).
+- Stretch: also auto-regenerate the dashboard YAML when `services.py` changes — a workflow that runs `gen-dashboard.py` on push and commits the result back. Avoids forgetting to regen.
+- **Effort:** S.
+
 ### ⏳ M26. Grafana sidecar admin-API auth is broken — locks out admin user
 - **Source:** discovered 2026-05-22 while verifying the new service-status dashboard.
 - The `grafana-sc-dashboard` sidecar calls `POST /api/admin/provisioning/dashboards/reload` after writing each ConfigMap-sourced dashboard to `/tmp/dashboards/`. Auth is failing with 401 every minute (chart values has `adminPassword: "ChangeMe123!"` but the live admin password is different). Net effect: Grafana reports `too many consecutive incorrect login attempts for user - login for user temporarily blocked` on a rolling basis — the admin user is effectively unusable for human login via the UI.
