@@ -23,9 +23,12 @@ spec:
           restartPolicy: Never
           containers:
             - name: backup
-              # aws-s3-sync image already has bash + aws CLI + scp via openssh-client
-              image: ghcr.io/sparked-diamond/aws-s3-sync:main
-              imagePullPolicy: Always
+              # alpine/k8s ships with kubectl, curl, openssh-client AND aws CLI.
+              # Same image the unifi-cert-sync CronJob uses, keeping the
+              # ssh client+aws CLI bundle in one place. (aws-s3-sync image
+              # lacks ssh; tried 2026-05-23 and the SCP step failed.)
+              image: alpine/k8s:1.31.13
+              imagePullPolicy: IfNotPresent
               command: ["/bin/bash", "/config/backup.sh"]
               env:
                 - name: S3_BUCKET

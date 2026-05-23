@@ -98,10 +98,12 @@ data:
     {
       echo "# TYPE unifi_backup_last_run_timestamp gauge"
       echo "unifi_backup_last_run_timestamp $(date +%s)"
+      echo "# TYPE unifi_backup_status gauge"
       for n in "${!status[@]}"; do
-        echo "# TYPE unifi_backup_status gauge"
         echo "unifi_backup_status{device=\"$n\"} ${status[$n]}"
-        echo "# TYPE unifi_backup_bytes gauge"
+      done
+      echo "# TYPE unifi_backup_bytes gauge"
+      for n in "${!bytes[@]}"; do
         echo "unifi_backup_bytes{device=\"$n\"} ${bytes[$n]}"
       done
     } | curl --max-time 5 --data-binary @- "${PUSHGATEWAY}/metrics/job/${JOB}" 2>/dev/null || \

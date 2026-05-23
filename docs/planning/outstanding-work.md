@@ -267,11 +267,11 @@ revision use the next free ID per tier. Status legend:
   - **M18** Evaluate UniFi eBGP + MetalLB BGP mode (overlaps with audit part 2)
   - **M15-M17** Twilio Talk hygiene items (911 address, orphan DID, SIP UDP→TLS+sRTP) — out-of-band UDM Talk console
 
-### ⏳ M30. UDM zone architecture — reconcile doc with live (P0 from M25 audit)
-- `docs/architecture/firewall-zones.md` describes 6 custom zones (Trusted / Infrastructure / Security / IoT / Guest / Legacy); live UDM has just `IoT`. Sensitive networks sit in `Internal` zone with default Allow-All Internal→Internal — the documented inter-VLAN restrictions aren't enforced.
-- **Two options:** (a) implement custom zones for Trusted/Infrastructure/Security per the doc (effort: L, plus migration risk), or (b) rewrite the doc to describe the live single-IoT-custom-zone reality and mark the multi-zone design as "Future state" (effort: M, no risk).
-- **Recommendation from audit:** do (b) now; (a) becomes its own properly-planned migration later if you want tighter zoning.
-- **Effort:** M (option b) / L (option a).
+### 🟡 M30. UDM zone architecture — reconcile doc with live + future-state design
+- **Status 2026-05-23:** option (b) shipped. Option (a) tracked as the migration plan in the new future-state doc, awaiting user kickoff.
+- **Option (b) done** (commit `f5693c3`): rewrote `docs/architecture/firewall-zones.md` to match the live single-custom-zone (IoT) reality. Removed 317 lines of aspirational multi-zone description; added a "Current state vs aspirational state" callout pointing at the future-state doc.
+- **Future-state doc** (new — `docs/planning/firewall-zones-future-state.md`): proposes a 4-zone end-state (Trusted/Infrastructure/IoT/Security), inter-zone allow/deny matrix, named allow rules, **5-phase migration plan** with per-phase rollback procedures, and a decision checklist. Calls out M31 (UDM backup) as a hard prerequisite (now ✅), so Phase 1 (pilot Unifi/212 → Infrastructure zone) is unblocked.
+- **Open questions for you** (§7 of future-state doc): (1) SimpliSafe WAN dependence; (2) non-K8s sync jobs Clients→Servers that would silently break; (3) Default/199 disposition; (4) WireGuard WAN1 (UDM-side VPN pool) — re-enable or delete; (5) long-term L3-switch ACL management strategy. Phase 2 risk is unbounded until §5 is resolved.
 
 ### ⏳ M31. Automated UDM backup to S3 (P0 from M25 audit)
 - UDM controller DB holds all firewall rules, WiFi PSKs, Talk extension/ring-group/DID config, port-forwards, switch port profiles. Today the only copy lives on the UDM itself; firmware reset / hardware loss = total config reconstruction.
