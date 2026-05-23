@@ -22,11 +22,13 @@ revision use the next free ID per tier. Status legend:
 
 ## CRITICAL — production outage / data-loss risk
 
-### ⏳ C1. CNPG continuous backup (Barman) not configured cluster-wide
-- **Source:** `archive/outstanding-work-2026-05-16.md` C1; `archive/long-term-stability-review-2026-05-12.md`
-- Velero FS backup of a live Postgres pod is not crash-consistent. Without Barman + ScheduledBackup we have no PITR; a corrupt pgdata = data loss.
-- **Effort:** M
-- **Blockers:** None — S3 bucket already exists; just wire the Cluster manifest.
+### ✅ C1. CNPG continuous backup (Barman) configured cluster-wide
+- **Done:** 2026-05-15 (verified 2026-05-23). Tracker was stale. Live state:
+  - `postgres-cluster.spec.backup.barmanObjectStore` wired in `platform/kubernetes/cnpg/01-cluster.yaml` — destination `s3://postgres-barman.wind.etherport.net`, WAL + data both gzip + AES256, 30d retention, `target: prefer-standby` to keep load off the primary.
+  - SOPS-encrypted S3 creds at `platform/kubernetes/cnpg/05-barman-credentials.sops.yaml`.
+  - `ScheduledBackup/postgres-cluster-daily` at 05:00 UTC daily (`platform/kubernetes/cnpg/06-scheduled-backup.yaml`) — verified 9 consecutive successful `barmanObjectStore` backups (2026-05-15 through 2026-05-23).
+  - Restore runbook: `docs/runbooks/postgres-barman.md`.
+- Continuous WAL archiving + daily full snapshots = PITR at ~second granularity, crash-consistent (Postgres-aware), separate bucket from Velero. Source: `archive/outstanding-work-2026-05-16.md` C1.
 
 ### ✅ C2. Rebuild `dns-fallback` (1001) + `vpn-local` (1002) from VM 9001 template
 - **Done:** 2026-05-16. Both standalone VMs recreated from the new Packer template; TF in sync with live state. Tracked as task #4.
@@ -243,7 +245,16 @@ revision use the next free ID per tier. Status legend:
 - Fixed with a one-shot reset: `grafana-cli admin reset-admin-password "$GF_SECURITY_ADMIN_PASSWORD"` inside the running pod. Sidecar now returns 200 on reload calls. No more rolling admin-user lockout.
 - Documented the trigger conditions + recovery procedure in `docs/runbooks/grafana-admin-password.md` so this doesn't accumulate undiscovered noise across the next rebuild / password rotation. Considered a CronJob-as-IaC fix but rejected: would intrude on legitimate UI changes; manual is the right cadence.
 
-### ⏳ M25. UDM / UniFi config audit — zones, inter-VLAN routing, modern features
+### ✅ M25. UDM / UniFi config audit — zones, inter-VLAN routing, modern features
+- **Done:** 2026-05-23. Full audit at `docs/planning/udm-audit-2026-05-23.md` (884 lines, read-only — no config changes made). Three parts: docs-vs-live drift, modern-features eval, best-practices sweep. 23 prioritized follow-up items at the end of the doc.
+- **Biggest findings (P0):**
+  - Zone architecture is largely aspirational — `firewall-zones.md` describes 6 custom zones; live UDM has **1 custom zone (IoT)**. Sensitive networks (Servers, vSAN, Unifi/212, Security/205, Ceph/210) sit in the wide-open `Internal` zone. Documented Infrastructure-zone + Security-zone rules **aren't enforced** by default-Allow-Internal-to-Internal. → spawned **M30** (decide reconcile direction) below.
+  - **No automated UDM backup.** Talk DR + controller DB + all firewall/PSK config exists only on the UDM. → spawned **M31** below.
+  - **UDM is on `beta` firmware channel** (probably unintentional). → spawned **M32** below.
+  - **rsyslogd is "enabled" but `host` is empty** — UDM logs go nowhere off-host. → spawned **M33** below.
+  - **H23 only protected the UDM itself**: all 9 switches + 7 APs have `auto_upgrade: true`; they upgrade nightly. → spawned **M34** below.
+  - Security/205 has Network Isolation ON + DHCP DNS cleared (doc said opposite); Internal → Hotspot is Allow All; firewall groups partially adopted (5 of 18); WireGuard Travel port-forward disabled but orphan.
+- **P2/P3 follow-ups** (NetFlow, edge-switch port isolation, eBGP migration, etc.) stay in the audit doc itself; promoting just the P0/P1 items into the tracker keeps this file readable.
 - **Source:** user ask 2026-05-22 (this revision).
 - Three-part audit:
   1. **Network docs vs. live UDM config.** Walk `docs/architecture/firewall-zones.md` + `docs/architecture/network.md` against the current zone-based firewall in UniFi Network ≥10 (Settings → Security → Firewall). Verify that the zone assignments documented match what's actually configured. Verify inter-VLAN routing restrictions (which VLANs can talk to which) are codified the way the docs describe them. Capture deltas as either a doc update or a UniFi config change — whichever is wrong, fix the wrong one.
@@ -254,6 +265,32 @@ revision use the next free ID per tier. Status legend:
   - **M13** Delete `/data/udm-le.removed-*` on UDM/Protect/Sequoia — the "old cert manager" remnants the user is thinking of (udm-le predates cert-manager-on-K8s for the wildcard); just needs SSH creds + a one-shot cleanup
   - **M18** Evaluate UniFi eBGP + MetalLB BGP mode (overlaps with audit part 2)
   - **M15-M17** Twilio Talk hygiene items (911 address, orphan DID, SIP UDP→TLS+sRTP) — out-of-band UDM Talk console
+
+### ⏳ M30. UDM zone architecture — reconcile doc with live (P0 from M25 audit)
+- `docs/architecture/firewall-zones.md` describes 6 custom zones (Trusted / Infrastructure / Security / IoT / Guest / Legacy); live UDM has just `IoT`. Sensitive networks sit in `Internal` zone with default Allow-All Internal→Internal — the documented inter-VLAN restrictions aren't enforced.
+- **Two options:** (a) implement custom zones for Trusted/Infrastructure/Security per the doc (effort: L, plus migration risk), or (b) rewrite the doc to describe the live single-IoT-custom-zone reality and mark the multi-zone design as "Future state" (effort: M, no risk).
+- **Recommendation from audit:** do (b) now; (a) becomes its own properly-planned migration later if you want tighter zoning.
+- **Effort:** M (option b) / L (option a).
+
+### ⏳ M31. Automated UDM backup to S3 (P0 from M25 audit)
+- UDM controller DB holds all firewall rules, WiFi PSKs, Talk extension/ring-group/DID config, port-forwards, switch port profiles. Today the only copy lives on the UDM itself; firmware reset / hardware loss = total config reconstruction.
+- **Fix:** weekly cron on the UDM (or off-host CronJob using SSH+rsync) that exports the config bundle, gzips, ships to S3 (`velero.wind.etherport.net` under `unifi/` prefix).
+- Companion: `docs/runbooks/unifi-talk.md` §DR (flagged this 2026-05-12, still open).
+- **Effort:** M.
+
+### ⏳ M32. UDM firmware channel back to `release` (P0 from M25 audit, trivial)
+- Live `mgmt.gateway_release_channel = beta`, almost certainly unintentional.
+- **Fix:** UDM UI → System → Updates → Firmware Channel: `beta` → `release`. One click.
+
+### ⏳ M33. UDM rsyslog destination empty — wire to remote receiver (P0 from M25 audit)
+- `rsyslogd` is enabled (`super_fabric_system_log = true`) but the destination `host` field is empty — UDM logs go nowhere off-host.
+- **Fix:** set destination to existing Promtail/syslog receiver (or stand one up).
+- **Effort:** S.
+
+### ⏳ M34. Disable site-wide UniFi auto-upgrade (extends H23)
+- H23 closed because the UDM itself has `mgmt.auto_upgrade: false`, but all 9 switches + 7 APs still have `safe_for_autoupgrade: true` and the site-wide policy upgrades them nightly at 03:00. A future firmware bug would auto-deploy to the fleet before you see it.
+- **Fix:** flip `mgmt.auto_upgrade: false` site-wide (or per-device on non-UDM devices). Manual updates via Network UI on a planned cadence.
+- **Effort:** Trivial.
 
 ---
 
