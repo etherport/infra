@@ -368,6 +368,18 @@ revision use the next free ID per tier. Status legend:
 - **Source:** M40 deliberately deferred. BMC sits on VLAN 200 (10.10.200.21); Alloy/Loki on VLAN 201 (10.10.201.73). For BMC PET traps to reach Alloy, the BMC needs to learn the gateway MAC for 10.10.200.1 — `ipmitool lan print 1` shows `Default Gateway MAC: 00:00:00:00:00:00` currently. Either populate the gateway MAC statically (one-shot ARP lookup + `ipmitool lan set 1 defgw mac <mac>`) or have the BMC do it via gratuitous ARP. Then enable PEF policy 1 with action="send to LAN destination 1" pointed at 10.10.201.73. Today we rely on BMC remote-syslog → Alloy which covers the same alerts.
 - **Effort:** S.
 
+### ⏳ L7. Clean up debug Jobs in `backups` namespace
+- **Source:** observed during M40 tidy 2026-05-23. Six failed pods from
+  `unifi-backup-test`, `unifi-backup-test2`, `unifi-backup-test3` Jobs
+  remain in the `backups` namespace (created 3.5h ago during M31
+  debugging before the playbook landed). All have `status=Error`,
+  contributing nothing — `kubectl get pods -A --field-selector
+  status.phase!=Running,Succeeded` returns them as the only
+  unhealthy pods cluster-wide. Cluster is otherwise green.
+- **Fix:** `kubectl delete job/unifi-backup-test{,2,3} -n backups`
+  (one-liner). Or wait for K8s' default Job TTL to expire.
+- **Effort:** Trivial.
+
 ### ⏳ L6. Plex `ALLOWED_NETWORKS` parse error
 - **Source:** surfaced 2026-05-23 by the new Plex logtail sidecar (M41). Plex repeatedly logs `ERROR - Error parsing allowedNetworks entry ' 10.10.201.0 24': Invalid argument`. The space-separated CIDR fragments suggest Plex is reading from its Web UI "LAN Networks" setting where the slash got stripped — likely an old config from before the env-var was set. The `ALLOWED_NETWORKS` env in `02-deployment.yaml` is correct (`10.10.201.0/24,...`); need to clear the Web UI value or re-sync. Library Settings → Network → LAN Networks → check/clear the value.
 - **Effort:** Trivial (one UI click).
