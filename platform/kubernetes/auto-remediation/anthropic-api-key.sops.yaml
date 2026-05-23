@@ -5,7 +5,7 @@ metadata:
     namespace: auto-remediation
 type: Opaque
 stringData:
-    api_key: ENC[AES256_GCM,data:uDHkjpeGHkf9pxc//l45e0ZMqMfR,iv:L0mPuDKTbq3N+ZYeTMP1TP3k9S0PxSdgoumhzhwvoZE=,tag:GGdtNpWe/4ohvCGJXO/l3w==,type:str]
+    api_key: ENC[AES256_GCM,data:MhOdXkFLgAW6A5C+m+TNYNC7bt23afzqm7PJGPKTh99pifVeCrS9XwyvNuZIrVA2kQTf3tI52bo23STDxmJunL0WHzjFSPagQ7IxNuS3OFpqcR/u4dGrkcGA7qIrVCSovLcljMBPOWKFI9Iv,iv:7Btv42N8n1JXzPtRM1GUATL599uMd33LfBqkvk3w8jw=,tag:falAAfCyI8QEiO/asqAq0Q==,type:str]
 sops:
     age:
         - enc: |
@@ -18,6 +18,6 @@ sops:
             -----END AGE ENCRYPTED FILE-----
           recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
     encrypted_regex: ^(data|stringData)$
-    lastmodified: "2026-05-23T18:16:36Z"
-    mac: ENC[AES256_GCM,data:87lG2nSzmazm9ptHVAsHJ10V9oo1u1u5RNan7r4dhs4ftre7ysViwfaSqow1OLci7wtI/439ouOtAUpmNidjKGv9dmzTFHFDaxMH09tOvwVzOGUCZt0sEqBKD5+CUnX8+bJ1ljOMDsz3NlFYGwCYlGspbAD87um/cUp3UCjpZec=,iv:BbHbKwNZqWvddXN1ktlPX1STFrQo88n0kVPgQF4U9Fw=,tag:j0/eIeQQ4cTfHg+7OzJ04g==,type:str]
+    lastmodified: "2026-05-23T20:51:41Z"
+    mac: ENC[AES256_GCM,data:ZqmjhI3npa4FOJUKKKKZ04fom0sb2Ewk3en+UewnLTefDsvJQBb0OpT9GkTBRGS+R6G7yD1y/6LeU7IUeq/0xJHIfPMRSueReFwOjIu1RF3leJiBw5DOVT7eBfF3a7FaO8f7xaGMDSje0j0vUHs99s2Ee+NWFiOJ8OT8QQI7hhM=,iv:JI5VR9eT0IlKrDPC34y0nS1qB+knmQrh4nTINutPLUM=,tag:noo9OT7piM/hyKWH9eq+sg==,type:str]
     version: 3.13.0
