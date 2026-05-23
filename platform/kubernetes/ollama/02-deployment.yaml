@@ -30,8 +30,15 @@ spec:
             - name: OLLAMA_KEEP_ALIVE
               value: "24h"
           resources:
+            # The namespace-default LimitRange (policy-baseline) caps
+            # memory at 4Gi for pods that don't set their own limit.
+            # Ollama legitimately needs 8Gi+ to load real models, so
+            # we set explicit limits here — the request stays 8Gi and
+            # the limit gives headroom for whatever model is loaded
+            # plus the inference working set.
             limits:
               nvidia.com/gpu.shared: 1
+              memory: "12Gi"
             requests:
               memory: "8Gi"
               cpu: "2"
