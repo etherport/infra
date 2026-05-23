@@ -359,6 +359,18 @@ revision use the next free ID per tier. Status legend:
 - **Source:** `docs/planning/hardcoded-ephemeral-ip-audit-2026-05-23.md`. Several places still hardcode AWS Elastic IPs that *could* rotate if recreated: `vpn-use1` endpoint `35.169.37.16` in `platform/kubernetes/wireguard/03-deployment.yaml`, dns-aws `52.40.219.113` in M35 plan, etc. Convert each to a Route53 FQDN + DNS lookup at peer/config render time so an EIP swap doesn't require a code change.
 - **Effort:** S per site, M overall.
 
+### ⏳ L4. Enable loki-ruler for LogQL alerting
+- **Source:** M40 commit `43c07fe`. We want alerts of the form `{job="syslog"} |~ "(Temperature|Fan|PowerSupply).*(Critical|Asserted)"` as a belt-and-suspenders complement to the ipmi_exporter metric alerts. PrometheusRule rejects LogQL. The Loki helm chart has a `ruler` block that, when enabled, runs a separate ruler component reading rules from a ConfigMap and pushing alerts to Alertmanager. Wire it in `clusters/wind/helm-releases/loki.yaml` + add LokiRule resources alongside PrometheusRule.
+- **Effort:** S (5-10 lines of values + one new resource type).
+
+### ⏳ L5. PVE BMC PEF / LAN alert destinations (cross-subnet PET trap)
+- **Source:** M40 deliberately deferred. BMC sits on VLAN 200 (10.10.200.21); Alloy/Loki on VLAN 201 (10.10.201.73). For BMC PET traps to reach Alloy, the BMC needs to learn the gateway MAC for 10.10.200.1 — `ipmitool lan print 1` shows `Default Gateway MAC: 00:00:00:00:00:00` currently. Either populate the gateway MAC statically (one-shot ARP lookup + `ipmitool lan set 1 defgw mac <mac>`) or have the BMC do it via gratuitous ARP. Then enable PEF policy 1 with action="send to LAN destination 1" pointed at 10.10.201.73. Today we rely on BMC remote-syslog → Alloy which covers the same alerts.
+- **Effort:** S.
+
+### ⏳ L6. Plex `ALLOWED_NETWORKS` parse error
+- **Source:** surfaced 2026-05-23 by the new Plex logtail sidecar (M41). Plex repeatedly logs `ERROR - Error parsing allowedNetworks entry ' 10.10.201.0 24': Invalid argument`. The space-separated CIDR fragments suggest Plex is reading from its Web UI "LAN Networks" setting where the slash got stripped — likely an old config from before the env-var was set. The `ALLOWED_NETWORKS` env in `02-deployment.yaml` is correct (`10.10.201.0/24,...`); need to clear the Web UI value or re-sync. Library Settings → Network → LAN Networks → check/clear the value.
+- **Effort:** Trivial (one UI click).
+
 ---
 
 ## DROP — outdated or already done
