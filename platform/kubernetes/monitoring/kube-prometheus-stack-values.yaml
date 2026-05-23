@@ -27,6 +27,16 @@ prometheus:
           resources:
             requests:
               storage: 10Gi
+    # Wire the prometheus-additional-scrape-configs Secret (defined in
+    # 01-external-scrape-config.yaml) into the Prometheus CR. Without
+    # this reference the Secret exists but is never loaded — leaving
+    # the external-nodes scrape job dormant and dns-fallback /
+    # vpn-local / dns-aws / vpn-aws all rendering as UNKNOWN in the
+    # service-status dashboard + email. Caught 2026-05-23.
+    additionalScrapeConfigsSecret:
+      enabled: true
+      name: prometheus-additional-scrape-configs
+      key: additional-scrape-configs.yaml
 
 alertmanager:
   enabled: true
