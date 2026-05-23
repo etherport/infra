@@ -31,8 +31,15 @@ spec:
               imagePullPolicy: IfNotPresent
               command: ["/bin/bash", "/config/backup.sh"]
               env:
+                # Lives under archive.wind.etherport.net/unifi/ because
+                # the aws-backup-credentials IAM user already has write
+                # access to that bucket (s3-sync writes there for the
+                # tenant shares). The velero.wind.etherport.net bucket
+                # is owned by Velero's IAM user; granting cross-user
+                # access there would be more plumbing for the same
+                # outcome.
                 - name: S3_BUCKET
-                  value: "velero.wind.etherport.net"
+                  value: "archive.wind.etherport.net"
                 - name: PUSHGATEWAY_URL
                   value: "http://pushgateway.monitoring.svc.cluster.local:9091"
               envFrom:
