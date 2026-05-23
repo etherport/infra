@@ -135,6 +135,13 @@ spec:
               protocol              = "udp"
               labels                = { job = "syslog", protocol = "udp" }
               use_incoming_timestamp = true
+              // UDM-Pro + USW + USG all emit BSD-style (RFC3164).
+              // Default is RFC5424 — leaving it default produces
+              // "expecting a version value in the range 1-999"
+              // parser errors on every datagram (saw this 2026-05-23
+              // immediately after the UDM Traffic Logging → SIEM
+              // toggle pointed at us). Switch to rfc3164.
+              syslog_format         = "rfc3164"
             }
             forward_to = [loki.write.default.receiver]
           }
@@ -145,6 +152,7 @@ spec:
               protocol              = "tcp"
               labels                = { job = "syslog", protocol = "tcp" }
               use_incoming_timestamp = true
+              syslog_format         = "rfc3164"
             }
             forward_to = [loki.write.default.receiver]
           }
