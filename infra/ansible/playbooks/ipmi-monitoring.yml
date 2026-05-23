@@ -270,7 +270,7 @@
         group: root
         mode: "0755"
 
-    - name: Override prometheus-ipmi-exporter ExecStart
+    - name: Override prometheus-ipmi-exporter ExecStart + run-as-root
       ansible.builtin.copy:
         dest: /etc/systemd/system/prometheus-ipmi-exporter.service.d/override.conf
         owner: root
@@ -278,6 +278,16 @@
         mode: "0644"
         content: |
           [Service]
+          # /dev/ipmi0 is crw------- root:root by default — the freeipmi
+          # binaries (bmc-info, ipmi-sensors, etc) exit 1 "permission
+          # denied" when run as the prometheus user. Running the exporter
+          # as root is the upstream-recommended approach and what the
+          # README suggests for in-band scrape. Alternative would be a
+          # udev rule + ipmi group, but adds more moving parts for the
+          # same effective privilege level (any access to the BMC is
+          # equivalent to root anyway).
+          User=root
+          Group=root
           ExecStart=
           ExecStart=/usr/bin/prometheus-ipmi-exporter \
             --config.file=/etc/prometheus/ipmi_local.yml \
