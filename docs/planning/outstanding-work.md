@@ -74,18 +74,21 @@ revision use the next free ID per tier. Status legend:
 - **Done:** 2026-05-22. Eleven planning docs moved to `docs/planning/archive/` with a `README.md` table listing why each was archived. Includes the just-completed `proxmox-sdn-implementation-2026-05-18.md` (PRs 1-6 all shipped). Top-level `docs/planning/` now holds only the canonical tracker + active design docs + ADRs.
 
 ### 🟡 H9. Deploy swap + CloudWatch agent + node_exporter on external VMs
-- **Status 2026-05-23:** 3 of 4 hosts done. New workflow `.github/workflows/ansible-vm-fleet.yml` runs base.yml / swap.yml / cloudwatch-agent.yml against any subset of the dns-fallback / vpn-local / dns-aws / vpn-aws fleet (mirrors ansible-proxmox.yml pattern).
-- **Done via base.yml apply:** dns-fallback, vpn-local — node_exporter v1.8.2 installed; service-status dashboard + email now show them UP. dns-aws was already up (node_exporter installed earlier).
-- **⏳ Blocked on vpn-aws:** ansible SSH to `ubuntu@10.10.100.10` returns `Permission denied (publickey)`. The gh-runner's ANSIBLE_SSH_KEY pubkey isn't authorized on vpn-aws. Two-line manual fix (run from your laptop with whichever key matches the `GS-EC2` AWS key pair):
+- **Status 2026-05-23:** Local hosts complete; both AWS hosts blocked on the same SSH-key problem.
+- **New workflow:** `.github/workflows/ansible-vm-fleet.yml` runs base.yml / swap.yml / cloudwatch-agent.yml against any subset of dns-fallback / vpn-local / dns-aws / vpn-aws.
+- **Done (local hosts):** base, swap, cloudwatch-agent all applied to dns-fallback + vpn-local. node_exporter v1.8.2 confirmed scraping (UP in dashboard + email). swap isn't strictly needed on local hosts (8GB RAM) but applied for consistency.
+- **⏳ Blocked on BOTH AWS hosts:** ansible SSH to `ubuntu@10.10.100.5` (dns-aws) + `ubuntu@10.10.100.10` (vpn-aws) returns `Permission denied (publickey)`. The gh-runner's ANSIBLE_SSH_KEY pubkey isn't authorized on either AWS host. (dns-aws was UP in the dashboard because node_exporter was installed manually pre-Ansible; vpn-aws was never set up.) One-shot fix from your laptop using the `GS-EC2` AWS key:
   ```
-  ssh ubuntu@10.10.100.10 \
-    'echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab" >> ~/.ssh/authorized_keys'
-  # Then re-dispatch the workflow:
-  gh workflow run ansible-vm-fleet.yml -f playbook=base -f inventory=aws -f action=apply -f limit=vpn-aws
-  gh workflow run ansible-vm-fleet.yml -f playbook=swap -f inventory=aws -f action=apply -f limit=vpn-aws
-  gh workflow run ansible-vm-fleet.yml -f playbook=cloudwatch-agent -f inventory=aws -f action=apply -f limit=vpn-aws
+  PUBKEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab'
+  for h in 10.10.100.5 10.10.100.10; do
+    ssh ubuntu@$h "grep -qF '$PUBKEY' ~/.ssh/authorized_keys || echo '$PUBKEY' >> ~/.ssh/authorized_keys"
+  done
+  # Then re-dispatch ansible against both AWS hosts:
+  for p in base swap cloudwatch-agent; do
+    gh workflow run ansible-vm-fleet.yml -f playbook=$p -f inventory=aws -f action=apply
+  done
   ```
-- swap.yml + cloudwatch-agent.yml still pending against all 4 hosts (only base.yml ran today). Same workflow dispatch, just swap the `-f playbook=` value.
+- **Durable IaC follow-up (M28 below):** add the homelab automation pubkey to the AWS VMs' cloud-init `user_data` so future-recreates have it baked in.
 
 ### ✅ H10. Inventory consolidation (ansible vs kubespray)
 - **Done:** 2026-05-16. Tracked as task #5.
@@ -237,6 +240,18 @@ revision use the next free ID per tier. Status legend:
 
 ### ✅ M24. Modernize s3-sync daily-report HTML
 - **Done:** 2026-05-22 (commit `cc70da4`). Replaced the bootstrap-y card grid in `platform/kubernetes/backups/aws-s3/image/scripts/daily-report.sh` with a refined neutral palette (CSS vars), `prefers-color-scheme` dark-mode support, tabular numerics, status pills with currentColor-dotted indicator instead of full pill bg, monospace timestamps, and a responsive 2-col grid on narrow viewports. Targets Apple Mail (iCloud) primarily — other clients degrade gracefully. Source: task #39 (✅).
+
+### ⏳ M28. Bake homelab automation pubkey into AWS VMs' user_data
+- **Source:** discovered 2026-05-23 during H9 (both dns-aws + vpn-aws rejected the gh-runner SSH key).
+- Currently `aws_instance.dns` and `aws_instance.vpn` in `infra/terraform/aws/compute/main.tf` provision with `key_name = aws_key_pair.gs_ec2.key_name` only (your personal SSH key). The homelab automation pubkey (the one stored in 1Password as `Homelab Automation SSH Key`) was never added to `~ubuntu/.ssh/authorized_keys` on those VMs, so the gh-runner can't ansible them. Today's workaround is a manual `ssh ... >> authorized_keys` from your laptop (see H9 above).
+- Durable fix: add a `user_data` block to each `aws_instance` resource that drops the automation pubkey into `/home/ubuntu/.ssh/authorized_keys` via cloud-init. Only takes effect on instance recreate (both VMs have `lifecycle.prevent_destroy = true`, so cloud-init only fires on a fresh deploy — but it's the right safety net for any future rebuild).
+- Effort: S.
+
+### ⏳ M29. kube-proxy metrics not scrapable (TargetDown warning)
+- **Source:** discovered 2026-05-23 during alert audit.
+- kube-proxy currently has `metricsBindAddress: 127.0.0.1:10249` (kubespray default), but the kube-prometheus-stack ServiceMonitor scrapes node IPs on :10249 — refused. 9 active TargetDown warnings (one per node), no email impact (warning, not critical), but pollutes the firing-alerts panel.
+- Durable fix: add `kube_proxy_metrics_bind_address: 0.0.0.0:10249` to `infra/kubespray/inventory/group_vars/k8s_cluster/k8s-cluster.yml`, then kubespray re-run (or edit live ConfigMap `kube-system/kube-proxy` + `kubectl rollout restart ds/kube-proxy -n kube-system` as a short-term unblock).
+- Effort: S.
 
 ### ✅ M27. Wire service-status inventory drift-check into CI
 - **Done:** 2026-05-23. New workflow at `.github/workflows/service-status-inventory-drift.yml` runs weekly (Mon 08:00 PT) on the self-hosted gh-runner. SCPs kubeconfig from k8s-cp1 (same pattern as `post-bootstrap.sh`), runs `scripts/check-service-status-inventory.py --untracked`, and opens / refreshes a GitHub Issue labeled `inventory-drift` when STALE entries are found. Mirrors the H16 terraform drift detector pattern. Stretch (auto-regenerating dashboard YAML on `services.py` change) deferred.
