@@ -129,6 +129,42 @@ spec:
           // RFC3164 (BSD) — what UDM-Pro, USW, USG, most home gear
           // emit by default. RFC5424 is newer but few SOHO devices
           // speak it. Alloy's loki.source.syslog handles both.
+          // Promote syslog metadata to real labels so Grafana queries
+          // can filter by sender ("show me only UDM logs", "show only
+          // PVE BMC logs"). Without this everything is jumbled under
+          // a single {job="syslog"} stream.
+          //
+          // IMPORTANT pattern (verified 2026-05-23 from Alloy 1.7 docs
+          // after first attempt failed): loki.relabel is referenced via
+          // .rules on loki.source.syslog's relabel_rules argument
+          // (NOT via forward_to chain to its .receiver). The relabel
+          // happens INSIDE the syslog source, where it can see the
+          // internal __syslog_* labels before they're stripped.
+          loki.relabel "syslog" {
+            forward_to = []  // unused; we wire via relabel_rules on the source
+
+            rule {
+              action      = "labelmap"
+              regex       = "__syslog_message_(hostname|app_name|severity|facility)"
+              replacement = "${1}"
+            }
+            rule {
+              source_labels = ["__syslog_connection_ip_address"]
+              target_label  = "source_ip"
+            }
+            // Promotion above leaves "hostname" + "app_name" labels;
+            // alias to shorter names that match what the audit
+            // doc + dashboards use.
+            rule {
+              source_labels = ["hostname"]
+              target_label  = "host"
+            }
+            rule {
+              source_labels = ["app_name"]
+              target_label  = "app"
+            }
+          }
+
           loki.source.syslog "udp" {
             listener {
               address               = "0.0.0.0:514"
@@ -150,7 +186,8 @@ spec:
               // a second or two earlier anyway).
               use_incoming_timestamp = false
             }
-            forward_to = [loki.relabel.syslog.receiver]
+            relabel_rules = loki.relabel.syslog.rules
+            forward_to    = [loki.write.default.receiver]
           }
 
           loki.source.syslog "tcp" {
@@ -161,31 +198,8 @@ spec:
               syslog_format         = "rfc3164"
               use_incoming_timestamp = false
             }
-            forward_to = [loki.relabel.syslog.receiver]
-          }
-
-          // Promote syslog metadata to real labels so Grafana queries
-          // can filter by sender ("show me only UDM logs", "show only
-          // PVE BMC logs"). Without this everything is jumbled under
-          // a single {job="syslog"} stream.
-          loki.relabel "syslog" {
-            forward_to = [loki.write.default.receiver]
-
-            rule {
-              source_labels = ["__syslog_message_hostname"]
-              target_label  = "host"
-            }
-            rule {
-              source_labels = ["__syslog_message_app_name"]
-              target_label  = "app"
-            }
-            // Source-IP label is the reliable fallback when devices
-            // don't put a hostname in the RFC3164 header (some UniFi
-            // APs do this).
-            rule {
-              source_labels = ["__syslog_connection_ip_address"]
-              target_label  = "source_ip"
-            }
+            relabel_rules = loki.relabel.syslog.rules
+            forward_to    = [loki.write.default.receiver]
           }
 
       # The DaemonSet must run on every node and needs hostPath access
