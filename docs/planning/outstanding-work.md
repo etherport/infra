@@ -316,6 +316,13 @@ revision use the next free ID per tier. Status legend:
 - Grafana datasource auto-provisioned via ConfigMap label `grafana_datasource: "1"`. Runbook at `docs/runbooks/loki-log-aggregation.md` covers query examples, syslog onboarding, retention/storage, S3 future migration.
 - Unblocks **M33** (point UDM rsyslog at `.73`). Future work: alertmanager rule for Loki ingest backlog (TODO breadcrumb in runbook); S3 backend when log volume justifies it.
 
+### ✅ M38. Tear down vpn-mumbai (ap-south-1) regional VPN
+- **Done:** 2026-05-23 (commits `cb102f8` + this one). User confirmed no travel for the next few weeks; destroyed to avoid the per-region $30/mo idle cost. Workflow `terraform-regional-vpn.yml` action=destroy + workspace=default ran clean (instance `i-0325d902bf6edd464` → `terminated`). Removed peer block from `infra/ansible/playbooks/wireguard.yml` (`wg0_regional_peers`) and `platform/kubernetes/wireguard/03-deployment.yaml` (preserved as a comment block in both for resurrection). Deleted dangling Route53 record `vpn-travel.etherport.net. → 13.234.119.106` that the destroy missed (it's managed in the route53 module, not the regional-vpn module — capturing as L-tier debt below).
+- **To resurrect:** dispatch `terraform-regional-vpn.yml` action=apply with `region=ap-south-1`, `region_short=mumbai`, `vpc_cidr=10.10.112.0/24`, `tunnel_ip=10.255.255.3` → re-add the peer blocks from the inline comments → re-add the Route53 A record. New AWS EIP will require new homelab WireGuard peer endpoint.
+
+### ✅ M39. Lambda dns-restrict-ip revoke ignoring stale entries
+- **Done:** 2026-05-23 (commit `cb102f8`). Bug discovered during H6 cleanup: after Lambda enabled on `allow_ssh` SG, new IPs were added cleanly but the 4 stale `/32`s (`47.34.215.233`, `47.159.189.230`, `146.70.238.13`, `86.98.93.115`) persisted across reconciliations. Root cause: AWS `revoke_security_group_ingress` treats a passed `Description` as part of the match key, so our `"Managed by dns-restrict-ip (22/tcp)"` description failed to match the existing rules' `"Allow SSH access from ..."` descriptions. Fix: split `_permissions()` to accept an optional description; `add_security_group_rules` passes our marker, `remove_security_group_rules` omits it. Apply dispatched; verified `sg-0079fee23ee54417a:22/tcp` now contains only the 2 Route53-derived entries.
+
 ### ⏳ M34. Disable site-wide UniFi auto-upgrade (extends H23)
 - H23 closed because the UDM itself has `mgmt.auto_upgrade: false`, but all 9 switches + 7 APs still have `safe_for_autoupgrade: true` and the site-wide policy upgrades them nightly at 03:00. A future firmware bug would auto-deploy to the fleet before you see it.
 - **Fix:** flip `mgmt.auto_upgrade: false` site-wide (or per-device on non-UDM devices). Manual updates via Network UI on a planned cadence.
@@ -327,6 +334,16 @@ revision use the next free ID per tier. Status legend:
 
 ### ⏳ L1. Proxmox HA cluster expansion
 - Source: `archive/outstanding-work-2026-05-16.md` L1. Blocked on adding a 2nd PVE node.
+
+### ⏳ L2. Regional VPN destroy doesn't drop the per-region Route53 record
+- **Source:** observed during M38 (Mumbai destroy 2026-05-23). After `terraform-regional-vpn.yml` action=destroy ran clean, the `vpn-travel.etherport.net. → 13.234.119.106` A record was still present (deleted by hand after). The regional-vpn module manages the EC2/VPC/SG side but doesn't own the public DNS record — that lives in the `route53` module as a separate resource keyed on the EIP. So destroy leaves a dangling record pointing at a freed-up Elastic IP.
+- **Risk:** the next AWS customer to grab that EIP would receive traffic addressed to `vpn-travel.etherport.net` until the record's 300s TTL expires. Low real-world impact for a WireGuard endpoint (handshake fails without the right key) but still a leak.
+- **Fix options:** (a) move the Route53 record into the regional-vpn module so the per-region apply/destroy owns it end-to-end; (b) wire a `data` reference + `null_resource` `destroy_provisioner` in the regional-vpn module to call `aws route53 change-resource-record-sets DELETE` on teardown; (c) accept it as a manual step in the resurrection runbook. (a) is cleanest.
+- **Effort:** S.
+
+### ⏳ L3. EIP → FQDN conversion debt (hardcoded ephemeral IP audit follow-up)
+- **Source:** `docs/planning/hardcoded-ephemeral-ip-audit-2026-05-23.md`. Several places still hardcode AWS Elastic IPs that *could* rotate if recreated: `vpn-use1` endpoint `35.169.37.16` in `platform/kubernetes/wireguard/03-deployment.yaml`, dns-aws `52.40.219.113` in M35 plan, etc. Convert each to a Route53 FQDN + DNS lookup at peer/config render time so an EIP swap doesn't require a code change.
+- **Effort:** S per site, M overall.
 
 ---
 
