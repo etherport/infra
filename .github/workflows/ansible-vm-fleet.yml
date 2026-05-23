@@ -1,0 +1,141 @@
+name: Ansible VM Fleet (non-K8s + non-PVE)
+
+# Generic dispatch wrapper for running ansible playbooks against the
+# fleet of non-K8s VMs (AWS dns-aws/vpn-aws + local dns-fallback/
+# vpn-local). Uses the same self-hosted runner + ansible-runner image
+# as ansible-proxmox.yml.
+#
+# Examples:
+#   - playbook=base, inventory=both          → install node_exporter +
+#     base packages everywhere
+#   - playbook=swap, inventory=aws           → add swap to AWS t4g.nano
+#     instances (essential — they have only 512MB RAM)
+#   - playbook=cloudwatch-agent, inventory=aws --limit dns-aws → install
+#     CW agent on a single host
+#
+# Use the existing ansible-proxmox.yml for anything that targets the PVE
+# host (pve-sshd, proxmox, pve-network, ceph-msgr2).
+
+on:
+  workflow_dispatch:
+    inputs:
+      playbook:
+        description: 'Playbook to run'
+        required: true
+        type: choice
+        options:
+          - base
+          - swap
+          - cloudwatch-agent
+          - technitium
+          - wireguard
+          - tailscale
+      inventory:
+        description: 'Which inventory file(s)'
+        required: true
+        type: choice
+        default: both
+        options:
+          - wind    # dns-fallback + vpn-local (and other local non-K8s)
+          - aws     # dns-aws + vpn-aws
+          - both    # both inventories (non-k8s_cluster hosts only)
+      action:
+        description: 'check (--check --diff) or apply'
+        required: true
+        type: choice
+        default: check
+        options:
+          - check
+          - apply
+      limit:
+        description: 'Optional --limit (host or group; blank = all in inventory)'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  WORKING_DIR: infra/ansible
+
+jobs:
+  ansible:
+    name: ansible ${{ github.event.inputs.playbook }} ${{ github.event.inputs.action }}${{ github.event.inputs.limit != '' && format(' --limit {0}', github.event.inputs.limit) || '' }}
+    runs-on: [self-hosted, lifecycle]
+    container:
+      image: ghcr.io/sparked-diamond/ansible-runner:main
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup SSH key
+        env:
+          ANSIBLE_SSH_KEY: ${{ secrets.ANSIBLE_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$ANSIBLE_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # ansible.cfg sets StrictHostKeyChecking=no + accept-new in
+          # ansible_ssh_common_args. No ssh-keyscan (would add a
+          # PerSourcePenalty noauth attempt that breaks subsequent
+          # ansible SSH on OpenSSH 9.8+ — see ansible-proxmox.yml).
+          ls -la ~/.ssh/
+          ssh-keygen -lf ~/.ssh/id_ed25519 || true
+
+      - name: Build inventory args + limit
+        id: invargs
+        run: |
+          case "${{ github.event.inputs.inventory }}" in
+            wind) INV="-i inventory/wind/inventory.ini" ;;
+            aws)  INV="-i inventory/aws/inventory.ini"  ;;
+            both) INV="-i inventory/wind/inventory.ini -i inventory/aws/inventory.ini" ;;
+          esac
+          echo "inv=$INV" >> "$GITHUB_OUTPUT"
+
+          LIMIT=""
+          if [ -n "${{ github.event.inputs.limit }}" ]; then
+            LIMIT="--limit ${{ github.event.inputs.limit }}"
+          elif [ "${{ github.event.inputs.inventory }}" = "both" ]; then
+            # When running across both inventories, exclude k8s_cluster
+            # by default so we don't try to base.yml the worker nodes.
+            LIMIT="--limit all:!k8s_cluster"
+          fi
+          echo "limit=$LIMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Run ansible (check)
+        if: github.event.inputs.action == 'check'
+        env:
+          ANSIBLE_PRIVATE_KEY_FILE: /github/home/.ssh/id_ed25519
+        run: |
+          ansible-playbook ${{ steps.invargs.outputs.inv }} \
+            playbooks/${{ github.event.inputs.playbook }}.yml \
+            ${{ steps.invargs.outputs.limit }} \
+            --check --diff -v
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Run ansible (apply)
+        if: github.event.inputs.action == 'apply'
+        env:
+          ANSIBLE_PRIVATE_KEY_FILE: /github/home/.ssh/id_ed25519
+        run: |
+          ansible-playbook ${{ steps.invargs.outputs.inv }} \
+            playbooks/${{ github.event.inputs.playbook }}.yml \
+            ${{ steps.invargs.outputs.limit }} \
+            --diff -v
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Ansible run summary"
+            echo
+            echo "- Playbook: \`${{ github.event.inputs.playbook }}\`"
+            echo "- Inventory: \`${{ github.event.inputs.inventory }}\`"
+            echo "- Action: \`${{ github.event.inputs.action }}\`"
+            echo "- Limit: \`${{ steps.invargs.outputs.limit }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
