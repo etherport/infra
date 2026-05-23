@@ -40,16 +40,28 @@
       ansible.builtin.stat:
         path: /usr/local/bin/etcdctl
       register: etcdctl_bin
+      failed_when: not etcdctl_bin.stat.exists
 
-    - name: Find etcd PKI certs
+    # Kubespray installs etcd certs at /etc/ssl/etcd/ssl/, NOT the
+    # kubeadm-style /etc/kubernetes/pki/etcd/. The admin cert/key are
+    # per-host (admin-<hostname>.pem); CA is shared.
+    - name: Find etcd CA cert
       ansible.builtin.stat:
-        path: "{{ item }}"
-      register: cert_stat
-      loop:
-        - /etc/kubernetes/pki/etcd/ca.crt
-        - /etc/kubernetes/pki/etcd/healthcheck-client.crt
-        - /etc/kubernetes/pki/etcd/healthcheck-client.key
-      failed_when: not cert_stat.stat.exists
+        path: /etc/ssl/etcd/ssl/ca.pem
+      register: etcd_ca_stat
+      failed_when: not etcd_ca_stat.stat.exists
+
+    - name: Find etcd admin cert for this host
+      ansible.builtin.stat:
+        path: "/etc/ssl/etcd/ssl/admin-{{ inventory_hostname }}.pem"
+      register: etcd_admin_cert_stat
+      failed_when: not etcd_admin_cert_stat.stat.exists
+
+    - name: Find etcd admin key for this host
+      ansible.builtin.stat:
+        path: "/etc/ssl/etcd/ssl/admin-{{ inventory_hostname }}-key.pem"
+      register: etcd_admin_key_stat
+      failed_when: not etcd_admin_key_stat.stat.exists
 
     - name: Install etcd snapshot script
       ansible.builtin.copy:
@@ -66,12 +78,14 @@
           NOW="$(date -u +%Y%m%d-%H%M%S)"
           OUT="${SNAPSHOT_DIR}/etcd-${NOW}.db"
 
-          # Snapshot via local etcd endpoint with healthcheck-client cert.
+          # Snapshot via local etcd endpoint. Kubespray installs per-host
+          # admin certs at /etc/ssl/etcd/ssl/admin-<hostname>.pem.
+          HOST="$(hostname -s)"
           ETCDCTL_API=3 /usr/local/bin/etcdctl snapshot save "$OUT" \
             --endpoints=https://127.0.0.1:2379 \
-            --cacert=/etc/kubernetes/pki/etcd/ca.crt \
-            --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt \
-            --key=/etc/kubernetes/pki/etcd/healthcheck-client.key
+            --cacert=/etc/ssl/etcd/ssl/ca.pem \
+            --cert="/etc/ssl/etcd/ssl/admin-${HOST}.pem" \
+            --key="/etc/ssl/etcd/ssl/admin-${HOST}-key.pem"
 
           # Verify the snapshot is consistent.
           ETCDCTL_API=3 /usr/local/bin/etcdctl snapshot status "$OUT" \
