@@ -73,9 +73,19 @@ revision use the next free ID per tier. Status legend:
 ### ✅ H8. Archive completed migration docs
 - **Done:** 2026-05-22. Eleven planning docs moved to `docs/planning/archive/` with a `README.md` table listing why each was archived. Includes the just-completed `proxmox-sdn-implementation-2026-05-18.md` (PRs 1-6 all shipped). Top-level `docs/planning/` now holds only the canonical tracker + active design docs + ADRs.
 
-### ⏳ H9. Deploy swap + CloudWatch agent on vpn-aws / dns-aws
-- **Source:** `archive/outstanding-work-2026-05-16.md` H9
-- Ansible playbooks `swap.yml` + `cloudwatch-agent.yml` exist; never run against AWS VMs.
+### 🟡 H9. Deploy swap + CloudWatch agent + node_exporter on external VMs
+- **Status 2026-05-23:** 3 of 4 hosts done. New workflow `.github/workflows/ansible-vm-fleet.yml` runs base.yml / swap.yml / cloudwatch-agent.yml against any subset of the dns-fallback / vpn-local / dns-aws / vpn-aws fleet (mirrors ansible-proxmox.yml pattern).
+- **Done via base.yml apply:** dns-fallback, vpn-local — node_exporter v1.8.2 installed; service-status dashboard + email now show them UP. dns-aws was already up (node_exporter installed earlier).
+- **⏳ Blocked on vpn-aws:** ansible SSH to `ubuntu@10.10.100.10` returns `Permission denied (publickey)`. The gh-runner's ANSIBLE_SSH_KEY pubkey isn't authorized on vpn-aws. Two-line manual fix (run from your laptop with whichever key matches the `GS-EC2` AWS key pair):
+  ```
+  ssh ubuntu@10.10.100.10 \
+    'echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab" >> ~/.ssh/authorized_keys'
+  # Then re-dispatch the workflow:
+  gh workflow run ansible-vm-fleet.yml -f playbook=base -f inventory=aws -f action=apply -f limit=vpn-aws
+  gh workflow run ansible-vm-fleet.yml -f playbook=swap -f inventory=aws -f action=apply -f limit=vpn-aws
+  gh workflow run ansible-vm-fleet.yml -f playbook=cloudwatch-agent -f inventory=aws -f action=apply -f limit=vpn-aws
+  ```
+- swap.yml + cloudwatch-agent.yml still pending against all 4 hosts (only base.yml ran today). Same workflow dispatch, just swap the `-f playbook=` value.
 
 ### ✅ H10. Inventory consolidation (ansible vs kubespray)
 - **Done:** 2026-05-16. Tracked as task #5.

@@ -40,8 +40,11 @@ spec:
               image: python:3.14-slim # {"$imagepolicy": "flux-system:python-slim"}
               command: ["python3", "/work/configure-retention.py"]
               env:
-                - name: TECHNITIUM_URL
-                  value: "http://technitium-headless.dns.svc.cluster.local:5380"
+                # Comma-separated per-pod URLs — Technitium cluster mode
+                # doesn't sync settings between replicas (verified
+                # 2026-05-23), so we must hit each pod separately.
+                - name: TECHNITIUM_URLS
+                  value: "http://technitium-0.technitium-headless.dns.svc.cluster.local:5380,http://technitium-1.technitium-headless.dns.svc.cluster.local:5380"
                 - name: ADMIN_USER
                   valueFrom:
                     secretKeyRef:
