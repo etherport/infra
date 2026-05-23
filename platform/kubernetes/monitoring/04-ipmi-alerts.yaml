@@ -105,24 +105,11 @@ spec:
             summary: "PVE {{ $labels.name }} >75°C"
             description: "DIMM thermal sensor {{ $labels.name }} on {{ $labels.instance }} at {{ $value }}°C. DDR5 throttling typically begins around 85°C; investigate airflow."
 
-    # Loki-side log rules. These query the syslog stream for IPMI SEL
-    # events forwarded by ipmievd. Belt to the metric-side suspenders.
-    - name: pve-ipmi-syslog.rules
-      rules:
-        - alert: PveIpmiSelAssertion
-          # Loki recording-style alert; requires loki-ruler enabled.
-          # If ruler isn't running yet this rule is a no-op — the
-          # Prometheus alerts above still cover the same conditions
-          # via a different path.
-          expr: |
-            sum by (instance) (
-              count_over_time({job="syslog"} |~ "ipmievd:.*Asserted" [5m])
-            ) > 0
-          for: 0m
-          labels:
-            severity: warning
-            component: hardware
-            source: ipmievd
-          annotations:
-            summary: "IPMI SEL assertion logged on PVE"
-            description: "ipmievd reported a new SEL assertion. Check `kubectl -n monitoring logs ds/alloy | grep ipmievd` or query Loki for `{job=\"syslog\"} |~ \"ipmievd\"` for the full event."
+    # NOTE: a previous draft of this file mixed a Loki LogQL rule into
+    # this PrometheusRule group. The Prometheus operator validates with
+    # PromQL only — that LogQL rule caused the entire flux-system
+    # kustomization to fail (drift detection blocked) until removed
+    # 2026-05-23. LogQL alerts belong in a LokiRule resource via the
+    # loki-ruler component, which we don't yet have enabled. Tracked
+    # as a follow-up — for now the Prometheus-side metric alerts above
+    # cover the same failure modes via ipmi_exporter scrape.
