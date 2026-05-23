@@ -16,8 +16,10 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 2
-      # GC Job records after 1h — prevents stale KubeJobFailed alerts.
-      ttlSecondsAfterFinished: 3600
+      # GC Job records after 25h. Bumped from 1h on 2026-05-23 — the
+      # 1h limit was too aggressive across this fleet of CronJobs;
+      # alertmanager routing (M8) handles failed-job noise now.
+      ttlSecondsAfterFinished: 90000
       template:
         metadata:
           labels:

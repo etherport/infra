@@ -16,10 +16,11 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
-      # GC failed/successful Job records after 1h. Stuck Failed Job
-      # objects produced ~300 spurious alertmanager emails/day via
-      # KubeJobFailed; documented 2026-05-22 (alertmanager triage).
-      ttlSecondsAfterFinished: 3600
+      # GC after 25h — bumped from 1h on 2026-05-23 so the daily-
+      # report Job itself is visible for at least one full report
+      # window (helps when debugging "did today's email send?").
+      # Failed-job noise is handled by alertmanager routing (M8).
+      ttlSecondsAfterFinished: 90000
       template:
         spec:
           serviceAccountName: daily-report  # Has permissions to list jobs/cronjobs for status

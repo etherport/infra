@@ -13,10 +13,16 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
-      # GC Job records after 1h — prevents stale KubeJobFailed alerts
-      # accumulating across all share variants. Caught 2026-05-22 after
-      # ~4k alertmanager emails traced to stuck-Job alert spam.
-      ttlSecondsAfterFinished: 3600
+      # GC Job records 25h after they finish. Originally set to 3600
+      # (1h) on 2026-05-22 to clear stuck Failed jobs that were
+      # producing ~4k KubeJobFailed alertmanager emails — but 1h was
+      # too aggressive: the 06:00 PT s3-sync-daily-report enumerates
+      # jobs from the last 24h and the 01:00 PT runs were already
+      # ttl-deleted by then, producing "no executions in window"
+      # emails (caught 2026-05-23). 25h = 24h window + 1h slop.
+      # Failed-job noise is handled by alertmanager routing (M8) and
+      # InfoInhibitor pruning, not by aggressive TTL.
+      ttlSecondsAfterFinished: 90000
       template:
         metadata:
           annotations:
