@@ -86,31 +86,52 @@
     # ---------------------------------------------------------------------
     # 2. Sensor thresholds (idempotent — read current, set only if drifted)
     # ---------------------------------------------------------------------
-    - name: Read current sensor thresholds
+    # A single shell task reads ALL sensors at once (one SSH connection)
+    # so we don't trip pve-sshd's MaxStartups/LoginGraceTime limits when
+    # iterating. First attempt at this playbook (2026-05-23) iterated
+    # `ipmitool sensor get` per-sensor and got "Connection reset by peer"
+    # on item 2.
+    - name: Dump all sensor records as JSON (single SSH call)
       ansible.builtin.shell: |
         set -o pipefail
-        ipmitool sensor get "{{ item.sensor }}" 2>/dev/null \
-          | awk -F': *' '
-              /^ Upper Non-Critical/   { if ("{{ item.threshold }}" == "unc") print $2 }
-              /^ Upper Critical/       { if ("{{ item.threshold }}" == "ucr") print $2 }
-              /^ Upper Non-Recoverable/{ if ("{{ item.threshold }}" == "unr") print $2 }
-              /^ Lower Non-Critical/   { if ("{{ item.threshold }}" == "lnc") print $2 }
-              /^ Lower Critical/       { if ("{{ item.threshold }}" == "lcr") print $2 }
-              /^ Lower Non-Recoverable/{ if ("{{ item.threshold }}" == "lnr") print $2 }
-          ' | awk '{printf "%.0f", $1}'
+        for s in {{ (sensor_thresholds | map(attribute='sensor') | unique | list) | join(' ') }}; do
+          ipmitool sensor get "$s" 2>/dev/null \
+            | awk -F': *' -v s="$s" '
+                BEGIN { print s }
+                /^ Upper Non-Critical/    { print "unc=" $2 }
+                /^ Upper Critical/        { print "ucr=" $2 }
+                /^ Upper Non-Recoverable/ { print "unr=" $2 }
+                /^ Lower Non-Critical/    { print "lnc=" $2 }
+                /^ Lower Critical/        { print "lcr=" $2 }
+                /^ Lower Non-Recoverable/ { print "lnr=" $2 }
+                END   { print "---" }
+              '
+        done
       args:
         executable: /bin/bash
       changed_when: false
-      register: current_thresholds
-      loop: "{{ sensor_thresholds }}"
+      register: sensor_dump
 
+    # Inline parse: regex_search the dump for "<sensor>\n...<threshold>=<value>..."
+    # and compare to desired. No intermediate fact needed.
     - name: Set sensor threshold (only when drifted)
       ansible.builtin.command:
-        cmd: "ipmitool sensor thresh {{ item.item.sensor }} {{ item.item.threshold }} {{ item.item.value }}"
-      when: (item.stdout | default('') | int(default=0)) != (item.item.value | int)
-      loop: "{{ current_thresholds.results }}"
+        cmd: "ipmitool sensor thresh {{ item.sensor }} {{ item.threshold }} {{ item.value }}"
+      vars:
+        _block: >-
+          {{ (sensor_dump.stdout
+              | regex_search('(?ms)^' ~ item.sensor ~ '\n(.*?)\n---', '\\1', multiline=True))
+             | default('', true) }}
+        _current_raw: >-
+          {{ (_block
+              | regex_search('(?m)^' ~ item.threshold ~ '=(.+?)$', '\\1', multiline=True))
+             | default('na', true) | trim }}
+      when:
+        - _current_raw not in ['na', 'Not Available', '']
+        - (_current_raw | float | round(0) | int) != (item.value | int)
+      loop: "{{ sensor_thresholds }}"
       loop_control:
-        label: "{{ item.item.sensor }} {{ item.item.threshold }} -> {{ item.item.value }}"
+        label: "{{ item.sensor }} {{ item.threshold }} (current={{ _current_raw }}, want={{ item.value }})"
 
     # ---------------------------------------------------------------------
     # 3. ipmievd: daemonize SEL -> local syslog
