@@ -7,6 +7,27 @@ locals {
     ManagedBy   = "terraform"
     Module      = "compute"
   }
+
+  # Cloud-init payload shared by both AWS VMs (vpn + dns). Appends the
+  # gh-runner's automation pubkey to ubuntu's authorized_keys so the
+  # ansible-vm-fleet workflow can SSH in without a manual key push.
+  # Runs only on first boot — has no effect on a running instance, and
+  # both `aws_instance` blocks `ignore_changes = [user_data]` so a
+  # source diff doesn't try to recreate them.
+  #
+  # If the homelab automation key is ever rotated (1Password item
+  # "Homelab Automation SSH Key"), update the pubkey here AND in
+  # `infra/ansible/playbooks/pve-sshd.yml` AND on the live AWS hosts
+  # (~ubuntu/.ssh/authorized_keys on dns-aws + vpn-aws). See
+  # `memory/reference_pve_automation_pubkey.md` for the canonical
+  # list of placement.
+  aws_vm_cloud_init = <<-EOT
+    #cloud-config
+    users:
+      - name: ubuntu
+        ssh_authorized_keys:
+          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab"
+  EOT
 }
 
 #------------------------------------------------------------------------------
@@ -106,6 +127,15 @@ resource "aws_instance" "vpn" {
   subnet_id            = data.aws_subnet.public1.id
   private_ip           = "10.10.100.10"
 
+  # Cloud-init payload — runs ONCE on first boot to append the
+  # homelab-automation pubkey to ubuntu's authorized_keys so the
+  # gh-runner can ansible this host without a manual SSH key push.
+  # (2026-05-23: discovered both AWS VMs were provisioned with only
+  # the personal GS-EC2 key; the automation pubkey was added manually
+  # post-hoc via SSH-from-laptop. This bakes the fix for any future
+  # recreate.) Has no effect on the existing running instance.
+  user_data = local.aws_vm_cloud_init
+
   vpc_security_group_ids = [
     data.aws_security_group.vpn_server.id,
     data.aws_security_group.internal_comms.id,
@@ -142,8 +172,10 @@ resource "aws_instance" "vpn" {
   lifecycle {
     # Prevent accidental destruction
     prevent_destroy = true
-    # Ignore AMI changes - upgrades are manual
-    ignore_changes = [ami]
+    # Ignore AMI + user_data changes — AMI upgrades are manual; user_data
+    # only matters on first boot (cloud-init), so changes shouldn't
+    # trigger replacement on an already-running instance.
+    ignore_changes = [ami, user_data]
   }
 }
 
@@ -158,6 +190,9 @@ resource "aws_instance" "dns" {
   iam_instance_profile = aws_iam_instance_profile.ec2_cloudwatch_agent.name
   subnet_id            = data.aws_subnet.public1.id
   private_ip           = "10.10.100.5"
+
+  # Same cloud-init payload as vpn-aws — see comment on aws_instance.vpn.
+  user_data = local.aws_vm_cloud_init
 
   vpc_security_group_ids = [
     data.aws_security_group.dns_server.id,
@@ -195,8 +230,8 @@ resource "aws_instance" "dns" {
   lifecycle {
     # Prevent accidental destruction
     prevent_destroy = true
-    # Ignore AMI changes - upgrades are manual
-    ignore_changes = [ami]
+    # Ignore AMI + user_data — see comment on aws_instance.vpn.
+    ignore_changes = [ami, user_data]
   }
 }
 
