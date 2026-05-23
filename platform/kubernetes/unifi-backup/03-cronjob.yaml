@@ -1,0 +1,60 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: unifi-backup
+  namespace: backups
+spec:
+  # Daily at 04:00 PT — after the UDM's own 07:00 UTC autobackup
+  # writes a fresh .unf, and before the 06:00 PT daily-report email so
+  # status metrics are visible in the morning digest.
+  schedule: "0 4 * * *"
+  timeZone: "America/Los_Angeles"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 90000  # 25h — same pattern as other CronJobs
+      template:
+        spec:
+          serviceAccountName: unifi-backup
+          restartPolicy: Never
+          containers:
+            - name: backup
+              # aws-s3-sync image already has bash + aws CLI + scp via openssh-client
+              image: ghcr.io/sparked-diamond/aws-s3-sync:main
+              imagePullPolicy: Always
+              command: ["/bin/bash", "/config/backup.sh"]
+              env:
+                - name: S3_BUCKET
+                  value: "velero.wind.etherport.net"
+                - name: PUSHGATEWAY_URL
+                  value: "http://pushgateway.monitoring.svc.cluster.local:9091"
+              envFrom:
+                # AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY for s3 cp
+                - secretRef:
+                    name: aws-backup-credentials
+              volumeMounts:
+                - name: ssh-key
+                  mountPath: /ssh
+                  readOnly: true
+                - name: script
+                  mountPath: /config
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 96Mi
+                limits:
+                  memory: 256Mi
+          volumes:
+            - name: ssh-key
+              secret:
+                secretName: unifi-backup-ssh
+                defaultMode: 0600
+            - name: script
+              configMap:
+                name: unifi-backup-script
+                defaultMode: 0755

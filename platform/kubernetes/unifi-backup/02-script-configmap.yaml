@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: unifi-backup-script
+  namespace: backups
+data:
+  # Per-device backup targets. Format:
+  #   name | ssh-target | source-path | s3-prefix
+  # `source-path` is either a directory (we tar+gzip) or a glob for
+  # the latest matching file (we ship the newest one we find).
+  targets: |
+    udm-controller-db|root@10.10.200.1|/data/unifi/data/backup/autobackup/*.unf|udm/controller-db
+    udm-core-config|root@10.10.200.1|/data/unifi-core/config|udm/core-config
+    protect-core-config|root@10.10.212.10|/data/unifi-core/config|protect/core-config
+
+  # Backup CronJob script. Reuses the same SSH+SCP path the unifi-
+  # cert-sync CronJob uses; pushes to s3://${BUCKET}/${prefix}/<date>.<ext>.
+  # Idempotent in S3 (date in the filename means each day gets a new
+  # object; lifecycle policy on the bucket prefix handles retention).
+  backup.sh: |
+    #!/usr/bin/env bash
+    set -uo pipefail
+
+    BUCKET="${S3_BUCKET:?missing S3_BUCKET}"
+    PUSHGATEWAY="${PUSHGATEWAY_URL:-http://pushgateway.monitoring.svc.cluster.local:9091}"
+    JOB="unifi_backup"
+
+    DATE="$(date -u +%Y%m%d-%H%M%S)"
+    WORK="$(mktemp -d)"
+    trap 'rm -rf "$WORK"' EXIT
+
+    log() { echo "[$(date -Iseconds)] $*"; }
+
+    # SSH config — same key the cert-sync CronJob uses
+    mkdir -p /tmp/.ssh
+    cp /ssh/id_ed25519 /tmp/.ssh/id_ed25519
+    cp /ssh/known_hosts /tmp/.ssh/known_hosts
+    chmod 700 /tmp/.ssh
+    chmod 600 /tmp/.ssh/id_ed25519 /tmp/.ssh/known_hosts
+    SSH_OPTS=(-i /tmp/.ssh/id_ed25519
+              -o UserKnownHostsFile=/tmp/.ssh/known_hosts
+              -o StrictHostKeyChecking=yes
+              -o ConnectTimeout=15
+              -o BatchMode=yes)
+
+    declare -A status   # name -> 0 ok | 1 fetch failed | 2 upload failed
+    declare -A bytes
+
+    fetch_and_ship() {
+      local name="$1" target="$2" src="$3" prefix="$4"
+      log ""
+      log "=== ${name} (${target}) ==="
+      status[$name]=0
+      bytes[$name]=0
+
+      local local_file
+      if [[ "$src" == *"*"* ]]; then
+        local remote_dir="${src%/*}"
+        local pattern="${src##*/}"
+        log "  -> newest of ${remote_dir}/${pattern}"
+        local newest
+        newest=$(ssh "${SSH_OPTS[@]}" "$target" "ls -1t ${remote_dir}/${pattern} 2>/dev/null | head -1") || true
+        if [[ -z "$newest" ]]; then
+          log "  x no matching file"
+          status[$name]=1; return
+        fi
+        log "  -> ${newest}"
+        local_file="${WORK}/${name}-${DATE}.unf"
+        if ! scp -OqB "${SSH_OPTS[@]}" "${target}:${newest}" "${local_file}"; then
+          log "  x scp failed"
+          status[$name]=1; return
+        fi
+      else
+        log "  -> tarball of ${src}"
+        local_file="${WORK}/${name}-${DATE}.tar.gz"
+        if ! ssh "${SSH_OPTS[@]}" "$target" "tar -czf - -C $(dirname "$src") $(basename "$src") 2>/dev/null" > "${local_file}"; then
+          log "  x remote tar failed"
+          status[$name]=1; return
+        fi
+      fi
+
+      bytes[$name]=$(stat -c %s "${local_file}" 2>/dev/null || stat -f %z "${local_file}")
+      log "  ok fetched $(numfmt --to=iec ${bytes[$name]} 2>/dev/null || echo ${bytes[$name]}) bytes"
+
+      local s3_key="${prefix}/$(basename "${local_file}")"
+      if ! aws s3 cp --no-progress --quiet "${local_file}" "s3://${BUCKET}/${s3_key}"; then
+        log "  x s3 upload failed (s3://${BUCKET}/${s3_key})"
+        status[$name]=2; return
+      fi
+      log "  ok uploaded to s3://${BUCKET}/${s3_key}"
+    }
+
+    while IFS='|' read -r name target src prefix <&3; do
+      [[ -z "$name" || "$name" =~ ^[[:space:]]*# ]] && continue
+      fetch_and_ship "$name" "$target" "$src" "$prefix"
+    done 3< /config/targets
+
+    {
+      echo "# TYPE unifi_backup_last_run_timestamp gauge"
+      echo "unifi_backup_last_run_timestamp $(date +%s)"
+      for n in "${!status[@]}"; do
+        echo "# TYPE unifi_backup_status gauge"
+        echo "unifi_backup_status{device=\"$n\"} ${status[$n]}"
+        echo "# TYPE unifi_backup_bytes gauge"
+        echo "unifi_backup_bytes{device=\"$n\"} ${bytes[$n]}"
+      done
+    } | curl --max-time 5 --data-binary @- "${PUSHGATEWAY}/metrics/job/${JOB}" 2>/dev/null || \
+        log "warning: pushgateway push failed (non-fatal)"
+
+    overall=0
+    for n in "${!status[@]}"; do
+      [[ ${status[$n]} -ne 0 ]] && overall=1
+    done
+    log ""
+    log "Summary: $(declare -p status | sed 's/declare -A status=//')"
+    exit $overall

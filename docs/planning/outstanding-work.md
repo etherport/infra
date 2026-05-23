@@ -288,6 +288,13 @@ revision use the next free ID per tier. Status legend:
 - **Fix:** set destination to existing Promtail/syslog receiver (or stand one up).
 - **Effort:** S.
 
+### ⏳ M36. UDM "IP conflict" alerts for MetalLB VIPs (.5 + .71)
+- **Source:** user report 2026-05-23. UDM repeatedly fires IP-conflict alerts for `10.10.201.5` (Technitium aggregator/cluster VIP) and `10.10.201.71` (technitium-0 LoadBalancer IP). Both are MetalLB-managed.
+- **Why it happens:** MetalLB L2Advertisement mode picks ONE speaker pod per IP to send gratuitous ARP. When the elected speaker moves (pod restart, node drain, MetalLB controller re-election), the IP "moves" to a different node MAC. The UDM sees the same IP claimed by multiple MAC addresses over time and flags it as a conflict — even though it's working as designed.
+- **The clean fix = MetalLB BGP mode (M18).** In BGP mode, each speaker advertises the IP as a /32 route to the UDM (as a BGP peer). There's no ARP claim, no MAC ownership, no "conflict" from the UDM's perspective — it's a learned route. The Technitium audit (M25 §2.4) noted UniFi Network ≥10 supports eBGP peering, so this is unblocked technically. Effort: M (UDM BGP config + MetalLB BGPPeer/BGPAdvertisement CRs + private ASN allocation + cutover).
+- **Short-term workaround (stop the alerts without the BGP migration):** in the UDM UI under Settings → Networks → Default (or the LAN where these VIPs live), add an "Excluded IP" list for `.5` and `.71` so the UDM stops tracking them as DHCP clients. Or under Insights → IP Conflict Detection, add a per-IP suppression rule. Either is reversible if BGP migration happens later.
+- **Effort:** S (workaround) / M (proper BGP migration). Merging with M18 since they share the resolution.
+
 ### ⏳ M35. Wire dns-aws public IP as 3rd DHCP DNS resolver
 - **Source:** user ask 2026-05-23. Rationale: with `.5` (Technitium cluster VIP) primary + `.6` (dns-fallback VM) secondary, any combined outage of both the K8s cluster + the on-prem fallback + the AWS WG tunnel leaves clients with no DNS. Wiring dns-aws's public IP (currently `52.40.219.113`, the EIP of the dns-aws EC2 instance) as a 3rd DHCP DNS gives clients a path over the public internet even when the tunnel is down.
 - **Already in place:** the `dns_server` SG on AWS allows port 53 TCP+UDP from the homelab WAN IPs (`66.215.210.75` + `47.159.189.5`), kept in sync with `wan1`/`wan2.wind.etherport.net` Route53 records by the dns-restrict-ip Lambda. So clients reaching `52.40.219.113:53` from the homelab WAN will succeed.
