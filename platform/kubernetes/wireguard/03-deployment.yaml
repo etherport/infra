@@ -109,13 +109,10 @@ spec:
               AllowedIPs = 10.10.100.0/22, 10.255.255.1/32
               PersistentKeepalive = 25
 
-              [Peer]
-              # vpn-mumbai (ap-south-1) - regional travel endpoint
-              # Homelab initiates connection (avoids UDM port forward issues)
-              PublicKey = efcqDc4sRsq1yerx9gfTxDdnS3qj3+TH6XsWlmOxGT4=
-              Endpoint = 13.234.119.106:51820
-              AllowedIPs = 10.10.112.0/24, 10.255.255.3/32
-              PersistentKeepalive = 25
+              # vpn-mumbai (ap-south-1) peer block removed 2026-05-23.
+              # AWS instance destroyed (no travel planned for the next
+              # few weeks). To resurrect: see the comment in
+              # infra/ansible/playbooks/wireguard.yml `wg0_regional_peers`.
 
               [Peer]
               # vpn-use1 (us-east-1) - permanent east coast endpoint

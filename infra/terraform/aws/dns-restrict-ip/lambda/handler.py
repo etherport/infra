@@ -112,17 +112,25 @@ def get_security_group_ips(security_group_id, port, protocols):
     return ips
 
 
-def _permissions(ips, port, protocols, description):
-    """Build the IpPermissions list for authorize/revoke calls."""
+def _permissions(ips, port, protocols, description=None):
+    """Build the IpPermissions list. Pass description for add (so the
+    new rule is annotated with our marker) and omit it for revoke
+    (AWS revoke matches CIDR+port+protocol but treats a passed
+    Description as part of the match, so the rule won't be revoked
+    if its live description differs from what we send — was silently
+    leaving stale entries 2026-05-23)."""
     permissions = []
     for ip in ips:
         cidr = f"{ip}/32"
         for protocol in protocols:
+            ip_range = {"CidrIp": cidr}
+            if description is not None:
+                ip_range["Description"] = description
             permissions.append({
                 "IpProtocol": protocol,
                 "FromPort": port,
                 "ToPort": port,
-                "IpRanges": [{"CidrIp": cidr, "Description": description}],
+                "IpRanges": [ip_range],
             })
     return permissions
 
@@ -144,13 +152,14 @@ def add_security_group_rules(security_group_id, ips, port, protocols, descriptio
             raise
 
 
-def remove_security_group_rules(security_group_id, ips, port, protocols, description):
+def remove_security_group_rules(security_group_id, ips, port, protocols):
     if not ips:
         return
     try:
+        # Description omitted intentionally — see _permissions docstring.
         ec2.revoke_security_group_ingress(
             GroupId=security_group_id,
-            IpPermissions=_permissions(ips, port, protocols, description),
+            IpPermissions=_permissions(ips, port, protocols),
         )
         logger.info(f"[{security_group_id}:{port}/{protocols}] removed rules for {ips}")
     except ec2.exceptions.ClientError as e:
@@ -177,7 +186,7 @@ def sync_rule(spec, expected_ips):
     if add:
         add_security_group_rules(sg, add, port, protocols, description)
     if remove:
-        remove_security_group_rules(sg, remove, port, protocols, description)
+        remove_security_group_rules(sg, remove, port, protocols)
     if not add and not remove:
         logger.info(f"[{sg}:{port}/{protocols}] in sync")
 

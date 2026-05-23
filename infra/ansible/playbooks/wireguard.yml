@@ -85,13 +85,21 @@
     # These are TEMPORARY regional VPNs for travel - add/remove as needed
     # Both K8s WireGuard pod and vpn-local need these peers for failover to work
     # Homelab initiates connection to regional VPNs (avoids UDM port forward issues)
-    wg0_regional_peers:
-      - name: "vpn-mumbai (ap-south-1)"
-        comment: "TEMPORARY regional travel endpoint"
-        public_key: "efcqDc4sRsq1yerx9gfTxDdnS3qj3+TH6XsWlmOxGT4="
-        endpoint: "13.234.119.106:51820"
-        allowed_ips: "10.10.112.0/24, 10.255.255.3/32"
-        keepalive: 25
+    wg0_regional_peers: []
+      # vpn-mumbai (ap-south-1) was here until 2026-05-23. Destroyed at
+      # user request — no travel planned for the next few weeks.
+      # To resurrect: dispatch terraform-regional-vpn workflow with
+      # action=apply, region=ap-south-1, region_short=mumbai,
+      # vpc_cidr=10.10.112.0/24, tunnel_ip=10.255.255.3. Then re-add
+      # the peer block here AND in platform/kubernetes/wireguard/
+      # 03-deployment.yaml with the NEW endpoint IP (the EC2 instance
+      # is non-EIP so its public IP rotates per restart).
+      # Per-peer block was:
+      #   - name: "vpn-mumbai (ap-south-1)"
+      #     public_key: "efcqDc4sRsq1yerx9gfTxDdnS3qj3+TH6XsWlmOxGT4="
+      #     endpoint: "<NEW-IP>:51820"
+      #     allowed_ips: "10.10.112.0/24, 10.255.255.3/32"
+      #     keepalive: 25
 
     # =========================================================================
     # Client Config Template (for reference)
