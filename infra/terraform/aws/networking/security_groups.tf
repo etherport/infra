@@ -219,41 +219,30 @@ resource "aws_security_group" "dns_server" {
   })
 }
 
-# DNS access from homelab WAN IPs
-resource "aws_vpc_security_group_ingress_rule" "dns_udp_homelab1" {
-  security_group_id = aws_security_group.dns_server.id
-  description       = "DNS access from homelab WAN"
-  ip_protocol       = "udp"
-  from_port         = 53
-  to_port           = 53
-  cidr_ipv4         = "66.215.210.75/32"
+# DNS access from homelab WAN IPs — these four rules are now managed
+# by the dns-restrict-ip Lambda (infra/terraform/aws/dns-restrict-ip)
+# which keeps them in sync with Route53 records wan1/wan2.wind.etherport.net.
+# The Lambda re-applies on every Route53 change so hardcoding the IPs
+# here would silently drift on the next IP change.
+#
+# Removed from this module on 2026-05-23 (H6). The four `removed`
+# blocks below tell TF to forget them without destroying — the Lambda
+# continues writing to the SG via boto3.
+removed {
+  from = aws_vpc_security_group_ingress_rule.dns_udp_homelab1
+  lifecycle { destroy = false }
 }
-
-resource "aws_vpc_security_group_ingress_rule" "dns_udp_homelab2" {
-  security_group_id = aws_security_group.dns_server.id
-  description       = "DNS access from homelab WAN"
-  ip_protocol       = "udp"
-  from_port         = 53
-  to_port           = 53
-  cidr_ipv4         = "47.159.189.5/32"
+removed {
+  from = aws_vpc_security_group_ingress_rule.dns_udp_homelab2
+  lifecycle { destroy = false }
 }
-
-resource "aws_vpc_security_group_ingress_rule" "dns_tcp_homelab1" {
-  security_group_id = aws_security_group.dns_server.id
-  description       = "DNS access from homelab WAN"
-  ip_protocol       = "tcp"
-  from_port         = 53
-  to_port           = 53
-  cidr_ipv4         = "66.215.210.75/32"
+removed {
+  from = aws_vpc_security_group_ingress_rule.dns_tcp_homelab1
+  lifecycle { destroy = false }
 }
-
-resource "aws_vpc_security_group_ingress_rule" "dns_tcp_homelab2" {
-  security_group_id = aws_security_group.dns_server.id
-  description       = "DNS access from homelab WAN"
-  ip_protocol       = "tcp"
-  from_port         = 53
-  to_port           = 53
-  cidr_ipv4         = "47.159.189.5/32"
+removed {
+  from = aws_vpc_security_group_ingress_rule.dns_tcp_homelab2
+  lifecycle { destroy = false }
 }
 
 # HTTPS access from CloudFront (for DoH or management)
