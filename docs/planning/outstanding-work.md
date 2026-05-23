@@ -57,17 +57,10 @@ revision use the next free ID per tier. Status legend:
 ### ✅ H5. Increase replica counts → enable PDBs
 - **Done:** 2026-05-22 (commit `0851d26`). Prometheus + Alertmanager both bumped to `replicas=2` with podAntiAffinity in `kube-prometheus-stack-values.yaml`. cert-manager + cert-manager-cainjector + cert-manager-webhook were already 2/2 per kubectl (no change needed). Traefik was already 2/2. Grafana stays at 1 (RWO PVC + sticky session — HA needs external DB).
 
-### ⏳ H6. Hardcoded WAN IPs in AWS security groups
-- **Source:** `archive/outstanding-work-2026-05-16.md` H6
-- **Concrete plan** (2026-05-22 audit): three hardcoded entries in `infra/terraform/aws/networking/security_groups.tf`:
-  - `aws_security_group.allow_ssh` port 22 from `47.34.215.233/32` ("remote location")
-  - `aws_security_group.dns_server` port 53 UDP+TCP from `66.215.210.75/32` + `47.159.189.5/32` ("homelab WAN")
-- A `dns-restrict-ip` Lambda already exists (`infra/terraform/aws/dns-restrict-ip/`) — it watches Route53 record changes and rewrites `security_group_id` ingress rules. Currently targets one SG (`sg-08d12e417159c18d2`). Plan:
-  1. Add Route53 A records for the three IPs above (or reuse `wan1.wind.etherport.net` / `wan2` if they're the same source).
-  2. Extend `dns-restrict-ip` to accept a list of `(security_group_id, port, protocol)` rule specs and update each from its corresponding DNS record.
-  3. Remove the three hardcoded TF entries.
-- Effort: M. Needs careful state migration (the Lambda must own each rule entirely; partial overlap with TF state → drift).
-- Periodic rotation via Lambda exists but bootstrap IPs are hardcoded.
+### 🟡 H6. Hardcoded WAN IPs in AWS security groups
+- **Status 2026-05-23:** DNS-side done; SSH-side still hardcoded pending user input.
+- **Done (commit `d0f3a36`):** the 4 hardcoded `dns_(udp|tcp)_homelab[12]` ingress rules on `aws_security_group.dns_server` have been transferred from Terraform to the `dns-restrict-ip` Lambda. The Lambda was already keeping these in sync with `wan1`/`wan2.wind.etherport.net` Route53 records via boto3; the TF side was a redundant declaration that would have fought the Lambda on any WAN-IP change. Used `removed` blocks with `destroy = false` so TF forgets ownership without deleting the rules in AWS. Verified by `terraform apply` showing `0 added, 0 changed, 0 destroyed`.
+- **⏳ Still hardcoded:** `aws_security_group.allow_ssh` port 22 from `47.34.215.233/32` (commented "remote location"). To migrate this, need to decide: is this a static second residence IP (keep hardcoded with a clearer comment), or is it DDNS-tracked somewhere (add Route53 record + extend Lambda to also manage SG/port/protocol tuples beyond the dns_server SG)? **Awaiting your input** before further IaC changes.
 
 ### ✅ H7. Doc drift cleanup
 - **Done:** 2026-05-19 to 2026-05-21 in multiple commits. Architecture/overview/network/firewall-zones docs reflect VLAN 210, enp6s22, SDN bridges, RSA wildcard cert. `node-vlan-setup.md` updated 4→5 interfaces. `regional-vpn-deployment.md` drops 1.1.1.1 from DNS push.
@@ -183,8 +176,11 @@ revision use the next free ID per tier. Status legend:
 ### ✅ M8. Auto-remediation COVERAGE.md refresh
 - **Done:** 2026-05-22. Wrote `platform/kubernetes/auto-remediation/COVERAGE.md`: inventories all 22 defined rules, identifies what's covered, what isn't (CNPG, ceph-csi-provisioner, WG K8s pod, MetalLB speakers, Multus DS), and the big-finger discovery — **the webhook receiver isn't wired in alertmanager**, so all rules are dormant until that's fixed. Includes the exact YAML diff to wire it. Source: `archive/outstanding-work-2026-05-16.md` M8.
 
-### ⏳ M9. Etcd backup automation + DR drill schedule
-- Source: `archive/outstanding-work-2026-05-16.md` M9.
+### ✅ M9. Etcd backup automation
+- **Done:** 2026-05-23 (commits `c9e9247`, `899a9d3`). New ansible playbook `infra/ansible/playbooks/etcd-backup.yml` installs a systemd timer + service + script on each `kube_control_plane` node that runs `etcdctl snapshot save` daily at 02:00 PT with 14-day retention. Snapshots land in `/var/lib/etcd-snapshots/`; Velero's existing kube-system FS backup ships them off-host.
+- Verified via the new `ansible-vm-fleet.yml` workflow with `playbook=etcd-backup` choice: all 3 cp nodes took an initial 173MB snapshot at apply time (consistent hash `a9a4538e` across all 3 — etcd cluster is in sync). Next scheduled fire: 2026-05-24 02:00 PT.
+- Idempotent (re-running just rewrites units in place). Uses kubespray cert paths (`/etc/ssl/etcd/ssl/{ca,admin-<hostname>}.pem`), NOT the kubeadm-style ones.
+- **DR drill schedule** (the second half of the original M9 scope) tracked separately under M11 (RTO/RPO doc) + M12 (CNPG restore drill Tier B).
 
 ### ⏳ M10. Lifecycle / `ignore_changes` on Proxmox K8s VMs (F1.5)
 - Source: `archive/outstanding-work-2026-05-16.md` M10.
@@ -196,7 +192,20 @@ revision use the next free ID per tier. Status legend:
 - Source: task #24. Destructive test; needs supervision and maintenance window.
 
 ### ⏳ M13. Delete `/data/udm-le.removed-*` on UDM / Protect / Sequoia
-- Source: task #14. Runtime cleanup of orphaned cert backups; needs SSH paths configured (Sequoia rejected multi-key 1P agent with "too many auth failures"; UDM needs separate creds).
+- **Status 2026-05-23:** still blocked. Probed from laptop today — all three hosts reject the SSH agent's keys:
+  - `root@10.10.200.1` (UDM) → `Permission denied (publickey)`. UDM uses a separate SSH password set in the Network UI; not on the automation key.
+  - `graham@10.10.209.10` (Sequoia) → `Permission denied (publickey)`. Per prior note, multi-key agent triggers "too many auth failures".
+  - Protect at 10.10.212.10 — untested but same expected pattern.
+- **One-shot fix from your terminal** (separate session per host so the SSH agent only offers one key):
+  ```
+  # UDM
+  ssh -i ~/.ssh/<udm-key> root@10.10.200.1 'rm -rf /data/udm-le.removed-*'
+  # Sequoia
+  ssh -i ~/.ssh/<sequoia-key> graham@10.10.209.10 'sudo rm -rf /data/udm-le.removed-*'
+  # Protect (find right user + key)
+  ssh -i ~/.ssh/<protect-key> root@10.10.212.10 'rm -rf /data/udm-le.removed-*'
+  ```
+- **Closing-the-loop note:** M31 (new — automated UDM backup to S3) would also catch + manage the UDM-side `/data` directory contents going forward. Worth chasing M31 first; then M13 becomes obviated for the UDM, just Sequoia + Protect left.
 
 ### ⏳ M14. Investigate aws-s3-sync daily-report SSL mismatch (if recurs)
 - Source: task #25. Only act if it recurs.
