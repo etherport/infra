@@ -191,21 +191,13 @@ revision use the next free ID per tier. Status legend:
 ### ⏳ M12. CNPG restore drill Tier B (sibling cluster)
 - Source: task #24. Destructive test; needs supervision and maintenance window.
 
-### ⏳ M13. Delete `/data/udm-le.removed-*` on UDM / Protect / Sequoia
-- **Status 2026-05-23:** still blocked. Probed from laptop today — all three hosts reject the SSH agent's keys:
-  - `root@10.10.200.1` (UDM) → `Permission denied (publickey)`. UDM uses a separate SSH password set in the Network UI; not on the automation key.
-  - `graham@10.10.209.10` (Sequoia) → `Permission denied (publickey)`. Per prior note, multi-key agent triggers "too many auth failures".
-  - Protect at 10.10.212.10 — untested but same expected pattern.
-- **One-shot fix from your terminal** (separate session per host so the SSH agent only offers one key):
-  ```
-  # UDM
-  ssh -i ~/.ssh/<udm-key> root@10.10.200.1 'rm -rf /data/udm-le.removed-*'
-  # Sequoia
-  ssh -i ~/.ssh/<sequoia-key> graham@10.10.209.10 'sudo rm -rf /data/udm-le.removed-*'
-  # Protect (find right user + key)
-  ssh -i ~/.ssh/<protect-key> root@10.10.212.10 'rm -rf /data/udm-le.removed-*'
-  ```
-- **Closing-the-loop note:** M31 (new — automated UDM backup to S3) would also catch + manage the UDM-side `/data` directory contents going forward. Worth chasing M31 first; then M13 becomes obviated for the UDM, just Sequoia + Protect left.
+### ✅ M13. Delete `/data/udm-le.removed-*` on UDM / Protect / Sequoia
+- **Done:** 2026-05-23. All three devices cleaned:
+  - **Sequoia** (`/data/udm-le.removed-20260517`, 57MB) — used 1P item `Sequoia SSH` (root, password auth via sshpass with `-o PreferredAuthentications=keyboard-interactive`)
+  - **UDM** (`/ssd1/.data/udm-le.removed-20260517`, 98MB) — used one-shot K8s Job in the `unifi-cert-sync` ns mounting the existing `unifi-cert-sync-ssh` secret (same key path the cert-sync CronJob uses)
+  - **Protect** (`/data/udm-le.removed-20260517`, 98MB) — same path as UDM
+- **Cron/systemd check:** no remaining udm-le references in crontab, /etc/cron.*, systemd units, or timers on any of the three. The old triggers were inside the renamed `removed-*` directory itself, so dir-delete removes the only trigger surface.
+- **Total freed:** ~253MB across the three devices.
 
 ### ⏳ M14. Investigate aws-s3-sync daily-report SSL mismatch (if recurs)
 - Source: task #25. Only act if it recurs.
@@ -295,6 +287,12 @@ revision use the next free ID per tier. Status legend:
 - `rsyslogd` is enabled (`super_fabric_system_log = true`) but the destination `host` field is empty — UDM logs go nowhere off-host.
 - **Fix:** set destination to existing Promtail/syslog receiver (or stand one up).
 - **Effort:** S.
+
+### ⏳ M35. Wire dns-aws public IP as 3rd DHCP DNS resolver
+- **Source:** user ask 2026-05-23. Rationale: with `.5` (Technitium cluster VIP) primary + `.6` (dns-fallback VM) secondary, any combined outage of both the K8s cluster + the on-prem fallback + the AWS WG tunnel leaves clients with no DNS. Wiring dns-aws's public IP (currently `52.40.219.113`, the EIP of the dns-aws EC2 instance) as a 3rd DHCP DNS gives clients a path over the public internet even when the tunnel is down.
+- **Already in place:** the `dns_server` SG on AWS allows port 53 TCP+UDP from the homelab WAN IPs (`66.215.210.75` + `47.159.189.5`), kept in sync with `wan1`/`wan2.wind.etherport.net` Route53 records by the dns-restrict-ip Lambda. So clients reaching `52.40.219.113:53` from the homelab WAN will succeed.
+- **Fix:** for each tenant VLAN with DHCP DNS set to `.5/.6` today (Management, Servers, Clients, IoT, vSAN, Ceph, Unifi per M25 audit §1.6), add `52.40.219.113` as a 3rd entry. UDM UI per-network or via the `paultyng/unifi` TF provider if codifying. Skip Guest (already uses public DNS by design).
+- **Effort:** S — UI clicks or one TF block per network.
 
 ### ⏳ M34. Disable site-wide UniFi auto-upgrade (extends H23)
 - H23 closed because the UDM itself has `mgmt.auto_upgrade: false`, but all 9 switches + 7 APs still have `safe_for_autoupgrade: true` and the site-wide policy upgrades them nightly at 03:00. A future firmware bug would auto-deploy to the fleet before you see it.
