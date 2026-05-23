@@ -49,7 +49,7 @@ def main():
     token = auth["token"]
 
     # Get current settings
-    get_url = f"{base}/api/admin/settings/get?token={token}"
+    get_url = f"{base}/api/settings/get?token={token}"
     cur = _req("GET", get_url)
     if cur.get("status") != "ok":
         print(f"settings/get failed: {cur}", file=sys.stderr)
@@ -70,7 +70,7 @@ def main():
     # explicitly set only the two retention fields and let the server
     # preserve everything else (it does — only the supplied keys are
     # mutated).
-    set_url = (f"{base}/api/admin/settings/set"
+    set_url = (f"{base}/api/settings/set"
                f"?token={token}"
                f"&maxLogFileDays={want_log}"
                f"&maxStatFileDays={want_stat}")
