@@ -1,0 +1,128 @@
+---
+# Hardware-sensor alert rules for the PVE host via ipmi_exporter.
+#
+# Three classes of alert:
+#   1. Sensor reading exceeds tuned threshold (slow, polled).
+#   2. ipmi_exporter itself is down (we lose visibility entirely).
+#   3. SEL events arriving via syslog (Loki LogQL alert — defined in
+#      this file too via the Alloy/Loki side; the cluster's
+#      AlertmanagerConfig already covers routing).
+#
+# Sensor thresholds in the playbook (ipmi-monitoring.yml) are the
+# BMC's own assertion thresholds — when crossed, the BMC fires a SEL
+# event that ipmievd → syslog → Loki picks up. The Prometheus alerts
+# below are independent: they query ipmi_exporter scraped metrics so
+# we get alerting even if the BMC's own SEL/syslog path is broken.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: pve-ipmi-hardware
+  namespace: monitoring
+  labels:
+    release: monitoring
+    app: kube-prometheus-stack
+spec:
+  groups:
+    - name: pve-ipmi.rules
+      rules:
+        # The exporter itself
+        - alert: IpmiExporterDown
+          expr: up{job="pve-ipmi"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            component: hardware
+          annotations:
+            summary: "ipmi_exporter on {{ $labels.instance }} is unreachable"
+            description: "Lost hardware-sensor visibility on {{ $labels.instance }}. Cannot detect CPU temp or fan failure from Prometheus side. Falls back to BMC syslog only."
+
+        # CPU temperature — early warning. Threshold matches the BMC
+        # sensor unc=82 from ipmi-monitoring.yml. Firing here AND in
+        # the BMC means both paths agree; only one means the other
+        # path is broken.
+        - alert: PveCpuTempHigh
+          expr: ipmi_temperature_celsius{job="pve-ipmi",name="TEMP_CPU"} > 80
+          for: 5m
+          labels:
+            severity: warning
+            component: hardware
+          annotations:
+            summary: "PVE CPU sustained >80°C ({{ $value }}°C)"
+            description: "TEMP_CPU on {{ $labels.instance }} has been above 80°C for 5 minutes. Check fan curve in BMC UI (Settings → Fan Control). The 2026-05-02 incident pattern was brief spikes to 98°C with fans not ramping in time."
+
+        # CPU temperature — emergency
+        - alert: PveCpuTempCritical
+          expr: ipmi_temperature_celsius{job="pve-ipmi",name="TEMP_CPU"} > 88
+          for: 1m
+          labels:
+            severity: critical
+            component: hardware
+          annotations:
+            summary: "PVE CPU >88°C — approaching TjMax ({{ $value }}°C)"
+            description: "TEMP_CPU on {{ $labels.instance }} is at {{ $value }}°C. Ryzen 7000 TjMax is 95°C; the CPU will begin thermal throttling shortly. Investigate cooling immediately."
+
+        # Fan failure — fan reads near zero
+        - alert: PveFanFailed
+          expr: ipmi_fan_speed_rpm{job="pve-ipmi",name=~"FAN[1-4]"} < 300
+          for: 2m
+          labels:
+            severity: critical
+            component: hardware
+          annotations:
+            summary: "PVE {{ $labels.name }} reads {{ $value }} RPM"
+            description: "Chassis fan {{ $labels.name }} on {{ $labels.instance }} dropped to {{ $value }} RPM. Likely failed or unplugged. Other fans will need to compensate."
+
+        # Fans pegged — cooling capacity exhausted
+        - alert: PveFansPegged
+          expr: ipmi_fan_speed_rpm{job="pve-ipmi",name=~"FAN[1-4]"} > 12000
+          for: 15m
+          labels:
+            severity: warning
+            component: hardware
+          annotations:
+            summary: "PVE {{ $labels.name }} running at max ({{ $value }} RPM) for 15m"
+            description: "Sustained max-RPM operation indicates the cooling system is at capacity. Either ambient temperature is high or thermal load increased. Investigate before a thermal event."
+
+        # PSU degraded
+        - alert: PvePsuPowerLoss
+          expr: ipmi_chassis_power_state{job="pve-ipmi"} != 1
+          for: 1m
+          labels:
+            severity: critical
+            component: hardware
+          annotations:
+            summary: "PVE chassis power state abnormal"
+            description: "ipmi_chassis_power_state on {{ $labels.instance }} reports {{ $value }} (expected 1=on). Possible PSU event."
+
+        # Memory temperature (DIMMs)
+        - alert: PveDimmTempHigh
+          expr: ipmi_temperature_celsius{job="pve-ipmi",name=~"TEMP_DDR5.*"} > 75
+          for: 10m
+          labels:
+            severity: warning
+            component: hardware
+          annotations:
+            summary: "PVE {{ $labels.name }} >75°C"
+            description: "DIMM thermal sensor {{ $labels.name }} on {{ $labels.instance }} at {{ $value }}°C. DDR5 throttling typically begins around 85°C; investigate airflow."
+
+    # Loki-side log rules. These query the syslog stream for IPMI SEL
+    # events forwarded by ipmievd. Belt to the metric-side suspenders.
+    - name: pve-ipmi-syslog.rules
+      rules:
+        - alert: PveIpmiSelAssertion
+          # Loki recording-style alert; requires loki-ruler enabled.
+          # If ruler isn't running yet this rule is a no-op — the
+          # Prometheus alerts above still cover the same conditions
+          # via a different path.
+          expr: |
+            sum by (instance) (
+              count_over_time({job="syslog"} |~ "ipmievd:.*Asserted" [5m])
+            ) > 0
+          for: 0m
+          labels:
+            severity: warning
+            component: hardware
+            source: ipmievd
+          annotations:
+            summary: "IPMI SEL assertion logged on PVE"
+            description: "ipmievd reported a new SEL assertion. Check `kubectl -n monitoring logs ds/alloy | grep ipmievd` or query Loki for `{job=\"syslog\"} |~ \"ipmievd\"` for the full event."

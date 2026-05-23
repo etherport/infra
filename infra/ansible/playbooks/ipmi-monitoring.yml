@@ -1,0 +1,260 @@
+---
+# IPMI / BMC observability on PVE (ASRock Rack B650D4U, AMI MegaRAC FW 6.04).
+#
+# Background — 2026-05-02 incident: CPU repeatedly tripped TEMP_CPU
+# Upper Non-Critical (98 C) for ~1-2 seconds, deasserting before any
+# operator could see it. Was only discovered later via manual BMC web
+# login. Three problems compounded:
+#   1. Thresholds were vendor defaults (98 warn / 99 crit, basically
+#      at thermal throttle) so by the time warning fired, the CPU was
+#      already throttling.
+#   2. PEF was unarmed (no alert destinations, no policies enabled),
+#      so even when warnings asserted the BMC sent no notification.
+#   3. Sensors had no exporter on the Prometheus side, so the cluster
+#      had no record of TEMP_CPU climbing or fans pegging.
+#
+# This playbook closes 1 + 3 with durable IaC (idempotent re-runs).
+# It deliberately does NOT touch:
+#   - BMC accounts (user explicit: "don't do anything to these accounts
+#     yet bc i'm not onsite and if we lose access, there's no way of
+#     getting it back" — 2026-05-23). Account hardening is M42.
+#   - Fan curve / Smart Fan profile. Those live behind the proprietary
+#     AMI Web UI under Settings -> Fan Control and aren't reachable
+#     via standard IPMI or Redfish on this firmware. User needs to set
+#     the curve interactively. See docs/runbooks/pve-bmc-tuning.md.
+#   - PEF / LAN alert destinations. Cross-subnet PET traps from VLAN
+#     200 (mgmt) -> VLAN 201 (loki) need the default gateway MAC
+#     learned by the BMC, which it currently does not have. We're
+#     relying instead on (a) BMC Remote Log syslog -> Alloy (enabled
+#     in the BMC UI today), and (b) ipmievd -> local syslog -> Alloy.
+#     PEF wire-up is M43.
+#
+# Idempotent. Safe to re-run.
+#
+# Usage:
+#   ansible-playbook -i inventory/wind/inventory.ini playbooks/ipmi-monitoring.yml --check --diff
+#   ansible-playbook -i inventory/wind/inventory.ini playbooks/ipmi-monitoring.yml --diff
+# Or via .github/workflows/ansible-proxmox.yml (playbook: ipmi-monitoring).
+
+- name: PVE IPMI observability — exporter, SEL forwarder, sensor thresholds
+  hosts: proxmox_hosts
+  become: true
+  gather_facts: false
+
+  vars:
+    # Loki/Alloy syslog receiver (MetalLB LB).
+    alloy_syslog_host: 10.10.201.73
+    alloy_syslog_port: 514
+    # Where Prometheus scrapes the ipmi_exporter from.
+    ipmi_exporter_listen: "0.0.0.0:9290"
+    # Sensor thresholds applied (idempotently) on every run.
+    # CPU: vendor defaults were 98 warn / 99 crit — useless because the
+    # CPU is already throttling. AMD Ryzen 7000 TjMax is 95 C; we want
+    # both warn and crit firing well below that. 82/90 gives early
+    # warning + emergency without false flapping under load.
+    # FAN1-4: vendor had only lnc=200 (catches stopped fan). Adding
+    # unc=12500 catches "fans pegged at max" which is the canary for
+    # cooling capacity exhaustion.
+    sensor_thresholds:
+      - { sensor: TEMP_CPU, threshold: unc, value: 82 }
+      - { sensor: TEMP_CPU, threshold: ucr, value: 90 }
+      - { sensor: FAN1, threshold: unc, value: 12500 }
+      - { sensor: FAN2, threshold: unc, value: 12500 }
+      - { sensor: FAN3, threshold: unc, value: 12500 }
+      - { sensor: FAN4, threshold: unc, value: 12500 }
+
+  tasks:
+    # ---------------------------------------------------------------------
+    # 1. Package install
+    # ---------------------------------------------------------------------
+    - name: Install IPMI tooling + exporter
+      ansible.builtin.apt:
+        name:
+          - ipmitool             # ipmievd ships with this
+          - freeipmi-tools       # backend the exporter prefers
+          - prometheus-ipmi-exporter   # in Debian trixie main
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Load ipmi_devintf kernel module (needed for /dev/ipmi0 in-band)
+      community.general.modprobe:
+        name: ipmi_devintf
+        state: present
+        persistent: present
+
+    # ---------------------------------------------------------------------
+    # 2. Sensor thresholds (idempotent — read current, set only if drifted)
+    # ---------------------------------------------------------------------
+    - name: Read current sensor thresholds
+      ansible.builtin.shell: |
+        set -o pipefail
+        ipmitool sensor get "{{ item.sensor }}" 2>/dev/null \
+          | awk -F': *' '
+              /^ Upper Non-Critical/   { if ("{{ item.threshold }}" == "unc") print $2 }
+              /^ Upper Critical/       { if ("{{ item.threshold }}" == "ucr") print $2 }
+              /^ Upper Non-Recoverable/{ if ("{{ item.threshold }}" == "unr") print $2 }
+              /^ Lower Non-Critical/   { if ("{{ item.threshold }}" == "lnc") print $2 }
+              /^ Lower Critical/       { if ("{{ item.threshold }}" == "lcr") print $2 }
+              /^ Lower Non-Recoverable/{ if ("{{ item.threshold }}" == "lnr") print $2 }
+          ' | awk '{printf "%.0f", $1}'
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: current_thresholds
+      loop: "{{ sensor_thresholds }}"
+
+    - name: Set sensor threshold (only when drifted)
+      ansible.builtin.command:
+        cmd: "ipmitool sensor thresh {{ item.item.sensor }} {{ item.item.threshold }} {{ item.item.value }}"
+      when: (item.stdout | default('') | int(default=0)) != (item.item.value | int)
+      loop: "{{ current_thresholds.results }}"
+      loop_control:
+        label: "{{ item.item.sensor }} {{ item.item.threshold }} -> {{ item.item.value }}"
+
+    # ---------------------------------------------------------------------
+    # 3. ipmievd: daemonize SEL -> local syslog
+    # ---------------------------------------------------------------------
+    # ipmievd is shipped with ipmitool. It watches the BMC's System
+    # Event Log and writes new entries to local syslog with programname
+    # "ipmievd". Combined with the rsyslog forwarder below, this gets
+    # every sensor threshold assertion and SEL entry to Loki in real
+    # time without depending on the BMC's own remote syslog.
+    - name: Ensure ipmievd systemd unit is present
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/ipmievd.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=IPMI event log monitor (ipmitool ipmievd)
+          Documentation=man:ipmievd(8)
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=forking
+          PIDFile=/run/ipmievd.pid
+          ExecStart=/usr/sbin/ipmievd -O /run/ipmievd.pid sel
+          Restart=on-failure
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart ipmievd
+
+    - name: Enable + start ipmievd
+      ansible.builtin.systemd:
+        name: ipmievd
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    # ---------------------------------------------------------------------
+    # 4. rsyslog forwarder: PVE syslog -> Alloy syslog receiver
+    # ---------------------------------------------------------------------
+    # Covers ipmievd output, kernel messages, systemd journal, and any
+    # other syslog producer on the host. UDP because TCP can block the
+    # host if the receiver is down (Loki/Alloy share fate with the
+    # cluster; we don't want PVE's logging to wedge if K8s is down).
+    - name: Configure rsyslog to forward to Alloy
+      ansible.builtin.copy:
+        dest: /etc/rsyslog.d/40-alloy-forward.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Forward every syslog message to the Loki/Alloy syslog receiver.
+          # UDP so a Loki outage can't wedge local logging.
+          *.* action(type="omfwd"
+                     target="{{ alloy_syslog_host }}"
+                     port="{{ alloy_syslog_port }}"
+                     protocol="udp"
+                     action.resumeRetryCount="100"
+                     queue.type="LinkedList"
+                     queue.size="10000")
+      notify: Restart rsyslog
+
+    # ---------------------------------------------------------------------
+    # 5. ipmi_exporter: Prometheus scrape target
+    # ---------------------------------------------------------------------
+    # Debian package installs the binary at /usr/bin/prometheus-ipmi-exporter
+    # and a systemd unit `prometheus-ipmi-exporter`. We override the
+    # config + listen address via a drop-in so the service can be
+    # scraped by kube-prometheus-stack from inside the cluster.
+    - name: Ensure ipmi_exporter config dir exists
+      ansible.builtin.file:
+        path: /etc/prometheus
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Write ipmi_exporter config
+      ansible.builtin.copy:
+        dest: /etc/prometheus/ipmi_local.yml
+        owner: root
+        group: prometheus
+        mode: "0640"
+        content: |
+          # ipmi_exporter modules. The "default" module is what
+          # Prometheus scrapes when no `module=...` query param is set,
+          # which is fine for in-band/local scrape on the host itself.
+          modules:
+            default:
+              collectors:
+                - ipmi    # sensor readings (temps + fans + voltages)
+                - dcmi    # power draw (if supported by BMC)
+                - bmc     # BMC firmware version, watchdog
+                - chassis # power state
+      notify: Restart prometheus-ipmi-exporter
+
+    - name: Override prometheus-ipmi-exporter ExecStart
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/prometheus-ipmi-exporter.service.d/override.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Service]
+          ExecStart=
+          ExecStart=/usr/bin/prometheus-ipmi-exporter \
+            --config.file=/etc/prometheus/ipmi_local.yml \
+            --web.listen-address={{ ipmi_exporter_listen }} \
+            --freeipmi.path=/usr/sbin
+      notify: Restart prometheus-ipmi-exporter
+      register: exporter_override
+
+    - name: Ensure ExecStart drop-in dir exists (idempotent ahead of override)
+      ansible.builtin.file:
+        path: /etc/systemd/system/prometheus-ipmi-exporter.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Enable + start prometheus-ipmi-exporter
+      ansible.builtin.systemd:
+        name: prometheus-ipmi-exporter
+        enabled: true
+        state: started
+        daemon_reload: true
+
+  handlers:
+    - name: Restart ipmievd
+      ansible.builtin.systemd:
+        name: ipmievd
+        state: restarted
+        daemon_reload: true
+
+    - name: Restart rsyslog
+      ansible.builtin.systemd:
+        name: rsyslog
+        state: restarted
+
+    - name: Restart prometheus-ipmi-exporter
+      ansible.builtin.systemd:
+        name: prometheus-ipmi-exporter
+        state: restarted
+        daemon_reload: true

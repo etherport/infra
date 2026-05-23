@@ -42,3 +42,17 @@ stringData:
           regex: '10\.10\.100\.10:.*'
           target_label: instance
           replacement: 'vpn-aws'
+
+    # PVE host IPMI / BMC sensors (ASRock Rack B650D4U). Deployed by
+    # infra/ansible/playbooks/ipmi-monitoring.yml — see that file for
+    # the threshold + ipmievd + rsyslog forwarder context.
+    - job_name: 'pve-ipmi'
+      scrape_interval: 60s
+      scrape_timeout: 30s   # freeipmi sensor reads can be slow
+      static_configs:
+        - targets:
+            - '10.10.200.41:9290'  # pve in-band ipmi_exporter
+          labels:
+            instance: 'pve'
+            location: 'local'
+            hardware: 'asrock-rack-b650d4u'
