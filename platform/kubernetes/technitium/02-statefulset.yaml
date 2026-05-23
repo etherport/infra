@@ -79,8 +79,15 @@ spec:
         accessModes: ["ReadWriteOnce"]
         storageClassName: ceph-rbd
         resources:
+          # Bumped from 5Gi → 10Gi on 2026-05-23 after technitium-1 hit
+          # 96.8% with ~30MB/day of unrotated query logs. STS
+          # volumeClaimTemplates are immutable on existing instances,
+          # so the live PVCs were also patched + the static-PV recovery
+          # PV capacities raised to 10Gi in 02a-static-pv-recovery.yaml.
+          # The 02b-set-log-retention-job sets maxLogFileDays=7 via the
+          # Technitium API so day-to-day usage stays well under 10Gi.
           requests:
-            storage: 5Gi
+            storage: 10Gi
 ---
 apiVersion: v1
 kind: Service

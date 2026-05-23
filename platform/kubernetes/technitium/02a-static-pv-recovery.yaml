@@ -1,0 +1,99 @@
+# Static PV recovery for Technitium pgdata-equivalent volumes.
+#
+# Both Technitium pods have a 5Gi PVC dynamically provisioned at first
+# install. After the 2026-05-12 cluster rebuild, the underlying Ceph RBD
+# images survived but the K8s PVs/PVCs were gone — they were
+# hand-recreated as `data-technitium-{0,1}-recovery` PVs that pre-bind
+# to the existing images via `staticVolume: "true"`. This file commits
+# that pattern so a future rebuild can recover the same way without
+# needing a manual `kubectl create -f` step.
+#
+# Bumped to 10Gi on 2026-05-23: technitium-1 hit 96.8% with ~30MB/day
+# of query logs accumulating with no retention configured. The companion
+# fix is `02b-set-log-retention-job.yaml` which sets maxLogFileDays=7
+# via the Technitium API so day-to-day usage stays well under 10Gi.
+#
+# See docs/runbooks/disaster-recovery.md §2.3 for the static-PV pattern
+# in general.
+#
+# If the Ceph RBD images are ever rotated, update the imageName +
+# volumeHandle here AND on disk via `rbd image-meta list k8s-ceph/<img>`.
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: data-technitium-0-recovery
+  annotations:
+    pv.kubernetes.io/provisioned-by: rbd.csi.ceph.com
+spec:
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 10Gi
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: data-technitium-0
+    namespace: dns
+  csi:
+    driver: rbd.csi.ceph.com
+    fsType: ext4
+    nodeStageSecretRef:
+      name: csi-rbd-secret
+      namespace: ceph-csi
+    controllerExpandSecretRef:
+      name: csi-rbd-secret
+      namespace: ceph-csi
+    volumeAttributes:
+      clusterID: 4de37616-ef82-4295-8ff0-7309d4b34812
+      imageFeatures: layering
+      imageName: csi-vol-7253f2ce-cfe3-433d-9daa-78ab5bc2fe36
+      journalPool: k8s-ceph
+      pool: k8s-ceph
+      staticVolume: "true"
+    volumeHandle: csi-vol-7253f2ce-cfe3-433d-9daa-78ab5bc2fe36
+  mountOptions:
+    - discard
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ceph-rbd
+  volumeMode: Filesystem
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: data-technitium-1-recovery
+  annotations:
+    pv.kubernetes.io/provisioned-by: rbd.csi.ceph.com
+spec:
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 10Gi
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: data-technitium-1
+    namespace: dns
+  csi:
+    driver: rbd.csi.ceph.com
+    fsType: ext4
+    nodeStageSecretRef:
+      name: csi-rbd-secret
+      namespace: ceph-csi
+    controllerExpandSecretRef:
+      name: csi-rbd-secret
+      namespace: ceph-csi
+    volumeAttributes:
+      clusterID: 4de37616-ef82-4295-8ff0-7309d4b34812
+      imageFeatures: layering
+      imageName: csi-vol-ba25c344-cf5c-4bf7-a0e3-f2036a7947ca
+      journalPool: k8s-ceph
+      pool: k8s-ceph
+      staticVolume: "true"
+    volumeHandle: csi-vol-ba25c344-cf5c-4bf7-a0e3-f2036a7947ca
+  mountOptions:
+    - discard
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ceph-rbd
+  volumeMode: Filesystem

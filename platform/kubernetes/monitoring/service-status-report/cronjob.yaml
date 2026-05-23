@@ -13,7 +13,9 @@ metadata:
   name: service-status-report
   namespace: monitoring
 spec:
-  schedule: "0 7 * * *"  # 7am PT, staggered after the s3-sync 6am report
+  # Same wall-clock as the s3-sync daily-report (6:00 AM PT) so both
+  # land in the inbox together for a single morning check-in.
+  schedule: "0 6 * * *"
   timeZone: "America/Los_Angeles"
   suspend: false
   concurrencyPolicy: Forbid

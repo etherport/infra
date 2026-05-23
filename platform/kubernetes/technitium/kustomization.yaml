@@ -7,6 +7,8 @@ resources:
   - 00-namespace.yaml
   - 01-configmap.yaml
   - 02-statefulset.yaml
+  - 02a-static-pv-recovery.yaml
+  - 02b-set-log-retention-job.yaml
   - 03-service.yaml
   - 04-ingressroute.yaml
   - 05-secret.sops.yaml
@@ -19,5 +21,11 @@ configMapGenerator:
   - name: dns-zone-wind
     files:
       - zone.yaml=zones/wind.etherport.net.yaml
+    options:
+      disableNameSuffixHash: true
+  # Mounted into the technitium-set-log-retention CronJob pods.
+  - name: technitium-retention-script
+    files:
+      - configure-retention.py
     options:
       disableNameSuffixHash: true
