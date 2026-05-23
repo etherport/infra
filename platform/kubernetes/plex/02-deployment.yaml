@@ -109,6 +109,44 @@ spec:
               port: 32400
             initialDelaySeconds: 30
             periodSeconds: 10
+        # Log-tail sidecar — Plex writes its real logs to files under
+        # /config/Library/Application Support/Plex Media Server/Logs/
+        # rather than stdout, so the cluster-wide Alloy scraper sees
+        # nothing useful. This sidecar tails the active log files and
+        # writes each line to its own stdout, which Alloy picks up
+        # under {namespace="plex", container="logtail"}.
+        - name: logtail
+          image: busybox:1.36
+          # Read-only mount of the same Plex config PVC. The sidecar
+          # only needs to read the Logs/ subtree; never writes.
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+          # tail -F handles log-rotation (file recreation) — Plex
+          # rotates Plex Media Server.log to .1/.2/etc on size cap.
+          # Wait for the directory to exist before tailing (first
+          # boot, the dir doesn't exist until PMS has run once).
+          command:
+            - sh
+            - -c
+            - |
+              LOGDIR="/config/Library/Application Support/Plex Media Server/Logs"
+              while [ ! -d "$LOGDIR" ]; do
+                echo "waiting for Plex log dir at $LOGDIR"
+                sleep 30
+              done
+              echo "tailing Plex logs from $LOGDIR"
+              # -F follows by name + handles rotation. * picks up
+              # everything (PMS, scanner, transcoder, etc).
+              exec tail -n 0 -F "$LOGDIR"/*.log
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
       volumes:
         # Persistent config storage (Ceph RBD)
         - name: config
