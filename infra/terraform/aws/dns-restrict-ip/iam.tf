@@ -59,7 +59,14 @@ resource "aws_iam_role_policy" "ec2" {
           "ec2:AuthorizeSecurityGroupIngress",
           "ec2:RevokeSecurityGroupIngress"
         ]
-        Resource = "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group/${var.security_group_id}"
+        # Allow mutation on every SG referenced in rule_specs (plus the
+        # legacy security_group_id for backward compatibility).
+        Resource = distinct(concat(
+          [for s in var.rule_specs :
+            "arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group/${s.security_group_id}"
+          ],
+          ["arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:security-group/${var.security_group_id}"],
+        ))
       }
     ]
   })

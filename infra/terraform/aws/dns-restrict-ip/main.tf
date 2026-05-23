@@ -44,9 +44,14 @@ resource "aws_lambda_function" "dns_restrict_ip" {
 
   environment {
     variables = {
-      HOSTED_ZONE_ID    = var.hosted_zone_id
-      SECURITY_GROUP_ID = var.security_group_id
-      RECORD_NAMES      = join(",", var.record_names)
+      HOSTED_ZONE_ID = var.hosted_zone_id
+      RECORD_NAMES   = join(",", var.record_names)
+      # JSON-encoded list of {security_group_id, port, protocols}.
+      # The Lambda iterates over each spec and keeps its SG's ingress
+      # rules in sync with the Route53 record IPs. Multi-SG / multi-port
+      # support added 2026-05-23 so the same WAN IPs that gate DNS can
+      # also gate SSH on the allow_ssh SG.
+      RULE_SPECS = jsonencode(var.rule_specs)
     }
   }
 
