@@ -238,12 +238,10 @@ revision use the next free ID per tier. Status legend:
 ### ✅ M27. Wire service-status inventory drift-check into CI
 - **Done:** 2026-05-23. New workflow at `.github/workflows/service-status-inventory-drift.yml` runs weekly (Mon 08:00 PT) on the self-hosted gh-runner. SCPs kubeconfig from k8s-cp1 (same pattern as `post-bootstrap.sh`), runs `scripts/check-service-status-inventory.py --untracked`, and opens / refreshes a GitHub Issue labeled `inventory-drift` when STALE entries are found. Mirrors the H16 terraform drift detector pattern. Stretch (auto-regenerating dashboard YAML on `services.py` change) deferred.
 
-### ⏳ M26. Grafana sidecar admin-API auth is broken — locks out admin user
-- **Source:** discovered 2026-05-22 while verifying the new service-status dashboard.
-- The `grafana-sc-dashboard` sidecar calls `POST /api/admin/provisioning/dashboards/reload` after writing each ConfigMap-sourced dashboard to `/tmp/dashboards/`. Auth is failing with 401 every minute (chart values has `adminPassword: "ChangeMe123!"` but the live admin password is different). Net effect: Grafana reports `too many consecutive incorrect login attempts for user - login for user temporarily blocked` on a rolling basis — the admin user is effectively unusable for human login via the UI.
-- **Not a blocker for dashboards**: Grafana's file provisioner scans `/tmp/dashboards/` every 30s (see `/etc/grafana/provisioning/dashboards/*.yaml`, `updateIntervalSeconds: 30`) and loads valid JSON regardless of whether the reload API succeeds. So new dashboards still appear; this is just noisy and breaks human admin login.
-- **Fix:** point both the sidecar and the chart at a real admin password. Options: (a) re-baseline the `monitoring-grafana` Secret with the password from `platform/kubernetes/monitoring/grafana-admin-secret.sops.yaml` (if it's the source of truth) + `admin.existingSecret` in chart values; (b) just update the chart-values plaintext to match the live secret (worse; not durable). Either way also rotate the admin password since it's been used in a thousand failed-login attempts.
-- **Effort:** S.
+### ✅ M26. Grafana sidecar admin-API auth is broken — locks out admin user
+- **Done:** 2026-05-23. Root cause was subtler than the original assessment: the chart's `admin.existingSecret: grafana-admin-credentials` IS wired and IS the SOPS-encrypted source-of-truth, but Grafana's env-var-driven admin password only takes effect on first-ever startup with an empty `grafana.db`. Once the DB exists, it's authoritative. Someone (or a UI password change) had drifted the DB hash from the env-var value, so the sidecar's basic-auth requests with the env-var password failed forever.
+- Fixed with a one-shot reset: `grafana-cli admin reset-admin-password "$GF_SECURITY_ADMIN_PASSWORD"` inside the running pod. Sidecar now returns 200 on reload calls. No more rolling admin-user lockout.
+- Documented the trigger conditions + recovery procedure in `docs/runbooks/grafana-admin-password.md` so this doesn't accumulate undiscovered noise across the next rebuild / password rotation. Considered a CronJob-as-IaC fix but rejected: would intrude on legitimate UI changes; manual is the right cadence.
 
 ### ⏳ M25. UDM / UniFi config audit — zones, inter-VLAN routing, modern features
 - **Source:** user ask 2026-05-22 (this revision).
