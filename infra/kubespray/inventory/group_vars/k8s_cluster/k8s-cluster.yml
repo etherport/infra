@@ -137,6 +137,13 @@ kube_proxy_mode: iptables
 # must be set to true for MetalLB, kube-vip(ARP enabled) to work
 kube_proxy_strict_arp: false
 
+# Bind kube-proxy's /metrics endpoint to all interfaces so the
+# kube-prometheus-stack ServiceMonitor (which scrapes node IPs on port
+# 10249) can actually reach it. Default upstream is 127.0.0.1:10249,
+# which leaves Prometheus reporting `TargetDown` on every node.
+# Caught 2026-05-23 during alert audit (M29).
+kube_proxy_metrics_bind_address: 0.0.0.0:10249
+
 # A string slice of values which specify the addresses to use for NodePorts.
 # Values may be valid IP blocks (e.g. 1.2.3.0/24, 1.2.3.4/32).
 # The default empty string slice ([]) means to use all local addresses.

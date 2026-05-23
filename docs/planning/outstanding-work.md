@@ -235,11 +235,8 @@ revision use the next free ID per tier. Status legend:
 ### ✅ M28. Bake homelab automation pubkey into AWS VMs' user_data
 - **Done:** 2026-05-23 (commit `47aa528`). Added `local.aws_vm_cloud_init` to `infra/terraform/aws/compute/main.tf` — cloud-init payload that appends the automation pubkey to `ubuntu`'s `authorized_keys` on first boot. Wired to both `aws_instance.vpn` and `aws_instance.dns` with `lifecycle.ignore_changes = [user_data]` so the source change doesn't trip the existing running instances' `prevent_destroy`. Has zero effect on what's running today; future recreate gets the key baked in so the ansible-vm-fleet workflow works on day one.
 
-### ⏳ M29. kube-proxy metrics not scrapable (TargetDown warning)
-- **Source:** discovered 2026-05-23 during alert audit.
-- kube-proxy currently has `metricsBindAddress: 127.0.0.1:10249` (kubespray default), but the kube-prometheus-stack ServiceMonitor scrapes node IPs on :10249 — refused. 9 active TargetDown warnings (one per node), no email impact (warning, not critical), but pollutes the firing-alerts panel.
-- Durable fix: add `kube_proxy_metrics_bind_address: 0.0.0.0:10249` to `infra/kubespray/inventory/group_vars/k8s_cluster/k8s-cluster.yml`, then kubespray re-run (or edit live ConfigMap `kube-system/kube-proxy` + `kubectl rollout restart ds/kube-proxy -n kube-system` as a short-term unblock).
-- Effort: S.
+### ✅ M29. kube-proxy metrics not scrapable (TargetDown warning)
+- **Done:** 2026-05-23. Set `kube_proxy_metrics_bind_address: 0.0.0.0:10249` in `infra/kubespray/inventory/group_vars/k8s_cluster/k8s-cluster.yml` (durable across cluster rebuilds) AND patched the live `kube-system/kube-proxy` ConfigMap + `kubectl rollout restart ds/kube-proxy` so the change took effect immediately. All 16 kube-proxy targets (8 nodes × 2 Prometheus replicas) now report UP. The TargetDown alert has `for: 10m`, so it'll clear ~10 min after the rollout.
 
 ### ✅ M27. Wire service-status inventory drift-check into CI
 - **Done:** 2026-05-23. New workflow at `.github/workflows/service-status-inventory-drift.yml` runs weekly (Mon 08:00 PT) on the self-hosted gh-runner. SCPs kubeconfig from k8s-cp1 (same pattern as `post-bootstrap.sh`), runs `scripts/check-service-status-inventory.py --untracked`, and opens / refreshes a GitHub Issue labeled `inventory-drift` when STALE entries are found. Mirrors the H16 terraform drift detector pattern. Stretch (auto-regenerating dashboard YAML on `services.py` change) deferred.
