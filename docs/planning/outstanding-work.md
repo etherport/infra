@@ -410,8 +410,37 @@ For history. Anything ticked above has a brief inline note; this is the index.
 | H23 | Disable UniFi auto-update | 2026-05-16 |
 | H24 | USW LAG quirk | 2026-05-16 |
 | H25 | Ceph VLAN 210 migration | 2026-05-18 |
+| H26 | Etcd backup automation + DR drill schedule | 2026-05-22 |
 | H27 | Ceph msgr2 v2 re-enable | 2026-05-22 |
 | H28 | Containerized ansible CI | 2026-05-22 |
+| H5 | Prometheus + Alertmanager replicas=2 podAntiAffinity | 2026-05-22 |
+| H6 | Hardcoded WAN IPs in AWS security groups → Lambda-managed | 2026-05-23 |
+| H8 | Archive completed proxmox-sdn-implementation doc | 2026-05-22 |
+| M2 | cert-manager wildcard runbook | 2026-05-21 |
+| M4 | Image pinning + Renovate policy doc | 2026-05-21 |
+| M8 | Auto-remediation webhook wired into alertmanager + COVERAGE.md | 2026-05-22 |
+| M9 | Etcd backup automation + DR drill schedule | 2026-05-22 |
+| M19 | MetalLB advertising technitium aggregator .201.5 | 2026-05-22 |
+| M20 | safety-check single-ping flake tolerance over WG | 2026-05-22 |
+| M21 | WG K8s pod preStop / VRRP failover | 2026-05-22 |
+| M22 | Consolidated Grafana service-status dashboard | 2026-05-22 |
+| M23 | Daily service-status email digest | 2026-05-22 |
+| M24 | Modernize s3-sync daily-report HTML | 2026-05-22 |
+| M26 | Grafana sidecar admin password rotation | 2026-05-22 |
+| M27 | service-status inventory drift-check in CI | 2026-05-22 |
+| M28 | Bake homelab automation pubkey into AWS VM user_data | 2026-05-22 |
+| M29 | kube-proxy metrics scrape | 2026-05-22 |
+| M13 | Delete /data/udm-le.removed-* + cert mgmt for all 3 UniFi-OS devices | 2026-05-23 |
+| M25 | UDM / UniFi config audit (3-part) | 2026-05-23 |
+| M31 | Automated UDM backup to S3 (infra.wind.etherport.net) | 2026-05-23 |
+| M33 | UDM rsyslog → Alloy syslog receiver | 2026-05-23 |
+| M36 | Document UDM MetalLB IP-conflict noise (BGP migration M18 unblocks) | 2026-05-23 |
+| M37 | Loki + Alloy centralized log aggregation | 2026-05-23 |
+| M38 | Tear down vpn-mumbai (ap-south-1) regional VPN | 2026-05-23 |
+| M39 | Lambda dns-restrict-ip revoke description-mismatch fix | 2026-05-23 |
+| M40 | PVE IPMI / ASRock Rack BMC observability (ipmi_exporter + ipmievd + thresholds) | 2026-05-23 |
+| C1 | CNPG Barman ScheduledBackup + Cluster manifest | 2026-05-22 |
+| C3 | Encrypt Ceph key in plaintext inventory | 2026-05-22 |
 
 ---
 
