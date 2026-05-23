@@ -1,0 +1,140 @@
+---
+# Etcd snapshot automation — installs a systemd timer on each
+# kube_control_plane node that runs `etcdctl snapshot save` daily.
+#
+# Why systemd timer (vs k8s CronJob): keeps the backup outside the
+# cluster's own control plane so an etcd outage doesn't prevent the
+# backup from running. Snapshots are local to each cp node; Velero's
+# node-agent FS backup of /var/lib/etcd-snapshots then ships them
+# off-host (the Velero kube-system schedule already covers this).
+#
+# Idempotent — re-runs replace existing units in-place.
+#
+# Usage:
+#   ansible-playbook -i inventory/wind/inventory.ini playbooks/etcd-backup.yml --limit kube_control_plane
+#
+# Or via the GH workflow:
+#   gh workflow run ansible-vm-fleet.yml -f playbook=etcd-backup -f inventory=wind \
+#     -f action=apply -f limit=kube_control_plane
+
+- name: Install etcd snapshot timer on control-plane nodes
+  hosts: kube_control_plane
+  become: true
+  remote_user: ubuntu
+
+  vars:
+    snapshot_dir: /var/lib/etcd-snapshots
+    snapshot_retention_days: 14
+    snapshot_schedule_oncalendar: "*-*-* 09:00:00 UTC"  # 02:00 PT daily
+
+  tasks:
+    - name: Ensure snapshot directory exists
+      ansible.builtin.file:
+        path: "{{ snapshot_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Find etcdctl binary
+      ansible.builtin.stat:
+        path: /usr/local/bin/etcdctl
+      register: etcdctl_bin
+
+    - name: Find etcd PKI certs
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: cert_stat
+      loop:
+        - /etc/kubernetes/pki/etcd/ca.crt
+        - /etc/kubernetes/pki/etcd/healthcheck-client.crt
+        - /etc/kubernetes/pki/etcd/healthcheck-client.key
+      failed_when: not cert_stat.stat.exists
+
+    - name: Install etcd snapshot script
+      ansible.builtin.copy:
+        dest: /usr/local/bin/etcd-snapshot.sh
+        owner: root
+        group: root
+        mode: "0700"
+        content: |
+          #!/bin/bash
+          # Daily etcd snapshot. Installed by playbooks/etcd-backup.yml.
+          set -euo pipefail
+          SNAPSHOT_DIR="{{ snapshot_dir }}"
+          RETENTION_DAYS="{{ snapshot_retention_days }}"
+          NOW="$(date -u +%Y%m%d-%H%M%S)"
+          OUT="${SNAPSHOT_DIR}/etcd-${NOW}.db"
+
+          # Snapshot via local etcd endpoint with healthcheck-client cert.
+          ETCDCTL_API=3 /usr/local/bin/etcdctl snapshot save "$OUT" \
+            --endpoints=https://127.0.0.1:2379 \
+            --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+            --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt \
+            --key=/etc/kubernetes/pki/etcd/healthcheck-client.key
+
+          # Verify the snapshot is consistent.
+          ETCDCTL_API=3 /usr/local/bin/etcdctl snapshot status "$OUT" \
+            --write-out=table
+
+          # Retain N days; delete older.
+          find "$SNAPSHOT_DIR" -name "etcd-*.db" -type f -mtime "+$RETENTION_DAYS" -delete
+
+          # Final inventory for log clarity.
+          ls -lh "$SNAPSHOT_DIR"
+
+    - name: Install systemd .service unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/etcd-snapshot.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Periodic etcd snapshot via etcdctl
+          Documentation=https://etcd.io/docs/latest/op-guide/recovery/
+          After=etcd.service
+
+          [Service]
+          Type=oneshot
+          User=root
+          ExecStart=/usr/local/bin/etcd-snapshot.sh
+
+    - name: Install systemd .timer unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/etcd-snapshot.timer
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Trigger /usr/local/bin/etcd-snapshot.sh daily
+          Documentation=https://etcd.io/docs/latest/op-guide/recovery/
+
+          [Timer]
+          OnCalendar={{ snapshot_schedule_oncalendar }}
+          Persistent=true
+          RandomizedDelaySec=300
+          Unit=etcd-snapshot.service
+
+          [Install]
+          WantedBy=timers.target
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Enable + start the etcd-snapshot.timer
+      ansible.builtin.systemd:
+        name: etcd-snapshot.timer
+        enabled: true
+        state: started
+
+    - name: Run a snapshot once immediately so the dir isn't empty
+      ansible.builtin.command: /usr/local/bin/etcd-snapshot.sh
+      register: first_snapshot
+      changed_when: false  # snapshot always "runs" — don't flag as changed
+
+    - name: Show first snapshot output
+      ansible.builtin.debug:
+        msg: "{{ first_snapshot.stdout_lines[-10:] }}"

@@ -30,6 +30,7 @@ on:
           - technitium
           - wireguard
           - tailscale
+          - etcd-backup        # K8s control-plane only — pass `-f limit=kube_control_plane`
       inventory:
         description: 'Which inventory file(s)'
         required: true
