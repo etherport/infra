@@ -74,15 +74,22 @@
     # ---------------------------------------------------------------------
     # 1. Package install
     # ---------------------------------------------------------------------
-    - name: Install IPMI tooling + exporter
+    - name: Install IPMI tooling + exporter + rsyslog
       ansible.builtin.apt:
         name:
           - ipmitool             # ipmievd ships with this
           - freeipmi-tools       # backend the exporter prefers
           - prometheus-ipmi-exporter   # in Debian trixie main
+          - rsyslog              # default-inactive on PVE 8+; needed to forward to Alloy
         state: present
         update_cache: true
         cache_valid_time: 3600
+
+    - name: Enable + start rsyslog (default-inactive on Proxmox 8+)
+      ansible.builtin.systemd:
+        name: rsyslog
+        enabled: true
+        state: started
 
     - name: Load ipmi_devintf kernel module (needed for /dev/ipmi0 in-band)
       community.general.modprobe:
