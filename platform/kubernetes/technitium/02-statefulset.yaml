@@ -79,15 +79,23 @@ spec:
         accessModes: ["ReadWriteOnce"]
         storageClassName: ceph-rbd
         resources:
-          # Bumped from 5Gi → 10Gi on 2026-05-23 after technitium-1 hit
-          # 96.8% with ~30MB/day of unrotated query logs. STS
-          # volumeClaimTemplates are immutable on existing instances,
-          # so the live PVCs were also patched + the static-PV recovery
-          # PV capacities raised to 10Gi in 02a-static-pv-recovery.yaml.
-          # The 02b-set-log-retention-job sets maxLogFileDays=7 via the
-          # Technitium API so day-to-day usage stays well under 10Gi.
+          # Stays at 5Gi here because (a) STS volumeClaimTemplate is
+          # immutable post-create (Flux dry-run fails: "updates to
+          # statefulset spec for fields other than ..."), and (b) the
+          # live PVCs use the static-PV recovery pattern
+          # (`staticVolume: "true"` in the PV's volumeAttributes),
+          # which the ceph-csi external-resizer refuses to expand
+          # (resizer panics with "invalid memory address" — confirmed
+          # 2026-05-23).
+          #
+          # Size pressure is handled by 02b-set-log-retention-job
+          # capping logs at 7 days. If a future need to expand
+          # arises, the path is: (1) delete STS with --cascade=orphan;
+          # (2) delete recovery PVs; (3) `rbd resize` the RBD images
+          # on the Ceph cluster directly; (4) bump capacity in
+          # 02a-static-pv-recovery.yaml; (5) re-apply.
           requests:
-            storage: 10Gi
+            storage: 5Gi
 ---
 apiVersion: v1
 kind: Service

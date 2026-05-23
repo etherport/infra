@@ -8,10 +8,16 @@
 # that pattern so a future rebuild can recover the same way without
 # needing a manual `kubectl create -f` step.
 #
-# Bumped to 10Gi on 2026-05-23: technitium-1 hit 96.8% with ~30MB/day
-# of query logs accumulating with no retention configured. The companion
-# fix is `02b-set-log-retention-job.yaml` which sets maxLogFileDays=7
-# via the Technitium API so day-to-day usage stays well under 10Gi.
+# Capacity stays at 5Gi here (matches the live RBD image size).
+# Attempted to bump to 10Gi on 2026-05-23 — failed because:
+#   1. STS volumeClaimTemplate is immutable (Flux dry-run rejects).
+#   2. ceph-csi external-resizer panics on staticVolume: "true" PVs.
+# Real expansion path needs an `rbd resize` on the Ceph cluster
+# directly + an STS recreate with --cascade=orphan. Until then,
+# size pressure is handled by 02b-set-log-retention-job capping
+# query logs at 7 days (technitium-1 was at 96.8% on this 5Gi PVC
+# with 17 days of unrotated logs; 7-day retention brings it well
+# under 50%).
 #
 # See docs/runbooks/disaster-recovery.md §2.3 for the static-PV pattern
 # in general.
@@ -30,6 +36,12 @@ spec:
   accessModes:
     - ReadWriteOnce
   capacity:
+    # K8s capacity field carries 10Gi to match live (kubectl patch set
+    # this 2026-05-23 attempting expansion; PVC shrink is forbidden so
+    # we keep the source aligned). The underlying Ceph RBD image is
+    # still 5Gi — `rbd info k8s-ceph/<image>` would show the truth.
+    # 02b-set-log-retention-job keeps actual usage well under 5Gi
+    # so the mismatch is benign.
     storage: 10Gi
   claimRef:
     apiVersion: v1
@@ -69,6 +81,12 @@ spec:
   accessModes:
     - ReadWriteOnce
   capacity:
+    # K8s capacity field carries 10Gi to match live (kubectl patch set
+    # this 2026-05-23 attempting expansion; PVC shrink is forbidden so
+    # we keep the source aligned). The underlying Ceph RBD image is
+    # still 5Gi — `rbd info k8s-ceph/<image>` would show the truth.
+    # 02b-set-log-retention-job keeps actual usage well under 5Gi
+    # so the mismatch is benign.
     storage: 10Gi
   claimRef:
     apiVersion: v1
