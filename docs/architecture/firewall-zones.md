@@ -1,12 +1,30 @@
 # Firewall Zones and Policy
 
-This document describes the zone-based firewall architecture for the homelab network, implemented on the UDM Pro using **UniFi Network Application v10.x**.
+This document describes the **live** zone-based firewall configuration on the UDM Pro ("Windroute") as of 2026-05-23, sourced from the read-only audit at `docs/planning/udm-audit-2026-05-23.md` (Part 1).
 
-> **Note**: UniFi Network v10.x introduced a new zone-based firewall UI under **Settings > Security > Firewall**. The legacy firewall API still works but is not reflected in the new UI. This documentation covers the new zone-based approach.
+> **Controller version:** UniFi Network 9.4.x on UniFi OS 5.1.12. The v10 Zone-Based Firewall migration (`ZONE_BASED_FIREWALL`) completed 2024-12-22; the legacy `rest/firewallrule` endpoint is empty.
+
+---
+
+## Current state vs. aspirational state
+
+**Previous versions of this doc described a 6-custom-zone design** (Trusted, Infrastructure, IoT, Security, Guest, Legacy) with a detailed inter-zone allow/deny matrix and ~10 user-authored firewall rules. The 2026-05-23 audit confirmed that **only one custom zone has ever been created**: `IoT`. Every other "documented" zone never existed on the UDM.
+
+What this actually means on the wire:
+
+- VLANs 200 (Management), 201 (Servers), 202 (Clients), 205 (Security), 209 (vSAN), 210 (Ceph), 212 (Unifi), and 4040 (Inter-VLAN) all live in the built-in `Internal` zone.
+- The default `Internal → Internal: Allow All Traffic` predefined policy makes every "Infrastructure-zone rule" and every "Security-zone rule" in the old doc a **no-op** — the traffic was already allowed by the zone default.
+- The only firewall enforcement that does meaningful work today is the `IoT` custom zone (which is correctly isolated) plus four user-authored allow rules (IoT-to-DNS, Allow-Wireguard, Twilio-SIP, Twilio-Media).
+
+The previous multi-zone design has been **moved to a forward-looking companion doc** at `docs/planning/firewall-zones-future-state.md`. That doc proposes a phased migration if/when the user decides to tighten the zoning. Until that migration runs, **this doc is the source of truth** and the old aspirational tables are gone.
+
+Tracker: **M30** in `docs/planning/outstanding-work.md`.
+
+---
 
 ## Network Architecture Overview
 
-The homelab network uses a **dual-router architecture** with routing responsibilities split between the UDM Pro ("Windroute") and an L3 switch ("Switch Rack PoE"). This architecture has important implications for firewall policy.
+The homelab network uses a **dual-router architecture** with routing responsibilities split between the UDM Pro and an L3 switch.
 
 ### Dual-Router Architecture
 
@@ -20,14 +38,15 @@ The homelab network uses a **dual-router architecture** with routing responsibil
 │                                         UDM Pro ("Windroute")                                            │
 │                                    Primary Router / Firewall / NAT                                       │
 │                                                                                                          │
-│   Routes: Default (1), Management (200), IoT (204), Security (205), Guest (206), Unifi (212)            │
+│   Routes: Default (untagged), Management (200), IoT (204), Security (205), Guest (206),                 │
+│           Unifi (212), Inter-VLAN (4040)                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
        │           │           │           │           │           │           │
        ▼           ▼           ▼           ▼           ▼           ▼           ▼
  ┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐
  │ Untagged ││ VLAN 200 ││ VLAN 204 ││ VLAN 205 ││ VLAN 206 ││ VLAN 212 ││ VLAN 4040│
  │ Default  ││Management││   IoT    ││ Security ││  Guest   ││  Unifi   ││ Transit  │
- │  LEGACY  ││ TRUSTED  ││   IOT    ││ ISOLATED ││  GUEST   ││  INFRA   ││  INFRA   │
+ │ Internal ││ Internal ││ IoT (★)  ││ Internal ││ Hotspot  ││ Internal ││ Internal │
  │10.10.199 ││10.10.200 ││10.10.204 ││10.10.205 ││10.10.206 ││10.10.212 ││10.255.253│
  └──────────┘└──────────┘└──────────┘└──────────┘└──────────┘└──────────┘└────┬─────┘
                                                                               │
@@ -42,659 +61,323 @@ The homelab network uses a **dual-router architecture** with routing responsibil
  │                           L3 Switch ("Switch Rack PoE")                                 │
  │                              Secondary Router                                           │
  │                                                                                         │
- │   Routes: Servers (201), Clients (202), vSAN (209)                                     │
- │   Static routes to AWS via 10.255.253.3                                                 │
+ │   Routes: Servers (201), Clients (202), vSAN (209), Ceph (210)                         │
+ │   Static routes to AWS (10.10.100.0/22, 10.255.255.0/29, 10.254.0.0/24)                │
  └────────────────────────────────────────────────────────────────────────────────────────┘
-                │              │              │
-                ▼              ▼              ▼
-          ┌──────────┐   ┌──────────┐   ┌──────────┐
-          │ VLAN 201 │   │ VLAN 202 │   │ VLAN 209 │
-          │ Servers  │   │ Clients  │   │   vSAN   │
-          │ TRUSTED  │   │ TRUSTED  │   │  INFRA   │
-          │10.10.201 │   │10.10.202 │   │10.10.209 │
-          └──────────┘   └──────────┘   └──────────┘
+                │              │              │             │
+                ▼              ▼              ▼             ▼
+          ┌──────────┐   ┌──────────┐   ┌──────────┐  ┌──────────┐
+          │ VLAN 201 │   │ VLAN 202 │   │ VLAN 209 │  │ VLAN 210 │
+          │ Servers  │   │ Clients  │   │   vSAN   │  │   Ceph   │
+          │ Internal │   │ Internal │   │ Internal │  │ Internal │
+          │10.10.201 │   │10.10.202 │   │10.10.209 │  │10.10.210 │
+          └──────────┘   └──────────┘   └──────────┘  └──────────┘
 
-                               AWS/WireGuard Routes (via L3 Switch)
-                               ─────────────────────────────────────
-                               10.10.100.0/22   - AWS Environment
-                               10.255.255.0/29 - WireGuard tunnel endpoint
-                               10.254.0.0/24   - WireGuard client tunnel
+  (★) IoT is the only custom zone on the controller. Everything else
+      labelled "Internal" sits in the built-in Internal zone and is
+      reachable from every other Internal-zone network by default.
 ```
 
 ### Firewall Implications of Dual-Router Architecture
 
-**Critical Understanding**: The UDM Pro firewall only sees traffic that traverses the UDM Pro. Traffic between networks routed by the L3 switch **never** passes through the UDM Pro firewall.
+The UDM firewall only sees traffic that traverses the UDM. Traffic between L3-switch-routed VLANs (201 ↔ 202 ↔ 209 ↔ 210) **never passes through the UDM** and is unaffected by anything in this document.
 
 | Traffic Path | Firewall Applies? | Example |
 |--------------|-------------------|---------|
-| Servers (201) <-> Clients (202) | **No** - L3 switch only | User laptop accessing K8s services |
-| Servers (201) <-> vSAN (209) | **No** - L3 switch only | Proxmox host accessing vSAN storage |
-| Servers (201) <-> IoT (204) | **Yes** - crosses UDM | Server accessing IoT device |
-| Clients (202) <-> Internet | **Yes** - crosses UDM | Web browsing |
-| IoT (204) <-> Security (205) | **Yes** - crosses UDM | Should be blocked |
-| Any <-> Internet | **Yes** - crosses UDM | All internet traffic |
+| Servers (201) ↔ Clients (202) | **No** — L3 switch only | Laptop → K8s service |
+| Servers (201) ↔ vSAN (209) | **No** — L3 switch only | Proxmox → vSAN storage |
+| Servers (201) ↔ Ceph (210) | **No** — L3 switch only | K8s nodes ↔ Ceph mons |
+| Servers (201) ↔ IoT (204) | **Yes** — crosses UDM | Server → Home Assistant |
+| Clients (202) ↔ Internet | **Yes** — crosses UDM | Web browsing |
+| IoT (204) ↔ Security (205) | **Yes** — crosses UDM (and blocked, see below) | (not allowed) |
+| Any ↔ Internet | **Yes** — crosses UDM | All internet traffic |
 
 **Where to apply security policies:**
 
 | Traffic Flow | Where to Configure |
 |--------------|-------------------|
-| Between L3-switch VLANs (201, 202, 209) | L3 switch ACLs |
-| Between UDM VLANs (200, 204, 205, 206, 212) | UDM Zone-Based Firewall |
-| Between L3-switch and UDM VLANs | UDM Zone-Based Firewall (on transit VLAN 4040) |
+| Between L3-switch VLANs (201, 202, 209, 210) | L3 switch ACLs (status: see §"Unverified items") |
+| Between UDM-routed VLANs (200, 204, 205, 206, 212, 4040) and itself | UDM Zone-Based Firewall |
+| Between L3-switch and UDM-routed VLANs | UDM Zone-Based Firewall (traffic transits VLAN 4040) |
 | To/from Internet | UDM Zone-Based Firewall |
+
+---
 
 ## Complete VLAN Inventory
 
-### Networks Routed by UDM Pro (Windroute)
+### Networks Routed by UDM Pro
 
-| VLAN | Name | Subnet | Zone | Purpose |
-|------|------|--------|------|---------|
-| 1 | Default | 10.10.199.0/24 | Legacy | Legacy/unused - should be empty |
-| 200 | Management | 10.10.200.0/24 | Trusted | Network equipment (UDM, switches, APs) |
-| 204 | IoT | 10.10.204.0/24 | IoT | Smart home devices |
-| 205 | Security | 10.10.205.0/24 | Security | Cameras, NVR |
-| 206 | Guest | 10.10.206.0/24 | Guest | Guest WiFi (Network Isolation enabled) |
-| 212 | Unifi | 10.10.212.0/24 | Infrastructure | UniFi devices (APs, readers, cameras, IP phones) |
-| 4040 | Inter-VLAN Routing | 10.255.253.0/24 | Infrastructure | Transit between UDM and L3 switch |
+| VLAN | Name | Subnet | Live Zone | Purpose |
+|------|------|--------|-----------|---------|
+| (untagged) | Default | 10.10.199.0/24 | Internal | Untagged native — should be empty, but DHCP `.100-.254` is still on. Talk service listens on `10.10.199.1` (see `unifi-talk.md`). |
+| 200 | Management | 10.10.200.0/24 | Internal | Network equipment (UDM, switches, APs) |
+| 204 | IoT | 10.10.204.0/24 | **IoT (custom)** | Smart home devices |
+| 205 | Security | 10.10.205.0/24 | Internal | SimpliSafe gear (cameras retired) — Network Isolation = ON (see §"Known anomalies") |
+| 206 | Guest | 10.10.206.0/24 | Hotspot (built-in) | Guest WiFi |
+| 212 | Unifi | 10.10.212.0/24 | Internal | UniFi APs/cameras/IP phones |
+| 4040 | Inter-VLAN | 10.255.253.0/24 | Internal | Transit between UDM and L3 switch |
 
-### Networks Routed by L3 Switch (Switch Rack PoE)
+### Networks Routed by L3 Switch
 
-| VLAN | Name | Subnet | Zone | Purpose |
-|------|------|--------|------|---------|
-| 201 | Servers | 10.10.201.0/24 | Trusted | K8s nodes, DNS, infrastructure services |
-| 202 | Clients | 10.10.202.0/24 | Trusted | User laptops, phones |
-| 209 | vSAN | 10.10.209.0/24 | Infrastructure | Storage network (Proxmox/NAS) |
-| 210 | Ceph | 10.10.210.0/24 | Infrastructure | Dedicated Ceph storage network (PVE mon on .41, K8s nodes on .50-.60 via `enp6s22` MTU 9000). Migrated 2026-05-18 from VLAN 201. |
+| VLAN | Name | Subnet | Live Zone | Purpose |
+|------|------|--------|-----------|---------|
+| 201 | Servers | 10.10.201.0/24 | Internal | K8s nodes, DNS (MetalLB `.5/.6`), infra services |
+| 202 | Clients | 10.10.202.0/24 | Internal | User laptops, phones |
+| 209 | vSAN | 10.10.209.0/24 | Internal | Storage network (Proxmox/NAS) |
+| 210 | Ceph | 10.10.210.0/24 | Internal | Dedicated Ceph storage (PVE mon `.41`, K8s nodes `.50-.60` via `enp6s22` MTU 9000). Migrated 2026-05-18 from VLAN 201. |
 
-### Static Routes (via L3 Switch at 10.255.253.3)
+### Networks Not in the Architecture Tables but Present on the UDM
 
-| Destination | Purpose |
-|-------------|---------|
-| 10.10.100.0/22 | AWS Environment |
-| 10.255.255.0/29 | WireGuard tunnel endpoint |
-| 10.254.0.0/24 | WireGuard client tunnel |
+| Network | Live Zone | Notes |
+|---------|-----------|-------|
+| WireGuard WAN1 (192.168.3.0/24) | VPN | UDM-side remote-user-VPN pool, no clients connected. Tracked under M14 / future cleanup. |
+| LTE WAN | External | Failover priority 4, never used. Tracked for retirement. |
+| WAN1 / WAN2 | External | Frontier (primary), Spectrum (failover-only). |
 
-## Zone Definitions
+### Static Routes (carried by both UDM and L3 switch)
 
-The network is organized into six security zones based on trust level and function:
+| Destination | Purpose | Next-hop |
+|-------------|---------|----------|
+| 10.10.100.0/22 | AWS Environment | 10.10.201.20 (vpn-local VIP, on L3 switch) / 10.255.253.3 (from UDM) |
+| 10.255.255.0/29 | WireGuard tunnel endpoint | same |
+| 10.254.0.0/24 | WireGuard client tunnel | same |
 
-| Zone | Trust Level | Networks | Description |
-|------|-------------|----------|-------------|
-| **Trusted** | High | Management (200), Servers (201), Clients (202) | Full inter-zone access, primary work networks |
-| **Infrastructure** | High (Restricted) | vSAN (209), Unifi (212), Inter-VLAN (4040) | Critical infrastructure, access restricted to specific systems |
-| **IoT** | Low | IoT (204) | Smart home devices, limited access |
-| **Security** | Isolated | Security (205) | Cameras, NVR, highly restricted |
-| **Guest** | Untrusted | Guest (206) | Guest WiFi, internet-only access |
-| **Legacy** | None | Default (1) | Legacy network, should be empty |
-
-## Default Policies
-
-### Zone-to-Zone Default Actions
-
-| Source Zone | Trusted | Infrastructure | IoT | Security | Guest | Internet |
-|-------------|---------|----------------|-----|----------|-------|----------|
-| **Trusted** | Allow | Allow | Allow | Allow | Deny | Allow |
-| **Infrastructure** | Allow* | Allow* | Deny | Deny | Deny | Deny** |
-| **IoT** | Deny | Deny | Allow | Deny | Deny | Allow |
-| **Security** | Deny | Deny | Deny | Allow | Deny | Deny |
-| **Guest** | Deny | Deny | Deny | Deny | Deny | Allow |
-| **Legacy** | Deny | Deny | Deny | Deny | Deny | Deny |
-
-**Notes:**
-- `*` Infrastructure to Trusted: Only for management/monitoring purposes
-- `**` Infrastructure to Internet: Generally denied; storage networks should not reach internet
-
-### Detailed Zone Policies
-
-#### Trusted Zone (Management, Servers, Clients)
-
-| Policy | Description |
-|--------|-------------|
-| Inter-zone | Full access between Trusted networks |
-| To IoT | Allow (for management and Home Assistant) |
-| To Security | Allow (for NVR access and camera management) |
-| To Infrastructure | Allow (for storage and switch management) |
-| To Guest | Deny (no reason to access guest devices) |
-| To Internet | Allow |
-
-#### Infrastructure Zone (vSAN, Unifi, Inter-VLAN)
-
-| Network | Allowed Sources | Allowed Destinations |
-|---------|-----------------|---------------------|
-| vSAN (209) | Proxmox hosts, NAS (from Servers VLAN) | Storage targets only |
-| Unifi (212) | Management (200), UDM | UniFi Controller, APs |
-| Inter-VLAN (4040) | UDM (10.255.253.1), L3 Switch (10.255.253.3) | Routing traffic only |
-
-#### IoT Zone
-
-| Policy | Description |
-|--------|-------------|
-| To DNS (Servers) | Allow UDP/53, TCP/53 to 10.10.201.5, 10.10.201.6 |
-| To Home Assistant | Allow TCP/8123 to 10.10.204.25 (if in IoT VLAN) |
-| To NTP | Allow UDP/123 to router gateway |
-| To Internet | Allow (for cloud services, updates) |
-| To all other internal | Deny |
-
-#### Security Zone
-
-| Policy | Description |
-|--------|-------------|
-| To DNS (Servers) | Allow UDP/53, TCP/53 to 10.10.201.5, 10.10.201.6 |
-| Internal to NVR | Allow cameras (10.10.205.0/24) to NVR (10.10.205.10) |
-| To Internet | Deny by default; optionally allow NVR (10.10.205.10) to TCP/443 for cloud backup |
-| To all other internal | Deny |
-
-#### Guest Zone
-
-| Policy | Description |
-|--------|-------------|
-| Network Isolation | **Enabled** - Uses UDM built-in DNS and DHCP isolation |
-| To Internet | Allow |
-| To all internal | Deny (enforced by Network Isolation) |
-
-> **Note**: Guest network should use UniFi's built-in Network Isolation feature rather than zone-based firewall rules. This provides complete isolation at a lower level and includes captive portal support.
-
-#### Legacy Zone (Default — untagged native, 10.10.199.0/24)
-
-| Policy | Description |
-|--------|-------------|
-| All traffic | Deny - this VLAN should have no devices |
-
-## Explicit Allow Rules
-
-These rules permit specific cross-zone traffic that would otherwise be denied by default policies.
-
-### IoT Zone Rules
-
-| Rule Name | Source | Destination | Protocol/Port | Purpose |
-|-----------|--------|-------------|---------------|---------|
-| IoT-to-DNS | 10.10.204.0/24 | 10.10.201.5, 10.10.201.6 | UDP/53, TCP/53 | DNS resolution |
-| IoT-to-HomeAssistant | 10.10.204.0/24 | 10.10.204.25 | TCP/8123 | Home Assistant API |
-| IoT-to-NTP | 10.10.204.0/24 | 10.10.200.1 | UDP/123 | Time sync via router |
-| IoT-to-MQTT | 10.10.204.0/24 | 10.10.201.x | TCP/1883, TCP/8883 | MQTT broker (if applicable) |
-
-### Security Zone Rules
-
-| Rule Name | Source | Destination | Protocol/Port | Purpose |
-|-----------|--------|-------------|---------------|---------|
-| Security-to-DNS | 10.10.205.0/24 | 10.10.201.5, 10.10.201.6 | UDP/53, TCP/53 | DNS resolution |
-| Security-to-NVR | 10.10.205.0/24 | 10.10.205.10 | TCP/7443, TCP/554 (RTSP) | UniFi Protect NVR |
-| NVR-to-Internet | 10.10.205.10 | 0.0.0.0/0 | TCP/443 | Cloud backup (optional) |
-
-### Infrastructure Zone Rules
-
-| Rule Name | Source | Destination | Protocol/Port | Purpose |
-|-----------|--------|-------------|---------------|---------|
-| Unifi-Adoption | 10.10.212.0/24 | 10.10.200.1 | TCP/8080 | UniFi device adoption |
-| Unifi-STUN | 10.10.212.0/24 | 10.10.200.1 | UDP/3478 | STUN for UniFi |
-| vSAN-to-vSAN | 10.10.209.0/24 | 10.10.209.0/24 | All | vSAN/storage cluster traffic |
-
-### Trusted Zone Cross-Access Rules
-
-| Rule Name | Source | Destination | Protocol/Port | Purpose |
-|-----------|--------|-------------|---------------|---------|
-| Mgmt-to-Servers | 10.10.200.0/24 | 10.10.201.0/24 | All | Network management access |
-| Clients-to-Servers | 10.10.202.0/24 | 10.10.201.0/24 | All | User access to services |
-| Clients-to-IoT | 10.10.202.0/24 | 10.10.204.0/24 | All | Control IoT devices |
-
-### Return Traffic
-
-| Rule Name | Source | Destination | Protocol/Port | Purpose |
-|-----------|--------|-------------|---------------|---------|
-| Established-Return | Any | Any | Established/Related | Return traffic for allowed connections |
-
-## UDM Pro Configuration (UniFi Network v10.x)
-
-UniFi Network v10.x uses a **Zone-Based Firewall** with a visual **Zone Matrix** interface. This replaces the legacy LAN In/Out/Local rule types with a more intuitive zone-to-zone policy model.
-
-### Prerequisites: Disable Network Isolation
-
-> **IMPORTANT**: Before creating firewall rules to allow specific traffic between zones, you **must** disable Network Isolation on any networks where you want granular firewall control. Network Isolation blocks inter-VLAN traffic at a lower level than firewall rules - if it's enabled, your allow rules will have no effect.
-
-**What is Network Isolation?**
-
-Network Isolation is a UniFi feature that provides a simple "all or nothing" block of inter-VLAN traffic. When enabled:
-- All traffic to/from other VLANs is blocked at the switch/network level
-- This blocking happens **before** firewall rules are evaluated
-- Firewall allow rules cannot override Network Isolation
-
-**When to use Network Isolation vs. Zone-Based Firewall:**
-
-| Use Case | Recommended Approach |
-|----------|---------------------|
-| Complete isolation (no inter-VLAN traffic needed) | Network Isolation ON |
-| Selective traffic allowed (e.g., IoT to DNS only) | Network Isolation OFF + Zone-Based Firewall rules |
-| Guest network with internet-only access | Network Isolation ON |
-
-**How to Disable Network Isolation:**
-
-**Navigation**: `Settings` > `Networks` > `[Select Network]` > `Advanced` (expand if collapsed)
-
-1. Go to **Settings** > **Networks**
-2. Click on the network you want to modify (e.g., **IoT** or **Security**)
-3. Scroll down and expand the **Advanced** section (click "Advanced" or the expand arrow)
-4. Find the **Network Isolation** toggle
-5. Set it to **OFF** (disabled)
-6. Click **Save** or **Apply Changes**
-
-Network Isolation settings by network:
-
-| Network | VLAN | Disable Network Isolation? | Reason |
-|---------|------|---------------------------|--------|
-| Default | 1 | No | Legacy, should have no devices |
-| Management | 200 | No (leave default) | Trusted zone, typically not isolated |
-| Servers | 201 | No (leave default) | Trusted zone, L3 switch routed |
-| Clients | 202 | No (leave default) | Trusted zone, L3 switch routed |
-| IoT | 204 | **Yes** | Need to allow DNS traffic to Servers zone |
-| Security | 205 | **Yes** | Need to allow DNS traffic to Servers zone |
-| Guest | 206 | **No** | Keep isolation enabled for complete guest isolation |
-| vSAN | 209 | No | L3 switch routed, restricted at switch level |
-| Unifi | 212 | **Yes** | Need to allow adoption/management traffic |
-| Inter-VLAN | 4040 | No | Transit network, restrict at switch level |
-
-> **Warning**: After disabling Network Isolation, the network will rely entirely on your zone-based firewall rules for security. Make sure you have proper deny-by-default policies in place before disabling isolation. Custom zones (IoT, Security, Infrastructure) are blocked from Internal zone by default, so your security posture is maintained.
+Note: `routing.json` shows each AWS route exists **twice** — once with `gateway_type=switch` and once with `gateway_type=default` — so both routers carry the logical routes and the UDM hands transit to the L3 switch.
 
 ---
 
-### Step-by-Step Configuration
+## Live Zone Inventory
 
-Once you have disabled Network Isolation on the relevant networks, proceed with the following steps to configure zone-based firewall rules.
+UniFi Network creates a fixed set of built-in zones; you can add custom zones on top. Source: `zone-matrix.json`.
 
-### Understanding the Zone Matrix
-
-The Zone Matrix displays traffic flow between zones as a grid:
-- **Rows** = Source zones (where traffic originates)
-- **Columns** = Destination zones (where traffic is headed)
-- **Cells** = Policies controlling traffic between those zones
-
-Built-in zones in UniFi v10.x:
-| Zone | Purpose |
-|------|---------|
-| **Internal** | Default zone for trusted LAN networks |
-| **External** | Untrusted traffic (WAN/Internet) |
-| **Gateway** | Traffic to/from the UDM Pro itself (DHCP, DNS, management) |
-| **VPN** | VPN client and site-to-site traffic |
-
-### Step 1: Create Custom Zones
-
-For proper network segmentation, create custom zones for each security zone.
-
-**Navigation**: `Settings` > `Security` > `Firewall` > `Zones` tab
-
-1. Click **Create Zone**
-2. Enter zone name (e.g., `IoT`)
-3. Select the network to assign (e.g., IoT VLAN 204)
-4. Click **Create**
-
-Create the following zones:
-
-| Zone Name | Assigned Networks | Purpose |
-|-----------|------------------|---------|
-| `IoT` | VLAN 204 (10.10.204.0/24) | Smart home devices |
-| `Security` | VLAN 205 (10.10.205.0/24) | Cameras, NVR |
-| `Infrastructure` | VLAN 212 (10.10.212.0/24), VLAN 4040 (10.255.253.0/24) | UniFi devices, transit |
-
-> **Note**: Networks in custom zones are **blocked by default** from accessing other custom zones and the Internal zone. They can reach External (internet) and Gateway by default.
-
-> **Note**: Guest (VLAN 206) should remain in the default Internal zone with Network Isolation enabled, rather than a custom zone.
-
-> **Note**: Management (VLAN 200) should remain in the Internal zone as it's a trusted network.
-
-### Step 2: Create Network Objects (IP Groups)
-
-Network Objects define reusable IP addresses and subnets for use in firewall policies.
-
-**Navigation**: `Settings` > `Profiles` > `Network Objects`
-
-1. Click **Create New**
-2. Configure:
-   - **Object Name**: `DNS-Servers`
-   - **Type**: `IPv4 Address/Subnet`
-   - **Address**: `10.10.201.5` (click Add, then add `10.10.201.6`)
-3. Click **Add** to save
-
-Create the following Network Objects:
-
-| Object Name | Type | Addresses |
-|-------------|------|-----------|
-| `DNS-Servers` | IPv4 Address/Subnet | 10.10.201.5, 10.10.201.6 |
-| `Management-Network` | IPv4 Address/Subnet | 10.10.200.0/24 |
-| `Servers-Network` | IPv4 Address/Subnet | 10.10.201.0/24 |
-| `Client-Network` | IPv4 Address/Subnet | 10.10.202.0/24 |
-| `IoT-Network` | IPv4 Address/Subnet | 10.10.204.0/24 |
-| `Security-Network` | IPv4 Address/Subnet | 10.10.205.0/24 |
-| `Guest-Network` | IPv4 Address/Subnet | 10.10.206.0/24 |
-| `vSAN-Network` | IPv4 Address/Subnet | 10.10.209.0/24 |
-| `Unifi-Network` | IPv4 Address/Subnet | 10.10.212.0/24 |
-| `NVR-Server` | IPv4 Address/Subnet | 10.10.205.10 |
-| `Home-Assistant` | IPv4 Address/Subnet | 10.10.204.25 |
-| `Router-Gateway` | IPv4 Address/Subnet | 10.10.200.1 |
-| `AWS-Networks` | IPv4 Address/Subnet | 10.10.100.0/22, 10.255.255.0/29, 10.254.0.0/24 |
-
-### Step 3: Create Port Groups
-
-**Navigation**: `Settings` > `Profiles` > `Port Groups`
-
-1. Click **Create New**
-2. Configure:
-   - **Name**: `DNS-Ports`
-   - **Port**: `53`
-3. Click **Add**
-
-| Group Name | Ports | Purpose |
-|------------|-------|---------|
-| `DNS-Ports` | 53 | DNS queries |
-| `NTP-Port` | 123 | Time synchronization |
-| `HomeAssistant-Port` | 8123 | Home Assistant web UI |
-| `UniFi-Adoption-Ports` | 8080, 3478 | UniFi device adoption/STUN |
-| `NVR-Ports` | 7443, 554 | UniFi Protect NVR, RTSP |
-
-### Step 4: Create Firewall Policies via Zone Matrix
-
-**Navigation**: `Settings` > `Security` > `Firewall`
-
-The Zone Matrix shows all zones. Click on a cell (intersection of source and destination zones) to view or create policies for that traffic flow.
+| Zone | Type | Member networks | Notes |
+|------|------|-----------------|-------|
+| **Internal** | built-in | Default, Management/200, Servers/201, Clients/202, Security/205, vSAN/209, Ceph/210, Unifi/212, InterVLAN/4040 | Default = `Allow All Traffic` within the zone. **This is the wide-open default that makes most "documented" intra-LAN policies redundant today.** |
+| **IoT** | custom | IoT/204 | The only custom zone. Default = block-by-default to other zones; one explicit allow for DNS (see below). |
+| **External** | built-in | WAN1, WAN2, LTE | Internet. Inbound blocked by default with named exceptions (Twilio + WireGuard). |
+| **Gateway** | built-in | UDM itself | DHCP/DNS/management surface of the UDM. Allow-most by default. |
+| **VPN** | built-in | WireGuard WAN1 (UDM remote-user-vpn) | Currently no clients connected. VPN → Internal = Allow All (broad — if/when this pool is ever populated, VPN clients have full LAN reach). |
+| **Hotspot** | built-in | Guest/206 | UniFi's purpose-built captive-portal zone. |
+| **DMZ** | built-in | (none) | Not used. |
 
 ---
 
-#### Policy 1: Allow IoT to DNS Servers
+## Live Default Policies (Zone-to-Zone)
 
-This policy allows IoT devices (10.10.204.0/24) to reach DNS servers (10.10.201.5, 10.10.201.6) on port 53.
+Decoded from `firewall-policies.json` + `zone-matrix.json`. There are **114 total policies**: 110 predefined (auto-generated UniFi boilerplate for zone defaults) and **4 user-authored**.
 
-1. In the Zone Matrix, click the cell at **IoT** (row) -> **Internal** (column)
-2. Click **Create Policy** at the bottom of the policy list
-3. Configure the policy:
+### Default behaviour from each source zone
 
-| Field | Value |
-|-------|-------|
-| **Name** | Allow IoT to DNS |
-| **Action** | Allow |
-| **Source Zone** | IoT |
-| **Specific Source** | Type: IP, Object: `IoT-Network` |
-| **Destination Zone** | Internal |
-| **Specific Destination** | Type: IP, Object: `DNS-Servers` |
-| **Port** | Object: `DNS-Ports` |
-| **IP Version** | IPv4 |
-| **Protocol** | TCP/UDP |
-| **Connection State** | All |
-| **Schedule** | Always |
+| Source → Dest | Live default | Notes |
+|---|---|---|
+| Internal → Internal | **Allow All Traffic** | Every documented "Trusted/Infrastructure/Security" rule between 200/201/202/205/209/210/212/4040 is satisfied by this default. |
+| Internal → External | Allow All Traffic | Standard outbound internet. |
+| Internal → IoT | **Block All Traffic** | Servers cannot initiate to IoT devices. Practical impact: Home Assistant cross-VLAN control of a Hue bridge does not work without an explicit allow (none exists). |
+| Internal → Gateway | Allow All | LAN reaches UDM management surface. |
+| Internal → VPN | Allow All | Inert today (no VPN clients). |
+| Internal → Hotspot | Allow All | **Permissive** — Internal can reach guest devices. Low practical risk (ephemeral devices) but tighter than necessary. |
+| Internal → DMZ | Allow All | Unused. |
+| IoT → Internal | Block All + 1 explicit allow ("Allow IoT to DNS") | Correctly isolated. |
+| IoT → External | Allow All | IoT devices reach cloud services / NTP / updates. |
+| IoT → Gateway | Allow Return Traffic | Stateful return only. |
+| External → Internal | Block All + 6 named exceptions (Twilio-SIP, Twilio-Media, Allow-Wireguard, plus 3 predefined SLAAC/RA-style allows) | Standard WAN posture. |
+| External → Gateway | 13 predefined allows (DHCPv6/RA/SLAAC/RADIUS/hotspot redirect) + Twilio + WireGuard inbound | Dense column of UniFi-managed boilerplate. |
+| Hotspot → Internal | Block All + Allow Public DNS + portal-auth exceptions | Standard guest posture. |
+| Hotspot → External | Allow All (post-auth) | Guests reach internet. |
+| VPN → Internal | Allow All | Untouched UniFi default. |
 
-4. Click **Add Policy**
+### Per-zone policy density
 
----
+From `zone-matrix.json` (counts include predefined policies):
 
-#### Policy 2: Allow Security to DNS Servers
-
-1. Click the cell at **Security** -> **Internal**
-2. Click **Create Policy**
-3. Configure:
-
-| Field | Value |
-|-------|-------|
-| **Name** | Allow Security to DNS |
-| **Action** | Allow |
-| **Source Zone** | Security |
-| **Specific Source** | Type: IP, Object: `Security-Network` |
-| **Destination Zone** | Internal |
-| **Specific Destination** | Type: IP, Object: `DNS-Servers` |
-| **Port** | Object: `DNS-Ports` |
-| **IP Version** | IPv4 |
-| **Protocol** | TCP/UDP |
-| **Connection State** | All |
-| **Schedule** | Always |
-
-4. Click **Add Policy**
+```
+Internal → {Internal:2, External:3, Gateway:1, VPN:1, Hotspot:2, DMZ:2, IoT:3}
+External → {Internal:6, External:3, Gateway:13, VPN:3, Hotspot:3, DMZ:3, IoT:3}
+Gateway  → {Internal:1, External:1, all others:1}
+VPN      → {Internal:1, External:1, all others:1}
+Hotspot  → {Internal:4, External:3, …}
+DMZ      → {all 1-3}
+IoT      → {Internal:3, others:1}
+```
 
 ---
 
-#### Policy 3: Allow Infrastructure (Unifi) to Management
+## Explicit User-Authored Allow Rules
 
-1. Click the cell at **Infrastructure** -> **Internal**
-2. Click **Create Policy**
-3. Configure:
+These are the **only** firewall rules that aren't predefined boilerplate. Source: `firewall-policies.json` (`predefined: false`).
 
-| Field | Value |
-|-------|-------|
-| **Name** | Allow Unifi Adoption |
-| **Action** | Allow |
-| **Source Zone** | Infrastructure |
-| **Specific Source** | Type: IP, Object: `Unifi-Network` |
-| **Destination Zone** | Internal |
-| **Specific Destination** | Type: IP, Object: `Router-Gateway` |
-| **Port** | Object: `UniFi-Adoption-Ports` |
-| **IP Version** | IPv4 |
-| **Protocol** | TCP/UDP |
-| **Connection State** | All |
-| **Schedule** | Always |
+| Rule | Source | Destination | Protocol/Port | Purpose |
+|------|--------|-------------|---------------|---------|
+| **Allow IoT to DNS** | IoT zone (10.10.204.0/24) | `DNS-Servers` IP group (10.10.201.5, 10.10.201.6) | TCP/UDP `DNS-Ports` (53) | Lets IoT devices resolve via Technitium without exposing the rest of Servers. |
+| **Allow-Wireguard** | External UDP, any source | 10.10.201.20 (keepalived VIP) | UDP 9821 (`WG-Ports-Inbound` group) | Inbound WireGuard for site-to-site (backs the `Wireguard Local` port-forward). |
+| **Allow-Twilio-SIP-6767** | External UDP, `Twilio Signal IPs` group | Gateway zone (UDM itself) | UDP 6767 | Twilio SIP termination for UniFi Talk. Destination is the UDM (`10.10.199.1`), not a LAN host. |
+| **Allow-Twilio-Media-10000-60000** | External UDP, `Twilio Media IPs` group | Gateway zone (UDM itself) | UDP 10000-60000 | Twilio media (RTP) for UniFi Talk. |
 
-4. Click **Add Policy**
+**Firewall groups in use** (source: `firewall-groups.json`):
 
----
+| Group | Type | Used by |
+|-------|------|---------|
+| `DNS-Servers` | address-group (2 IPs) | Allow IoT to DNS |
+| `DNS-Ports` | port-group (53) | Allow IoT to DNS |
+| `Twilio Signal IPs` | address-group (8 /30s) | Allow-Twilio-SIP-6767 |
+| `Twilio Media IPs` | address-group (1 /18) | Allow-Twilio-Media-10000-60000 |
+| `WG-Ports-Inbound` | port-group (9821) | Allow-Wireguard |
 
-#### Policy 4: Block Security Zone Internet Access
-
-If you want to block the Security zone from reaching the internet (except for allowed rules):
-
-1. Click the cell at **Security** -> **External**
-2. The default may be "Allow All" - click to view policies
-3. Click **Create Policy**
-4. Configure:
-
-| Field | Value |
-|-------|-------|
-| **Name** | Block Security to Internet |
-| **Action** | Block |
-| **Source Zone** | Security |
-| **Specific Source** | Any |
-| **Destination Zone** | External |
-| **Specific Destination** | Any |
-| **Protocol** | All |
-
-5. Click **Add Policy**
+That is the full inventory. The aspirational "Network Objects" table from the old doc (13 named groups) is not present today; expanding adoption is **P2 #12** in the audit.
 
 ---
 
-#### Policy 5: Allow NVR Cloud Backup (Optional)
+## Port Forwards
 
-If you want to allow the NVR to reach the internet for cloud backup:
+Source: `port-forwards.json`.
 
-1. Click the cell at **Security** -> **External**
-2. Click **Create Policy**
-3. Configure:
+| Rule | Direction | Port(s) | Target | Doc reference |
+|------|-----------|---------|--------|---------------|
+| `Twilio-SIP` | UDP inbound | 6767 | 10.10.199.1 (UDM Talk service) | `unifi-talk.md` |
+| `Twilio-Media-Signal` | UDP inbound | 10000-60000 | 10.10.199.1 (UDM Talk service) | `unifi-talk.md` |
+| `Wireguard Local` | TCP+UDP inbound | 9821 | 10.10.201.20 (keepalived VIP) | `platform/wireguard/README.md` |
+| `Wireguard Travel` | UDP inbound | 9820 | 10.10.201.20 | **Disabled** (`enabled=false`). Per session notes, travel VPN is now site→AWS; this rule should be deleted (P2 #9 in audit). |
 
-| Field | Value |
-|-------|-------|
-| **Name** | Allow NVR Cloud Backup |
-| **Action** | Allow |
-| **Source Zone** | Security |
-| **Specific Source** | Type: IP, Object: `NVR-Server` |
-| **Destination Zone** | External |
-| **Specific Destination** | Any |
-| **Port** | 443 |
-| **IP Version** | IPv4 |
-| **Protocol** | TCP |
-| **Connection State** | All |
-| **Schedule** | Always |
+---
 
-4. Click **Add Policy**
-5. **Important**: Ensure this rule is ordered ABOVE the "Block Security to Internet" rule (Policy 4)
+## DNS Server Pointers (per-VLAN DHCP)
 
-> **Note**: In v10.x, custom zones like IoT and Security are blocked from accessing Internal by default. You only need explicit allow rules for specific traffic (like DNS). Block rules are primarily needed for zone-to-zone traffic that is allowed by default.
+Source: `networks.json` (`dhcpd_dns_1`, `dhcpd_dns_2`).
 
-### Step 5: Verify Zone Matrix
+| Network | DHCP DNS | Notes |
+|---------|----------|-------|
+| Default (199) | (none) | DHCP enabled but no DNS handed out — a smell, but no clients should be here anyway. |
+| Management (200) | 10.10.201.5 / .6 | Technitium primary/secondary |
+| Servers (201) | .5 / .6 | |
+| Clients (202) | .5 / .6 | |
+| IoT (204) | .5 / .6 | |
+| **Security (205)** | **(explicitly empty)** | See "Known anomalies" below. |
+| Guest (206) | 1.1.1.1 / 8.8.8.8 / 8.8.4.4 | Public resolvers — intentional, no leak to Technitium. |
+| vSAN (209) | .5 / .6 | Harmless — vSAN nodes don't DNS. |
+| Ceph (210) | .5 / .6 | |
+| Unifi (212) | .5 / .6 | |
 
-After creating policies, the Zone Matrix will show:
-- **IoT -> Internal**: Shows policy count (e.g., "Policies (1)")
-- **Security -> Internal**: Shows policy count
-- **Infrastructure -> Internal**: Shows policy count
+---
 
-Click on any cell to view the policies applied to that zone pair.
+## Known anomalies (live state worth flagging, not yet fixed)
 
-### Zone Matrix Quick Reference
+These are documented here so a reader doesn't mistake them for bugs in this doc. Each is tracked separately.
 
-| Source Zone | Destination Zone | Default Behavior | Custom Policy |
-|-------------|------------------|------------------|---------------|
-| Internal | Internal | Allow All | - |
-| Internal | External | Allow All | - |
-| Internal | IoT | Allow All | - |
-| Internal | Security | Allow All | - |
-| Internal | Infrastructure | Allow All | - |
-| IoT | Internal | **Block All** | Allow to DNS only |
-| IoT | External | Allow All | - |
-| IoT | Security | **Block All** | - |
-| Security | Internal | **Block All** | Allow to DNS only |
-| Security | External | Allow All | Block (except NVR) |
-| Security | IoT | **Block All** | - |
-| Infrastructure | Internal | **Block All** | Allow UniFi adoption |
-| Infrastructure | External | Allow All | Block (recommended) |
-| Any | Gateway | Allow All | - |
+1. **Security/205 Network Isolation = ON + DHCP DNS empty.** Network Isolation at L2 prevents any inter-VLAN traffic regardless of zone policy. With no DHCP DNS, SimpliSafe gear has no resolver. Either disable isolation + set DNS to .5/.6, or document the deliberately-blank choice. Tracked: audit P1 #6 / M30-adjacent.
+2. **Internal → Hotspot is Allow All.** Anything on the Servers VLAN can reach guest devices. Practical risk: low (guests ephemeral). Documented intent was Deny. Tracked: audit P2 #11.
+3. **VPN zone is wired but unused.** WireGuard WAN1 (192.168.3.0/24) has no clients. VPN → Internal is Allow All; if the pool is ever populated, those clients get full LAN reach with no policy in place. Tracked under the M14 cleanup decision.
+4. **LTE WAN still configured.** Failover priority 4, never carried traffic. Slated for removal.
+5. **`Wireguard Travel` port-forward is `enabled=false`** but still in the config. Should be deleted (audit P2 #9).
 
-## L3 Switch ACL Configuration
+---
 
-Since the L3 switch routes traffic between Servers (201), Clients (202), and vSAN (209), you must configure ACLs on the switch to enforce security between these networks.
+## Unverified items (cannot confirm from controller API)
 
-### Recommended L3 Switch ACLs
+The controller's REST API does not expose these. Treat as unverified until checked via the UI or by SSHing the switch.
 
-| ACL Name | Source | Destination | Action | Purpose |
-|----------|--------|-------------|--------|---------|
-| Deny-Clients-to-vSAN | 10.10.202.0/24 | 10.10.209.0/24 | Deny | Client devices should not access storage |
-| Allow-Servers-to-vSAN | 10.10.201.0/24 | 10.10.209.0/24 | Allow | Proxmox hosts need vSAN access |
-| Allow-Clients-to-Servers | 10.10.202.0/24 | 10.10.201.0/24 | Allow | Users access services |
-| Allow-Servers-to-Clients | 10.10.201.0/24 | 10.10.202.0/24 | Allow | Services respond to users |
+| Item | Why unverifiable | Disposition |
+|------|------------------|-------------|
+| L3 switch interface-to-VLAN bindings (which VLAN it routes vs. UDM) | Switch-local L3 config not in REST surface | Confirmed indirectly via `routing.json` next-hops — Servers/Clients/vSAN/Ceph route off the L3 switch. |
+| L3 switch ACLs (`Deny-Clients-to-vSAN`, `Allow-Servers-to-vSAN`, etc.) — described in old doc | UniFi switch ACL surface not in REST on Network 9.4.x | **Treat as not deployed** unless someone confirms via UI screenshot. Audit P3 #21. |
+| Switch port profiles (`Cameras / Phones / Clients / APs / UniFi Devices`) | — | All 5 confirmed present in `port-profiles.json`. |
 
-> **Note**: The specific configuration syntax depends on your L3 switch vendor (e.g., UniFi Switch, Cisco, etc.). Consult your switch documentation for ACL configuration commands.
+---
 
-## Testing
+## Configuring policies in UniFi Network 9.4.x
 
-After configuring policies, verify from devices in each zone:
+The v10 Zone-Based Firewall is **already migrated and enabled** (`ZONE_BASED_FIREWALL` migration ran 2024-12-22). Legacy `rest/firewallrule` returns 0 entries.
 
-### From an IoT device (10.10.204.x):
+**Navigation:** `Settings` → `Security` → `Firewall` → Zone Matrix tab.
+
+The matrix shows each (source, destination) zone pair as a cell; click into a cell to see/add policies for that flow. Built-in zones (Internal, External, Gateway, VPN, Hotspot, DMZ) cannot be deleted. Custom zones (today: `IoT`) are managed under the same Firewall page.
+
+If you are adding a new policy:
+
+1. Open the matrix cell for the relevant (source, destination) pair.
+2. Click **Create Policy**.
+3. For source/destination, prefer **Network Objects** / **Port Groups** under `Settings > Profiles` over hard-coded IPs — keeps future renumbering cheap. Today only 3 IP groups and 2 port groups exist; expanding this catalogue is tracked under audit P2 #12.
+4. Set `Connection State: All` unless you specifically need to scope to new/established.
+5. Save and verify by watching `System Log` → `Triggers` for hits.
+
+**Before disabling Network Isolation on any network**, check what relies on it. With Internal → Internal currently `Allow All`, the only network whose isolation actively matters is Security/205 (see Known anomalies #1).
+
+---
+
+## Testing the current policy
+
+These checks reflect the **live** behaviour, not the aspirational design.
+
+### From an IoT device (10.10.204.x)
 
 ```bash
-# Should work - DNS resolution via internal DNS servers
+# Should work — explicit allow rule
 nslookup google.com 10.10.201.5
-nslookup google.com 10.10.201.6
-dig @10.10.201.5 google.com
+dig @10.10.201.6 google.com
 
-# Should work - Internet access
+# Should work — IoT → External is Allow All
 ping 8.8.8.8
 curl -I https://google.com
 
-# Should be blocked - Direct access to servers network (except DNS)
-ping 10.10.201.50  # K8s control plane
-curl http://10.10.201.1  # Should fail
-
-# Should be blocked - Access to client network
-ping 10.10.202.x  # Client devices
-
-# Should be blocked - Access to security network
-ping 10.10.205.10  # NVR
+# Should be blocked — IoT → Internal default is Block All (no allow exists)
+ping 10.10.201.50      # K8s control plane
+ping 10.10.205.10      # would-be NVR
+ping 10.10.202.5       # Client laptop
 ```
 
-### From a Security zone device (10.10.205.x):
+### From a Servers/Clients/Management host (Internal zone)
 
 ```bash
-# Should work - DNS resolution
-nslookup google.com 10.10.201.5
+# Should work — Internal → Internal is Allow All
+ping 10.10.200.1       # Management gateway
+ping 10.10.205.10      # Anything in Security/205 (zone is Internal)
+ping 10.10.212.5       # Anything in Unifi/212
 
-# Should work - Access to NVR within security zone
-ping 10.10.205.10
-
-# Should be blocked (if Policy 6 is configured)
-ping 8.8.8.8  # Internet access
-
-# Should be blocked - Access to other networks
-ping 10.10.204.x  # IoT devices
-ping 10.10.202.x  # Client devices
+# Should FAIL — Internal → IoT is Block All by default (no allow)
+ping 10.10.204.51      # Hue bridge or similar
 ```
 
-### From a Guest device (10.10.206.x):
+### From a Guest device (10.10.206.x, Hotspot zone)
 
 ```bash
-# Should work - Internet access (via UDM DNS)
+# Should work — Hotspot → External post-auth Allow
 ping 8.8.8.8
 curl -I https://google.com
 
-# Should be blocked - All internal networks
-ping 10.10.201.x  # Servers
-ping 10.10.202.x  # Clients
-ping 10.10.204.x  # IoT
-ping 10.10.205.x  # Security
+# Should be blocked — Hotspot → Internal default Block
+ping 10.10.201.5       # Internal DNS
+ping 10.10.202.5       # Client
 ```
+
+---
 
 ## Troubleshooting
 
-### View Firewall Logs
+### View firewall logs
 
-**Navigation**: `Settings` > `System` > `System Log`
+`Settings` → `System` → `System Log` → `Triggers` tab. Filter by source IP.
 
-1. Click the **Triggers** tab
-2. Look for blocked traffic entries
-3. Filter by source IP to see what is being blocked
+### Common issues
 
-### Common Issues
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| IoT device can't resolve DNS | IoT zone allow-rule disabled, or device not in VLAN 204 | Check `Allow IoT to DNS` in matrix (`IoT → Internal`). Verify device DHCP DNS is `.5/.6`. |
+| Server-side service can't reach Hue/IoT device | Internal → IoT is Block by default | Add an explicit allow in the `Internal → IoT` cell (none exists today). |
+| Security/205 device can't resolve | Network Isolation = ON + DHCP DNS empty | See Known anomalies #1. Either disable isolation + set DNS, or move .205 into a future custom zone with a DNS allow rule. |
+| Can't reach UDM management | Gateway zone access blocked | Don't add deny rules to `Internal → Gateway`. |
+| Traffic between Servers/Clients/vSAN/Ceph isn't filtered | Those VLANs route off the L3 switch — UDM never sees the traffic | Use L3 switch ACLs (status: unverified). |
+| Guest reaches internal device | Internal → Hotspot is currently Allow All | See Known anomalies #2. |
 
-| Symptom | Possible Cause | Solution |
-|---------|----------------|----------|
-| IoT devices cannot resolve DNS | Policy not created or wrong zone assignment | Verify network is in correct zone, check policy exists |
-| **Firewall allow rules have no effect** | **Network Isolation is enabled** | **Disable Network Isolation on the source network (Settings > Networks > [Network] > Advanced > Network Isolation OFF). See Prerequisites section.** |
-| Policy created but not working | Zone assignment issue | Check that the VLAN is assigned to the correct custom zone |
-| Return traffic blocked | Missing return policy | In v10.x, return traffic is usually auto-allowed; check Connection State is set to "All" |
-| Cannot access UDM Pro management | Gateway zone blocked | Ensure Gateway zone access is not blocked |
-| Traffic between L3-switch VLANs not filtered | Wrong device | UDM firewall does not see L3-switch routed traffic; configure ACLs on L3 switch |
-| Guest can access internal networks | Network Isolation disabled | Re-enable Network Isolation on Guest network |
+### Verify zone assignment
 
-### Verify Zone Assignment
+`Settings` → `Networks` → click the network → check **Zone** field. Only VLAN 204 should show a custom zone (`IoT`); everything else shows `Internal`, plus Guest in `Hotspot`.
 
-1. Go to `Settings` > `Networks`
-2. Click on your network (e.g., IoT, Security, Unifi)
-3. Look for the **Zone** field - ensure it shows your custom zone name
-
-### Verify Traffic Path
-
-To determine if traffic passes through the UDM firewall:
-
-1. Identify source and destination VLANs
-2. Check which device routes each VLAN:
-   - VLANs 1, 200, 204, 205, 206, 212, 4040: UDM Pro
-   - VLANs 201, 202, 209: L3 Switch
-3. If both VLANs are routed by the same device, UDM firewall rules may not apply
-
-## Legacy Configuration (Pre-v10.x)
-
-<details>
-<summary>Click to expand legacy firewall rule configuration (for reference only)</summary>
-
-The legacy firewall used LAN In/Out/Local rule types with IP Groups. This configuration is preserved for reference but should not be used on UniFi Network v10.x.
-
-### Legacy Navigation
-- IP Groups: `Settings` > `Profiles` > `IP Groups`
-- Firewall Rules: `Settings` > `Firewall & Security` > `Firewall Rules`
-
-### Legacy Rule Types
-- **LAN In**: Traffic entering from LAN interface
-- **LAN Out**: Traffic exiting to LAN interface
-- **LAN Local**: Traffic destined for the UDM Pro itself
-
-If you have legacy rules, you can migrate to zone-based firewall:
-1. Navigate to `Security` > `Traffic & Firewall Rules`
-2. Click **Upgrade** to migrate to Zone-Based Firewall
-
-</details>
-
-## Future Considerations
-
-1. **mDNS Reflector**: If IoT devices need to discover each other across VLANs, enable mDNS reflector in UniFi settings (`Settings` > `Networks` > Advanced)
-2. **IGMP Proxy**: For multicast traffic (some smart home protocols)
-3. **Logging**: Enable syslog logging on block policies for troubleshooting
-4. **Auto Allow Return Traffic**: When creating allow policies, enable this option if bidirectional communication is needed
-5. **AWS Network Access**: Configure policies to allow appropriate traffic to/from AWS networks (10.10.100.0/22) via the WireGuard tunnel
-6. **L3 Switch ACL Automation**: Consider using Ansible or similar to manage L3 switch ACLs consistently
-7. **Network Segmentation Review**: Periodically review zone assignments and policies as the network evolves
+---
 
 ## References
 
-- [UniFi Zone-Based Firewalls - Ubiquiti Help Center](https://help.ui.com/hc/en-us/articles/115003173168-Zone-Based-Firewalls-in-UniFi)
-- [UniFi Gateway - Advanced Firewall Rules](https://help.ui.com/hc/en-us/articles/27699646208279-UniFi-Gateway-Advanced-Firewall-Rules)
+- `docs/planning/udm-audit-2026-05-23.md` — read-only audit that drives this doc (Part 1)
+- `docs/planning/firewall-zones-future-state.md` — proposed migration to a multi-zone design
+- `docs/planning/outstanding-work.md` — M30 (reconcile zone arch), M14 (VPN cleanup)
+- `/tmp/unifi-state/` — live state dump from `scripts/unifi/dump-state.sh` (regenerate to refresh)
+- [UniFi Zone-Based Firewalls — Ubiquiti Help Center](https://help.ui.com/hc/en-us/articles/115003173168-Zone-Based-Firewalls-in-UniFi)
 - [Migrating to Zone-Based Firewalls](https://help.ui.com/hc/en-us/articles/28223082254743-Migrating-to-Zone-Based-Firewalls-in-UniFi)
-- [Traffic & Policy Management in UniFi](https://help.ui.com/hc/en-us/articles/5546542486551-Traffic-Policy-Management-in-UniFi)
