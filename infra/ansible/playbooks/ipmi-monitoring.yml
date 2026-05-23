@@ -255,6 +255,14 @@
                 - chassis # power state
       notify: Restart prometheus-ipmi-exporter
 
+    - name: Ensure ExecStart drop-in dir exists
+      ansible.builtin.file:
+        path: /etc/systemd/system/prometheus-ipmi-exporter.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
     - name: Override prometheus-ipmi-exporter ExecStart
       ansible.builtin.copy:
         dest: /etc/systemd/system/prometheus-ipmi-exporter.service.d/override.conf
@@ -269,15 +277,6 @@
             --web.listen-address={{ ipmi_exporter_listen }} \
             --freeipmi.path=/usr/sbin
       notify: Restart prometheus-ipmi-exporter
-      register: exporter_override
-
-    - name: Ensure ExecStart drop-in dir exists (idempotent ahead of override)
-      ansible.builtin.file:
-        path: /etc/systemd/system/prometheus-ipmi-exporter.service.d
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
 
     - name: Enable + start prometheus-ipmi-exporter
       ansible.builtin.systemd:
