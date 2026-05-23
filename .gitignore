@@ -26,6 +26,10 @@
 **/inventory/**/credentials/*
 !**/inventory/**/credentials/*.sops.yaml
 
+# SOPS edit tempfiles — sops creates `.decrypted~<name>` while editing,
+# which contains the FULL PLAINTEXT secret. Never commit.
+**/.decrypted~*
+
 # Kubeconfigs
 **/admin.conf
 **/*.kubeconfig
