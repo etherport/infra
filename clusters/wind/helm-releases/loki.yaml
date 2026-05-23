@@ -131,10 +131,20 @@ spec:
         enabled: false
         grafanaAgent:
           installOperator: false
-      lokiCanary:
-        enabled: false
       serviceMonitor:
         enabled: true  # let kube-prometheus-stack scrape loki itself
+    # Disable the synthetic canary DaemonSet. In loki chart 6.x this
+    # key moved from monitoring.lokiCanary to root lokiCanary (verified
+    # 2026-05-23 — DS was running despite monitoring.lokiCanary.enabled=false).
+    # It writes a counter log line every second and reads it back to
+    # validate the pipeline; the logs show up in Grafana as service
+    # "unknown_service" because the canary pods don't carry an
+    # app.kubernetes.io/name=loki-canary label (the label is set to
+    # "loki"). Loki's own /metrics endpoint already exposes ingest
+    # health (loki_ingester_*, loki_request_duration_seconds), so the
+    # canary's loki_canary_* metrics are redundant.
+    lokiCanary:
+      enabled: false
     test:
       enabled: false
 
