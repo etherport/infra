@@ -1,11 +1,14 @@
 # S3 Buckets for homelab infrastructure
 #
 # Buckets managed:
-# - velero.wind.etherport.net - Kubernetes backups (Velero)
-# - archive.wind.etherport.net - Snapshot archives (Deep Archive)
+# - velero.wind.etherport.net - Kubernetes backups (Velero specifically)
+# - archive.wind.etherport.net - NAS snapshot archives (Deep Archive)
 # - logs.archive.wind.etherport.net - Archive operation logs
 # - email-fwd.grahamsmith.net - Email forwarding storage
 # - logs.grahamsmith.net - ALB access logs and general logging
+# - infra.wind.etherport.net - General-purpose homelab infra state +
+#                              backups (UDM/Protect controller-DB,
+#                              future Loki S3 backing, ad-hoc dumps)
 #
 # NOT managed (reference only):
 # - terraform.wind.etherport.net - Terraform state (in use)
@@ -537,3 +540,107 @@ resource "aws_s3_bucket_policy" "postgres_barman_protect" {
     }]
   })
 }
+
+#------------------------------------------------------------------------------
+# Infrastructure state + backups (general-purpose)
+#
+# UDM/Protect controller-DB nightly backups (M31), and earmarked as the
+# Loki S3 backing store (M37 future). Any future "where do we put this
+# small infra state" question lands here unless it has a dedicated reason
+# to live elsewhere.
+#------------------------------------------------------------------------------
+
+resource "aws_s3_bucket" "infra" {
+  bucket = "infra.wind.etherport.net"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Name    = "infra.wind.etherport.net"
+    Purpose = "homelab-infrastructure-state"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "infra" {
+  bucket = aws_s3_bucket.infra.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "infra" {
+  bucket = aws_s3_bucket.infra.id
+
+  rule {
+    id     = "Expire old object versions + abort stuck uploads"
+    status = "Enabled"
+    filter {}
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+    expiration {
+      expired_object_delete_marker = true
+    }
+  }
+
+  # UDM backup objects: keep 90 days. Lifecycle rule per-prefix.
+  rule {
+    id     = "Expire UDM backups after 90 days"
+    status = "Enabled"
+    filter {
+      prefix = "unifi/"
+    }
+    expiration {
+      days = 90
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "infra" {
+  bucket = aws_s3_bucket.infra.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_policy" "infra_protect" {
+  bucket = aws_s3_bucket.infra.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "DenyBucketDestruction"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = local.destruction_actions
+      Resource = [
+        aws_s3_bucket.infra.arn,
+        "${aws_s3_bucket.infra.arn}/*",
+      ]
+    }]
+  })
+}
+
+# IAM policy update: extend the existing s3-backup-kubernetes-policy
+# (attached to the kubernetes-s3-backup IAM user that backs the
+# aws-backup-credentials K8s secret) to include the new infra bucket.
+#
+# IMPORTANT: this policy is NOT TF-managed today (was created out of
+# band via aws CLI; current version is v13). Until imported, applying
+# this resource via TF would create a NEW policy with the same name —
+# AWS would error. Updates to the live policy need to go via:
+#   aws iam create-policy-version --policy-arn arn:aws:iam::830881980142:policy/s3-backup-kubernetes-policy \
+#     --policy-document file://infra/terraform/aws/iam-policies/s3-backup-kubernetes-policy.json \
+#     --set-as-default
+#
+# A companion JSON at infra/terraform/aws/iam-policies/s3-backup-kubernetes-policy.json
+# captures the desired policy text. Updating that file + running the
+# CLI above is the durable workflow until someone imports the policy
+# into TF state.
