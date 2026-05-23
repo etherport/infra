@@ -273,20 +273,30 @@ revision use the next free ID per tier. Status legend:
 - **Future-state doc** (new — `docs/planning/firewall-zones-future-state.md`): proposes a 4-zone end-state (Trusted/Infrastructure/IoT/Security), inter-zone allow/deny matrix, named allow rules, **5-phase migration plan** with per-phase rollback procedures, and a decision checklist. Calls out M31 (UDM backup) as a hard prerequisite (now ✅), so Phase 1 (pilot Unifi/212 → Infrastructure zone) is unblocked.
 - **Open questions for you** (§7 of future-state doc): (1) SimpliSafe WAN dependence; (2) non-K8s sync jobs Clients→Servers that would silently break; (3) Default/199 disposition; (4) WireGuard WAN1 (UDM-side VPN pool) — re-enable or delete; (5) long-term L3-switch ACL management strategy. Phase 2 risk is unbounded until §5 is resolved.
 
-### ⏳ M31. Automated UDM backup to S3 (P0 from M25 audit)
-- UDM controller DB holds all firewall rules, WiFi PSKs, Talk extension/ring-group/DID config, port-forwards, switch port profiles. Today the only copy lives on the UDM itself; firmware reset / hardware loss = total config reconstruction.
-- **Fix:** weekly cron on the UDM (or off-host CronJob using SSH+rsync) that exports the config bundle, gzips, ships to S3 (`velero.wind.etherport.net` under `unifi/` prefix).
-- Companion: `docs/runbooks/unifi-talk.md` §DR (flagged this 2026-05-12, still open).
-- **Effort:** M.
+### ✅ M31. Automated UDM backup to S3 (P0 from M25 audit)
+- **Done:** 2026-05-23. New CronJob `unifi-backup` in `backups` ns, fires daily 04:00 PT. Three targets per run:
+  - **`udm-controller-db`** — newest `.unf` from `/data/unifi/data/backup/autobackup/` (UDM writes one daily at 07:00 UTC, ~8.5MB).
+  - **`udm-core-config`** — tar+gz of `/data/unifi-core/config/` (firewall, fabric, firmware, cloud YAMLs ~21KB).
+  - **`protect-core-config`** — tar+gz of Protect's `/data/unifi-core/config/`.
+- Lands at `s3://infra.wind.etherport.net/{prefix}/{name}-{date}.{ext}`. New `infra.wind.etherport.net` general-purpose bucket created via TF (`4101a49`); IAM policy `s3-backup-kubernetes-policy` extended to v14 to allow PutObject. Lifecycle: 90d expiry under `unifi/` + 30d noncurrent-version cleanup.
+- Reuses `unifi-cert-sync-ssh` SSH key (copied to a new SOPS-encrypted secret in `backups` ns). Status + bytes metrics pushed to pushgateway under `unifi_backup_*`.
+- Verified end-to-end: first manual fire uploaded all 3 objects cleanly.
 
 ### ⏳ M32. UDM firmware channel back to `release` (P0 from M25 audit, trivial)
 - Live `mgmt.gateway_release_channel = beta`, almost certainly unintentional.
 - **Fix:** UDM UI → System → Updates → Firmware Channel: `beta` → `release`. One click.
 
-### ⏳ M33. UDM rsyslog destination empty — wire to remote receiver (P0 from M25 audit)
-- `rsyslogd` is enabled (`super_fabric_system_log = true`) but the destination `host` field is empty — UDM logs go nowhere off-host.
-- **Fix:** set destination to existing Promtail/syslog receiver (or stand one up).
-- **Effort:** S.
+### 🟡 M33. UDM rsyslog destination empty — wire to Alloy syslog receiver (P0 from M25 audit)
+- **Status 2026-05-23:** Receiver side shipped (M37 — Loki + Alloy); UDM-side config still pending.
+- Alloy is deployed via `clusters/wind/helm-releases/alloy.yaml` with a syslog LoadBalancer Service at MetalLB IP **`10.10.201.73`**, listening on UDP/TCP **514** (RFC3164 + RFC5424). Logs flow into Loki.
+- **Last step:** UDM UI → Settings → System → Remote Logging → set host `10.10.201.73` port `514` (UDP or TCP). OR via UDM API:
+  ```
+  curl -k -b $COOKIES -H "X-CSRF-Token: $TOKEN" -X PUT \
+    https://10.10.200.1/proxy/network/api/s/default/set/setting/super_fabric_system_log \
+    -d '{"key":"super_fabric_system_log","host":"10.10.201.73","port":514,"netconsole_enabled":false}'
+  ```
+- Once configured, query in Grafana via the new Loki datasource: `{job="syslog"} |~ "(?i)error|fail"`.
+- **Effort:** Trivial (one UI click) once Flux applies M37.
 
 ### ⏳ M36. UDM "IP conflict" alerts for MetalLB VIPs (.5 + .71)
 - **Source:** user report 2026-05-23. UDM repeatedly fires IP-conflict alerts for `10.10.201.5` (Technitium aggregator/cluster VIP) and `10.10.201.71` (technitium-0 LoadBalancer IP). Both are MetalLB-managed.
@@ -300,6 +310,11 @@ revision use the next free ID per tier. Status legend:
 - **Already in place:** the `dns_server` SG on AWS allows port 53 TCP+UDP from the homelab WAN IPs (`66.215.210.75` + `47.159.189.5`), kept in sync with `wan1`/`wan2.wind.etherport.net` Route53 records by the dns-restrict-ip Lambda. So clients reaching `52.40.219.113:53` from the homelab WAN will succeed.
 - **Fix:** for each tenant VLAN with DHCP DNS set to `.5/.6` today (Management, Servers, Clients, IoT, vSAN, Ceph, Unifi per M25 audit §1.6), add `52.40.219.113` as a 3rd entry. UDM UI per-network or via the `paultyng/unifi` TF provider if codifying. Skip Guest (already uses public DNS by design).
 - **Effort:** S — UI clicks or one TF block per network.
+
+### ✅ M37. Centralized log aggregation with Loki + Alloy
+- **Done:** 2026-05-23 (commit `3ed67ae`). Single-binary Loki on 20Gi Ceph RBD PVC, 30d retention, internal ClusterIP at `loki.monitoring.svc:3100`. Alloy DaemonSet replaces Promtail — picks up k8s pod logs natively + exposes a RFC3164/5424 syslog UDP+TCP receiver on `:514` via a dedicated MetalLB LoadBalancer at **`10.10.201.73`**.
+- Grafana datasource auto-provisioned via ConfigMap label `grafana_datasource: "1"`. Runbook at `docs/runbooks/loki-log-aggregation.md` covers query examples, syslog onboarding, retention/storage, S3 future migration.
+- Unblocks **M33** (point UDM rsyslog at `.73`). Future work: alertmanager rule for Loki ingest backlog (TODO breadcrumb in runbook); S3 backend when log volume justifies it.
 
 ### ⏳ M34. Disable site-wide UniFi auto-upgrade (extends H23)
 - H23 closed because the UDM itself has `mgmt.auto_upgrade: false`, but all 9 switches + 7 APs still have `safe_for_autoupgrade: true` and the site-wide policy upgrades them nightly at 03:00. A future firmware bug would auto-deploy to the fleet before you see it.
