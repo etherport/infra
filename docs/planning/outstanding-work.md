@@ -197,6 +197,9 @@ revision use the next free ID per tier. Status legend:
 - **Cron/systemd check:** no remaining udm-le references in crontab, /etc/cron.*, systemd units, or timers on any of the three. The old triggers were inside the renamed `removed-*` directory itself, so dir-delete removes the only trigger surface.
 - **Total freed:** ~253MB across the three devices.
 
+### ✅ M23. DR runbook with measured RTO/RPO targets
+- **Done partial:** 2026-05-24. `docs/runbooks/disaster-recovery.md` now has (a) a Recovery Priority table with both Target and Measured columns (currently `?` since no drills have run), (b) a backup ownership matrix mapping each workload to its backup tool / location / restore proc, (c) a CNPG point-in-time recovery section (was missing), (d) a §11 RTO/RPO measurement drill methodology with quarterly rotation (HA → Postgres PITR → etcd → Velero namespace recreate). When drills happen, the Measured columns + Last drill dates get updated by the operator. Targets stay aspirational until measured.
+
 ### ⏳ M14. Investigate aws-s3-sync daily-report SSL mismatch (if recurs)
 - Source: task #25. Only act if it recurs.
 - **Note on ID:** the *archived* outstanding-work-2026-05-16.md used M14 for a UDM WireGuard cleanup item; some older cross-references (e.g. `docs/architecture/firewall-zones.md`) still point at that older meaning. To disambiguate, that WireGuard cleanup is now M42 (below). The two are unrelated.

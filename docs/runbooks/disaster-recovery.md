@@ -4,14 +4,21 @@ Procedures for recovering from various failure scenarios in the homelab infrastr
 
 ## Recovery Priority
 
-| Priority | Component | RTO | RPO |
-|----------|-----------|-----|-----|
-| P0 | DNS (Technitium cluster) | 5 min | 0 (real-time sync) |
-| P0 | VPN (site-to-site) | 15 min | N/A |
-| P1 | Kubernetes control plane | 30 min | Daily backup |
-| P1 | Critical apps (Home Assistant) | 1 hour | Daily backup |
-| P2 | Monitoring (Prometheus/Grafana) | 4 hours | Daily backup |
-| P3 | Media services (Plex) | 24 hours | Daily backup |
+The table below is a **target** + **last-measured** view. RTO =
+time from incident → service back. RPO = max acceptable data loss.
+A `?` in the Measured column means we've never actually drilled
+this — the number is aspirational. Run the drill in §11 below and
+update.
+
+| Priority | Component | Target RTO | Target RPO | Measured RTO | Measured RPO | Last drill |
+|---|---|---|---|---|---|---|
+| P0 | DNS (Technitium cluster) | 5 min | 0 (real-time sync) | ? | ? | never |
+| P0 | VPN (site-to-site) | 15 min | N/A | ? | N/A | never |
+| P1 | Kubernetes control plane | 30 min | 24 h (daily etcd snapshot) | ? | ? | never |
+| P1 | Critical apps (Home Assistant) | 1 hour | 24 h (daily Velero) | ? | ? | never |
+| P2 | Monitoring (Prometheus/Grafana) | 4 hours | 24 h | ? | ? | never |
+| P3 | Media services (Plex) | 24 hours | 24 h | ? | ? | never |
+| P3 | Postgres (CNPG) | 1 hour | 5 min (continuous WAL via Barman) | ? | ? | never |
 
 ---
 
@@ -511,6 +518,107 @@ kubectl get pods -n dr-test
 # Cleanup
 kubectl delete namespace dr-test
 ```
+
+---
+
+## 9. Postgres (CNPG) WAL-replay restore
+
+Continuous WAL is shipped to S3 via Barman (CNPG operator handles it
+automatically — see `platform/kubernetes/cnpg/01-cluster.yaml`
+`backup` section). RPO of ~5min comes from `wal_compression` +
+streaming, not nightly snapshots.
+
+```bash
+# 1. List available base backups + WAL files
+kubectl exec -n postgres -it postgres-cluster-1 -c postgres -- \
+  barman-cloud-backup-list s3://infra.wind.etherport.net/postgres/barman/postgres-cluster
+
+# 2. Create a new CNPG cluster from backup (point-in-time recovery)
+cat <<EOF | kubectl apply -f -
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres-cluster-restore
+  namespace: postgres
+spec:
+  bootstrap:
+    recovery:
+      source: postgres-cluster
+      recoveryTarget:
+        targetTime: "2026-05-24 18:00:00.00000+00"  # adjust
+  externalClusters:
+    - name: postgres-cluster
+      barmanObjectStore:
+        destinationPath: s3://infra.wind.etherport.net/postgres/barman
+        s3Credentials:
+          accessKeyId: { name: cnpg-barman-creds, key: ACCESS_KEY_ID }
+          secretAccessKey: { name: cnpg-barman-creds, key: ACCESS_SECRET_KEY }
+EOF
+
+# 3. After cluster is Ready, switch app connections to the new service:
+kubectl -n postgres patch service postgres-cluster-rw \
+  -p '{"spec":{"selector":{"cnpg.io/cluster":"postgres-cluster-restore"}}}'
+
+# 4. Once verified, delete the old cluster + rename the new one.
+```
+
+---
+
+## 10. Backup ownership matrix
+
+What backs up what, where it lives, who restores it. Cross-reference
+with `platform/kubernetes/monitoring/06-backup-alerts.yaml` for the
+alerts that fire when any of these fail.
+
+| Workload backed up | Backup tool | Location | Schedule | Restore proc |
+|---|---|---|---|---|
+| K8s resources + PVs | Velero (10 schedules) | S3 `infra.wind.etherport.net/velero/` (via Kopia repo) | daily | §3.1 above |
+| Postgres data | CNPG Barman (continuous WAL + nightly base) | S3 `infra.wind.etherport.net/postgres/barman/` | continuous | §9 above |
+| etcd | systemd timer on each CP node + Velero `kube-system-daily` ships /var/lib/etcd-snapshots | local + S3 | daily 02:00 PT | §1.2 above |
+| UDM controller-db + UDM core-config + Protect core-config | `unifi-backup` CronJob | S3 `infra.wind.etherport.net/unifi/` | daily 04:00 PT | UDM UI restore (Settings → System → Restore) |
+| NAS media + docs (7 shares) | `s3-sync` CronJob | per-share S3 buckets | daily 01:00 PT | `aws s3 sync s3://<bucket>/ /restore/` |
+| Google Drive personal | `rclone gdrive-sync` CronJob | NFS share `/mnt/data/gdrive-mirror` | daily 00:00 PT | restore from NFS or re-sync from gdrive |
+| UDM / UNVR / Sequoia wildcard cert | `unifi-cert-sync` CronJob | n/a (re-issued by cert-manager) | weekly Mon 04:00 | force re-run: `kubectl -n unifi-cert-sync create job --from=cronjob/unifi-cert-sync manual-$(date +%s)` |
+
+---
+
+## 11. RTO/RPO measurement drill
+
+The Recovery Priority table at the top has TARGET values + a `?` in
+the Measured column. To replace `?` with real numbers, schedule a
+~2-hour quarterly drill:
+
+**Setup:**
+1. Pick a non-production-affecting recovery (e.g. restore a deleted
+   Plex pod, or recover a deleted ConfigMap from Velero) so the
+   drill doesn't risk live data.
+2. Note start time T0.
+3. Trigger the failure (`kubectl delete` the resource).
+4. Note time T1 when the alert fires (RTO measurement starts here —
+   real-world RTO is "time to detection + time to recovery").
+5. Execute the relevant restore procedure from §1-§9.
+6. Note T2 when service is verified back.
+
+**Compute + record:**
+
+- RTO = T2 - T1 (time from incident to service back)
+- RPO = T0 - <timestamp of last successful backup before T0>
+
+Update the table at the top of this file with the measured values
++ today's date in the Last drill column. Commit + push.
+
+**Recommended drill rotation:**
+
+| Quarter | Drill target |
+|---|---|
+| Q1 | Home Assistant pod (P1) — restore from Velero `critical-apps-daily` |
+| Q2 | Postgres point-in-time recovery (P3 RPO test) — restore to alt cluster, verify a table row |
+| Q3 | etcd snapshot restore on a non-active CP node (P1) |
+| Q4 | Full Velero namespace recreation from scratch (Plex P3) |
+
+Each drill produces 2 numbers + a refreshed `Last drill` date.
+After a year of drills, the table has real numbers instead of
+guesses.
 
 ---
 
