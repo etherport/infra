@@ -36,13 +36,20 @@ data:
     """
     import os
     import json
+    import hmac
+    import hashlib
+    import base64
     import logging
     import smtplib
     import ssl
     import urllib.request
     import urllib.error
+    import urllib.parse
     import yaml
     from email.message import EmailMessage
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from html import escape as html_escape
     from http.server import HTTPServer, BaseHTTPRequestHandler
     from kubernetes import client, config
     from datetime import datetime, timedelta, timezone
@@ -83,6 +90,12 @@ data:
     AI_PRICE_PER_M_INPUT = float(os.environ.get('AI_ADVISOR_PRICE_INPUT', '3.0'))
     AI_PRICE_PER_M_OUTPUT = float(os.environ.get('AI_ADVISOR_PRICE_OUTPUT', '15.0'))
 
+    # ---- Phase 2: approve-via-email ----
+    AI_PHASE2_ENABLED = os.environ.get('AI_PHASE2_ENABLED', 'false').lower() == 'true'
+    APPROVAL_HMAC_KEY = os.environ.get('APPROVAL_HMAC_KEY', '')
+    APPROVAL_BASE_URL = os.environ.get('APPROVAL_BASE_URL', '')  # e.g. https://remediation-approve.<tailnet>.ts.net
+    APPROVAL_TTL_HOURS = int(os.environ.get('APPROVAL_TTL_HOURS', '24'))
+
     # Known-noisy alertnames — short-circuit BEFORE calling Claude.
     # Saves API tokens on alerts that always diagnose to noop, plus
     # alerts that are structurally never-actionable (InfoInhibitor is
@@ -116,6 +129,12 @@ data:
 
     # Per-day cost tracker (resets at UTC midnight).
     _cost_tracker = {'date': None, 'usd_spent': 0.0}
+
+    # Pending proposals awaiting approval (Phase 2). Keyed by proposal_id.
+    # In-memory, single-replica controller, so a pod restart drops them
+    # (operator gets "token expired" if they click after a restart).
+    # GC'd opportunistically in _gc_pending().
+    _pending_proposals = {}
 
     def _today_utc():
         return datetime.now(timezone.utc).date()
@@ -210,7 +229,7 @@ data:
         truncated to `limit` entries total. Best-effort; failures empty."""
         try:
             params = (
-                f"query={urllib.request.quote(query)}"
+                f"query={urllib.parse.quote(query)}"
                 f"&start={start_ts}000000000&end={end_ts}000000000"
                 f"&limit={limit}&direction=backward"
             )
@@ -230,7 +249,7 @@ data:
         """Query Prometheus for prior fires of this alertname (last 24h)."""
         try:
             q = f'count_over_time(ALERTS{{alertname="{alertname}",alertstate="firing"}}[24h])'
-            url = f"{PROMETHEUS_URL}/api/v1/query?query={urllib.request.quote(q)}"
+            url = f"{PROMETHEUS_URL}/api/v1/query?query={urllib.parse.quote(q)}"
             with urllib.request.urlopen(url, timeout=5) as resp:
                 data = json.loads(resp.read())
             results = data.get('data', {}).get('result', [])
@@ -352,9 +371,16 @@ data:
         """Strip any field outside the schema. Enum-check proposed_action.type."""
         if not isinstance(parsed, dict):
             return None
+        # Confidence: coerce safely. Claude has been known to send
+        # strings ("high"), None, or omit it entirely; raw min/max
+        # crashes the caller and the diagnosis silently disappears.
+        try:
+            _conf = float(parsed.get('confidence', 0.0) or 0.0)
+        except (TypeError, ValueError):
+            _conf = 0.0
         clean = {
             'diagnosis': str(parsed.get('diagnosis', ''))[:2000],
-            'confidence': float(max(0.0, min(1.0, parsed.get('confidence', 0.0)))),
+            'confidence': max(0.0, min(1.0, _conf)),
             'human_summary': str(parsed.get('human_summary', ''))[:2000],
         }
         action = parsed.get('proposed_action', {}) or {}
@@ -377,17 +403,26 @@ data:
         }
         return clean
 
-    def _send_email(subject, body):
-        """Send via SMTP using the same SES creds as alertmanager."""
+    def _send_email(subject, body, html_body=None):
+        """Send via SMTP using the same SES creds as alertmanager.
+        If html_body provided, sends as multipart text+html."""
         if not (SMTP_USER and SMTP_PASS):
             logger.warning("SMTP creds not configured; skipping email send")
             return False
         try:
-            msg = EmailMessage()
-            msg['Subject'] = subject
-            msg['From'] = EMAIL_FROM
-            msg['To'] = EMAIL_TO
-            msg.set_content(body)
+            if html_body:
+                msg = MIMEMultipart('alternative')
+                msg['Subject'] = subject
+                msg['From'] = EMAIL_FROM
+                msg['To'] = EMAIL_TO
+                msg.attach(MIMEText(body, 'plain'))
+                msg.attach(MIMEText(html_body, 'html'))
+            else:
+                msg = EmailMessage()
+                msg['Subject'] = subject
+                msg['From'] = EMAIL_FROM
+                msg['To'] = EMAIL_TO
+                msg.set_content(body)
             ctx = ssl.create_default_context()
             with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as s:
                 s.starttls(context=ctx)
@@ -397,6 +432,73 @@ data:
         except Exception as e:
             logger.error(f"Email send failed: {e}")
             return False
+
+    # ---- Phase 2: approval token + pending proposals ----
+
+    def _sign(proposal_id):
+        """HMAC-SHA256 sign a proposal_id. Returns base64url string."""
+        if not APPROVAL_HMAC_KEY:
+            return ''
+        sig = hmac.new(APPROVAL_HMAC_KEY.encode(), proposal_id.encode(), hashlib.sha256).digest()
+        return base64.urlsafe_b64encode(sig).rstrip(b'=').decode()
+
+    def _verify(proposal_id, token):
+        """Constant-time compare of provided token vs expected."""
+        expected = _sign(proposal_id)
+        if not expected or not token:
+            return False
+        return hmac.compare_digest(expected, token)
+
+    def _new_proposal_id():
+        """96-bit (12-byte) random id, base64url-encoded → 16 chars.
+        Used as both _pending_proposals key and HMAC input."""
+        return base64.urlsafe_b64encode(os.urandom(12)).rstrip(b'=').decode()
+
+    def _gc_pending():
+        """Drop expired proposals from the pending map."""
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(hours=APPROVAL_TTL_HOURS)
+        expired = [k for k, v in _pending_proposals.items() if v['ts'] < cutoff]
+        for k in expired:
+            del _pending_proposals[k]
+        return len(expired)
+
+    def _store_proposal(proposal_id, alert, clean):
+        """Stash a proposal for later approval."""
+        _gc_pending()
+        _pending_proposals[proposal_id] = {
+            'ts': datetime.now(timezone.utc),
+            'alert': alert,
+            'proposal': clean,
+        }
+
+    def _execute_proposal(proposal):
+        """Run the action specified in a stored proposal. Returns
+        (success_bool, message_str)."""
+        action = proposal['proposed_action']
+        atype = action.get('type', 'noop')
+        params = action.get('params', {}) or {}
+        if atype == 'noop':
+            return True, 'noop (no action taken)'
+        if atype == 'restart_pods':
+            ns = params.get('namespace', '')
+            sel = params.get('selector', '')
+            if not (ns and sel):
+                return False, 'missing namespace/selector'
+            if ns in AI_NAMESPACE_DENYLIST:
+                return False, f'namespace {ns} in denylist'
+            ok = restart_pods(ns, sel)
+            return ok, f'restart_pods ns={ns} selector={sel}'
+        if atype == 'scale_deployment_temp':
+            ns = params.get('namespace', '')
+            name = params.get('deployment', '')
+            if not (ns and name):
+                return False, 'missing namespace/deployment'
+            if ns in AI_NAMESPACE_DENYLIST:
+                return False, f'namespace {ns} in denylist'
+            ok = scale_deployment(ns, name)
+            return ok, f'scale_deployment_temp ns={ns} deploy={name}'
+        return False, f'unknown action type {atype}'
 
     def _advise(alert):
         """Top-level: fetch context, call Claude, email diagnosis. Bounded
@@ -422,6 +524,10 @@ data:
                     f"{json.dumps(alert, indent=2, default=str)}"
                 ),
             )
+            # Enter cooldown so flapping alertnames at AM repeat_interval
+            # don't spam "[unavailable]" emails every 5min for the rest
+            # of the day (caught in the 2026-05-24 code review).
+            recent_actions[alert_name] = datetime.now()
             return
 
         prompt = _load_prompt()
@@ -441,6 +547,9 @@ data:
                     f"{json.dumps(alert, indent=2, default=str)}"
                 ),
             )
+            # Cooldown: don't spam "[advisor error]" mails if Anthropic
+            # is having an outage and AM keeps re-firing the alert.
+            recent_actions[alert_name] = datetime.now()
             return
 
         clean = _validate_response(parsed)
@@ -460,31 +569,103 @@ data:
             daily_usd_spent=round(_cost_tracker['usd_spent'], 4),
         )
 
-        # Build email
+        # Build email. Phase 2 adds Approve/Reject buttons when:
+        #   - Phase 2 toggle is enabled
+        #   - Proposed action is executable (not noop)
+        #   - HMAC + base URL are configured
         action_info = clean['proposed_action']
         action_block = (
             f"Proposed action: {action_info['type']}\n"
             + (f"Target: {action_info['params']}\n" if action_info['type'] != 'noop' else "")
             + f"Reasoning: {action_info['reasoning']}\n"
         )
+
+        approve_url = ''
+        reject_url = ''
+        proposal_id = ''
+        if (AI_PHASE2_ENABLED and APPROVAL_HMAC_KEY and APPROVAL_BASE_URL
+                and action_info['type'] != 'noop'):
+            proposal_id = _new_proposal_id()
+            _store_proposal(proposal_id, alert, clean)
+            token = _sign(proposal_id)
+            base = APPROVAL_BASE_URL.rstrip('/')
+            approve_url = f"{base}/approve?id={proposal_id}&token={token}&decision=approve"
+            reject_url = f"{base}/approve?id={proposal_id}&token={token}&decision=reject"
+
+        # Plain-text body (always present)
         body = (
             f"{clean['human_summary']}\n\n"
             f"---\n"
             f"Diagnosis: {clean['diagnosis']}\n"
             f"Confidence: {clean['confidence']:.2f}\n\n"
             f"{action_block}\n"
-            f"---\n"
-            f"Phase 1: advisory only. To execute the proposed action,\n"
-            f"do so manually (or add a static rule in\n"
-            f"platform/kubernetes/auto-remediation/configmap.yaml).\n\n"
+        )
+        if approve_url:
+            body += (
+                f"---\n"
+                f"To EXECUTE this action, open: {approve_url}\n"
+                f"To REJECT (mark false-positive), open: {reject_url}\n"
+                f"Links expire in {APPROVAL_TTL_HOURS}h.\n\n"
+            )
+        else:
+            body += (
+                f"---\n"
+                f"Phase 1 mode (no execute link). To execute manually, do so\n"
+                f"yourself (or add a static rule in\n"
+                f"platform/kubernetes/auto-remediation/configmap.yaml).\n\n"
+            )
+        body += (
             f"Daily spend: ${_cost_tracker['usd_spent']:.4f} of ${AI_DAILY_USD_CAP} cap.\n"
-            f"Audit: kubectl -n monitoring logs ds/alloy | grep ai_advisor\n\n"
+            f"Audit: kubectl -n auto-remediation logs deploy/remediation-controller | grep ai_advisor\n\n"
             f"---\n"
             f"Raw alert payload:\n{json.dumps(alert, indent=2, default=str)[:2000]}\n"
         )
+
+        # HTML body with Approve/Reject buttons when in Phase 2. Built
+        # via string concatenation rather than triple-quote literal so
+        # the YAML block-literal indent stays consistent.
+        html_body = None
+        if approve_url:
+            _btn_approve = (
+                '<a href="' + html_escape(approve_url) + '" style="display:inline-block;'
+                'padding:10px 20px;background:#2d8f4d;color:#fff;text-decoration:none;'
+                'border-radius:4px;font-weight:600">Approve + Execute</a>'
+            )
+            _btn_reject = (
+                '<a href="' + html_escape(reject_url) + '" style="display:inline-block;'
+                'padding:10px 20px;background:#8f2d2d;color:#fff;text-decoration:none;'
+                'border-radius:4px;font-weight:600">Reject</a>'
+            )
+            html_body = (
+                '<html><body style="font-family:system-ui,sans-serif;max-width:640px">'
+                + '<p>' + html_escape(clean['human_summary']) + '</p>'
+                + '<table style="border-collapse:collapse;margin:24px 0"><tr>'
+                + '<td style="padding:0 8px 0 0">' + _btn_approve + '</td>'
+                + '<td style="padding:0 0 0 8px">' + _btn_reject + '</td>'
+                + '</tr></table>'
+                + '<p style="color:#666;font-size:13px">Links expire in '
+                + str(APPROVAL_TTL_HOURS) + 'h. Tailscale-only (your devices have it).</p>'
+                + '<hr><dl style="font-size:14px">'
+                + '<dt><b>Diagnosis</b></dt><dd>' + html_escape(clean['diagnosis']) + '</dd>'
+                + '<dt style="margin-top:8px"><b>Confidence</b></dt><dd>'
+                + f"{clean['confidence']:.2f}" + '</dd>'
+                + '<dt style="margin-top:8px"><b>Proposed action</b></dt><dd>'
+                + '<code>' + html_escape(action_info['type']) + '</code> &mdash; '
+                + html_escape(json.dumps(action_info['params']))
+                + '<br><i>' + html_escape(action_info['reasoning']) + '</i></dd>'
+                + '</dl><hr>'
+                + '<p style="color:#666;font-size:12px">Daily spend: $'
+                + f"{_cost_tracker['usd_spent']:.4f}"
+                + ' of $' + str(AI_DAILY_USD_CAP) + ' cap.</p>'
+                + '<pre style="background:#f4f4f4;padding:8px;font-size:11px;overflow-x:auto">'
+                + html_escape(json.dumps(alert, indent=2, default=str)[:1500])
+                + '</pre></body></html>'
+            )
+
         _send_email(
             subject=f"[AI advisor: {clean['proposed_action']['type']}] {alert_name}",
             body=body,
+            html_body=html_body,
         )
         # Phase 1 records the action in cooldown to prevent repeat
         # diagnoses of the same flap. Phase 2/3 would execute and
@@ -495,6 +676,75 @@ data:
     # Webhook (unchanged for rule-matched alerts; advisor on miss)
     # ===================================================================
     class AlertWebhook(BaseHTTPRequestHandler):
+        def do_GET(self):
+            """Phase 2 approval endpoint. URL:
+               /approve?id=<proposal_id>&token=<HMAC>&decision=approve|reject
+            Anything else 404s. No HTML form, no cookies; just GET the link."""
+            if not self.path.startswith('/approve'):
+                self.send_response(404)
+                self.end_headers()
+                return
+
+            parsed = urllib.parse.urlparse(self.path)
+            qs = urllib.parse.parse_qs(parsed.query)
+            pid = (qs.get('id', [''])[0] or '').strip()
+            tok = (qs.get('token', [''])[0] or '').strip()
+            # Default to reject on missing/malformed decision — safer fail-mode.
+            decision = (qs.get('decision', ['reject'])[0] or 'reject').strip().lower()
+
+            def html_response(code, title, body):
+                self.send_response(code)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.end_headers()
+                self.wfile.write((
+                    '<html><body style="font-family:system-ui,sans-serif;max-width:520px;margin:40px auto;text-align:center">'
+                    '<h2>' + html_escape(title) + '</h2>'
+                    '<p>' + html_escape(body) + '</p>'
+                    '</body></html>'
+                ).encode())
+
+            if not (pid and tok):
+                html_response(400, "Bad request", "Missing id or token.")
+                return
+            if not _verify(pid, tok):
+                _audit('approve_bad_token', proposal_id=pid)
+                html_response(403, "Invalid or expired", "Token verification failed.")
+                return
+            entry = _pending_proposals.get(pid)
+            if not entry:
+                _audit('approve_not_found', proposal_id=pid)
+                html_response(410, "Expired", f"Proposal expired or controller restarted since email sent (TTL {APPROVAL_TTL_HOURS}h).")
+                return
+
+            if decision == 'reject':
+                _audit(
+                    'rejected',
+                    proposal_id=pid,
+                    alertname=entry['alert'].get('labels', {}).get('alertname'),
+                    action_type=entry['proposal']['proposed_action'].get('type'),
+                )
+                del _pending_proposals[pid]
+                html_response(200, "Rejected", "Marked as false positive. No action taken. Cooldown active for 15min.")
+                return
+
+            # Approve path
+            ok, msg = _execute_proposal(entry['proposal'])
+            _audit(
+                'approved_executed' if ok else 'approved_failed',
+                proposal_id=pid,
+                alertname=entry['alert'].get('labels', {}).get('alertname'),
+                action_type=entry['proposal']['proposed_action'].get('type'),
+                result_msg=msg,
+            )
+            if ok:
+                recent_actions[entry['alert'].get('labels', {}).get('alertname', '?')] = datetime.now()
+            del _pending_proposals[pid]
+            html_response(
+                200 if ok else 500,
+                "Executed" if ok else "Execution failed",
+                msg,
+            )
+
         def do_POST(self):
             """Handle incoming Prometheus alerts"""
             content_length = int(self.headers['Content-Length'])
@@ -554,9 +804,15 @@ data:
     if __name__ == '__main__':
         PORT = 8080
         server = HTTPServer(('', PORT), AlertWebhook)
+        # Single-threaded HTTPServer (intentional — keeps the
+        # _pending_proposals dict TOCTOU-free). Downside: a 30s
+        # Anthropic call blocks /approve clicks + incoming webhooks
+        # until it completes. Acceptable at homelab alert volumes.
+        _phase2_ready = AI_PHASE2_ENABLED and bool(APPROVAL_HMAC_KEY) and bool(APPROVAL_BASE_URL)
         logger.info(
             f"Auto-remediation webhook server listening on port {PORT} "
             f"(ai_advisor={'on' if AI_ENABLED else 'off'}, "
+            f"phase2={'ready' if _phase2_ready else ('toggled but unconfigured' if AI_PHASE2_ENABLED else 'off')}, "
             f"daily_cap=${AI_DAILY_USD_CAP}, model={AI_MODEL})"
         )
         server.serve_forever()

@@ -107,16 +107,27 @@ docs/
 |----------|-------------|
 | [localtuya/](guides/localtuya/) | LocalTuya setup for IoT devices |
 
-## Planning (Temporary)
+## Planning
 
-*These docs will be deleted once implemented.*
+The canonical work tracker for active/upcoming/in-flight items is
+**[outstanding-work.md](planning/outstanding-work.md)**. Anything not
+in that file is either out of scope, already done, or hasn't been
+captured yet.
 
 | Document | Description |
 |----------|-------------|
-| [PRODUCTION-READINESS-CHECKLIST.md](planning/PRODUCTION-READINESS-CHECKLIST.md) | Pre-production checklist |
-| [TODO-configmap-migration.md](planning/TODO-configmap-migration.md) | ConfigMap migration tracking |
+| [outstanding-work.md](planning/outstanding-work.md) | **Source of truth** for prioritized open work (H/M/L tiers) + completed index |
+| [ai-alert-remediation-2026-05-23.md](planning/ai-alert-remediation-2026-05-23.md) | AI advisor system design (M41) |
+| [ai-advisor-phases-2-3-scope.md](planning/ai-advisor-phases-2-3-scope.md) | M41 Phase 2/3 implementation scope |
+| [firewall-zones-future-state.md](planning/firewall-zones-future-state.md) | Proposed 4-zone UDM design (M30) |
+| [hardcoded-ephemeral-ip-audit-2026-05-23.md](planning/hardcoded-ephemeral-ip-audit-2026-05-23.md) | EIP / ephemeral-IP audit |
+| [udm-audit-2026-05-23.md](planning/udm-audit-2026-05-23.md) | UDM / UniFi config audit (M25) |
+| [public-web-infrastructure.md](planning/public-web-infrastructure.md) | Status of public-facing web hosting |
 | [VERSIONING-STRATEGY.md](planning/VERSIONING-STRATEGY.md) | Container image versioning approach |
 | [sops-vs-ansible-vault.md](planning/sops-vs-ansible-vault.md) | SOPS vs Ansible-Vault comparison |
+
+Older completed/superseded planning docs (kept for historical
+context only) live in [docs/planning/archive/](planning/archive/).
 
 ---
 

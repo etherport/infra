@@ -1,0 +1,27 @@
+---
+# Tailscale ingress for the M41 Phase 2 approval URL. Picks up the
+# `tailscale` IngressClass (operator at tailscale/operator). Gives the
+# controller a MagicDNS hostname like
+# https://remediation-approve.<tailnet>.ts.net/approve?id=...&token=...
+# accessible from any of your Tailscale-joined devices (phone/laptop).
+#
+# After this lands + Tailscale operator provisions the cert, copy the
+# resulting hostname into deployment.yaml's APPROVAL_BASE_URL env var
+# (e.g. "https://remediation-approve.tail-scale.ts.net"). The operator
+# logs the assigned hostname when it provisions the ingress:
+#   kubectl logs -n tailscale deploy/operator | grep remediation
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: remediation-approve
+  namespace: auto-remediation
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: remediation-webhook
+      port:
+        number: 8080
+  tls:
+    - hosts:
+        - remediation-approve

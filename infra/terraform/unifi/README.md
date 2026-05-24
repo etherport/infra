@@ -3,9 +3,12 @@
 Manages UDM-side network config (VLANs, port forwards, static DHCP
 reservations, eventually static routes + firewall) as code.
 
-**Status:** Phase 1 skeleton only. No resources defined yet — runs of
-`terraform plan` will succeed with "no changes" until the per-resource
-files (`networks.tf`, `port-forwards.tf`, `reservations.tf`) are added.
+**Status:** Phase 1 live (2026-05-17). `networks.tf`, `port-forwards.tf`,
+`reservations.tf`, `routes.tf` all shipped + imported. `terraform plan`
+should show `0 to add, 0 to change, 0 to destroy` against the live UDM.
+If you see diffs, edit HCL to match live state — don't apply blind.
+Phase 2 (firewall zones + zone matrix) deliberately deferred — see
+`docs/planning/firewall-zones-future-state.md`.
 
 ## Why this module exists
 

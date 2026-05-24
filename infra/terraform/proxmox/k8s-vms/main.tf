@@ -27,28 +27,35 @@ locals {
   cpu_type     = "host"
 
   # Control plane nodes - 3 for HA (etcd quorum requires odd number)
-  # Slim configuration since they only run etcd, API server, controller-manager, scheduler
+  # 8 GB each (was 4 GB until 2026-05-24). The original 4 GB assumed
+  # CPs only run apiserver+etcd+controller-manager+scheduler, but in
+  # this homelab Prometheus replicas (H5 HA work) + home-assistant
+  # + cilium agents also land on CPs because there's no anti-affinity
+  # away from them. Apiserver alone steady-states at ~3.5 GiB; with
+  # 4 GiB total the CP runs at >90% mem and fires
+  # NodeMemoryHighUtilization repeatedly (18 alerts/day surfaced by
+  # the AI advisor as "real signal but noop" — M44).
   # VM ID scheme: control planes 100-102, workers 110-113, GPU 120.
   control_plane_nodes = {
     k8s-cp1 = {
       vm_id     = 100
       ip        = "10.10.201.50"
       vcpus     = 4
-      memory_mb = 4096
+      memory_mb = 8192
       disk_gb   = 50
     }
     k8s-cp2 = {
       vm_id     = 101
       ip        = "10.10.201.51"
       vcpus     = 4
-      memory_mb = 4096
+      memory_mb = 8192
       disk_gb   = 50
     }
     k8s-cp3 = {
       vm_id     = 102
       ip        = "10.10.201.52"
       vcpus     = 4
-      memory_mb = 4096
+      memory_mb = 8192
       disk_gb   = 50
     }
   }

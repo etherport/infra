@@ -11,5 +11,7 @@ resources:
   - advisor-prompt-configmap.yaml
   - anthropic-api-key.sops.yaml
   - smtp-credentials.sops.yaml
+  - approval-hmac-secret.sops.yaml
+  - approval-ingress.yaml
   - deployment.yaml
   - service.yaml

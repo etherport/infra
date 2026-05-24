@@ -130,7 +130,7 @@ The UDM firewall only sees traffic that traverses the UDM. Traffic between L3-sw
 
 | Network | Live Zone | Notes |
 |---------|-----------|-------|
-| WireGuard WAN1 (192.168.3.0/24) | VPN | UDM-side remote-user-VPN pool, no clients connected. Tracked under M14 / future cleanup. |
+| WireGuard WAN1 (192.168.3.0/24) | VPN | UDM-side remote-user-VPN pool, no clients connected. Tracked under M42 / future cleanup. |
 | LTE WAN | External | Failover priority 4, never used. Tracked for retirement. |
 | WAN1 / WAN2 | External | Frontier (primary), Spectrum (failover-only). |
 
@@ -265,7 +265,7 @@ These are documented here so a reader doesn't mistake them for bugs in this doc.
 
 1. **Security/205 Network Isolation = ON + DHCP DNS empty.** Network Isolation at L2 prevents any inter-VLAN traffic regardless of zone policy. With no DHCP DNS, SimpliSafe gear has no resolver. Either disable isolation + set DNS to .5/.6, or document the deliberately-blank choice. Tracked: audit P1 #6 / M30-adjacent.
 2. **Internal → Hotspot is Allow All.** Anything on the Servers VLAN can reach guest devices. Practical risk: low (guests ephemeral). Documented intent was Deny. Tracked: audit P2 #11.
-3. **VPN zone is wired but unused.** WireGuard WAN1 (192.168.3.0/24) has no clients. VPN → Internal is Allow All; if the pool is ever populated, those clients get full LAN reach with no policy in place. Tracked under the M14 cleanup decision.
+3. **VPN zone is wired but unused.** WireGuard WAN1 (192.168.3.0/24) has no clients. VPN → Internal is Allow All; if the pool is ever populated, those clients get full LAN reach with no policy in place. Tracked under the M42 cleanup decision.
 4. **LTE WAN still configured.** Failover priority 4, never carried traffic. Slated for removal.
 5. **`Wireguard Travel` port-forward is `enabled=false`** but still in the config. Should be deleted (audit P2 #9).
 
@@ -377,7 +377,7 @@ ping 10.10.202.5       # Client
 
 - `docs/planning/udm-audit-2026-05-23.md` — read-only audit that drives this doc (Part 1)
 - `docs/planning/firewall-zones-future-state.md` — proposed migration to a multi-zone design
-- `docs/planning/outstanding-work.md` — M30 (reconcile zone arch), M14 (VPN cleanup)
+- `docs/planning/outstanding-work.md` — M30 (reconcile zone arch), M42 (VPN cleanup)
 - `/tmp/unifi-state/` — live state dump from `scripts/unifi/dump-state.sh` (regenerate to refresh)
 - [UniFi Zone-Based Firewalls — Ubiquiti Help Center](https://help.ui.com/hc/en-us/articles/115003173168-Zone-Based-Firewalls-in-UniFi)
 - [Migrating to Zone-Based Firewalls](https://help.ui.com/hc/en-us/articles/28223082254743-Migrating-to-Zone-Based-Firewalls-in-UniFi)

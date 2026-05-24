@@ -1,3 +1,16 @@
+---
+# NodeLocal DNS Corefile override.
+#
+# DELIBERATELY NOT in any kustomization. This file lives next to the
+# monitoring stack because the troubleshooting runbook
+# (docs/runbooks/dns-resolution-issues.md) references it, but applying
+# it is a MANUAL one-shot: `kubectl apply -f <this>`. It's namespaced
+# kube-system, which would collide with monitoring kustomization's
+# `namespace: monitoring` directive if we tried to include it.
+#
+# Long-term: fold these Corefile changes into kubespray's nodelocaldns
+# defaults so a cluster rebuild reproduces them. Until then, treat
+# this file as the source of truth for what was applied + when.
 apiVersion: v1
 kind: ConfigMap
 metadata:

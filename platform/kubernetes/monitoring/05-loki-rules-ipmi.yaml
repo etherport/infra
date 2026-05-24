@@ -1,0 +1,65 @@
+---
+# LogQL alert rules for the loki-ruler (L4, 2026-05-24).
+#
+# Picked up by the k8s-sidecar in the loki pod (sidecar.rules.label
+# = "loki_rule") which writes this CM content to
+# /var/loki/rules-temp/fake/ in the loki container. Ruler scans
+# that dir and fires alerts at Alertmanager.
+#
+# Add new groups by appending to the rules.yaml block below, OR
+# create a sibling ConfigMap with the same label. Sidecar tolerates
+# multiple.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-rules-ipmi
+  namespace: monitoring
+  labels:
+    loki_rule: "1"
+data:
+  pve-ipmi.yaml: |
+    groups:
+      - name: pve-ipmi-syslog
+        interval: 60s
+        rules:
+          # SEL assertion. Counts how many "Asserted" lines from
+          # ipmievd hit the syslog stream in the last 5 min. Fires
+          # on any. Matches the prior M40 attempt that got removed
+          # from PrometheusRule because PromQL can't speak LogQL.
+          - alert: PveIpmiSelAssertion
+            expr: |
+              sum by (host) (
+                count_over_time({app="ipmievd", host="pve"} |~ "Asserted" [5m])
+              ) > 0
+            for: 0m
+            labels:
+              severity: warning
+              component: hardware
+              source: ipmievd
+            annotations:
+              summary: "IPMI SEL assertion on {{ $labels.host }}"
+              description: |
+                ipmievd logged at least one new SEL assertion in the
+                last 5 minutes. Likely sensor threshold cross or
+                hardware event. Query in Grafana:
+                  {app="ipmievd", host="{{ $labels.host }}"} |~ "Asserted"
+
+          # Surfaces UDM syslog at severity error/critical. The UDM
+          # emits ~10 lines/sec; this captures only the rare ones
+          # that explicitly mark themselves above 'warning'.
+          - alert: UdmSyslogCritical
+            expr: |
+              sum by (host) (
+                count_over_time({host="udm", severity=~"err|crit|alert|emerg"} [10m])
+              ) > 0
+            for: 5m
+            labels:
+              severity: warning
+              component: network
+              source: udm
+            annotations:
+              summary: "UDM logged err/crit syslog (sustained for 5m)"
+              description: |
+                UDM syslog has been logging severity err/crit/alert/emerg
+                lines for 5+ minutes. Investigate:
+                  {host="udm", severity=~"err|crit|alert|emerg"}

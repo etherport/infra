@@ -83,6 +83,24 @@ spec:
       # otherwise phones home cluster/version metadata daily.
       analytics:
         reporting_enabled: false
+      # Ruler: evaluates LokiRule resources (LogQL alert/recording
+      # rules) and pushes alerts to Alertmanager. Enables alerts like
+      # "syslog stream contains ipmievd assertion in last 5m" that
+      # PrometheusRule can't express (PromQL only). M40 had a LogQL
+      # rule placeholder that broke the kustomization until removed
+      # 2026-05-23; this is the proper unblock (L4).
+      ruler:
+        enable_api: true
+        enable_alertmanager_v2: true
+        alertmanager_url: "http://monitoring-kube-prometheus-alertmanager.monitoring.svc.cluster.local:9093"
+        storage:
+          type: local
+          local:
+            directory: /var/loki/rules
+        rule_path: /var/loki/rules-temp
+        ring:
+          kvstore:
+            store: inmemory
 
     # Single-binary pod sizing + storage.
     singleBinary:
@@ -113,6 +131,21 @@ spec:
       replicas: 0
     backend:
       replicas: 0
+
+    # k8s-sidecar to pick up LogQL alert rules from labeled ConfigMaps.
+    # Sidecar watches for ConfigMaps with label `loki_rule: "1"` (any
+    # namespace) and writes them under /var/loki/rules-temp/fake/
+    # (the "fake" tenant when auth_enabled=false). The ruler scans
+    # this directory and pushes any firing alerts to Alertmanager.
+    # Same pattern as our Grafana dashboards sidecar (grafana_dashboard
+    # label) — L4 from outstanding-work.md, 2026-05-24.
+    sidecar:
+      rules:
+        enabled: true
+        label: loki_rule
+        labelValue: "1"
+        folder: /var/loki/rules-temp/fake
+        searchNamespace: ALL
 
     # The chart wants to pull in a MinIO subchart for object storage by
     # default. We're on filesystem — disable the dependency entirely.

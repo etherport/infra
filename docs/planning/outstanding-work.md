@@ -1,7 +1,7 @@
 # Outstanding Work — Consolidated Priority List
 
-Latest revision: 2026-05-22 (file renamed from `outstanding-work-2026-05-21.md`
-to drop the date suffix — canonical name is stable; predecessors live in `archive/`).
+Latest revision: 2026-05-24. Canonical filename `outstanding-work.md`
+is stable; older dated snapshots live in `archive/`.
 
 Successor to `archive/outstanding-work-2026-05-16.md`. Resets the priority lattice
 after a multi-day session covering SDN migration, Ceph VLAN move, post-
@@ -55,12 +55,10 @@ revision use the next free ID per tier. Status legend:
 - **Done:** 2026-05-16. PAT scope updated, `FLUX_DEPLOY_KEY` + `SOPS_AGE_KEY` populated. Tracked as task #6.
 
 ### ✅ H5. Increase replica counts → enable PDBs
-- **Done:** 2026-05-22 (commit `0851d26`). Prometheus + Alertmanager both bumped to `replicas=2` with podAntiAffinity in `kube-prometheus-stack-values.yaml`. cert-manager + cert-manager-cainjector + cert-manager-webhook were already 2/2 per kubectl (no change needed). Traefik was already 2/2. Grafana stays at 1 (RWO PVC + sticky session — HA needs external DB).
+- **Done:** 2026-05-22 (commit `0851d26`). Prometheus + Alertmanager both bumped to `replicas=2` with podAntiAffinity in `clusters/wind/helm-releases/monitoring.yaml` (inline HelmRelease values; the stale `platform/kubernetes/monitoring/values.yaml` is not loaded by any kustomization and is queued for deletion under L8). cert-manager + cert-manager-cainjector + cert-manager-webhook were already 2/2 per kubectl (no change needed). Traefik was already 2/2. Grafana stays at 1 (RWO PVC + sticky session — HA needs external DB).
 
-### 🟡 H6. Hardcoded WAN IPs in AWS security groups
-- **Status 2026-05-23:** DNS-side done; SSH-side still hardcoded pending user input.
-- **Done (commit `d0f3a36`):** the 4 hardcoded `dns_(udp|tcp)_homelab[12]` ingress rules on `aws_security_group.dns_server` have been transferred from Terraform to the `dns-restrict-ip` Lambda. The Lambda was already keeping these in sync with `wan1`/`wan2.wind.etherport.net` Route53 records via boto3; the TF side was a redundant declaration that would have fought the Lambda on any WAN-IP change. Used `removed` blocks with `destroy = false` so TF forgets ownership without deleting the rules in AWS. Verified by `terraform apply` showing `0 added, 0 changed, 0 destroyed`.
-- **⏳ Still hardcoded:** `aws_security_group.allow_ssh` port 22 from `47.34.215.233/32` (commented "remote location"). To migrate this, need to decide: is this a static second residence IP (keep hardcoded with a clearer comment), or is it DDNS-tracked somewhere (add Route53 record + extend Lambda to also manage SG/port/protocol tuples beyond the dns_server SG)? **Awaiting your input** before further IaC changes.
+### ✅ H6. Hardcoded WAN IPs in AWS security groups
+- **Done:** 2026-05-23 (commits `d0f3a36` + `cb102f8`). DNS-side: the 4 `dns_(udp|tcp)_homelab[12]` rules on `aws_security_group.dns_server` migrated from Terraform to the `dns-restrict-ip` Lambda via `removed { destroy = false }` blocks. SSH-side: extended the Lambda's `rule_specs` to also manage `allow_ssh:22:tcp`; the stale `/32`s (`47.34.215.233`, `47.159.189.230`, `146.70.238.13`, `86.98.93.115`) confirmed safe-to-drop by the user and revoked by the Lambda (after the `_permissions()` description-mismatch bug fix in M39). Verified: `sg-0079fee23ee54417a:22/tcp` contains only `47.159.189.5/32` + `66.215.210.75/32`, both labeled `Managed by dns-restrict-ip (22/tcp)`, kept in sync with `wan1`/`wan2.wind.etherport.net`.
 
 ### ✅ H7. Doc drift cleanup
 - **Done:** 2026-05-19 to 2026-05-21 in multiple commits. Architecture/overview/network/firewall-zones docs reflect VLAN 210, enp6s22, SDN bridges, RSA wildcard cert. `node-vlan-setup.md` updated 4→5 interfaces. `regional-vpn-deployment.md` drops 1.1.1.1 from DNS push.
@@ -201,6 +199,7 @@ revision use the next free ID per tier. Status legend:
 
 ### ⏳ M14. Investigate aws-s3-sync daily-report SSL mismatch (if recurs)
 - Source: task #25. Only act if it recurs.
+- **Note on ID:** the *archived* outstanding-work-2026-05-16.md used M14 for a UDM WireGuard cleanup item; some older cross-references (e.g. `docs/architecture/firewall-zones.md`) still point at that older meaning. To disambiguate, that WireGuard cleanup is now M42 (below). The two are unrelated.
 
 ### ⏳ M15. Twilio Talk: fix 911 emergency address
 - Source: task #20. Out-of-band (Twilio console).
@@ -330,6 +329,13 @@ revision use the next free ID per tier. Status legend:
 - **Footgun caught during apply:** the first draft of `04-ipmi-alerts.yaml` mixed a LogQL rule into the PrometheusRule which failed admission and BLOCKED the entire `flux-system` kustomization until removed. Captured at the top of the file. LogQL rules need `loki-ruler` which we don't yet have.
 - **Effort follow-up:** L4 (loki-ruler), L5 (BMC PEF with proper gateway MAC), M42 (BMC account hardening when user is onsite).
 
+### ⏳ M42. UDM WireGuard cleanup (renumbered from archived M14)
+- **Source:** carried forward via `docs/architecture/firewall-zones.md` cross-reference. Original archive ID was M14 but that's now reused for the s3-sync SSL probe item above. ID rotated to M42 to disambiguate.
+- **Effort:** S. Walk the UDM WG peer list, drop stale entries (likely vpn-mumbai before M38 destroyed it — verify), confirm wg0_regional_peers in `infra/ansible/playbooks/wireguard.yml` matches.
+
+### ✅ M44. Bump CP VM memory 4 GB → 8 GB
+- **Done:** 2026-05-24. NodeMemoryHighUtilization had been firing constantly on k8s-cp2 + k8s-cp3 (advisor saw 18 hits in first 24h, all noop). Root cause: kube-apiserver alone steady-states at ~3.5 GiB; CPs were sized at 4 GiB total. Bumped `control_plane_nodes.k8s-cp{1,2,3}.memory_mb` in `infra/terraform/proxmox/k8s-vms/main.tf` from 4096 to 8192. Apply rolls each CP sequentially; etcd quorum preserved (2-of-3 throughout). PVE has 96+ GB; +12 GB overhead trivial.
+
 ### 🟡 M41. Plex log centralization + AI-augmented alert remediation
 - **Done partial:** 2026-05-23 (commits `77a9ee0` `30d7f20` `062b3b1`).
 - **Phase 1 of the advisor SHIPPED but is OFF by default.** Controller pod is rolled with the new code, prompt ConfigMap, two SOPS-encrypted secret placeholders (anthropic-api-key, smtp-credentials), and `AI_ADVISOR_ENABLED=false`. To turn on: see `docs/runbooks/ai-advisor-phase1-enable.md`. Requires (a) creating a dedicated Anthropic API key, (b) populating the two SOPS secrets, (c) flipping the deployment env. All three need user action — Anthropic console isn't agent-accessible, and the existing SMTP creds can't be auto-mirrored cross-namespace without writing plaintext to disk (correctly blocked by the sandbox).
@@ -360,13 +366,20 @@ revision use the next free ID per tier. Status legend:
 - **Source:** `docs/planning/hardcoded-ephemeral-ip-audit-2026-05-23.md`. Several places still hardcode AWS Elastic IPs that *could* rotate if recreated: `vpn-use1` endpoint `35.169.37.16` in `platform/kubernetes/wireguard/03-deployment.yaml`, dns-aws `52.40.219.113` in M35 plan, etc. Convert each to a Route53 FQDN + DNS lookup at peer/config render time so an EIP swap doesn't require a code change.
 - **Effort:** S per site, M overall.
 
-### ⏳ L4. Enable loki-ruler for LogQL alerting
-- **Source:** M40 commit `43c07fe`. We want alerts of the form `{job="syslog"} |~ "(Temperature|Fan|PowerSupply).*(Critical|Asserted)"` as a belt-and-suspenders complement to the ipmi_exporter metric alerts. PrometheusRule rejects LogQL. The Loki helm chart has a `ruler` block that, when enabled, runs a separate ruler component reading rules from a ConfigMap and pushing alerts to Alertmanager. Wire it in `clusters/wind/helm-releases/loki.yaml` + add LokiRule resources alongside PrometheusRule.
-- **Effort:** S (5-10 lines of values + one new resource type).
+### ✅ L4. Enable loki-ruler for LogQL alerting
+- **Done:** 2026-05-24. `clusters/wind/helm-releases/loki.yaml` now has a `loki.ruler` block (alertmanager_url pointed at kube-prometheus-stack's AM service) + `sidecar.rules.enabled: true` that watches ConfigMaps labeled `loki_rule: "1"` and writes them into the ruler's rules dir. First two rules shipped in `platform/kubernetes/monitoring/05-loki-rules-ipmi.yaml`: PveIpmiSelAssertion (counts ipmievd "Asserted" lines in 5m) + UdmSyslogCritical (sustained err/crit severity for 5m). Pattern matches the existing Grafana dashboards sidecar (label-discovery). Add new rule groups by appending to the ConfigMap or creating sibling ConfigMaps with the same label.
 
 ### ⏳ L5. PVE BMC PEF / LAN alert destinations (cross-subnet PET trap)
 - **Source:** M40 deliberately deferred. BMC sits on VLAN 200 (10.10.200.21); Alloy/Loki on VLAN 201 (10.10.201.73). For BMC PET traps to reach Alloy, the BMC needs to learn the gateway MAC for 10.10.200.1 — `ipmitool lan print 1` shows `Default Gateway MAC: 00:00:00:00:00:00` currently. Either populate the gateway MAC statically (one-shot ARP lookup + `ipmitool lan set 1 defgw mac <mac>`) or have the BMC do it via gratuitous ARP. Then enable PEF policy 1 with action="send to LAN destination 1" pointed at 10.10.201.73. Today we rely on BMC remote-syslog → Alloy which covers the same alerts.
 - **Effort:** S.
+
+### ⏳ L8. Delete stale `platform/kubernetes/monitoring/values.yaml`
+- **Source:** consistency review 2026-05-24. The file is the legacy chart-values that was replaced by inline values inside `clusters/wind/helm-releases/monitoring.yaml`. It's not referenced from any `kustomization.yaml`, so Flux doesn't apply it. Source of confusion (e.g. the original H5 entry pointed at the wrong file). Safe to delete; commits since the migration use the HelmRelease inline values exclusively.
+- **Effort:** Trivial.
+
+### ⏳ L9. Delete legacy traefik files
+- **Source:** consistency review 2026-05-24. `platform/kubernetes/traefik/{pvc-traefik-ceph.yaml,traefik-acme-fix.yaml}` are explicitly labeled "Legacy. Safe to remove." in the traefik README but still on disk. Drop them.
+- **Effort:** Trivial.
 
 ### ⏳ L7. Clean up debug Jobs in `backups` namespace
 - **Source:** observed during M40 tidy 2026-05-23. Six failed pods from
@@ -451,6 +464,8 @@ For history. Anything ticked above has a brief inline note; this is the index.
 | M38 | Tear down vpn-mumbai (ap-south-1) regional VPN | 2026-05-23 |
 | M39 | Lambda dns-restrict-ip revoke description-mismatch fix | 2026-05-23 |
 | M40 | PVE IPMI / ASRock Rack BMC observability (ipmi_exporter + ipmievd + thresholds) | 2026-05-23 |
+| M44 | Bump CP VM memory 4 → 8 GB | 2026-05-24 |
+| L4  | Enable loki-ruler (LogQL alerts) | 2026-05-24 |
 | C1 | CNPG Barman ScheduledBackup + Cluster manifest | 2026-05-22 |
 | C3 | Encrypt Ceph key in plaintext inventory | 2026-05-22 |
 

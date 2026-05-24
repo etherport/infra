@@ -34,6 +34,22 @@ spec:
             value: "true"
           - name: AI_ADVISOR_DAILY_COST_USD_CAP
             value: "0.50"
+          # Phase 2 (approve-via-email). Set to "true" + populate the
+          # approval-hmac secret + set APPROVAL_BASE_URL to your Tailscale
+          # hostname for the controller. See:
+          # docs/runbooks/ai-advisor-phase2-enable.md
+          - name: AI_PHASE2_ENABLED
+            value: "false"
+          - name: APPROVAL_BASE_URL
+            value: ""   # e.g. "https://remediation-approve.<tailnet>.ts.net"
+          - name: APPROVAL_TTL_HOURS
+            value: "24"
+          - name: APPROVAL_HMAC_KEY
+            valueFrom:
+              secretKeyRef:
+                name: ai-advisor-approval-hmac
+                key: hmac_key
+                optional: true
           - name: AI_ADVISOR_MAX_INPUT_TOKENS
             value: "8000"
           - name: AI_ADVISOR_MODEL

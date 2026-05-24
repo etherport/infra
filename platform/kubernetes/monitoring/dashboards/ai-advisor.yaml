@@ -1,0 +1,137 @@
+---
+# Grafana dashboard for the M41 AI advisor. Queries Loki for the
+# structured `ai_advisor {...}` log lines the controller emits.
+#
+# Each panel uses LogQL to parse the JSON payload off the controller
+# pod stdout and count/aggregate by event type, alertname, cost, etc.
+# Provisioned via the grafana-dashboards sidecar (label
+# grafana_dashboard: "1").
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-advisor-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  ai-advisor.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "graphTooltip": 1,
+      "tags": ["ai-advisor", "auto-remediation"],
+      "title": "AI Advisor (M41)",
+      "uid": "ai-advisor-m41",
+      "schemaVersion": 41,
+      "time": { "from": "now-24h", "to": "now" },
+      "refresh": "1m",
+      "panels": [
+        {
+          "type": "stat",
+          "title": "Diagnoses (24h)",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+          "targets": [{
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=\"success\" [24h]))",
+            "refId": "A"
+          }],
+          "fieldConfig": {"defaults": {"unit": "short"}}
+        },
+        {
+          "type": "stat",
+          "title": "Skipped (noisy filter)",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+          "targets": [{
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=\"skipped_noisy\" [24h]))",
+            "refId": "A"
+          }]
+        },
+        {
+          "type": "stat",
+          "title": "Daily cap hits",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+          "targets": [{
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=\"cap_reached\" [24h]))",
+            "refId": "A"
+          }],
+          "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}, "color": {"mode": "thresholds"}}}
+        },
+        {
+          "type": "stat",
+          "title": "Approved + executed",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+          "targets": [{
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=\"approved_executed\" [24h]))",
+            "refId": "A"
+          }],
+          "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "green"}}}
+        },
+        {
+          "type": "stat",
+          "title": "Rejected by operator",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
+          "targets": [{
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=\"rejected\" [24h]))",
+            "refId": "A"
+          }]
+        },
+        {
+          "type": "stat",
+          "title": "API failures (24h)",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
+          "targets": [{
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=~\"api_failed|invalid_response|approve_bad_token|approved_failed\" [24h]))",
+            "refId": "A"
+          }],
+          "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 5}]}, "color": {"mode": "thresholds"}}}
+        },
+        {
+          "type": "timeseries",
+          "title": "Events / 5m",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 0, "y": 4, "w": 24, "h": 8},
+          "targets": [{
+            "expr": "sum by (event) (count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json [5m]))",
+            "refId": "A"
+          }]
+        },
+        {
+          "type": "barchart",
+          "title": "Top alertnames diagnosed (24h)",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+          "targets": [{
+            "expr": "topk(10, sum by (alertname) (count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=\"success\" [24h])))",
+            "refId": "A",
+            "instant": true
+          }]
+        },
+        {
+          "type": "barchart",
+          "title": "Top noise-filtered (24h)",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+          "targets": [{
+            "expr": "topk(10, sum by (alertname) (count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=\"skipped_noisy\" [24h])))",
+            "refId": "A",
+            "instant": true
+          }]
+        },
+        {
+          "type": "table",
+          "title": "Last 50 advisor events",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 0, "y": 20, "w": 24, "h": 12},
+          "targets": [{
+            "expr": "{namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event != \"\" | line_format \"{{.event}} {{.alertname}} {{ if .confidence}}conf={{.confidence}} {{end}}{{ if .proposed_action_type}}action={{.proposed_action_type}} {{end}}{{ if .cost_usd}}cost=${{.cost_usd}}{{end}}\"",
+            "refId": "A",
+            "maxLines": 50
+          }]
+        }
+      ]
+    }
