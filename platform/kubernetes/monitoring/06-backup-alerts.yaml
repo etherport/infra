@@ -95,9 +95,13 @@ spec:
           # CNPG publishes `cnpg_collector_last_failed_backup_timestamp`
           # which is the unix-ts of the LAST failed backup attempt.
           # If it's newer than the last *successful* backup, alert.
+          # Aggregate per (cluster, namespace) with max() — every pod
+          # in a CNPG cluster publishes the same timestamps, so the raw
+          # series has N>1 duplicates on each side which `> on (...)`
+          # rejects ("found duplicate series for the match group").
           expr: |
-            cnpg_collector_last_failed_backup_timestamp
-              > on (cluster, namespace) cnpg_collector_last_available_backup_timestamp
+            max by (cluster, namespace) (cnpg_collector_last_failed_backup_timestamp)
+              > on (cluster, namespace) max by (cluster, namespace) (cnpg_collector_last_available_backup_timestamp)
           for: 30m
           labels:
             severity: critical
