@@ -1,0 +1,45 @@
+name: Bootstrap runner SSH key (one-shot)
+
+# Self-installs the automation@homelab pubkey into the gh-runner VM's
+# `ubuntu` user authorized_keys. Closes the chicken-and-egg where
+# ansible/gh-runner.yml needs ssh-in to apply (but the play is what
+# would have installed the key).
+#
+# Runs ON the runner itself, so no SSH-in required. NO checkout step
+# (which would trip the .git permission issue this is trying to fix
+# the prereq for).
+#
+# Dispatch once via:
+#   gh workflow run bootstrap-runner-key.yml
+#
+# After it completes: ssh ubuntu@<runner> with the
+# Homelab Automation SSH Key in your 1P agent will work, and
+# ansible-playbook gh-runner.yml from anywhere will work.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  install:
+    runs-on: [self-hosted, lifecycle]
+    steps:
+      - name: Install automation@homelab pubkey in ~/.ssh/authorized_keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab'
+          AUTH=~/.ssh/authorized_keys
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          touch "$AUTH"
+          chmod 600 "$AUTH"
+          if grep -qxF "$KEY" "$AUTH"; then
+            echo "✓ automation@homelab already present"
+          else
+            echo "$KEY" >> "$AUTH"
+            echo "✓ automation@homelab installed"
+          fi
+          echo "--- current authorized keys (fingerprints) ---"
+          ssh-keygen -lf "$AUTH" 2>/dev/null || ssh-keygen -l -f "$AUTH"
+          echo "--- ~/.ssh listing ---"
+          ls -la ~/.ssh
