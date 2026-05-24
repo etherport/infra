@@ -41,6 +41,22 @@
         fail_msg: "GH_TOKEN env var must be set. Pass via `GH_TOKEN=<pat> ansible-playbook ...`."
 
   tasks:
+    # Ensure the automation@homelab pubkey is present on this VM.
+    # Cloud-init on the standalone-vms TF module sets it at FIRST
+    # boot via initialization.user_account.keys — but if the VM was
+    # provisioned before that default existed (or was created with
+    # an override), the key may be missing. Without this key any
+    # future `ssh ubuntu@<runner>` from a laptop fails, breaking
+    # interactive ops + recovery.
+    # Re-applying this play self-heals: a missing key gets installed,
+    # an existing matching key is a no-op.
+    - name: Ensure automation@homelab pubkey is authorized for {{ runner_user }}
+      ansible.posix.authorized_key:
+        user: "{{ runner_user }}"
+        state: present
+        key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab"
+        comment: "automation@homelab (managed by gh-runner.yml)"
+
     - name: Install runner dependencies
       ansible.builtin.apt:
         name:
