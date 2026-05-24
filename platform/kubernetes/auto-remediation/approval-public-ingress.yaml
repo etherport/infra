@@ -1,24 +1,27 @@
 ---
 # Public approval URL for the AI advisor (M41 P2.5).
 #
-# Sister to approval-ingress.yaml (Tailscale-only). This one exposes
-# the /approve endpoint on the public internet via Traefik so the
-# operator can approve advisor proposals from any device, including
-# devices not on the Tailscale tailnet.
+# DO NOT POINT EMAIL LINKS HERE YET. Default email links still go to
+# the Tailscale-only URL. This Ingress exists but is unadvertised
+# until an auth gate is in front (tracked as L13). The HMAC token
+# alone is not a sufficient security boundary for a public URL —
+# anyone with email access can approve.
 #
-# Security model: the HMAC-signed proposal_id token IS the auth.
-# Anyone with the URL can approve, but the URL is only delivered
-# via email (DKIM-signed via SES, sent to one inbox). The token
-# can't be forged without the APPROVAL_HMAC_KEY (in SOPS secret,
-# never leaves the cluster). Worst case: someone who steals the
-# email + clicks Approve triggers a pod restart in a single
-# allow-listed namespace — well below the threshold for caring.
+# Sister to approval-ingress.yaml (Tailscale-only). Same backend
+# service. Reasoning for keeping it deployed but unadvertised:
+# - The Traefik IngressRoute is harmless on its own; you'd have to
+#   know the URL pattern AND have a valid HMAC token to do anything.
+#   Both come from access to the email inbox.
+# - When L13 lands (Cloudflare Access or similar zero-trust gate in
+#   front of *.wind.etherport.net for sensitive endpoints), flipping
+#   APPROVAL_BASE_URL to the public URL becomes a 1-line change.
+# - Removing + re-adding the Ingress later is fine but commits to a
+#   "Tailscale forever" model. Keeping it positions for future.
 #
-# This sits alongside (not replaces) the Tailscale ingress. Both
-# routes hit the same backend service. The operator can use either.
-# Email links continue pointing at the Tailscale URL by default
-# (APPROVAL_BASE_URL env in deployment.yaml); switching to public
-# requires changing that env to https://approve.wind.etherport.net.
+# To advertise (after auth gate is in place):
+#   1. Switch APPROVAL_BASE_URL in deployment.yaml.
+#   2. Commit + push.
+#   3. New advisor emails carry the public URL.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:

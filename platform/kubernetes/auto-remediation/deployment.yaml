@@ -40,6 +40,15 @@ spec:
           # docs/runbooks/ai-advisor-phase2-enable.md
           - name: AI_PHASE2_ENABLED
             value: "true"
+          # Phase 3 (autonomous execute, opt-in per alert). Kill switch.
+          # When "true", alerts carrying `ai_remediation: "auto"` label
+          # get auto-executed if confidence + action + namespace clear
+          # the guardrails. Default OFF. See:
+          # docs/runbooks/ai-advisor-phase3-enable.md
+          - name: AI_PHASE3_ENABLED
+            value: "false"
+          - name: AI_PHASE3_CONFIDENCE_THRESHOLD
+            value: "0.85"
           - name: APPROVAL_BASE_URL
             value: "https://remediation-approve.tail48f596.ts.net"
           - name: APPROVAL_TTL_HOURS

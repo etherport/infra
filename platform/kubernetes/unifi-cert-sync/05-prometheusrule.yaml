@@ -17,6 +17,8 @@ spec:
           for: 10m
           labels:
             severity: warning
+            namespace: unifi-cert-sync
+            component: cert
           annotations:
             summary: "UniFi cert sync failed for {{ $labels.device }}"
             description: |
@@ -33,6 +35,8 @@ spec:
           for: 1h
           labels:
             severity: warning
+            namespace: unifi-cert-sync
+            component: cert
           annotations:
             summary: "UniFi cert sync hasn't run in >14 days"
             description: |
@@ -47,6 +51,8 @@ spec:
           for: 1h
           labels:
             severity: critical
+            namespace: unifi-cert-sync
+            component: cert
           annotations:
             summary: "wildcard cert expires in <14 days"
             description: |

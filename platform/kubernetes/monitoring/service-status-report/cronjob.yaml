@@ -24,7 +24,10 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
-      ttlSecondsAfterFinished: 3600
+      # 25h (matches sibling backup CronJobs) so Alloy reliably scrapes
+      # pod logs before GC. Was 1h — in practice enough for a 5s scrape
+      # interval, but the outlier value was a foot-gun if Alloy stalled.
+      ttlSecondsAfterFinished: 90000
       template:
         spec:
           serviceAccountName: service-status-report

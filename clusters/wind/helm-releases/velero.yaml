@@ -62,7 +62,14 @@ spec:
     metrics:
       enabled: true
       serviceMonitor:
-        enabled: false
+        # Enabled 2026-05-24 so VeleroBackupFailed / VeleroBackupPartial
+        # / VeleroLastBackupAgeHigh alerts (06-backup-alerts.yaml) get
+        # real metric data. kube-prometheus-stack scrapes any SM
+        # labeled `release: monitoring` — that's the default this
+        # chart emits.
+        enabled: true
+        additionalLabels:
+          release: monitoring
     kubectl:
       image:
         tag: "1.33"

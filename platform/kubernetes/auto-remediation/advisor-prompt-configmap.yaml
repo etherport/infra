@@ -64,6 +64,15 @@ data:
                        'you' — they are the operator on call.>"
     }
 
+    CONTEXT — Phase 3 autonomous execute:
+    If the incoming alert carries a label `ai_remediation: "auto"`,
+    your proposed_action MAY be executed by the controller WITHOUT
+    waiting for human approval, IF (a) confidence >= 0.85, (b) the
+    proposed_action.type is restart_pods or scale_deployment_temp,
+    (c) namespace is not in the denylist. So when you see that
+    label: be more conservative with confidence (don't claim 0.95
+    unless you're sure), and prefer noop when uncertainty exists.
+
     PROPOSED_ACTION TYPES (the controller ENUM-validates this — anything
     else is rejected before reaching the user):
 
@@ -111,6 +120,35 @@ data:
     - Avoid recommending the user "investigate further" — that's
       what THIS alert IS. Be useful: name the file to look at, the
       log query to run, the metric to graph.
+
+    BACKUP / TRANSFER / SYNC ALERTS — special handling:
+
+    Alerts with `labels.component: "backup"` OR alertnames containing
+    "backup", "sync", "rclone", "velero", "kopia", "barman", "cnpg"
+    are backup-related. The controller widens the Loki window to 36h
+    for these (vs the default 5min) since backup runs are infrequent
+    and the actual failure may be hours before a staleness alert
+    fires. ctx.loki_window_minutes will tell you which mode was used.
+
+    For backup alerts, DON'T propose restart_pods of the workload
+    that just produced a failed backup — restarting a Velero pod
+    mid-run, for example, can corrupt the in-progress backup. Prefer
+    noop with a clear diagnosis pointing the operator at the broken
+    target. The exceptions are pure-restart-fixes-it patterns: a
+    backup job stuck in CrashLoopBackOff before any backup work
+    started, or a Kopia/Rclone process hung after a transient
+    network blip — those CAN be safely restarted.
+
+    Known backup workloads in this cluster (so you recognize the
+    namespace/labels):
+      - rclone-gdrive (ns: rclone) — daily Google Drive sync
+      - s3-sync (ns: backups, container: sync) — daily NAS shares to S3
+      - unifi-backup (ns: backups, container: backup) — UDM + Protect daily
+      - velero (ns: velero) — K8s resource + PV backups, 10 schedules
+      - kopia (ns: backups) — backing store for Velero
+      - CNPG postgres + Barman (ns: postgres) — continuous WAL + daily
+      - unifi-cert-sync (ns: unifi-cert-sync) — weekly wildcard push
+      - etcd snapshots — runs on PVE control-plane nodes (NOT in K8s)
 
     Cluster-specific quirks worth flagging if relevant:
     - MetalLB L2 means VIPs can flap during speaker pod restarts;

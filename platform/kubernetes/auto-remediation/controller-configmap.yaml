@@ -105,6 +105,18 @@ data:
     APPROVAL_BASE_URL = os.environ.get('APPROVAL_BASE_URL', '')  # e.g. https://remediation-approve.<tailnet>.ts.net
     APPROVAL_TTL_HOURS = int(os.environ.get('APPROVAL_TTL_HOURS', '24'))
 
+    # ---- Phase 3: autonomous execution (opt-in per alert) ----
+    # Top-level kill switch + per-alert opt-in via PrometheusRule
+    # label `ai_remediation: "auto"`. Both must be true for autonomous
+    # execute. Designed so a single env flip can revert ALL Phase 3
+    # alerts to Phase 2 (approve-via-email) behavior immediately.
+    AI_PHASE3_ENABLED = os.environ.get('AI_PHASE3_ENABLED', 'false').lower() == 'true'
+    AI_PHASE3_CONFIDENCE_THRESHOLD = float(os.environ.get('AI_PHASE3_CONFIDENCE_THRESHOLD', '0.85'))
+    # Phase 3 inherits the SAME action allowlist + namespace denylist
+    # as Phase 2. No expansion. Phase 3 is purely about who pulls the
+    # trigger (operator click vs controller itself), not what actions
+    # are possible.
+
     # Known-noisy alertnames — short-circuit BEFORE calling Claude.
     # Saves API tokens on alerts that always diagnose to noop, plus
     # alerts that are structurally never-actionable (InfoInhibitor is
@@ -406,18 +418,43 @@ data:
             except Exception as e:
                 ctx['pod_logs_error'] = str(e)
 
-        # Loki window: 5min before, 1min after alert.startsAt
+        # Loki window: 5min before, 1min after alert.startsAt by
+        # default. Widen to 36h for backup/sync alerts (component=
+        # backup OR known-backup alertnames) since backup runs are
+        # infrequent — the actual failure may be hours before the
+        # staleness alert fires.
         try:
             starts_at = alert.get('startsAt', '')
             if starts_at:
                 start_dt = datetime.fromisoformat(starts_at.replace('Z', '+00:00'))
-                start_ts = int((start_dt - timedelta(minutes=5)).timestamp())
+                is_backup_alert = (
+                    labels.get('component') == 'backup'
+                    or any(kw in alertname.lower() for kw in (
+                        'backup', 'sync', 'rclone', 'velero', 'kopia',
+                        'barman', 'cnpg', 'unificertsync', 's3sync',
+                    ))
+                )
+                window_min = (60 * 36) if is_backup_alert else 5
+                start_ts = int((start_dt - timedelta(minutes=window_min)).timestamp())
                 end_ts = int((start_dt + timedelta(minutes=1)).timestamp())
                 if namespace and pod:
                     q = '{namespace="%s",pod="%s"}' % (namespace, pod)
+                elif namespace:
+                    # No pod (typical for CronJob alerts since
+                    # Alertmanager only knows the rule name, not the
+                    # ephemeral pod). Query the whole namespace.
+                    q = '{namespace="%s"}' % namespace
                 else:
-                    q = '{namespace="%s"}' % (namespace or 'default')
+                    # No namespace either (some custom-metric alerts
+                    # like rclone publish only `share=` labels). Last
+                    # resort: query by component label if present.
+                    if labels.get('component'):
+                        q = '{component="%s"}' % labels['component']
+                    else:
+                        q = '{namespace="default"}'
                 ctx['loki_window'] = _fetch_loki_window(q, start_ts, end_ts, limit=150)
+                ctx['loki_query_used'] = q
+                ctx['loki_window_minutes'] = window_min
         except Exception as e:
             ctx['loki_error'] = str(e)
 
@@ -882,6 +919,84 @@ data:
             daily_usd_spent=round(_cost_tracker['usd_spent'], 4),
         )
 
+        # ---- Phase 3: autonomous execution (gated per-alert) ----
+        # If this alert is explicitly opted in via Alertmanager label
+        # `ai_remediation: "auto"` AND the kill switch is on AND
+        # confidence + action + namespace all clear the guardrails,
+        # execute now without waiting for human approval. Emails a
+        # receipt after the fact (not before).
+        labels = alert.get('labels', {}) or {}
+        action_info = clean['proposed_action']
+        atype = action_info.get('type', 'noop')
+        params = action_info.get('params', {}) or {}
+        ns = params.get('namespace', '')
+        auto_ok = (
+            AI_PHASE3_ENABLED
+            and labels.get('ai_remediation', '').lower() == 'auto'
+            and atype in {'restart_pods', 'scale_deployment_temp'}
+            and ns and ns not in AI_NAMESPACE_DENYLIST
+            and float(clean.get('confidence', 0.0)) >= AI_PHASE3_CONFIDENCE_THRESHOLD
+        )
+        if auto_ok:
+            ok, msg = _execute_proposal(clean)
+            _audit(
+                'auto_executed' if ok else 'auto_execute_failed',
+                alertname=alert_name,
+                action_type=atype,
+                confidence=clean['confidence'],
+                result_msg=msg,
+            )
+            if ok:
+                recent_actions[alert_name] = datetime.now()
+            _exec_text = (
+                f"AI advisor AUTO-EXECUTED an action for {alert_name}.\n\n"
+                f"Action: {atype} {json.dumps(params)}\n"
+                f"Confidence: {clean['confidence']:.2f}\n"
+                f"Result: {'OK' if ok else 'FAILED'} — {msg}\n\n"
+                f"Diagnosis: {clean['diagnosis']}\n\n"
+                f"This alert was opted into Phase 3 autonomous execution via "
+                f"the `ai_remediation: auto` label. To revert this alert to "
+                f"Phase 2 (approve-by-click) behavior, remove that label "
+                f"from the alert rule. To revert ALL alerts globally, set "
+                f"AI_PHASE3_ENABLED=false in the controller deployment.\n\n"
+                f"Raw alert payload:\n{json.dumps(alert, indent=2, default=str)[:2000]}"
+            )
+            _exec_html = _render_email(
+                eyebrow='AI Advisor &middot; Auto-executed' if ok else 'AI Advisor &middot; Auto-execute FAILED',
+                title=alert_name,
+                subhead=clean['human_summary'],
+                status_pill_html=(
+                    '<span class="pill pill-ok"><span class="dot"></span>Auto-executed</span>'
+                    if ok else
+                    '<span class="pill pill-err"><span class="dot"></span>Auto-execute failed</span>'
+                ),
+                body_html=(
+                    '<div class="card"><div class="card-label">Action taken</div>'
+                    '<p class="card-body"><code>' + html_escape(atype) + '</code> &mdash; '
+                    '<code>' + html_escape(json.dumps(params)) + '</code><br>'
+                    'Result: <b>' + ('OK' if ok else 'FAILED') + '</b> &mdash; '
+                    + html_escape(msg) + '</p></div>'
+                    '<div class="card"><div class="card-label">Why</div>'
+                    '<p class="card-body">' + html_escape(clean['diagnosis']) + '</p></div>'
+                    '<p style="color:var(--text-muted);font-size:13px">'
+                    'To revert to per-action approval for this alert, remove '
+                    '<code>ai_remediation: "auto"</code> from its PrometheusRule label set.</p>'
+                ),
+                meta_pairs=[
+                    ('Confidence', f"{clean['confidence']:.0%}"),
+                    ('Action', atype),
+                    ('Daily spend', f"${_cost_tracker['usd_spent']:.4f} / ${AI_DAILY_USD_CAP}"),
+                ],
+                raw_alert=alert,
+                footer_extra='Phase 3 autonomous &mdash; receipt only, no approval needed',
+            )
+            _send_email(
+                subject=f"[Etherport AI Advisor: AUTO-{atype}] {alert_name}",
+                body=_exec_text,
+                html_body=_exec_html,
+            )
+            return  # Phase 3 done; skip Phase 2 email path
+
         # Build email. Phase 2 adds Approve/Reject buttons when:
         #   - Phase 2 toggle is enabled
         #   - Proposed action is executable (not noop)
@@ -1159,6 +1274,7 @@ data:
             f"Auto-remediation webhook server listening on port {PORT} "
             f"(ai_advisor={'on' if AI_ENABLED else 'off'}, "
             f"phase2={'ready' if _phase2_ready else ('toggled but unconfigured' if AI_PHASE2_ENABLED else 'off')}, "
+            f"phase3={'on (opt-in via alert label)' if AI_PHASE3_ENABLED else 'off'}, "
             f"daily_cap=${AI_DAILY_USD_CAP}, model={AI_MODEL})"
         )
         server.serve_forever()

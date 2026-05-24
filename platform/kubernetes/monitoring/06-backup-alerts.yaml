@@ -1,0 +1,177 @@
+---
+# Alert rules for backup/transfer/sync workloads that publish
+# metrics but had no PrometheusRule until now (gap surfaced by
+# the 2026-05-24 audit). Each carries a `namespace` label so the
+# AI advisor's `_build_context()` can pull the right Loki window
+# + pod logs.
+#
+# Sister to:
+# - comprehensive-alerts.yaml (KopiaDown / VeleroDown — service
+#   liveness)
+# - rclone-gdrive/03-prometheus-rules.yaml (rclone-specific)
+# - unifi-cert-sync/05-prometheusrule.yaml (cert-specific)
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: backup-jobs
+  namespace: monitoring
+  labels:
+    release: monitoring
+    app: kube-prometheus-stack
+spec:
+  groups:
+    # ---------- s3-sync (custom homelab metrics) ----------
+    - name: s3-sync.rules
+      rules:
+        - alert: S3SyncFailed
+          # `homelab_backup_last_run_success` is 1 = OK / 0 = fail.
+          # Published by the daily-report CronJob to the pushgateway.
+          expr: homelab_backup_last_run_success == 0
+          for: 5m
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "s3-sync failed for {{ $labels.share }}"
+            description: |
+              The last sync for share `{{ $labels.share }}` to S3
+              failed. Investigate: kubectl -n backups logs job/<latest>
+              or query Loki: {namespace="backups", container="sync"}
+
+        - alert: S3SyncStale
+          # No successful run in >36h (daily runs at 01:00 PT; 36h
+          # covers one missed window + buffer).
+          expr: (time() - homelab_backup_last_run_timestamp_seconds) > 129600
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "s3-sync for {{ $labels.share }} hasn't run in >36h"
+            description: |
+              Last successful run of s3-sync for `{{ $labels.share }}`
+              was {{ $value | humanizeDuration }} ago. CronJob may be
+              suspended or in a crashloop.
+
+    # ---------- UniFi backup CronJob ----------
+    - name: unifi-backup.rules
+      rules:
+        - alert: UnifiBackupFailed
+          # `unifi_backup_status` is non-zero on failure (per the
+          # backup.sh script pushed by 03-cronjob.yaml).
+          expr: unifi_backup_status > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "UniFi backup failed for {{ $labels.target }}"
+            description: |
+              The UDM/Protect backup for target `{{ $labels.target }}`
+              failed. Status code: {{ $value }}. Check pod logs:
+              kubectl -n backups logs -l app=unifi-backup --tail=100
+
+        - alert: UnifiBackupStale
+          expr: (time() - unifi_backup_last_run_timestamp) > 129600
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "UniFi backup hasn't completed for {{ $labels.target }} in >36h"
+            description: |
+              Last successful UniFi backup for target
+              `{{ $labels.target }}` was {{ $value | humanizeDuration }}
+              ago. Daily 04:00 PT schedule may be skipping.
+
+    # ---------- CNPG / Barman postgres backups ----------
+    - name: cnpg-backup.rules
+      rules:
+        - alert: CNPGBackupFailed
+          # CNPG publishes `cnpg_collector_last_failed_backup_timestamp`
+          # which is the unix-ts of the LAST failed backup attempt.
+          # If it's newer than the last *successful* backup, alert.
+          expr: |
+            cnpg_collector_last_failed_backup_timestamp
+              > on (cluster, namespace) cnpg_collector_last_available_backup_timestamp
+          for: 30m
+          labels:
+            severity: critical
+            component: backup
+            namespace: postgres
+          annotations:
+            summary: "CNPG cluster {{ $labels.cluster }} has a backup failure"
+            description: |
+              The most recent backup attempt for CNPG cluster
+              `{{ $labels.cluster }}` failed, AND it's newer than the
+              last successful backup. Manual investigation needed:
+              kubectl -n postgres get scheduledbackups,backups
+              kubectl -n postgres logs cnpg-controller-manager-<pod>
+
+        - alert: CNPGBackupStale
+          # No successful backup in 36h (daily at 05:00 UTC).
+          expr: (time() - cnpg_collector_last_available_backup_timestamp) > 129600
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+            namespace: postgres
+          annotations:
+            summary: "CNPG cluster {{ $labels.cluster }} backup stale (>36h)"
+            description: |
+              Last successful CNPG backup for `{{ $labels.cluster }}`
+              was {{ $value | humanizeDuration }} ago.
+
+    # ---------- Velero backup metrics ----------
+    # Needs Velero's serviceMonitor enabled (currently disabled in
+    # clusters/wind/helm-releases/velero.yaml — see L14 follow-up).
+    # Rules ship now but stay dormant until the SM exists; once it
+    # does, they activate automatically.
+    - name: velero-backups.rules
+      rules:
+        - alert: VeleroBackupFailed
+          expr: velero_backup_failure_total > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: backup
+            namespace: velero
+          annotations:
+            summary: "Velero backup failure recorded for {{ $labels.schedule }}"
+            description: |
+              At least one backup invocation for schedule
+              `{{ $labels.schedule }}` has failed. Check:
+              velero backup logs <name>
+              kubectl -n velero get backups
+
+        - alert: VeleroBackupPartial
+          expr: velero_backup_partial_failure_total > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: backup
+            namespace: velero
+          annotations:
+            summary: "Velero partial backup recorded for {{ $labels.schedule }}"
+            description: |
+              A backup completed with partial failures. Some resources
+              were not backed up. velero describe backup <name>.
+
+        - alert: VeleroLastBackupAgeHigh
+          # If no completion for any schedule in 36h, alert. Adjust per
+          # schedule once Velero exposes the metric by schedule name.
+          expr: time() - velero_backup_last_successful_timestamp > 129600
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+            namespace: velero
+          annotations:
+            summary: "Velero hasn't completed a backup in >36h"
+            description: |
+              {{ $value | humanizeDuration }} since any Velero schedule
+              completed successfully. All 10 schedules should run daily.

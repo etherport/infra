@@ -333,6 +333,16 @@ revision use the next free ID per tier. Status legend:
 - **Source:** carried forward via `docs/architecture/firewall-zones.md` cross-reference. Original archive ID was M14 but that's now reused for the s3-sync SSL probe item above. ID rotated to M42 to disambiguate.
 - **Effort:** S. Walk the UDM WG peer list, drop stale entries (likely vpn-mumbai before M38 destroyed it — verify), confirm wg0_regional_peers in `infra/ansible/playbooks/wireguard.yml` matches.
 
+### ✅ M46. Backup/transfer/sync workloads covered by AI advisor
+- **Done:** 2026-05-24. Background-audit subagent identified 11 backup/transfer workloads + their gaps. Action shipped:
+  - **Added `namespace` label** to existing alerts so advisor's `_build_context()` can pull pod logs + Loki window: `KopiaDown`, `VeleroDown` (in `comprehensive-alerts.yaml`); `RcloneGDriveSync*` (4 alerts in `rclone-gdrive/03-prometheus-rules.yaml`); `UnifiCertSync*` + `UnifiWildcardCertExpiring` (3 in `unifi-cert-sync/05-prometheusrule.yaml`).
+  - **New `06-backup-alerts.yaml`** PrometheusRule with the previously-missing alerts: `S3SyncFailed/Stale`, `UnifiBackupFailed/Stale`, `CNPGBackupFailed/Stale`, `VeleroBackupFailed/Partial/LastBackupAgeHigh`.
+  - **Velero ServiceMonitor enabled** in `clusters/wind/helm-releases/velero.yaml` so the velero-side metrics actually scrape (the rules were dormant before).
+  - **Advisor context widened to 36h** for any alert with `component: backup` OR alertname containing backup/sync/rclone/velero/kopia/barman/cnpg. Backup runs are infrequent — the 5min default window missed the actual failure.
+  - **Prompt extended** with explicit backup-workload awareness — Claude is now told (a) which namespaces hold which backup workloads, (b) NOT to propose restart_pods for in-flight Velero/Kopia/CNPG pods, (c) when restart IS safe (CrashLoopBackOff before any work started, hung process after network blip).
+  - **service-status-report** TTL bumped 3600 → 90000 to match sibling CronJobs.
+- **Still TODO** (L15): etcd snapshot timer on PVE CP nodes logs only to journald — never reaches Loki. Either ship journald → syslog → Alloy `:514`, or add a Prometheus textfile collector emitting `etcd_snapshot_last_run_timestamp`. Captured below.
+
 ### 🟡 M45. Extend AI advisor context to cover AWS resources
 - **Source:** user ask 2026-05-24. Today the advisor's `_build_context()` only fetches K8s pod logs + Loki + K8s events for the alerted resource. AWS-side infra (Lambda functions ddns/dns-restrict-ip/email-forward/homeassistant-alexa; EC2 dns-aws + vpn-aws; ALB; Route53) logs to CloudWatch only — the advisor diagnoses these blind. Plus UNVR + UNAS syslog onboarding (see `docs/runbooks/syslog-onboard-device.md`).
 - **Phase A (UNVR + UNAS — preparatory):** already shipped 2026-05-24. Alloy relabel rules include `^UNVR.*` → `unvr` and `^Sequoia.*` → `unas-sequoia`. User flips the syslog setting in each device's UI per the runbook; logs flow into Loki automatically, advisor's existing Loki-window fetch picks them up for free.
@@ -383,6 +393,24 @@ revision use the next free ID per tier. Status legend:
 ### ⏳ L8. Delete stale `platform/kubernetes/monitoring/values.yaml`
 - **Source:** consistency review 2026-05-24. The file is the legacy chart-values that was replaced by inline values inside `clusters/wind/helm-releases/monitoring.yaml`. It's not referenced from any `kustomization.yaml`, so Flux doesn't apply it. Source of confusion (e.g. the original H5 entry pointed at the wrong file). Safe to delete; commits since the migration use the HelmRelease inline values exclusively.
 - **Effort:** Trivial.
+
+### ⏳ L15. Ship etcd snapshot timer logs to Loki
+- **Source:** M46 backup audit 2026-05-24. The Ansible-managed etcd snapshot systemd timer on each PVE control-plane node writes only to journald — never reaches Loki. Snapshots themselves are captured by Velero's `kube-system-daily` FS backup, but timer-side failures (disk full, snapshotter crash) are invisible.
+- **Fix options:**
+  - (a) Install `systemd-journal-upload` or rsyslog forwarder on the CP nodes pointing at `10.10.201.73:514` (existing Alloy syslog receiver). Same pattern as the PVE ipmi-monitoring playbook's rsyslog forwarder. Adds ~10 lines to `etcd-backup.yml` playbook.
+  - (b) Add a Prometheus textfile collector emitting `etcd_snapshot_last_run_timestamp` after each snapshot; add a staleness alert. More aligned with how other backup workloads alert.
+- **Effort:** S either way.
+
+### ⏳ L14. AI advisor public approval URL — needs auth gate before advertise
+- **Source:** Phase 2 wireup 2026-05-24. The `approve.wind.etherport.net` Traefik IngressRoute is deployed but unadvertised (email links default to the Tailscale URL). HMAC-token-only auth on a public endpoint is too thin — anyone with email access can approve. Before flipping `APPROVAL_BASE_URL` to the public URL, add a zero-trust gate:
+  - Option A: **Cloudflare Access** policy gating `*.wind.etherport.net` — requires Google SSO + email-domain restriction. ~30min setup; needs Cloudflare-as-DNS for the domain (currently Route53). Doable but moves DNS authority.
+  - Option B: **Tailscale Funnel** — exposes a TS service publicly via TS-managed gate. No DNS change; gate is TS auth. Requires Funnel feature on the tailnet.
+  - Option C (current): Stay TS-only; treat public Ingress as future infra.
+- **Effort:** M.
+
+### ⏳ L13. Phase 3 (autonomous execute) opt-in alerts
+- **Source:** code shipped 2026-05-24 (`AI_PHASE3_ENABLED` env, default OFF). Per the phased rollout plan in `docs/runbooks/ai-advisor-phase3-enable.md`: week 1 add `ai_remediation: "auto"` label to `NodeLocalDNSHighErrorRate` only; week 2 add `CoreDNSDown`; week 3 add `TechnitiumDNSDown` + `HomeAssistantDown`; expand 1/week as comfort builds. Never include CNPG / Ceph / kube-system alerts.
+- **Effort:** Trivial per alert (one label addition). Spread across weeks for safety.
 
 ### ✅ L12. Dedicated `tag:cluster-ingress` Tailscale tag + ACL in IaC
 - **Done:** 2026-05-24. `tag:cluster-ingress` added to `tagOwners` in the tailnet ACL (operator-owner only). `auto-remediation/remediation-approve` Ingress annotation flipped from `tag:subnet-router` → `tag:cluster-ingress`. Bonus: pulled the entire tailnet policy into IaC at `infra/tailscale/policy.hujson` with heavy inline comments + a README. GH Actions workflow `.github/workflows/tailscale-policy.yml` POSTs the file to `https://api.tailscale.com/api/v2/tailnet/-/acl` on every push to main (the older admin-console GitHub-pull flow is deprecated; API-push is the current pattern). One-time operator setup: generate Tailscale API key + add as `TAILSCALE_API_KEY` GH repo secret, then lock the admin-console policy editor so the web UI becomes view-only. Tailnet ID `TwxNUjPekr11CNTRL` (display: `sparked-diamond.github`).
@@ -480,7 +508,10 @@ For history. Anything ticked above has a brief inline note; this is the index.
 | M39 | Lambda dns-restrict-ip revoke description-mismatch fix | 2026-05-23 |
 | M40 | PVE IPMI / ASRock Rack BMC observability (ipmi_exporter + ipmievd + thresholds) | 2026-05-23 |
 | M44 | Bump CP VM memory 4 → 8 GB | 2026-05-24 |
+| M46 | Backup/transfer alerts + advisor context coverage | 2026-05-24 |
 | L4  | Enable loki-ruler (LogQL alerts) | 2026-05-24 |
+| L11 | gh-runner .git permission durable fix | 2026-05-24 |
+| L12 | tag:cluster-ingress + ACL in IaC + GH-Actions push | 2026-05-24 |
 | C1 | CNPG Barman ScheduledBackup + Cluster manifest | 2026-05-22 |
 | C3 | Encrypt Ceph key in plaintext inventory | 2026-05-22 |
 

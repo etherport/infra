@@ -17,6 +17,7 @@ spec:
       labels:
         severity: critical
         component: backup
+        namespace: rclone
       annotations:
         summary: "Google Drive sync failed"
         description: "Rclone Google Drive sync job has failed. Last sync status: {{ $value }}"
@@ -27,6 +28,7 @@ spec:
       labels:
         severity: warning
         component: backup
+        namespace: rclone
       annotations:
         summary: "Google Drive sync hasn't run in 25+ hours"
         description: "Rclone Google Drive sync hasn't completed successfully in over 25 hours. Last run: {{ $value | humanizeDuration }} ago"
@@ -37,6 +39,7 @@ spec:
       labels:
         severity: warning
         component: backup
+        namespace: rclone
       annotations:
         summary: "Google Drive sync completed with errors"
         description: "Rclone Google Drive sync completed but encountered {{ $value }} errors. Check logs for details."
@@ -47,6 +50,7 @@ spec:
       labels:
         severity: info
         component: backup
+        namespace: rclone
       annotations:
         summary: "Google Drive sync taking longer than expected"
         description: "Rclone Google Drive sync took {{ $value | humanizeDuration }} to complete (>30 minutes). This may indicate network issues or large data changes."

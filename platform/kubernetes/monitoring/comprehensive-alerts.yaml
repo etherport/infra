@@ -142,6 +142,11 @@ spec:
       labels:
         severity: warning
         auto_remediate: "true"
+        # namespace/pod/deployment surface to webhook so AI advisor's
+        # _build_context() can pull the right Loki window + pod logs.
+        namespace: backups
+        deployment: kopia
+        component: backup
       annotations:
         summary: "Kopia backup service is down"
         description: "Kopia has no available replicas"
@@ -152,6 +157,9 @@ spec:
       labels:
         severity: warning
         auto_remediate: "true"
+        namespace: velero
+        deployment: velero
+        component: backup
       annotations:
         summary: "Velero backup service is down"
         description: "Velero has no available replicas"
