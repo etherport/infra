@@ -40,6 +40,25 @@ jobs:
     # connection=local to touch the host's systemd, .ssh, etc.
     runs-on: [self-hosted, lifecycle]
     steps:
+      # Pre-checkout fix for L11: previous workflow runs (especially
+      # terraform-*) may leave .git/objects entries owned by root, which
+      # makes `actions/checkout`'s subsequent git fetch fail with
+      # "insufficient permission for adding an object". The job-started
+      # hook normally handles this, but if the hook isn't installed yet
+      # (which is the *purpose of this workflow*), we need to bootstrap
+      # the fix here. Cloud-init grants the ubuntu user passwordless
+      # sudo (/etc/sudoers.d/90-cloud-init-users), so this works on a
+      # vanilla runner VM with no prior ansible apply.
+      - name: Bootstrap workspace ownership (pre-checkout)
+        shell: bash
+        run: |
+          set -u
+          WORK="${RUNNER_WORKSPACE_BASE:-/home/ubuntu/actions-runner/_work}"
+          if [ -d "$WORK" ]; then
+            sudo -n chown -R "$(id -un):$(id -gn)" "$WORK" 2>/dev/null || \
+              chown -R "$(id -un):$(id -gn)" "$WORK" 2>/dev/null || true
+          fi
+
       - name: Checkout
         uses: actions/checkout@v6
 
