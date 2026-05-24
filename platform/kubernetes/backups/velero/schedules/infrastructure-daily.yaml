@@ -11,8 +11,13 @@ spec:
       - monitoring
       - traefik
       - cert-manager
-      - icloudpd
       - rclone
       - metallb-system
+      # icloudpd removed 2026-05-24: namespace doesn't exist (never
+      # deployed in this cluster), and listing a missing namespace
+      # makes Velero mark the whole backup PartiallyFailed →
+      # velero_backup_last_successful_timestamp doesn't advance →
+      # VeleroLastBackupAgeHigh alert fires forever. Re-add when
+      # icloudpd is actually deployed.
     defaultVolumesToFsBackup: true
     ttl: 720h0m0s

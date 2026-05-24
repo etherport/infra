@@ -118,7 +118,10 @@ spec:
 
         - alert: CNPGBackupStale
           # No successful backup in 36h (daily at 05:00 UTC).
-          expr: (time() - cnpg_collector_last_available_backup_timestamp) > 129600
+          # max() per cluster — replicas that haven't witnessed any
+          # backup report 0, which would otherwise trigger the alert
+          # forever even when the primary just backed up successfully.
+          expr: (time() - max by (cluster, namespace) (cnpg_collector_last_available_backup_timestamp)) > 129600
           for: 1h
           labels:
             severity: warning
