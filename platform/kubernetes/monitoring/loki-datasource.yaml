@@ -23,6 +23,12 @@ data:
     apiVersion: 1
     datasources:
       - name: Loki
+        # Explicit UID so dashboards can reference it stably as
+        # "loki" instead of needing the Grafana-auto-generated UUID.
+        # Without this, dashboards hard-coding "uid": "loki" don't
+        # bind to the datasource — the AI advisor dashboard fell
+        # silent 2026-05-24 because of exactly this.
+        uid: loki
         type: loki
         access: proxy
         # Single-binary Service in the same namespace. The chart names

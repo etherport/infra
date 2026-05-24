@@ -1,0 +1,36 @@
+---
+# Public approval URL for the AI advisor (M41 P2.5).
+#
+# Sister to approval-ingress.yaml (Tailscale-only). This one exposes
+# the /approve endpoint on the public internet via Traefik so the
+# operator can approve advisor proposals from any device, including
+# devices not on the Tailscale tailnet.
+#
+# Security model: the HMAC-signed proposal_id token IS the auth.
+# Anyone with the URL can approve, but the URL is only delivered
+# via email (DKIM-signed via SES, sent to one inbox). The token
+# can't be forged without the APPROVAL_HMAC_KEY (in SOPS secret,
+# never leaves the cluster). Worst case: someone who steals the
+# email + clicks Approve triggers a pod restart in a single
+# allow-listed namespace — well below the threshold for caring.
+#
+# This sits alongside (not replaces) the Tailscale ingress. Both
+# routes hit the same backend service. The operator can use either.
+# Email links continue pointing at the Tailscale URL by default
+# (APPROVAL_BASE_URL env in deployment.yaml); switching to public
+# requires changing that env to https://approve.wind.etherport.net.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: remediation-approve-public
+  namespace: auto-remediation
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`approve.wind.etherport.net`) && PathPrefix(`/approve`)
+      kind: Rule
+      services:
+        - name: remediation-webhook
+          port: 8080
+  tls: {}   # uses the existing wind.etherport.net wildcard cert

@@ -115,7 +115,12 @@ spec:
         # nothing useful. This sidecar tails the active log files and
         # writes each line to its own stdout, which Alloy picks up
         # under {namespace="plex", container="logtail"}.
-        - name: logtail
+        # Container name = "plex-logtail" (not just "logtail") so
+        # Loki/Grafana Service Browser shows the sidecar's stream
+        # under a meaningful name. Loki auto-derives service_name
+        # from container, so a generic "logtail" would have hidden
+        # these logs behind a name that says nothing about Plex.
+        - name: plex-logtail
           image: busybox:1.36
           # Read-only mount of the same Plex config PVC. The sidecar
           # only needs to read the Logs/ subtree; never writes.

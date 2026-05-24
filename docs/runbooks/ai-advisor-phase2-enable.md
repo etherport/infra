@@ -145,6 +145,42 @@ alertname enters cooldown (15min)
 browser shows: "Rejected. Marked as false positive."
 ```
 
+## Public approval URL (alternative to Tailscale-only)
+
+Phase 2 ships TWO ingresses:
+
+| URL | Route via | Reach | Default? |
+|---|---|---|---|
+| `https://remediation-approve.tail48f596.ts.net/approve?...` | Tailscale | Tailnet-only devices | ✅ in `APPROVAL_BASE_URL` |
+| `https://approve.wind.etherport.net/approve?...` | Traefik public ingress + wildcard cert | Any device, any network | available, not default |
+
+Both hit the same controller `/approve` endpoint. The HMAC-signed
+`token` parameter is the auth — anyone with a valid token can
+approve; the link is delivered only via DKIM-signed email to one
+inbox. Token cannot be forged without the in-cluster
+`APPROVAL_HMAC_KEY` secret.
+
+**To switch the default to public** (so you can approve without
+Tailscale, e.g. from a phone that isn't on TS):
+
+```yaml
+# In platform/kubernetes/auto-remediation/deployment.yaml:
+- name: APPROVAL_BASE_URL
+  value: "https://approve.wind.etherport.net"
+```
+
+Commit + push, Flux reconciles, the controller emails new links
+pointing at the public URL. The Tailscale URL keeps working (the
+ingress stays up) — only the email links change.
+
+**Risk delta:** moving from TS-only to public expands the attack
+surface from "must compromise the inbox AND have TS access" to
+"must compromise the inbox alone". Given (a) tokens expire in
+24h, (b) action allowlist is restart_pods + scale_deployment_temp,
+(c) namespace denylist excludes kube-system / cnpg-system / etc.,
+(d) cooldown prevents repeat-fire, the worst case is a single
+pod restart in a non-system namespace. Acceptable for homelab.
+
 ## Tuning knobs
 
 | Env | Default | Purpose |
