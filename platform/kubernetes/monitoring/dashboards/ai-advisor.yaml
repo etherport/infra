@@ -20,8 +20,8 @@ data:
       "editable": true,
       "graphTooltip": 1,
       "tags": ["ai-advisor", "auto-remediation"],
-      "title": "AI Advisor (M41)",
-      "uid": "ai-advisor-m41",
+      "title": "Etherport AI Advisor",
+      "uid": "ai-advisor",
       "schemaVersion": 41,
       "time": { "from": "now-24h", "to": "now" },
       "refresh": "1m",
@@ -32,7 +32,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
           "targets": [{
-            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=\"success\" [24h]))",
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=\"success\" [24h]))",
             "refId": "A"
           }],
           "fieldConfig": {"defaults": {"unit": "short"}}
@@ -43,7 +43,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
           "targets": [{
-            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=\"skipped_noisy\" [24h]))",
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=\"skipped_noisy\" [24h]))",
             "refId": "A"
           }]
         },
@@ -53,7 +53,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
           "targets": [{
-            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=\"cap_reached\" [24h]))",
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=\"cap_reached\" [24h]))",
             "refId": "A"
           }],
           "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}, "color": {"mode": "thresholds"}}}
@@ -64,7 +64,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
           "targets": [{
-            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=\"approved_executed\" [24h]))",
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=\"approved_executed\" [24h]))",
             "refId": "A"
           }],
           "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "green"}}}
@@ -75,7 +75,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
           "targets": [{
-            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=\"rejected\" [24h]))",
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=\"rejected\" [24h]))",
             "refId": "A"
           }]
         },
@@ -85,7 +85,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
           "targets": [{
-            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=~\"api_failed|invalid_response|approve_bad_token|approved_failed\" [24h]))",
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=~\"api_failed|invalid_response|approve_bad_token|approved_failed\" [24h]))",
             "refId": "A"
           }],
           "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 5}]}, "color": {"mode": "thresholds"}}}
@@ -96,7 +96,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "gridPos": {"x": 0, "y": 4, "w": 24, "h": 8},
           "targets": [{
-            "expr": "sum by (event) (count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json [5m]))",
+            "expr": "sum by (event) (count_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" [5m]))",
             "refId": "A"
           }]
         },
@@ -106,7 +106,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
           "targets": [{
-            "expr": "topk(10, sum by (alertname) (count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=\"success\" [24h])))",
+            "expr": "topk(10, sum by (alertname) (count_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=\"success\" [24h])))",
             "refId": "A",
             "instant": true
           }]
@@ -117,7 +117,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
           "targets": [{
-            "expr": "topk(10, sum by (alertname) (count_over_time({namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event=\"skipped_noisy\" [24h])))",
+            "expr": "topk(10, sum by (alertname) (count_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=\"skipped_noisy\" [24h])))",
             "refId": "A",
             "instant": true
           }]
@@ -128,7 +128,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "gridPos": {"x": 0, "y": 20, "w": 24, "h": 12},
           "targets": [{
-            "expr": "{namespace=\"auto-remediation\"} |= \"ai_advisor\" | json | event != \"\" | line_format \"{{.event}} {{.alertname}} {{ if .confidence}}conf={{.confidence}} {{end}}{{ if .proposed_action_type}}action={{.proposed_action_type}} {{end}}{{ if .cost_usd}}cost=${{.cost_usd}}{{end}}\"",
+            "expr": "{namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event != \"\" | line_format \"{{.event}} {{.alertname}} {{ if .confidence}}conf={{.confidence}} {{end}}{{ if .proposed_action_type}}action={{.proposed_action_type}} {{end}}{{ if .cost_usd}}cost=${{.cost_usd}}{{end}}\"",
             "refId": "A",
             "maxLines": 50
           }]

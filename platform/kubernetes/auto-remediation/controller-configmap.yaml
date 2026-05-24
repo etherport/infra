@@ -209,12 +209,21 @@ data:
     # ===================================================================
 
     def _audit(event, **kwargs):
-        """Emit a structured JSON line for the audit log. Scraped by
-        Alloy under {namespace="auto-remediation"}; query in Loki as
-        {namespace="auto-remediation"} |= "ai_advisor"."""
-        record = {'ts': datetime.now(timezone.utc).isoformat(), 'event': event}
+        """Emit a structured JSON line for the audit log. Pure JSON
+        (no logger prefix) so the Grafana dashboard's `| json` parser
+        can read it directly without regex extraction. The `tag` field
+        replaces the old "ai_advisor " text marker.
+        Query in Loki: {namespace="auto-remediation"} | json | tag="ai_advisor"
+        """
+        record = {
+            'tag': 'ai_advisor',
+            'ts': datetime.now(timezone.utc).isoformat(),
+            'event': event,
+        }
         record.update(kwargs)
-        logger.info(f"ai_advisor {json.dumps(record, default=str)}")
+        # print() bypasses the logging formatter so the line is pure
+        # JSON; Alloy still scrapes it from container stdout.
+        print(json.dumps(record, default=str), flush=True)
 
     def _load_prompt():
         try:

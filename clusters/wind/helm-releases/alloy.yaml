@@ -197,12 +197,43 @@ spec:
               replacement   = "switch-${1}"
               action        = "replace"
             }
+            // UniFi Protect / UNVR — usually emits hostname like
+            // "UNVR-Pro" or "UNVRMax". Friendly target: "unvr".
+            rule {
+              source_labels = ["host"]
+              regex         = "^UNVR.*"
+              target_label  = "host"
+              replacement   = "unvr"
+              action        = "replace"
+            }
+            // UniFi NAS / Sequoia — emits "Sequoia*" or similar.
+            // Friendly target: "unas-sequoia".
+            rule {
+              source_labels = ["host"]
+              regex         = "^Sequoia.*"
+              target_label  = "host"
+              replacement   = "unas-sequoia"
+              action        = "replace"
+            }
             // Final pass: lowercase everything so {host="ap-deck"}
             // works regardless of which device generated it.
             rule {
               source_labels = ["host"]
               target_label  = "host"
               action        = "lowercase"
+            }
+            // Set service_name to match host so Grafana's "Service
+            // Browser" view shows friendly device names instead of
+            // collapsing everything under a single "syslog" service.
+            // 2026-05-24: user reported the dashboard "still not
+            // showing friendly names" — root cause was service_name
+            // (default "syslog" for all) being what the Service
+            // Browser groups by, while our friendly `host` label
+            // was a separate dimension.
+            rule {
+              source_labels = ["host"]
+              target_label  = "service_name"
+              action        = "replace"
             }
           }
 

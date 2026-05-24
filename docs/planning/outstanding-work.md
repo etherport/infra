@@ -333,6 +333,13 @@ revision use the next free ID per tier. Status legend:
 - **Source:** carried forward via `docs/architecture/firewall-zones.md` cross-reference. Original archive ID was M14 but that's now reused for the s3-sync SSL probe item above. ID rotated to M42 to disambiguate.
 - **Effort:** S. Walk the UDM WG peer list, drop stale entries (likely vpn-mumbai before M38 destroyed it — verify), confirm wg0_regional_peers in `infra/ansible/playbooks/wireguard.yml` matches.
 
+### 🟡 M45. Extend AI advisor context to cover AWS resources
+- **Source:** user ask 2026-05-24. Today the advisor's `_build_context()` only fetches K8s pod logs + Loki + K8s events for the alerted resource. AWS-side infra (Lambda functions ddns/dns-restrict-ip/email-forward/homeassistant-alexa; EC2 dns-aws + vpn-aws; ALB; Route53) logs to CloudWatch only — the advisor diagnoses these blind. Plus UNVR + UNAS syslog onboarding (see `docs/runbooks/syslog-onboard-device.md`).
+- **Phase A (UNVR + UNAS — preparatory):** already shipped 2026-05-24. Alloy relabel rules include `^UNVR.*` → `unvr` and `^Sequoia.*` → `unas-sequoia`. User flips the syslog setting in each device's UI per the runbook; logs flow into Loki automatically, advisor's existing Loki-window fetch picks them up for free.
+- **Phase B (CloudWatch Logs ingest into advisor — TODO):** extend `_build_context` to detect AWS-related alerts (heuristic: `alert.labels.instance` matches `10.10.100.*` AWS VPC, OR job=`external-nodes` with location=`aws`, OR alertname contains `Lambda`) and fetch recent CloudWatch Logs entries via boto3. Needs a new IAM user `ai-advisor-readonly` (scoped: `logs:GetLogEvents + logs:FilterLogEvents + logs:DescribeLogGroups`), creds in a new SOPS-encrypted Secret. Code addition: ~80 lines (`_fetch_cloudwatch_logs(group_pattern, start_ts, end_ts, limit=100)` mirroring `_fetch_loki_window`'s shape).
+- **Phase C (AWS log-stream centralization — bigger lift, optional):** for unified search/alerts across AWS + on-prem in Loki, deploy a CloudWatch Logs → Loki forwarder (either Lambda subscription filter pushing to `loki:3100/loki/api/v1/push` or a Kinesis Firehose). Out of scope for Phase B; only justified if you want Grafana dashboards spanning AWS logs.
+- **Effort:** Phase B = S (a day). Phase C = M.
+
 ### ✅ M44. Bump CP VM memory 4 GB → 8 GB
 - **Done:** 2026-05-24. NodeMemoryHighUtilization had been firing constantly on k8s-cp2 + k8s-cp3 (advisor saw 18 hits in first 24h, all noop). Root cause: kube-apiserver alone steady-states at ~3.5 GiB; CPs were sized at 4 GiB total. Bumped `control_plane_nodes.k8s-cp{1,2,3}.memory_mb` in `infra/terraform/proxmox/k8s-vms/main.tf` from 4096 to 8192. Apply rolls each CP sequentially; etcd quorum preserved (2-of-3 throughout). PVE has 96+ GB; +12 GB overhead trivial.
 
@@ -376,6 +383,28 @@ revision use the next free ID per tier. Status legend:
 ### ⏳ L8. Delete stale `platform/kubernetes/monitoring/values.yaml`
 - **Source:** consistency review 2026-05-24. The file is the legacy chart-values that was replaced by inline values inside `clusters/wind/helm-releases/monitoring.yaml`. It's not referenced from any `kustomization.yaml`, so Flux doesn't apply it. Source of confusion (e.g. the original H5 entry pointed at the wrong file). Safe to delete; commits since the migration use the HelmRelease inline values exclusively.
 - **Effort:** Trivial.
+
+### ⏳ L12. Dedicated `tag:cluster-ingress` Tailscale tag
+- **Source:** Phase 2 wireup 2026-05-24. The Tailscale Ingress for the
+  AI advisor approval URL currently uses `tag:subnet-router` (already
+  allowed by your tailnet ACL) but semantically it's not a subnet
+  router — it's an operator-managed cluster ingress. Add a new
+  `tag:cluster-ingress` to the tailnet ACL `tagOwners` and switch the
+  annotation on `auto-remediation/remediation-approve` Ingress to it.
+  Same for any future operator-managed ingresses.
+- **Effort:** Trivial (ACL edit + annotation update).
+
+### ⏳ L11. gh-runner .git permission failure on TF apply jobs
+- **Source:** M44 apply attempt 2026-05-24 failed: `insufficient
+  permission for adding an object to repository database .git/objects`
+  + `fatal: failed to write object` + `fatal: unpack-objects failed`.
+  Run 26366496970 logs. Workspace .git directory on the lifecycle
+  runner VM has wrong ownership/perms — likely from a prior cleanup
+  step that ran as a different uid. Fix: `chown -R runner:runner
+  ~/_work/infra/.git` on the gh-runner VM, OR add a workspace cleanup
+  step in the workflow that nukes the dir before checkout. Until
+  fixed, all terraform-* workflows on the lifecycle runner are broken.
+- **Effort:** S.
 
 ### ⏳ L9. Delete legacy traefik files
 - **Source:** consistency review 2026-05-24. `platform/kubernetes/traefik/{pvc-traefik-ceph.yaml,traefik-acme-fix.yaml}` are explicitly labeled "Legacy. Safe to remove." in the traefik README but still on disk. Drop them.
