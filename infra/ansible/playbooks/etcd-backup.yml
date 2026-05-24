@@ -152,3 +152,57 @@
     - name: Show first snapshot output
       ansible.builtin.debug:
         msg: "{{ first_snapshot.stdout_lines[-10:] }}"
+
+    # ---- L15: ship etcd snapshot journal logs to Loki ----
+    # The snapshot service runs as a systemd unit and writes to
+    # journald. Without forwarding, snapshot failures (disk full,
+    # etcdctl crash) are invisible — Velero captures the snapshot
+    # FILES via kube-system-daily FS backup, but the timer's run
+    # history never reaches Loki.
+    #
+    # Install rsyslog (default-inactive on Ubuntu 24.04) + a
+    # journal-to-syslog drop-in so the etcd-snapshot.service unit's
+    # journal entries flow to the Alloy syslog receiver at
+    # 10.10.201.73:514. Same pattern as the PVE ipmi-monitoring
+    # playbook.
+    - name: Install rsyslog (default-inactive on Ubuntu)
+      ansible.builtin.apt:
+        name: rsyslog
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Configure rsyslog journal-to-forward for etcd-snapshot
+      ansible.builtin.copy:
+        dest: /etc/rsyslog.d/45-etcd-snapshot-to-loki.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Forward etcd-snapshot.service journal entries to the
+          # Alloy syslog receiver. Filtered to just this unit so we
+          # don't flood Loki with the rest of the node's syslog
+          # (those have other forwarders or stay local).
+          if $programname == 'etcd-snapshot' or $syslogtag startswith 'etcd-snapshot' then
+            action(type="omfwd"
+                   target="10.10.201.73"
+                   port="514"
+                   protocol="udp"
+                   action.resumeRetryCount="100"
+                   queue.type="LinkedList"
+                   queue.size="10000")
+            stop
+          }
+      notify: Restart rsyslog
+
+    - name: Enable + start rsyslog
+      ansible.builtin.systemd:
+        name: rsyslog
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Restart rsyslog
+      ansible.builtin.systemd:
+        name: rsyslog
+        state: restarted

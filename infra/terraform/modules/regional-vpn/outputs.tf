@@ -55,3 +55,8 @@ output "estimated_cost" {
   description = "Estimated monthly cost"
   value       = "~$3.07/month (t4g.nano) + data transfer"
 }
+
+output "dns_record_fqdn" {
+  description = "FQDN of the Route53 A record created for this VPN endpoint (empty if not created)"
+  value       = length(aws_route53_record.vpn_endpoint) > 0 ? aws_route53_record.vpn_endpoint[0].fqdn : ""
+}

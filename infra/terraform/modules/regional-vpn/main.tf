@@ -221,3 +221,53 @@ resource "aws_vpc_peering_connection" "to_hub" {
     Name = "${local.name_prefix}-to-hub"
   })
 }
+
+#------------------------------------------------------------------------------
+# Route53 DNS record for the WireGuard endpoint (L2 fix)
+#------------------------------------------------------------------------------
+# Owns vpn-travel.etherport.net (or whichever FQDN is passed). Created
+# on apply, deleted on destroy — closes the dangling-record issue
+# from M38 / L2 where the regional-vpn module would tear down the
+# EC2 + EIP but leave the DNS pointing at the freed-up IP for the
+# Route53 record's TTL.
+#
+# Disabled by default so existing callers (and the existing dangling
+# record under the route53 module's state) don't conflict. Enable per
+# regional invocation by setting both var.dns_zone_id and var.dns_record_name.
+#
+# Migration path for a deploy that previously had the record managed
+# by the route53 module: on next regional-vpn destroy, manually clean
+# the orphan there + import the new resource here on the next apply
+# via terraform import. Or just accept the duplicate apply-delete
+# cycle once.
+
+variable "dns_zone_id" {
+  description = "Route53 hosted zone ID for the DNS record. Empty = no record created."
+  type        = string
+  default     = ""
+}
+
+variable "dns_record_name" {
+  description = "FQDN to set as A record pointing at the EIP. E.g. vpn-travel.etherport.net. Empty = no record."
+  type        = string
+  default     = ""
+}
+
+variable "dns_record_ttl" {
+  description = "TTL on the A record. Default 300s."
+  type        = number
+  default     = 300
+}
+
+resource "aws_route53_record" "vpn_endpoint" {
+  count   = (var.dns_zone_id != "" && var.dns_record_name != "" && var.use_elastic_ip) ? 1 : 0
+  zone_id = var.dns_zone_id
+  name    = var.dns_record_name
+  type    = "A"
+  ttl     = var.dns_record_ttl
+  records = [aws_eip.vpn[0].public_ip]
+
+  # The eip count guard above prevents this from rendering when EIP
+  # isn't allocated. Without an EIP the IP would change on every
+  # instance restart and the DNS would be stale anyway.
+}

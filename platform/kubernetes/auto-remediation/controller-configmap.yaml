@@ -444,16 +444,23 @@ data:
                     # Alertmanager only knows the rule name, not the
                     # ephemeral pod). Query the whole namespace.
                     q = '{namespace="%s"}' % namespace
+                elif labels.get('component') == 'backup' or is_backup_alert:
+                    # No namespace on the alert (some custom-metric
+                    # alerts publish only `share=` / `target=` labels).
+                    # `component` is a Prometheus alert label, NOT a
+                    # Loki log label — querying {component=...} returns
+                    # nothing. Map to the actual backup workload
+                    # namespaces instead.
+                    q = '{namespace=~"backups|velero|rclone|postgres|unifi-cert-sync"}'
                 else:
-                    # No namespace either (some custom-metric alerts
-                    # like rclone publish only `share=` labels). Last
-                    # resort: query by component label if present.
-                    if labels.get('component'):
-                        q = '{component="%s"}' % labels['component']
-                    else:
-                        q = '{namespace="default"}'
-                ctx['loki_window'] = _fetch_loki_window(q, start_ts, end_ts, limit=150)
-                ctx['loki_query_used'] = q
+                    # No useful selector — leave loki_window empty
+                    # rather than feeding the LLM noise from default ns.
+                    q = None
+                if q:
+                    ctx['loki_window'] = _fetch_loki_window(q, start_ts, end_ts, limit=150)
+                else:
+                    ctx['loki_window'] = []
+                ctx['loki_query_used'] = q or '(none — no usable selector)'
                 ctx['loki_window_minutes'] = window_min
         except Exception as e:
             ctx['loki_error'] = str(e)
@@ -946,8 +953,11 @@ data:
                 confidence=clean['confidence'],
                 result_msg=msg,
             )
-            if ok:
-                recent_actions[alert_name] = datetime.now()
+            # Cooldown on BOTH success and failure — a flapping
+            # auto-execute failure (e.g. K8s API hiccup) shouldn't
+            # re-burn LLM budget on every AM repeat (4h default).
+            # Caught in 2026-05-24 code review.
+            recent_actions[alert_name] = datetime.now()
             _exec_text = (
                 f"AI advisor AUTO-EXECUTED an action for {alert_name}.\n\n"
                 f"Action: {atype} {json.dumps(params)}\n"
