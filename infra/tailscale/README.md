@@ -12,48 +12,87 @@ drifts over time.
 | [`policy.hujson`](policy.hujson) | The actual policy. HuJSON format (JSON + comments + trailing commas). |
 | [`README.md`](README.md) | You are here. |
 
-## How GitHub-sync works (one-time setup)
+## How sync works (one-time setup)
 
-The Tailscale admin console at <https://login.tailscale.com/admin/settings/general>
-has an **"Sync from GitHub"** option under *General Settings → Tailnet
-policy file*. Configure once:
+The Tailscale admin console no longer offers a pull-from-GitHub
+button (that older flow was deprecated). The current IaC pattern
+is **push from CI to the Tailscale API**:
 
-1. **Connect the Tailscale GitHub App** to the `sparked-diamond/infra`
-   repository. App permissions needed: read on repository contents +
-   pull-request write (for posting validation comments).
-2. **Set the path** to `infra/tailscale/policy.hujson`.
-3. **Set the branch** to `main`.
-4. **Enable sync.** Tailscale will validate the file on every push
-   to main and apply the new policy if it parses cleanly.
+```
+edit policy.hujson → git push main → GH Action POSTs to Tailscale API
+  → policy live on the tailnet within ~30s
+```
 
-Once enabled, this file is the canonical policy. Editing in the web
-UI still works but **only as a sandbox** — the next git push
-overwrites whatever was edited live. To make a real change: edit
-this file, PR, merge.
+The GH Action lives at `.github/workflows/tailscale-policy.yml`.
 
-Doc: <https://tailscale.com/kb/1407/sync-acls-from-github>
+**One-time setup**:
+
+1. **Tailscale admin console → Personal Settings → Keys → Generate
+   access token.** Scope: `tailnet policy file` (allows reading +
+   writing the ACL only — no other tailnet powers). Save the value
+   immediately — only shown once.
+2. **GitHub repo → Settings → Secrets and variables → Actions → New
+   repository secret** named `TAILSCALE_API_KEY` with the token
+   value.
+3. **First push** to `infra/tailscale/policy.hujson` triggers the
+   workflow. Verify it succeeded (Actions tab).
+4. **Lock the admin console editor** at
+   <https://login.tailscale.com/admin/settings/policy-file> →
+   "Prevent edits in the admin console". Optional but recommended
+   — prevents drift from someone editing in the web UI directly.
+5. **Set External reference** on the same page to
+   `https://github.com/sparked-diamond/infra/blob/main/infra/tailscale/policy.hujson`.
+   This is just a banner for human admins pointing at the source
+   of truth.
+
+Tailnet ID for reference: `TwxNUjPekr11CNTRL` (display name
+`sparked-diamond.github`). The workflow uses `-` as the tailnet
+shortcut so it doesn't need to know the specific ID.
 
 ## Editing workflow
 
-1. Make the edit locally. Validate the file parses as HuJSON by
-   pasting it into the **"Edit file"** sandbox in the Tailscale admin
-   console — it shows syntax errors + a live diff against the
-   currently-deployed policy. Don't `jq` this file (it'll reject the
-   comments).
-2. Commit + push (or PR if you'd like the Tailscale app to comment a
-   diff on the PR before merge).
-3. Within ~30s of the push landing on main, the tailnet picks up the
-   new policy. The admin console shows the commit SHA of the
-   currently-applied policy under *Settings → Tailnet policy file*.
+1. Make the edit locally in `policy.hujson`.
+2. (Optional) Validate locally with `hujsonfmt` if you have
+   `tailscale/hujson` installed, or paste into the admin console's
+   editor for a live syntax check + diff against the current policy.
+3. PR or push to `main`. The `tailscale-policy.yml` workflow:
+   - Runs `hujsonfmt` (or a fallback strict-JSON sanity check) on
+     the file. Fails the PR if it doesn't parse.
+   - On push to main: POSTs the file to
+     `https://api.tailscale.com/api/v2/tailnet/-/acl`.
+     200 = applied; 4xx = Tailscale rejected the policy (shown
+     in workflow logs with the validation error).
+4. Tailnet picks up the change within ~30s. No restart needed.
 
-## Rotating / revoking the sync
+## Rotating / revoking the API key
 
-If you ever need to disconnect GitHub sync (e.g. compromised PAT,
-broken sync, or just want to manage in web UI again):
+If the `TAILSCALE_API_KEY` ever leaks or you want to rotate:
 
-1. Admin console → *General Settings → Tailnet policy file → Disconnect*.
-2. Last-known policy stays applied. Future edits go via web UI.
-3. To re-enable, repeat the connect flow above.
+1. Admin console → Personal Settings → Keys.
+2. Revoke the old token.
+3. Generate a new one with the same scope (`acl:write`).
+4. Update the `TAILSCALE_API_KEY` GitHub repo secret.
+5. Push any commit to trigger the workflow with the new token.
+
+Lifetime: the token doesn't expire unless you set it to. If you
+want a TTL-bound token, set the expiry on creation; CI will start
+failing when it expires, prompting rotation.
+
+## If CI is down and you need to push
+
+Manual API call from your laptop:
+
+```bash
+TS_API_KEY=$(op read 'op://Private/Tailscale API/credential')
+curl -X POST \
+  -H "Authorization: Bearer $TS_API_KEY" \
+  -H "Content-Type: application/hujson" \
+  --data-binary @infra/tailscale/policy.hujson \
+  https://api.tailscale.com/api/v2/tailnet/-/acl
+```
+
+Same effect as the workflow. Avoids editing in the web UI which
+would create drift.
 
 ## What's in the policy
 

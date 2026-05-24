@@ -1,0 +1,107 @@
+name: Tailscale Policy
+
+# Push the tailnet policy file to Tailscale on every commit to main
+# that touches it. Closes the IaC loop — git becomes the source of
+# truth, the admin console becomes display-only.
+#
+# Setup (one-time):
+# 1. Tailscale admin console → Personal Settings → Keys →
+#    "Generate access token". Scope: tailnet policy file (acl:write).
+#    Save the token immediately (only shown once).
+# 2. GitHub repo → Settings → Secrets and variables → Actions →
+#    add `TAILSCALE_API_KEY` with the token value.
+# 3. After first successful workflow run, lock the admin console
+#    policy editor (Tailnet Settings → Policy file management →
+#    "Prevent edits in the admin console") so the web UI becomes
+#    view-only.
+#
+# Tailnet ID for this tailnet: TwxNUjPekr11CNTRL. The API accepts
+# `-` as a shortcut meaning "the tailnet of the API key being used",
+# which is what we use here so the workflow doesn't need to know
+# the specific ID.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/tailscale/policy.hujson'
+      - '.github/workflows/tailscale-policy.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/tailscale/policy.hujson'
+      - '.github/workflows/tailscale-policy.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    name: HuJSON syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install hujson-cli (Tailscale's parser)
+        run: |
+          go install github.com/tailscale/hujson/cmd/hujsonfmt@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+        # Falls back to a pure-jq check if go isn't available — jq
+        # strict-mode rejects comments + trailing commas so we strip
+        # them first as a poor man's HuJSON parser.
+
+      - name: Validate policy.hujson parses
+        run: |
+          set -e
+          if command -v hujsonfmt >/dev/null; then
+            hujsonfmt infra/tailscale/policy.hujson > /dev/null
+            echo "✓ HuJSON parses cleanly"
+          else
+            # Strip // comments + trailing commas, then jq -e
+            sed -e 's://.*$::' -e 's/,\([[:space:]]*[}\]]\)/\1/g' \
+              infra/tailscale/policy.hujson | jq -e . > /dev/null
+            echo "✓ Policy passes pure-jq sanity check (hujsonfmt unavailable)"
+          fi
+
+  push:
+    name: Push policy to Tailscale
+    needs: validate
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: POST policy to Tailscale API
+        env:
+          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+        run: |
+          set -e
+          if [ -z "$TS_API_KEY" ]; then
+            echo "::error::TAILSCALE_API_KEY repo secret missing — see workflow file header for setup."
+            exit 1
+          fi
+
+          HTTP=$(curl -sS -o /tmp/resp.json -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer $TS_API_KEY" \
+            -H "Content-Type: application/hujson" \
+            --data-binary @infra/tailscale/policy.hujson \
+            'https://api.tailscale.com/api/v2/tailnet/-/acl')
+
+          echo "HTTP $HTTP"
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::Tailscale API rejected the policy ($HTTP)"
+            echo "--- Response ---"
+            cat /tmp/resp.json
+            exit 1
+          fi
+
+          echo "## Tailscale Policy Applied" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Commit**: \`$GITHUB_SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **HTTP**: $HTTP (success)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Policy is live on the tailnet within ~30s. Verify at" >> "$GITHUB_STEP_SUMMARY"
+          echo "<https://login.tailscale.com/admin/acls/file>." >> "$GITHUB_STEP_SUMMARY"
