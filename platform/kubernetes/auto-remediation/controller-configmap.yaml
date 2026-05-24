@@ -85,6 +85,15 @@ data:
     LOKI_URL = os.environ.get('LOKI_URL', 'http://loki.monitoring.svc.cluster.local:3100')
     PROMETHEUS_URL = os.environ.get('PROMETHEUS_URL', 'http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090')
 
+    # M45 Phase B: CloudWatch Logs read for AWS-side context. Requires
+    # the AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY env vars to be
+    # populated from the ai-advisor-aws-cloudwatch SOPS secret; if
+    # empty, the advisor silently skips the CW fetch step.
+    AWS_REGION_PRIMARY = os.environ.get('AWS_REGION_PRIMARY', 'us-west-2')
+    # Subnet CIDR for AWS-VPC instances — used to detect aws-related
+    # alerts via the `instance` label.
+    AWS_VPC_CIDR_PREFIX = os.environ.get('AWS_VPC_CIDR_PREFIX', '10.10.100.')
+
     # Pricing per million tokens — keep in sync with anthropic.com/pricing.
     # claude-sonnet-4-6: $3/M input, $15/M output.
     AI_PRICE_PER_M_INPUT = float(os.environ.get('AI_ADVISOR_PRICE_INPUT', '3.0'))
@@ -254,6 +263,102 @@ data:
             logger.warning(f"Loki query failed: {e}")
             return []
 
+    # ---- M45 Phase B: CloudWatch Logs context for AWS-side alerts ----
+
+    # boto3 is imported lazily so a missing pip install doesn't crash
+    # the controller at startup — the advisor just gracefully skips
+    # the CW step.
+    _boto3_logs = None
+    _boto3_import_attempted = False
+
+    def _get_logs_client():
+        global _boto3_logs, _boto3_import_attempted
+        if _boto3_logs is not None or _boto3_import_attempted:
+            return _boto3_logs
+        _boto3_import_attempted = True
+        if not os.environ.get('AWS_ACCESS_KEY_ID') or not os.environ.get('AWS_SECRET_ACCESS_KEY'):
+            return None
+        try:
+            import boto3  # type: ignore
+            _boto3_logs = boto3.client('logs', region_name=AWS_REGION_PRIMARY)
+            return _boto3_logs
+        except Exception as e:
+            logger.warning(f"boto3 unavailable for CloudWatch Logs: {e}")
+            return None
+
+    def _alert_is_aws(alert):
+        """Heuristic — does this alert reference an AWS-side resource?
+        Returns dict of context hints, or None if not AWS-related."""
+        labels = alert.get('labels', {}) or {}
+        ann = alert.get('annotations', {}) or {}
+        instance = labels.get('instance', '')
+        alertname = labels.get('alertname', '')
+        # 1) job=external-nodes + location=aws (set in
+        #    01-external-scrape-config.yaml relabel rules)
+        if labels.get('job') == 'external-nodes' and labels.get('location') == 'aws':
+            return {'kind': 'ec2', 'name': labels.get('instance', '?')}
+        # 2) instance IP is in the AWS-VPC range (10.10.100.x)
+        if instance.startswith(AWS_VPC_CIDR_PREFIX):
+            return {'kind': 'ec2', 'name': instance}
+        # 3) alertname contains "lambda" — try to pull a function name
+        #    from labels.function or annotations.function
+        if 'lambda' in alertname.lower() or 'lambda' in (ann.get('summary', '') + ann.get('description', '')).lower():
+            return {
+                'kind': 'lambda',
+                'name': labels.get('function') or labels.get('function_name') or labels.get('functionname') or '?',
+            }
+        return None
+
+    def _fetch_cloudwatch_logs(aws_hint, start_ts, end_ts, limit=80):
+        """Fetch recent CW log events for the resource the alert points
+        at. Returns list of (timestamp_ms, message) tuples truncated to
+        `limit`. Failures empty + warn."""
+        cwlogs = _get_logs_client()
+        if not cwlogs:
+            return []
+        kind = aws_hint.get('kind')
+        name = aws_hint.get('name')
+        try:
+            if kind == 'lambda':
+                # /aws/lambda/<name>
+                group_prefix = f"/aws/lambda/{name}" if name and name != '?' else "/aws/lambda"
+            elif kind == 'ec2':
+                # /aws/ec2/<instance-id> OR CloudWatchAgent<...> — try
+                # both with prefix discovery.
+                group_prefix = "/aws/ec2"
+            else:
+                return []
+
+            # Discover up to 5 matching log groups under the prefix
+            resp = cwlogs.describe_log_groups(logGroupNamePrefix=group_prefix, limit=5)
+            groups = [g['logGroupName'] for g in resp.get('logGroups', [])]
+            if not groups:
+                # Fall back to broader prefix for ec2 (CloudWatchAgent*)
+                if kind == 'ec2':
+                    resp = cwlogs.describe_log_groups(logGroupNamePrefix='CloudWatchAgent', limit=5)
+                    groups = [g['logGroupName'] for g in resp.get('logGroups', [])]
+                if not groups:
+                    return []
+
+            entries = []
+            for gname in groups[:3]:  # cap to 3 groups to keep token cost bounded
+                try:
+                    flt = cwlogs.filter_log_events(
+                        logGroupName=gname,
+                        startTime=start_ts * 1000,
+                        endTime=end_ts * 1000,
+                        limit=max(1, limit // max(len(groups), 1)),
+                    )
+                    for e in flt.get('events', []):
+                        entries.append((e.get('timestamp', 0), e.get('message', '')[:500]))
+                except Exception as inner:
+                    logger.warning(f"CW Logs filter failed for {gname}: {inner}")
+            entries.sort(key=lambda x: -x[0])
+            return entries[:limit]
+        except Exception as e:
+            logger.warning(f"CloudWatch Logs fetch failed: {e}")
+            return []
+
     def _fetch_alert_history(alertname):
         """Query Prometheus for prior fires of this alertname (last 24h)."""
         try:
@@ -333,6 +438,25 @@ data:
 
         # History
         ctx['history']['last_24h_fires'] = _fetch_alert_history(alertname)
+
+        # M45 Phase B: if the alert references an AWS-side resource,
+        # pull a CloudWatch Logs window so the LLM sees Lambda /
+        # EC2-agent logs alongside on-prem context. Bounded by the
+        # same start/end times as the Loki window.
+        aws_hint = _alert_is_aws(alert)
+        if aws_hint:
+            try:
+                starts_at = alert.get('startsAt', '')
+                if starts_at:
+                    start_dt = datetime.fromisoformat(starts_at.replace('Z', '+00:00'))
+                    start_ts = int((start_dt - timedelta(minutes=10)).timestamp())
+                    end_ts = int((start_dt + timedelta(minutes=1)).timestamp())
+                    ctx['cloudwatch'] = {
+                        'aws_resource': aws_hint,
+                        'window': _fetch_cloudwatch_logs(aws_hint, start_ts, end_ts),
+                    }
+            except Exception as e:
+                ctx['cloudwatch_error'] = str(e)
 
         return ctx
 

@@ -21,7 +21,7 @@ spec:
         - /bin/bash
         - -c
         - |
-          pip install kubernetes pyyaml
+          pip install kubernetes pyyaml boto3
           python /scripts/remediate.py
         ports:
         - containerPort: 8080
@@ -49,6 +49,25 @@ spec:
               secretKeyRef:
                 name: ai-advisor-approval-hmac
                 key: hmac_key
+                optional: true
+          # M45 Phase B: CloudWatch Logs read for AWS-side alerts.
+          # Optional; missing/empty creds = advisor silently skips
+          # the CW fetch step (graceful degradation).
+          - name: AWS_REGION_PRIMARY
+            value: "us-west-2"
+          - name: AWS_VPC_CIDR_PREFIX
+            value: "10.10.100."
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: ai-advisor-aws-cloudwatch
+                key: aws_access_key_id
+                optional: true
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: ai-advisor-aws-cloudwatch
+                key: aws_secret_access_key
                 optional: true
           - name: AI_ADVISOR_MAX_INPUT_TOKENS
             value: "8000"

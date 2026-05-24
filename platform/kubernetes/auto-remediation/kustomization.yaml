@@ -13,5 +13,6 @@ resources:
   - smtp-credentials.sops.yaml
   - approval-hmac-secret.sops.yaml
   - approval-ingress.yaml
+  - aws-cloudwatch-creds.sops.yaml
   - deployment.yaml
   - service.yaml

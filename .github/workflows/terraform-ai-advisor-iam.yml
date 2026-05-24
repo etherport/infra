@@ -1,0 +1,117 @@
+name: AI Advisor IAM Terraform
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/terraform/aws/ai-advisor-iam/**'
+      - '.github/workflows/terraform-ai-advisor-iam.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/terraform/aws/ai-advisor-iam/**'
+      - '.github/workflows/terraform-ai-advisor-iam.yml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  TF_VERSION: '1.14.3'
+  AWS_REGION: us-west-2
+  WORKING_DIR: infra/terraform/aws/ai-advisor-iam
+
+jobs:
+  terraform:
+    name: Terraform ${{ github.event.inputs.action || 'plan' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: |
+          terraform init -backend-config="profile=" -reconfigure
+
+      - name: Terraform Plan (PR)
+        if: github.event_name == 'pull_request'
+        id: plan_pr
+        run: |
+          terraform plan -var="aws_profile=" -input=false -no-color -out=tfplan 2>&1 | tee plan_output.txt
+        continue-on-error: true
+
+      - name: Comment PR with Plan
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('${{ env.WORKING_DIR }}/plan_output.txt', 'utf8');
+            const outcome = '${{ steps.plan_pr.outcome }}';
+            const body = `## AI Advisor IAM Terraform Plan
+
+            **Result:** ${outcome === 'success' ? '✅ Success' : '❌ Failed'}
+
+            <details><summary>Show Plan Output</summary>
+
+            \`\`\`hcl
+            ${plan}
+            \`\`\`
+            </details>`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Terraform Plan (Push)
+        if: github.event_name == 'push'
+        run: |
+          echo "## AI Advisor IAM Changes" >> $GITHUB_STEP_SUMMARY
+          terraform plan -var="aws_profile=" -input=false -no-color 2>&1 | head -100 >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "*Run workflow manually with 'apply' action to deploy.*" >> $GITHUB_STEP_SUMMARY
+
+      - name: Terraform Plan (Manual)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'plan'
+        run: |
+          terraform plan -var="aws_profile=" -input=false -no-color
+
+      - name: Terraform Apply
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
+        run: |
+          terraform apply -auto-approve -input=false -var="aws_profile="
+          echo "## Outputs" >> $GITHUB_STEP_SUMMARY
+          echo "After apply succeeds, run locally to get creds:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "cd $WORKING_DIR" >> $GITHUB_STEP_SUMMARY
+          echo "terraform output -raw access_key_id" >> $GITHUB_STEP_SUMMARY
+          echo "terraform output -raw access_key_secret" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "Then encode into platform/kubernetes/auto-remediation/aws-cloudwatch-creds.sops.yaml via sops." >> $GITHUB_STEP_SUMMARY
