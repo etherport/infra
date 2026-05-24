@@ -66,10 +66,11 @@ data:
 
     cw = boto3.client('logs', region_name=AWS_REGION)
 
-    try:
-        config.load_incluster_config()
-    except Exception:
-        config.load_kube_config()
+    # In-cluster only. Falling back to load_kube_config silently
+    # would leave the client unauthenticated (system:anonymous),
+    # producing baffling 403s instead of a clear "not in a cluster"
+    # error. CronJob will retry on next tick if this fails.
+    config.load_incluster_config()
     kv1 = client.CoreV1Api()
 
 
