@@ -1,0 +1,127 @@
+// Tailscale Tailnet Policy File ("ACL")
+// =====================================
+//
+// Format: HuJSON — JSON with comments + trailing commas. Tailscale
+// auto-detects this format. Edit in any text editor; do NOT validate
+// with `jq` (it'll reject the comments) — use `tailscale-policy-check`
+// or the Tailscale admin console's syntax checker.
+//
+// Source of truth: this file. The Tailscale admin console is
+// configured to GitHub-sync from `infra/tailscale/policy.hujson` on
+// the `main` branch of sparked-diamond/infra. On `git push` to main,
+// the tailnet picks up the new policy within ~30s. To preview a
+// change before merging, paste this file's content into the admin
+// console's "Edit file" sandbox; it'll show a diff + validate.
+//
+// To rotate / revoke the GitHub sync, see infra/tailscale/README.md.
+//
+// Last revised: 2026-05-24 (added tag:cluster-ingress + heavy comments).
+
+{
+  //----------------------------------------------------------------
+  // tagOwners: who is allowed to apply each tag to a device
+  //----------------------------------------------------------------
+  // A device can wear a tag if either (a) the tailscale CLI / API
+  // request is made by an owner listed here, or (b) the device was
+  // tagged at registration time via an auth key scoped to that tag.
+  //
+  // Naming convention:
+  //   tag:k8s-operator     - the Tailscale K8s operator itself (auto-self-tags)
+  //   tag:subnet-router    - subnet routers (advertise CIDRs to other devices)
+  //   tag:homelab          - generic "this device lives in the homelab" tag
+  //   tag:cluster-ingress  - K8s ingresses provisioned by the TS operator
+  //                          (e.g. ai-advisor approval URL); they don't route
+  //                          subnets, they terminate a service.
+  "tagOwners": {
+    "tag:k8s-operator":    ["tag:k8s-operator", "autogroup:admin"],
+    "tag:subnet-router":   ["tag:k8s-operator", "autogroup:admin"],
+    "tag:homelab":         ["autogroup:admin"],
+    "tag:cluster-ingress": ["autogroup:owner"],
+  },
+
+  //----------------------------------------------------------------
+  // grants: ACLs in the v2 grants format
+  //----------------------------------------------------------------
+  // Currently allow-all: any device → any device on any port.
+  // This matches the homelab posture where every node is trusted
+  // and we rely on per-VLAN firewall rules at the UDM for L3
+  // segmentation. Tightening this would require:
+  //   - Inventory who actually needs what (small surface, mostly
+  //     the operator's laptop/phone hitting the cluster + AWS
+  //     resources hitting the homelab over the WireGuard mesh).
+  //   - Per-tag dst rules e.g.
+  //       {"src": ["autogroup:member"],
+  //        "dst": ["tag:cluster-ingress:443,80",
+  //                "tag:subnet-router:*",
+  //                "autogroup:self:*"]}
+  //   - A separate rule for tag:k8s-operator → cluster nodes so the
+  //     operator can poll the cluster state.
+  // Defer until the homelab has more users / less trust.
+  "grants": [
+    {"src": ["*"], "dst": ["*"], "ip": ["*"]},
+  ],
+
+  //----------------------------------------------------------------
+  // autoApprovers: which subnet routes are auto-approved
+  //----------------------------------------------------------------
+  // Subnet routers advertise CIDRs they can reach. Without
+  // auto-approval, the admin would have to manually approve each new
+  // device + each route in the admin UI. With auto-approval, any
+  // device tagged tag:subnet-router can advertise these prefixes and
+  // the tailnet accepts them immediately.
+  //
+  // Routes covered:
+  //   10.10.192.0/19  - the wind VLAN range (200-212 mgmt/svc/iot/etc.)
+  //   10.10.100.0/22  - AWS spoke VPCs (use1 hub + regional VPNs)
+  // Add prefixes here when new subnets come online (e.g. a guest
+  // VLAN at 10.10.220.0/24 would NOT auto-approve under current
+  // rules — it'd need its own entry).
+  "autoApprovers": {
+    "routes": {
+      "10.10.192.0/19": ["tag:subnet-router"],
+      "10.10.100.0/22": ["tag:subnet-router"],
+    },
+  },
+
+  //----------------------------------------------------------------
+  // ssh: Tailscale SSH access policy
+  //----------------------------------------------------------------
+  // Only enforces what happens when a Tailscale-SSH-enabled session
+  // is initiated. Regular sshd on each host still requires its own
+  // auth (the homelab keeps standard sshd; this is in addition).
+  //
+  // "action": "check" — requires Tailscale re-auth via the user's
+  // identity provider (Google for this tailnet) at session start.
+  // Stops a stolen tailnet token from also being a shell on every
+  // device.
+  //
+  // Scoped to autogroup:self so a user can only TS-SSH into devices
+  // they own. Other devices (tagged ones, other users' devices)
+  // aren't reachable via TS-SSH at all.
+  //
+  // "users": ["autogroup:nonroot", "root"] — allows SSH as the
+  // user's own login + as root. Root is included because the
+  // operator does occasionally need it during incidents; the
+  // "check" action above gates it behind re-auth.
+  "ssh": [
+    {
+      "action": "check",
+      "src":    ["autogroup:member"],
+      "dst":    ["autogroup:self"],
+      "users":  ["autogroup:nonroot", "root"],
+    },
+  ],
+
+  //----------------------------------------------------------------
+  // (Optional — not currently used) Future blocks to consider:
+  //----------------------------------------------------------------
+  //
+  // "groups":    named user groups (handy if we ever add a second
+  //              human or grant scoped access to a contractor).
+  // "hosts":     friendly aliases for CIDRs ("homelab" = "10.10.0.0/16")
+  //              that you can reference in grants/ssh.
+  // "nodeAttrs": per-tag/per-device flags (funnel, exit-node, etc.).
+  // "tests":     regression tests for the policy. Example:
+  //                {"src": "autogroup:member", "accept": ["tag:cluster-ingress:443"]}
+  //              The admin console runs these on save.
+}

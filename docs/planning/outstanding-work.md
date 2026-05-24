@@ -384,15 +384,8 @@ revision use the next free ID per tier. Status legend:
 - **Source:** consistency review 2026-05-24. The file is the legacy chart-values that was replaced by inline values inside `clusters/wind/helm-releases/monitoring.yaml`. It's not referenced from any `kustomization.yaml`, so Flux doesn't apply it. Source of confusion (e.g. the original H5 entry pointed at the wrong file). Safe to delete; commits since the migration use the HelmRelease inline values exclusively.
 - **Effort:** Trivial.
 
-### ⏳ L12. Dedicated `tag:cluster-ingress` Tailscale tag
-- **Source:** Phase 2 wireup 2026-05-24. The Tailscale Ingress for the
-  AI advisor approval URL currently uses `tag:subnet-router` (already
-  allowed by your tailnet ACL) but semantically it's not a subnet
-  router — it's an operator-managed cluster ingress. Add a new
-  `tag:cluster-ingress` to the tailnet ACL `tagOwners` and switch the
-  annotation on `auto-remediation/remediation-approve` Ingress to it.
-  Same for any future operator-managed ingresses.
-- **Effort:** Trivial (ACL edit + annotation update).
+### ✅ L12. Dedicated `tag:cluster-ingress` Tailscale tag + ACL in IaC
+- **Done:** 2026-05-24. `tag:cluster-ingress` added to `tagOwners` in the tailnet ACL (operator-owner only). `auto-remediation/remediation-approve` Ingress annotation flipped from `tag:subnet-router` → `tag:cluster-ingress`. Bonus: pulled the entire tailnet policy into IaC at `infra/tailscale/policy.hujson` with heavy inline comments + a README documenting the GitHub-sync workflow (Tailscale admin console pulls policy from `infra/tailscale/policy.hujson` on `main` branch). Source of truth moves from web UI to git.
 
 ### ✅ L11. gh-runner .git permission failure on TF apply jobs (durable fix)
 - **Done:** 2026-05-24 in `infra/ansible/playbooks/gh-runner.yml`. Symptom (M44 apply, run 26366496970): `insufficient permission for adding an object to repository database .git/objects` + `fatal: unpack-objects failed`. Root cause: some prior workflow step (likely a `container:`-based action) wrote files into the work dir as root; subsequent runs as the `ubuntu` runner user can't overwrite them.

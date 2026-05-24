@@ -16,11 +16,12 @@ metadata:
   name: remediation-approve
   namespace: auto-remediation
   annotations:
-    # Operator's default `tag:k8s` is rejected by the Tailscale ACL.
-    # Use the already-allowed tag:subnet-router so provisioning works.
-    # Follow-up (L10): add a dedicated `tag:cluster-ingress` to the
-    # tailnet ACL and switch this to it for cleaner separation.
-    tailscale.com/tags: "tag:subnet-router"
+    # tag:cluster-ingress is the dedicated tag for K8s-operator-
+    # managed ingresses (added to the tailnet ACL 2026-05-24 — see
+    # infra/tailscale/policy.hujson). Cleaner separation from
+    # tag:subnet-router (which is semantically for subnet routers,
+    # not service-fronting ingresses).
+    tailscale.com/tags: "tag:cluster-ingress"
 spec:
   ingressClassName: tailscale
   defaultBackend:
