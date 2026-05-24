@@ -244,7 +244,20 @@
   handlers:
     # Adding the runner user to the docker group requires a runner-service
     # restart for the new GID to take effect on subsequent workflow runs.
+    #
+    # When run LOCALLY (ansible_connection=local) the play is executing
+    # ON the runner — restarting the service mid-handler will kill the
+    # ansible-playbook process itself, leaving the workflow in a failed
+    # state even though all changes landed. Use systemd-run to schedule
+    # the restart for AFTER ansible exits, so the workflow can finish
+    # cleanly and the next job picks up the new config.
     - name: Restart runner
-      ansible.builtin.systemd:
-        name: "actions.runner.sparked-diamond-infra.{{ runner_name }}.service"
-        state: restarted
+      ansible.builtin.shell: |
+        set -e
+        if [ "{{ ansible_connection }}" = "local" ]; then
+          # Defer 10s so this play and its calling workflow can finish.
+          systemd-run --unit=runner-deferred-restart --on-active=10s \
+            systemctl restart actions.runner.sparked-diamond-infra.{{ runner_name }}.service
+        else
+          systemctl restart actions.runner.sparked-diamond-infra.{{ runner_name }}.service
+        fi
