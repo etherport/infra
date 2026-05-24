@@ -1,0 +1,102 @@
+name: GH Runner self-apply (ansible)
+
+# Re-applies infra/ansible/playbooks/gh-runner.yml against the runner
+# this workflow executes on, using connection=local. Sidesteps the
+# bootstrap chicken-and-egg where a fresh laptop can't SSH-in to apply
+# this play (no automation key yet, ssh-agent state, etc.).
+#
+# Dispatch via:
+#   gh workflow run ansible-gh-runner-self-apply.yml
+#
+# This is the durable maintenance path for the gh-runner VM itself.
+# For any other host, use ansible-vm-fleet.yml (which SSHes from
+# the runner container to the target).
+#
+# Why not use ansible-vm-fleet.yml here? That workflow runs ansible
+# from inside the ansible-runner container, which would still try to
+# SSH to ubuntu@10.10.201.30 from inside the container. Same key
+# situation as local laptop. Running on the bare runner with
+# connection=local skips SSH entirely.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'check (--check --diff) or apply'
+        required: true
+        type: choice
+        default: check
+        options:
+          - check
+          - apply
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    name: gh-runner ${{ github.event.inputs.action }} (local)
+    # NOTE: runs on the bare runner, NOT in a container — we need
+    # connection=local to touch the host's systemd, .ssh, etc.
+    runs-on: [self-hosted, lifecycle]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install ansible (if missing)
+        run: |
+          set -euo pipefail
+          if ! command -v ansible-playbook >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ansible
+          fi
+          ansible --version
+          # Install ansible.posix collection (authorized_key module).
+          ansible-galaxy collection install -f ansible.posix community.general
+
+      - name: Run ansible (check)
+        if: github.event.inputs.action == 'check'
+        # GH_TOKEN: GITHUB_TOKEN satisfies the play's pre_task length
+        # assertion. The actual /actions/runners/registration-token call
+        # is GUARDED by `when: not runner_config.stat.exists` and only
+        # fires on a brand-new install — re-applies (the common case)
+        # skip that task, so GITHUB_TOKEN's scope doesn't matter.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Use the existing wind inventory (gh-runner is already in
+          # gh_runners group) but force connection=local so we don't
+          # SSH to ourselves.
+          ansible-playbook \
+            -i inventory/wind/inventory.ini \
+            --limit gh-runner \
+            -e 'ansible_connection=local' \
+            playbooks/gh-runner.yml \
+            --check --diff -v
+        working-directory: infra/ansible
+
+      - name: Run ansible (apply)
+        if: github.event.inputs.action == 'apply'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ansible-playbook \
+            -i inventory/wind/inventory.ini \
+            --limit gh-runner \
+            -e 'ansible_connection=local' \
+            playbooks/gh-runner.yml \
+            --diff -v
+        working-directory: infra/ansible
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## gh-runner self-apply summary"
+            echo
+            echo "- Action: \`${{ github.event.inputs.action }}\`"
+            echo "- Mode: \`connection=local\` (no SSH-in needed)"
+            echo
+            echo "After 'apply', the runner service may restart."
+            echo "Job-started hook is installed under \`/home/ubuntu/actions-runner/hooks/job-started.sh\`."
+          } >> "$GITHUB_STEP_SUMMARY"

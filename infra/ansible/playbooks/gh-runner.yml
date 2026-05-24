@@ -179,6 +179,14 @@
     # Mechanism: ACTIONS_RUNNER_HOOK_JOB_STARTED env var points the runner
     # at a script that runs in the job-started lifecycle stage. See
     # https://github.com/actions/runner/blob/main/docs/adrs/1751-runner-job-hooks.md
+    - name: Ensure hooks dir exists
+      ansible.builtin.file:
+        path: "{{ runner_home }}/hooks"
+        state: directory
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+        mode: "0755"
+
     - name: Drop job-started hook script
       ansible.builtin.copy:
         dest: "{{ runner_home }}/hooks/job-started.sh"
@@ -199,14 +207,6 @@
           fi
           exit 0
       notify: Restart runner
-
-    - name: Ensure hooks dir exists
-      ansible.builtin.file:
-        path: "{{ runner_home }}/hooks"
-        state: directory
-        owner: "{{ runner_user }}"
-        group: "{{ runner_user }}"
-        mode: "0755"
 
     - name: Allow runner user passwordless sudo for chown (job-started hook)
       ansible.builtin.copy:
