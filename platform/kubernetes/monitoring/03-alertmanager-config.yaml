@@ -61,7 +61,7 @@ spec:
     - name: email-alerts
       emailConfigs:
         - to: graham.m.smith@me.com
-          from: alerts@etherport.net
+          from: "Etherport Alerts <alerts@etherport.net>"
           smarthost: email-smtp.us-west-2.amazonaws.com:587
           authUsername: AKIA4C5DM33XKE5WUPG4
           authPassword:

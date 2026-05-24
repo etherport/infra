@@ -57,7 +57,7 @@ spec:
           - name: EMAIL_TO
             value: "graham.m.smith@me.com"
           - name: EMAIL_FROM
-            value: "ai-advisor@etherport.net"
+            value: "Etherport AI Advisor <ai-advisor@etherport.net>"
           - name: SMTP_HOST
             value: "email-smtp.us-west-2.amazonaws.com"
           - name: SMTP_PORT

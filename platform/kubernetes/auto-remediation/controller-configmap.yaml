@@ -403,6 +403,146 @@ data:
         }
         return clean
 
+    # ---------- Styled HTML email template (M41 P2 polish) ----------
+    # Mirrors the visual language of service-status-report.py — light/dark
+    # adaptive CSS variables, max-width 720px, pill components for
+    # status, metric grid for stats, "card" surfaces with subtle borders.
+    # Kept inline (vs imported helper) so the controller stays a single
+    # self-contained script — no extra ConfigMaps to mount.
+    _EMAIL_CSS = """
+      :root {
+        --bg: #f6f7f9; --surface: #ffffff; --text: #0f172a;
+        --text-muted: #64748b; --border: #e5e7eb; --border-soft: #eef0f3;
+        --ok: #047857; --ok-bg: #ecfdf5;
+        --warn: #b45309; --warn-bg: #fffbeb;
+        --err: #b91c1c; --err-bg: #fef2f2;
+        --info: #1d4ed8; --info-bg: #eff6ff;
+        --muted: #6b7280; --muted-bg: #f3f4f6;
+        --accent: #1f2937;
+        --btn-go: #2d8f4d; --btn-no: #8f2d2d;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0b1220; --surface: #131c2e; --text: #e8eaf0;
+          --text-muted: #94a3b8; --border: #243049; --border-soft: #1b2538;
+          --ok: #34d399; --ok-bg: rgba(16,185,129,0.12);
+          --warn: #fbbf24; --warn-bg: rgba(217,119,6,0.15);
+          --err: #f87171; --err-bg: rgba(220,38,38,0.16);
+          --info: #93c5fd; --info-bg: rgba(29,78,216,0.18);
+          --muted: #94a3b8; --muted-bg: rgba(148,163,184,0.12);
+          --accent: #f1f5f9;
+        }
+      }
+      body { margin:0; padding:0; background:var(--bg); color:var(--text);
+        font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
+        font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+      .wrap { max-width:720px; margin:0 auto; padding:36px 20px 56px; }
+      .eyebrow { font-size:11px; font-weight:600; color:var(--text-muted);
+        letter-spacing:0.12em; text-transform:uppercase; margin:0 0 10px; }
+      h1 { font-size:24px; font-weight:700; letter-spacing:-0.015em;
+        margin:0 0 6px; color:var(--accent); }
+      .subhead { color:var(--text-muted); font-size:14px; margin:0 0 22px; }
+      .pill { display:inline-flex; align-items:center; gap:7px;
+        padding:5px 11px; border-radius:999px; font-size:13px;
+        font-weight:500; line-height:1; }
+      .pill .dot { width:7px; height:7px; border-radius:50%;
+        background:currentColor; display:inline-block; }
+      .pill-ok { background:var(--ok-bg); color:var(--ok); }
+      .pill-warn { background:var(--warn-bg); color:var(--warn); }
+      .pill-err { background:var(--err-bg); color:var(--err); }
+      .pill-info { background:var(--info-bg); color:var(--info); }
+      .pill-muted { background:var(--muted-bg); color:var(--muted); }
+      .card { background:var(--surface); border:1px solid var(--border);
+        border-radius:12px; padding:20px 22px; margin:0 0 16px; }
+      .card-label { font-size:11px; font-weight:600; color:var(--text-muted);
+        text-transform:uppercase; letter-spacing:0.08em; margin:0 0 8px; }
+      .card-body { font-size:15px; color:var(--text); margin:0;
+        word-wrap:break-word; }
+      .card-body code { background:var(--muted-bg); padding:2px 6px;
+        border-radius:4px; font-size:13px;
+        font-family:"SF Mono","Monaco",Menlo,Consolas,monospace; }
+      .btn-row { margin:24px 0 8px; }
+      .btn { display:inline-block; padding:12px 22px;
+        font-weight:600; font-size:14px; border-radius:6px;
+        text-decoration:none; margin-right:10px; line-height:1.2; }
+      .btn-approve { background:var(--btn-go); color:#fff; }
+      .btn-reject { background:var(--btn-no); color:#fff; }
+      .meta { display:grid; grid-template-columns:repeat(3,1fr); gap:10px;
+        margin:0 0 16px; }
+      @media (max-width:520px) { .meta { grid-template-columns:1fr 1fr; } }
+      .meta-item { background:var(--surface); border:1px solid var(--border);
+        border-radius:8px; padding:10px 12px; }
+      .meta-label { font-size:10px; color:var(--text-muted);
+        text-transform:uppercase; letter-spacing:0.06em; margin:0 0 4px; }
+      .meta-value { font-size:14px; color:var(--accent); font-weight:600;
+        font-variant-numeric:tabular-nums; }
+      .raw { background:var(--surface); border:1px solid var(--border);
+        border-radius:8px; padding:12px;
+        font-family:"SF Mono","Monaco",Menlo,Consolas,monospace;
+        font-size:11px; line-height:1.45; color:var(--text-muted);
+        overflow-x:auto; white-space:pre-wrap; word-wrap:break-word; }
+      .footer { margin-top:32px; padding-top:18px;
+        border-top:1px solid var(--border-soft);
+        font-size:12px; color:var(--text-muted); }
+      .footer code { font-family:"SF Mono","Monaco",Menlo,Consolas,monospace; }
+    """
+
+    def _confidence_pill(conf):
+        if conf >= 0.85:
+            cls, label = 'pill-ok', f'High {conf:.0%}'
+        elif conf >= 0.6:
+            cls, label = 'pill-info', f'Medium {conf:.0%}'
+        else:
+            cls, label = 'pill-warn', f'Low {conf:.0%}'
+        return f'<span class="pill {cls}"><span class="dot"></span>{label}</span>'
+
+    def _render_email(eyebrow, title, subhead, status_pill_html, body_html,
+                      action_buttons_html=None, meta_pairs=None, raw_alert=None,
+                      footer_extra=None):
+        """Build a complete HTML email document with the advisor's styling."""
+        parts = []
+        parts.append('<!DOCTYPE html>')
+        parts.append('<html><head><meta charset="utf-8">')
+        parts.append('<meta name="viewport" content="width=device-width,initial-scale=1.0">')
+        parts.append('<meta name="color-scheme" content="light dark">')
+        parts.append('<meta name="supported-color-schemes" content="light dark">')
+        parts.append('<title>' + html_escape(title) + '</title>')
+        parts.append('<style>' + _EMAIL_CSS + '</style></head>')
+        parts.append('<body><div class="wrap">')
+        parts.append('<p class="eyebrow">' + html_escape(eyebrow) + '</p>')
+        parts.append('<h1>' + html_escape(title) + '</h1>')
+        if subhead:
+            parts.append('<p class="subhead">' + html_escape(subhead) + '</p>')
+        if status_pill_html:
+            parts.append('<div style="margin:0 0 22px">' + status_pill_html + '</div>')
+        if action_buttons_html:
+            parts.append('<div class="btn-row">' + action_buttons_html + '</div>')
+        if meta_pairs:
+            parts.append('<div class="meta">')
+            for label, value in meta_pairs:
+                parts.append(
+                    '<div class="meta-item">'
+                    '<div class="meta-label">' + html_escape(label) + '</div>'
+                    '<div class="meta-value">' + html_escape(str(value)) + '</div>'
+                    '</div>')
+            parts.append('</div>')
+        parts.append(body_html or '')
+        if raw_alert is not None:
+            parts.append(
+                '<div class="card">'
+                '<div class="card-label">Raw alert payload</div>'
+                '<div class="raw">' + html_escape(json.dumps(raw_alert, indent=2, default=str)[:2500]) + '</div>'
+                '</div>'
+            )
+        parts.append('<div class="footer">')
+        if footer_extra:
+            parts.append(footer_extra + ' &middot; ')
+        parts.append(
+            'Audit log: <code>kubectl -n auto-remediation logs deploy/remediation-controller | grep ai_advisor</code>'
+        )
+        parts.append('</div></div></body></html>')
+        return ''.join(parts)
+
     def _send_email(subject, body, html_body=None):
         """Send via SMTP using the same SES creds as alertmanager.
         If html_body provided, sends as multipart text+html."""
@@ -517,12 +657,34 @@ data:
             return
         if _cap_reached():
             _audit('cap_reached', alertname=alert_name, daily_usd_spent=_cost_tracker['usd_spent'])
-            _send_email(
-                subject=f"[AI advisor unavailable: daily cap reached] {alert_name}",
-                body=(
-                    f"AI advisor hit its ${AI_DAILY_USD_CAP}/day cost cap. Raw alert below.\n\n"
-                    f"{json.dumps(alert, indent=2, default=str)}"
+            _cap_text = (
+                f"AI advisor hit its ${AI_DAILY_USD_CAP}/day cost cap. "
+                f"Raw alert below.\n\n{json.dumps(alert, indent=2, default=str)}"
+            )
+            _cap_html = _render_email(
+                eyebrow='AI Advisor &middot; Unavailable',
+                title=alert_name,
+                subhead=f"Daily cost cap of ${AI_DAILY_USD_CAP} reached. Diagnosis skipped.",
+                status_pill_html='<span class="pill pill-warn"><span class="dot"></span>Cap reached</span>',
+                body_html=(
+                    '<div class="card"><div class="card-label">What this means</div>'
+                    '<p class="card-body">The advisor has spent its daily budget. Further '
+                    'alerts in the next ' + str(int((86400 - (datetime.now(timezone.utc) - datetime.combine(_today_utc(), datetime.min.time(), tzinfo=timezone.utc)).total_seconds()) / 3600)) + 'h will fall through to this notice with the raw payload only. '
+                    'Resets at UTC midnight. To raise the cap, edit '
+                    '<code>AI_ADVISOR_DAILY_COST_USD_CAP</code> in the deployment.</p></div>'
                 ),
+                meta_pairs=[
+                    ('Spent today', f"${_cost_tracker['usd_spent']:.4f}"),
+                    ('Cap', f"${AI_DAILY_USD_CAP}"),
+                    ('Resets', 'UTC midnight'),
+                ],
+                raw_alert=alert,
+                footer_extra='Cooldown enforced &mdash; same alertname will not re-notify for 15min',
+            )
+            _send_email(
+                subject=f"[Etherport AI Advisor: unavailable] {alert_name}",
+                body=_cap_text,
+                html_body=_cap_html,
             )
             # Enter cooldown so flapping alertnames at AM repeat_interval
             # don't spam "[unavailable]" emails every 5min for the rest
@@ -540,12 +702,30 @@ data:
 
         if parsed is None:
             _audit('api_failed', alertname=alert_name)
-            _send_email(
-                subject=f"[AI advisor error] {alert_name}",
-                body=(
-                    f"AI advisor API call failed for {alert_name}. Raw alert below.\n\n"
-                    f"{json.dumps(alert, indent=2, default=str)}"
+            _err_text = (
+                f"AI advisor API call failed for {alert_name}. Raw alert below.\n\n"
+                f"{json.dumps(alert, indent=2, default=str)}"
+            )
+            _err_html = _render_email(
+                eyebrow='AI Advisor &middot; Error',
+                title=alert_name,
+                subhead='Anthropic API call failed. The alert is shown raw below.',
+                status_pill_html='<span class="pill pill-err"><span class="dot"></span>API error</span>',
+                body_html=(
+                    '<div class="card"><div class="card-label">What happened</div>'
+                    '<p class="card-body">The advisor reached '
+                    '<code>api.anthropic.com</code> but the response was unusable '
+                    '(network error, HTTP non-2xx, or malformed JSON). Check the '
+                    'controller logs for the exact reason. The static rule-based '
+                    'path is unaffected.</p></div>'
                 ),
+                raw_alert=alert,
+                footer_extra='Cooldown enforced &mdash; same alertname will not re-notify for 15min',
+            )
+            _send_email(
+                subject=f"[Etherport AI Advisor: error] {alert_name}",
+                body=_err_text,
+                html_body=_err_html,
             )
             # Cooldown: don't spam "[advisor error]" mails if Anthropic
             # is having an outage and AM keeps re-firing the alert.
@@ -621,46 +801,63 @@ data:
             f"Raw alert payload:\n{json.dumps(alert, indent=2, default=str)[:2000]}\n"
         )
 
-        # HTML body with Approve/Reject buttons when in Phase 2. Built
-        # via string concatenation rather than triple-quote literal so
-        # the YAML block-literal indent stays consistent.
-        html_body = None
+        # Styled HTML email — _render_email handles layout; we just
+        # build the body sections.
+        action_type = action_info['type']
         if approve_url:
-            _btn_approve = (
-                '<a href="' + html_escape(approve_url) + '" style="display:inline-block;'
-                'padding:10px 20px;background:#2d8f4d;color:#fff;text-decoration:none;'
-                'border-radius:4px;font-weight:600">Approve + Execute</a>'
+            buttons = (
+                '<a href="' + html_escape(approve_url) + '" class="btn btn-approve">Approve + Execute</a>'
+                '<a href="' + html_escape(reject_url) + '" class="btn btn-reject">Reject</a>'
             )
-            _btn_reject = (
-                '<a href="' + html_escape(reject_url) + '" style="display:inline-block;'
-                'padding:10px 20px;background:#8f2d2d;color:#fff;text-decoration:none;'
-                'border-radius:4px;font-weight:600">Reject</a>'
+        else:
+            buttons = None
+
+        _body_blocks = []
+        _body_blocks.append(
+            '<div class="card"><div class="card-label">AI Diagnosis</div>'
+            '<p class="card-body">' + html_escape(clean['diagnosis']) + '</p></div>'
+        )
+        _action_card = (
+            '<div class="card"><div class="card-label">Proposed Action</div>'
+            '<p class="card-body"><code>' + html_escape(action_type) + '</code>'
+        )
+        if action_type != 'noop':
+            _action_card += (
+                ' &mdash; <code>' + html_escape(json.dumps(action_info['params'])) + '</code>'
             )
-            html_body = (
-                '<html><body style="font-family:system-ui,sans-serif;max-width:640px">'
-                + '<p>' + html_escape(clean['human_summary']) + '</p>'
-                + '<table style="border-collapse:collapse;margin:24px 0"><tr>'
-                + '<td style="padding:0 8px 0 0">' + _btn_approve + '</td>'
-                + '<td style="padding:0 0 0 8px">' + _btn_reject + '</td>'
-                + '</tr></table>'
-                + '<p style="color:#666;font-size:13px">Links expire in '
-                + str(APPROVAL_TTL_HOURS) + 'h. Tailscale-only (your devices have it).</p>'
-                + '<hr><dl style="font-size:14px">'
-                + '<dt><b>Diagnosis</b></dt><dd>' + html_escape(clean['diagnosis']) + '</dd>'
-                + '<dt style="margin-top:8px"><b>Confidence</b></dt><dd>'
-                + f"{clean['confidence']:.2f}" + '</dd>'
-                + '<dt style="margin-top:8px"><b>Proposed action</b></dt><dd>'
-                + '<code>' + html_escape(action_info['type']) + '</code> &mdash; '
-                + html_escape(json.dumps(action_info['params']))
-                + '<br><i>' + html_escape(action_info['reasoning']) + '</i></dd>'
-                + '</dl><hr>'
-                + '<p style="color:#666;font-size:12px">Daily spend: $'
-                + f"{_cost_tracker['usd_spent']:.4f}"
-                + ' of $' + str(AI_DAILY_USD_CAP) + ' cap.</p>'
-                + '<pre style="background:#f4f4f4;padding:8px;font-size:11px;overflow-x:auto">'
-                + html_escape(json.dumps(alert, indent=2, default=str)[:1500])
-                + '</pre></body></html>'
+        _action_card += (
+            '<br><span style="color:var(--text-muted);font-size:14px">'
+            + html_escape(action_info['reasoning']) + '</span></p></div>'
+        )
+        _body_blocks.append(_action_card)
+        if approve_url:
+            _body_blocks.append(
+                '<p style="color:var(--text-muted);font-size:13px;margin:-4px 0 16px">'
+                'Approval links are Tailscale-only and expire in ' + str(APPROVAL_TTL_HOURS) + 'h.'
+                '</p>'
             )
+
+        _eyebrow = 'AI Advisor &middot; ' + ('Action proposed' if action_type != 'noop' else 'Diagnosis only')
+        _subhead = clean['human_summary']
+        _meta = [
+            ('Confidence', f"{clean['confidence']:.0%}"),
+            ('Proposed action', action_type),
+            ('Daily spend', f"${_cost_tracker['usd_spent']:.4f} / ${AI_DAILY_USD_CAP}"),
+        ]
+        html_body = _render_email(
+            eyebrow=_eyebrow,
+            title=alert_name,
+            subhead=_subhead,
+            status_pill_html=_confidence_pill(clean['confidence']),
+            body_html=''.join(_body_blocks),
+            action_buttons_html=buttons,
+            meta_pairs=_meta,
+            raw_alert=alert,
+            footer_extra=(
+                'Phase 2 enabled' if approve_url
+                else 'Phase 1 (advisory only) &mdash; execute manually if needed'
+            ),
+        )
 
         _send_email(
             subject=f"[AI advisor: {clean['proposed_action']['type']}] {alert_name}",
@@ -692,58 +889,74 @@ data:
             # Default to reject on missing/malformed decision — safer fail-mode.
             decision = (qs.get('decision', ['reject'])[0] or 'reject').strip().lower()
 
-            def html_response(code, title, body):
+            def html_response(code, title, body, pill_class='pill-info', pill_text=None):
+                """Styled confirmation page rendered via _render_email so
+                the in-browser approval result matches email visual language."""
                 self.send_response(code)
                 self.send_header('Content-Type', 'text/html; charset=utf-8')
                 self.end_headers()
-                self.wfile.write((
-                    '<html><body style="font-family:system-ui,sans-serif;max-width:520px;margin:40px auto;text-align:center">'
-                    '<h2>' + html_escape(title) + '</h2>'
-                    '<p>' + html_escape(body) + '</p>'
-                    '</body></html>'
-                ).encode())
+                pill_html = ''
+                if pill_text:
+                    pill_html = (
+                        '<span class="pill ' + pill_class + '">'
+                        '<span class="dot"></span>' + html_escape(pill_text) + '</span>'
+                    )
+                page = _render_email(
+                    eyebrow='AI Advisor &middot; Approval result',
+                    title=title,
+                    subhead=body,
+                    status_pill_html=pill_html,
+                    body_html='',
+                    footer_extra=None,
+                )
+                self.wfile.write(page.encode())
 
             if not (pid and tok):
-                html_response(400, "Bad request", "Missing id or token.")
+                html_response(400, "Bad request", "Missing id or token in URL.",
+                              pill_class='pill-err', pill_text='400')
                 return
             if not _verify(pid, tok):
                 _audit('approve_bad_token', proposal_id=pid)
-                html_response(403, "Invalid or expired", "Token verification failed.")
+                html_response(403, "Invalid or expired token",
+                              "Token verification failed. The link may have been corrupted or signed with a different HMAC key.",
+                              pill_class='pill-err', pill_text='403 forbidden')
                 return
             entry = _pending_proposals.get(pid)
             if not entry:
                 _audit('approve_not_found', proposal_id=pid)
-                html_response(410, "Expired", f"Proposal expired or controller restarted since email sent (TTL {APPROVAL_TTL_HOURS}h).")
+                html_response(410, "Proposal expired",
+                              f"This proposal has expired or the controller restarted since the email was sent (TTL {APPROVAL_TTL_HOURS}h).",
+                              pill_class='pill-muted', pill_text='Expired')
                 return
 
+            alertname = entry['alert'].get('labels', {}).get('alertname', '?')
+            atype = entry['proposal']['proposed_action'].get('type', '?')
+
             if decision == 'reject':
-                _audit(
-                    'rejected',
-                    proposal_id=pid,
-                    alertname=entry['alert'].get('labels', {}).get('alertname'),
-                    action_type=entry['proposal']['proposed_action'].get('type'),
-                )
+                _audit('rejected', proposal_id=pid, alertname=alertname, action_type=atype)
                 del _pending_proposals[pid]
-                html_response(200, "Rejected", "Marked as false positive. No action taken. Cooldown active for 15min.")
+                html_response(200, f"Rejected: {alertname}",
+                              "Marked as false positive. No action taken. Same alertname will not re-notify for 15min.",
+                              pill_class='pill-muted', pill_text='Rejected')
                 return
 
             # Approve path
             ok, msg = _execute_proposal(entry['proposal'])
             _audit(
                 'approved_executed' if ok else 'approved_failed',
-                proposal_id=pid,
-                alertname=entry['alert'].get('labels', {}).get('alertname'),
-                action_type=entry['proposal']['proposed_action'].get('type'),
-                result_msg=msg,
+                proposal_id=pid, alertname=alertname, action_type=atype, result_msg=msg,
             )
             if ok:
-                recent_actions[entry['alert'].get('labels', {}).get('alertname', '?')] = datetime.now()
+                recent_actions[alertname] = datetime.now()
             del _pending_proposals[pid]
-            html_response(
-                200 if ok else 500,
-                "Executed" if ok else "Execution failed",
-                msg,
-            )
+            if ok:
+                html_response(200, f"Executed: {alertname}",
+                              f"{atype} dispatched successfully. {msg}",
+                              pill_class='pill-ok', pill_text='Executed')
+            else:
+                html_response(500, f"Execution failed: {alertname}",
+                              msg,
+                              pill_class='pill-err', pill_text='Failed')
 
         def do_POST(self):
             """Handle incoming Prometheus alerts"""
