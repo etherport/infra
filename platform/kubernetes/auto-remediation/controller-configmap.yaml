@@ -83,6 +83,22 @@ data:
     AI_PRICE_PER_M_INPUT = float(os.environ.get('AI_ADVISOR_PRICE_INPUT', '3.0'))
     AI_PRICE_PER_M_OUTPUT = float(os.environ.get('AI_ADVISOR_PRICE_OUTPUT', '15.0'))
 
+    # Known-noisy alertnames — short-circuit BEFORE calling Claude.
+    # Saves API tokens on alerts that always diagnose to noop, plus
+    # alerts that are structurally never-actionable (InfoInhibitor is
+    # a kube-state-metrics placeholder; KubeJobCompleted/Watchdog
+    # are health canaries; CPUThrottlingHigh is informational on
+    # bursty workloads).
+    # Added 2026-05-24 after first 24h burned $0.94 in cap with 44
+    # InfoInhibitor + 18 NodeMemoryHigh diagnoses, all noop.
+    AI_IGNORE_ALERTS = {
+        'InfoInhibitor',
+        'Watchdog',
+        'KubeJobCompleted',
+        'CPUThrottlingHigh',
+        'KubeAggregatedAPIDown',  # transient on apiserver restart
+    }
+
     # Allowlist of proposed_action.type values the LLM may return.
     # ANYTHING ELSE is dropped server-side before the diagnosis is
     # emailed. The LLM never sees a shell; this enum is the entire
@@ -391,6 +407,9 @@ data:
             return
         if not ANTHROPIC_API_KEY:
             logger.warning(f"AI advisor enabled but ANTHROPIC_API_KEY empty — skipping {alert_name}")
+            return
+        if alert_name in AI_IGNORE_ALERTS:
+            _audit('skipped_noisy', alertname=alert_name)
             return
         if is_cooldown_active(alert_name):
             return
