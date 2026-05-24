@@ -1,0 +1,39 @@
+---
+# Service account + RBAC for the cloudwatch-to-loki forwarder.
+# Needs only:
+#   - read/write ConfigMap state in its own namespace (watermark
+#     tracking)
+# No cluster-wide perms; AWS perms come from boto3 env-var creds
+# (the IAM user is `ai-advisor-readonly` scoped to CloudWatch
+# Logs read; see infra/terraform/aws/ai-advisor-iam/).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudwatch-to-loki
+  namespace: cloudwatch-to-loki
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cloudwatch-to-loki-state
+  namespace: cloudwatch-to-loki
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "create", "update", "patch", "replace"]
+    resourceNames:
+      - "cloudwatch-to-loki-state"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cloudwatch-to-loki-state
+  namespace: cloudwatch-to-loki
+subjects:
+  - kind: ServiceAccount
+    name: cloudwatch-to-loki
+    namespace: cloudwatch-to-loki
+roleRef:
+  kind: Role
+  name: cloudwatch-to-loki-state
+  apiGroup: rbac.authorization.k8s.io

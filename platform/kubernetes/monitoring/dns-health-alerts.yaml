@@ -16,6 +16,12 @@ spec:
       for: 2m
       labels:
         severity: warning
+        # M41 Phase 3: opt this alert into autonomous execute. Static
+        # rule already restart_pods of node-local-dns; this label
+        # lets the AI advisor execute the same action autonomously
+        # when its confidence >= 0.85. Week-1 rollout per
+        # docs/runbooks/ai-advisor-phase3-enable.md.
+        ai_remediation: "auto"
       annotations:
         summary: "NodeLocalDNS error rate is high on {{ $labels.instance }}"
         description: "NodeLocalDNS on {{ $labels.instance }} has {{ $value }} SERVFAIL/sec"

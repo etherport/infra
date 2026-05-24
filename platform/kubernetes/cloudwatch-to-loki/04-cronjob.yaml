@@ -1,0 +1,62 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cloudwatch-to-loki
+  namespace: cloudwatch-to-loki
+spec:
+  # Every 5 minutes. Each run scans only events since the last
+  # successful run's watermark (or 30min if the group is new).
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 90000   # 25h — matches sibling backup CronJobs
+      template:
+        spec:
+          serviceAccountName: cloudwatch-to-loki
+          restartPolicy: Never
+          containers:
+            - name: forward
+              image: python:3.14-slim # {"$imagepolicy": "flux-system:python-slim"}
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  pip install --quiet boto3 kubernetes
+                  python /scripts/forward.py
+              env:
+                - name: LOG_GROUP_PREFIXES
+                  value: "/aws/lambda,/aws/ec2,CloudWatchAgent"
+                - name: LOKI_PUSH_URL
+                  value: "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+                - name: AWS_REGION
+                  value: "us-west-2"
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: aws-cloudwatch-creds
+                      key: aws_access_key_id
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: aws-cloudwatch-creds
+                      key: aws_secret_access_key
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "256Mi"
+                  cpu: "500m"
+          volumes:
+            - name: script
+              configMap:
+                name: cloudwatch-to-loki-script
+                defaultMode: 0755

@@ -46,7 +46,7 @@ spec:
           # the guardrails. Default OFF. See:
           # docs/runbooks/ai-advisor-phase3-enable.md
           - name: AI_PHASE3_ENABLED
-            value: "false"
+            value: "true"
           - name: AI_PHASE3_CONFIDENCE_THRESHOLD
             value: "0.85"
           - name: APPROVAL_BASE_URL

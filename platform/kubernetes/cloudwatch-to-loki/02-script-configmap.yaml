@@ -1,0 +1,228 @@
+---
+# Python script that polls CloudWatch Logs for configured log group
+# prefixes + pushes new events to in-cluster Loki via the push API.
+# Tracks high-water mark per log group in a ConfigMap so we don't
+# re-ingest on every run. M45 Phase C — closes the "AWS logs aren't
+# in Loki" gap so unified dashboards / queries / advisor context
+# span both on-prem and cloud.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudwatch-to-loki-script
+  namespace: cloudwatch-to-loki
+data:
+  forward.py: |
+    #!/usr/bin/env python3
+    """
+    CloudWatch Logs → Loki forwarder (M45 Phase C).
+
+    Polls CW Logs for configured prefixes every CronJob tick, pushes
+    new events to local Loki. High-water mark per log group is stored
+    in a ConfigMap so we resume cleanly across runs.
+
+    Env (required):
+      LOG_GROUP_PREFIXES  Comma-separated CW log-group name prefixes
+                          to scan. Default: /aws/lambda,/aws/ec2
+      LOKI_PUSH_URL       Loki push endpoint
+                          (http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push)
+      AWS_REGION          Default us-west-2
+
+    Env (optional):
+      STATE_CONFIGMAP     Name of the CM holding watermark state
+                          (default cloudwatch-to-loki-state)
+      STATE_NAMESPACE     CM namespace (default cloudwatch-to-loki)
+      LOOKBACK_MIN_FRESH  Lookback for groups we haven't seen before
+                          (default 30)
+      MAX_EVENTS_PER_GROUP Hard ceiling per group per run (default 5000)
+
+    AWS creds via standard boto3 env vars (AWS_ACCESS_KEY_ID +
+    AWS_SECRET_ACCESS_KEY in pod env from SOPS secret).
+
+    Idempotent + safe to re-run on failure: state CM tracks last
+    successful end-of-window per group; next run resumes from there.
+    """
+
+    import json
+    import os
+    import sys
+    import time
+    import urllib.request
+    import urllib.error
+    from datetime import datetime, timezone
+
+    import boto3
+    from kubernetes import client, config
+
+    LOG_GROUP_PREFIXES = [p.strip() for p in
+        os.environ.get('LOG_GROUP_PREFIXES', '/aws/lambda,/aws/ec2').split(',')
+        if p.strip()]
+    LOKI_PUSH_URL = os.environ.get('LOKI_PUSH_URL',
+        'http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push')
+    AWS_REGION = os.environ.get('AWS_REGION', 'us-west-2')
+    STATE_CM = os.environ.get('STATE_CONFIGMAP', 'cloudwatch-to-loki-state')
+    STATE_NS = os.environ.get('STATE_NAMESPACE', 'cloudwatch-to-loki')
+    LOOKBACK_MIN_FRESH = int(os.environ.get('LOOKBACK_MIN_FRESH', '30'))
+    MAX_EVENTS_PER_GROUP = int(os.environ.get('MAX_EVENTS_PER_GROUP', '5000'))
+
+    cw = boto3.client('logs', region_name=AWS_REGION)
+
+    try:
+        config.load_incluster_config()
+    except Exception:
+        config.load_kube_config()
+    kv1 = client.CoreV1Api()
+
+
+    def load_state():
+        """Return dict mapping log_group_name -> last_end_ts_ms."""
+        try:
+            cm = kv1.read_namespaced_config_map(STATE_CM, STATE_NS)
+            raw = (cm.data or {}).get('state.json', '{}')
+            return json.loads(raw)
+        except client.exceptions.ApiException as e:
+            if e.status == 404:
+                return {}
+            raise
+
+
+    def save_state(state):
+        body = client.V1ConfigMap(
+            metadata=client.V1ObjectMeta(name=STATE_CM, namespace=STATE_NS),
+            data={'state.json': json.dumps(state, sort_keys=True)},
+        )
+        try:
+            kv1.replace_namespaced_config_map(STATE_CM, STATE_NS, body)
+        except client.exceptions.ApiException as e:
+            if e.status == 404:
+                kv1.create_namespaced_config_map(STATE_NS, body)
+            else:
+                raise
+
+
+    def discover_groups():
+        groups = []
+        for prefix in LOG_GROUP_PREFIXES:
+            token = None
+            while True:
+                kwargs = {'logGroupNamePrefix': prefix, 'limit': 50}
+                if token:
+                    kwargs['nextToken'] = token
+                resp = cw.describe_log_groups(**kwargs)
+                for g in resp.get('logGroups', []):
+                    groups.append(g['logGroupName'])
+                token = resp.get('nextToken')
+                if not token:
+                    break
+        return sorted(set(groups))
+
+
+    def fetch_events(group, start_ms, end_ms):
+        events = []
+        token = None
+        while True:
+            kwargs = {
+                'logGroupName': group,
+                'startTime': start_ms,
+                'endTime': end_ms,
+                'limit': 1000,
+                'interleaved': True,
+            }
+            if token:
+                kwargs['nextToken'] = token
+            try:
+                resp = cw.filter_log_events(**kwargs)
+            except Exception as e:
+                print(f"  ! filter_log_events failed for {group}: {e}", flush=True)
+                break
+            for e in resp.get('events', []):
+                events.append((
+                    e.get('timestamp', 0),
+                    e.get('message', ''),
+                    e.get('logStreamName', ''),
+                ))
+                if len(events) >= MAX_EVENTS_PER_GROUP:
+                    print(f"  ! cap {MAX_EVENTS_PER_GROUP} hit for {group}; truncating", flush=True)
+                    return events
+            token = resp.get('nextToken')
+            if not token:
+                break
+        return events
+
+
+    def push_to_loki(group, events):
+        if not events:
+            return 0
+        by_stream = {}
+        for ts_ms, msg, stream in events:
+            # Loki wants nanosecond-precision timestamps as strings.
+            ns_ts = str(int(ts_ms) * 1_000_000)
+            by_stream.setdefault(stream, []).append([ns_ts, msg])
+        # service_name: take the last path segment of the log group
+        # (so /aws/lambda/ddns-updater -> "ddns-updater").
+        svc = group.rstrip('/').split('/')[-1] or 'aws'
+        payload = {
+            'streams': [
+                {
+                    'stream': {
+                        'job': 'cloudwatch',
+                        'cloud': 'aws',
+                        'log_group': group,
+                        'log_stream': stream,
+                        'service_name': svc,
+                    },
+                    'values': sorted(values, key=lambda v: v[0]),
+                }
+                for stream, values in by_stream.items()
+            ]
+        }
+        data = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(
+            LOKI_PUSH_URL,
+            data=data,
+            method='POST',
+            headers={'Content-Type': 'application/json'},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            if resp.status not in (200, 204):
+                raise RuntimeError(f"loki push {resp.status}: {resp.read()[:300]}")
+        return sum(len(v) for v in by_stream.values())
+
+
+    def main():
+        state = load_state()
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        default_start = now_ms - (LOOKBACK_MIN_FRESH * 60 * 1000)
+
+        groups = discover_groups()
+        print(f"discovered {len(groups)} log groups under prefixes {LOG_GROUP_PREFIXES}", flush=True)
+
+        total_pushed = 0
+        errors = 0
+        for g in groups:
+            start_ms = int(state.get(g, default_start))
+            # Don't query if start >= now (no work to do)
+            if start_ms >= now_ms:
+                continue
+            try:
+                events = fetch_events(g, start_ms, now_ms)
+                pushed = push_to_loki(g, events)
+                state[g] = now_ms
+                if pushed:
+                    print(f"  {g}: {pushed} events", flush=True)
+                total_pushed += pushed
+            except Exception as e:
+                errors += 1
+                print(f"  ! {g}: ERROR {e}", flush=True)
+
+        # Save state only if no errors — partial success would
+        # advance the watermark past unread events on failed groups.
+        if errors == 0:
+            save_state(state)
+            print(f"done: {total_pushed} events pushed; state saved", flush=True)
+        else:
+            print(f"done: {total_pushed} events pushed; {errors} errors — state NOT saved", flush=True)
+            sys.exit(1)
+
+
+    if __name__ == '__main__':
+        main()
