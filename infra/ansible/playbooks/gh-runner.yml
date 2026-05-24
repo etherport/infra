@@ -152,6 +152,72 @@
       args:
         creates: "/etc/systemd/system/actions.runner.sparked-diamond-infra.{{ runner_name }}.service"
 
+    # ---- L11 fix: durable workspace cleanup via runner job-started hook ----
+    # Some workflows (terraform-* in particular) interact with the work dir
+    # in ways that leave .git/objects owned by root. The next workflow run
+    # then fails with: "insufficient permission for adding an object to
+    # repository database .git/objects". This hook runs at every job start
+    # (before actions/checkout) and chowns the work dir back to the runner
+    # user so checkout can clean stale state.
+    #
+    # Mechanism: ACTIONS_RUNNER_HOOK_JOB_STARTED env var points the runner
+    # at a script that runs in the job-started lifecycle stage. See
+    # https://github.com/actions/runner/blob/main/docs/adrs/1751-runner-job-hooks.md
+    - name: Drop job-started hook script
+      ansible.builtin.copy:
+        dest: "{{ runner_home }}/hooks/job-started.sh"
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # Runs before EVERY workflow job. Quickly normalize ownership of
+          # the work tree so workflows that touch .git as a non-runner user
+          # (e.g. via container: steps or sudo) don't break the next run.
+          # Idempotent + cheap (no-op if everything's already owned right).
+          set -u
+          WORK="${RUNNER_WORKSPACE_BASE:-$(dirname "$(dirname "$0")")/_work}"
+          if [ -d "$WORK" ]; then
+            sudo -n chown -R {{ runner_user }}:{{ runner_user }} "$WORK" 2>/dev/null || \
+              chown -R {{ runner_user }}:{{ runner_user }} "$WORK" 2>/dev/null || true
+          fi
+          exit 0
+      notify: Restart runner
+
+    - name: Ensure hooks dir exists
+      ansible.builtin.file:
+        path: "{{ runner_home }}/hooks"
+        state: directory
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+        mode: "0755"
+
+    - name: Allow runner user passwordless sudo for chown (job-started hook)
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/runner-chown
+        content: "{{ runner_user }} ALL=(root) NOPASSWD: /usr/bin/chown\n"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: visudo -cf %s
+
+    - name: Set ACTIONS_RUNNER_HOOK_JOB_STARTED env in runner .env
+      ansible.builtin.lineinfile:
+        path: "{{ runner_home }}/.env"
+        regexp: "^ACTIONS_RUNNER_HOOK_JOB_STARTED="
+        line: "ACTIONS_RUNNER_HOOK_JOB_STARTED={{ runner_home }}/hooks/job-started.sh"
+        owner: "{{ runner_user }}"
+        group: "{{ runner_user }}"
+        mode: "0644"
+        create: true
+      notify: Restart runner
+
+    - name: One-off cleanup of stale root-owned files in work dir
+      ansible.builtin.command:
+        cmd: chown -R {{ runner_user }}:{{ runner_user }} {{ runner_home }}/_work
+      changed_when: true
+      failed_when: false   # work dir may not exist yet on a fresh runner
+
     - name: Start + enable runner service
       ansible.builtin.systemd:
         name: "actions.runner.sparked-diamond-infra.{{ runner_name }}.service"

@@ -394,17 +394,10 @@ revision use the next free ID per tier. Status legend:
   Same for any future operator-managed ingresses.
 - **Effort:** Trivial (ACL edit + annotation update).
 
-### ⏳ L11. gh-runner .git permission failure on TF apply jobs
-- **Source:** M44 apply attempt 2026-05-24 failed: `insufficient
-  permission for adding an object to repository database .git/objects`
-  + `fatal: failed to write object` + `fatal: unpack-objects failed`.
-  Run 26366496970 logs. Workspace .git directory on the lifecycle
-  runner VM has wrong ownership/perms — likely from a prior cleanup
-  step that ran as a different uid. Fix: `chown -R runner:runner
-  ~/_work/infra/.git` on the gh-runner VM, OR add a workspace cleanup
-  step in the workflow that nukes the dir before checkout. Until
-  fixed, all terraform-* workflows on the lifecycle runner are broken.
-- **Effort:** S.
+### ✅ L11. gh-runner .git permission failure on TF apply jobs (durable fix)
+- **Done:** 2026-05-24 in `infra/ansible/playbooks/gh-runner.yml`. Symptom (M44 apply, run 26366496970): `insufficient permission for adding an object to repository database .git/objects` + `fatal: unpack-objects failed`. Root cause: some prior workflow step (likely a `container:`-based action) wrote files into the work dir as root; subsequent runs as the `ubuntu` runner user can't overwrite them.
+- **Durable fix:** the gh-runner playbook now drops a `job-started.sh` hook at `{{ runner_home }}/hooks/job-started.sh` and points `ACTIONS_RUNNER_HOOK_JOB_STARTED` at it via the runner's `.env` file. The hook runs at every job start (before `actions/checkout`) and does a `chown -R {{ runner_user }}:{{ runner_user }} _work` so stale ownership self-heals on every run. Passwordless sudo for `/usr/bin/chown` granted to the runner user via `/etc/sudoers.d/runner-chown` (scoped to that one binary, validated with visudo). Also runs a one-off `chown -R` during the play so the next workflow can start immediately.
+- **To apply:** dispatch `ansible-proxmox.yml`? No — `gh-runner.yml` doesn't live in the proxmox workflow list. Run from operator's laptop with the standard env: `GH_TOKEN=$(op item get p4k7sihbwzls55lvt6qlf23fcu --fields token --reveal) ansible-playbook -i infra/ansible/inventory/wind/ infra/ansible/playbooks/gh-runner.yml`.
 
 ### ⏳ L9. Delete legacy traefik files
 - **Source:** consistency review 2026-05-24. `platform/kubernetes/traefik/{pvc-traefik-ceph.yaml,traefik-acme-fix.yaml}` are explicitly labeled "Legacy. Safe to remove." in the traefik README but still on disk. Drop them.
