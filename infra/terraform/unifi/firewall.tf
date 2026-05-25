@@ -16,8 +16,11 @@
 // avoid the broken endpoint entirely.
 //
 // rule_index numbers: paultyng/unifi uses an index in the LAN_IN
-// chain. Pick numbers above 2000 (well above the auto-generated
-// ones) and leave gaps for inserts.
+// chain. Provider docs allow 2000-2999 for LAN_IN but UniFi 10+
+// rejects values below ~2500 with FirewallRuleIndexOutOfRange (400)
+// — the legacy /rest/firewallrule endpoint there has 0 existing
+// rules (all migrated to zone-based) so the controller restricts
+// the user-modifiable index window. 2500+ works.
 
 // Port group for UDP/514 — port-groups still work on UniFi 10+ via
 // the legacy API, so keep this abstraction for reuse.
@@ -35,7 +38,7 @@ resource "unifi_firewall_rule" "allow_syslog_unvr_to_alloy" {
   name                   = "Allow UNVR → Alloy UDP/514 (syslog)"
   action                 = "accept"
   ruleset                = "LAN_IN"
-  rule_index             = 2010
+  rule_index             = 2500
   protocol               = "udp"
   src_address            = "10.10.212.10"  // UNVR / Protect controller (VLAN 212)
   dst_address            = "10.10.201.73"  // Alloy MetalLB LB (VLAN 201)
@@ -48,7 +51,7 @@ resource "unifi_firewall_rule" "allow_syslog_unas_to_alloy" {
   name                   = "Allow UNAS → Alloy UDP/514 (syslog)"
   action                 = "accept"
   ruleset                = "LAN_IN"
-  rule_index             = 2011
+  rule_index             = 2501
   protocol               = "udp"
   src_address            = "10.10.209.10"  // UNAS / Sequoia (VLAN 209)
   dst_address            = "10.10.201.73"  // Alloy MetalLB LB (VLAN 201)
