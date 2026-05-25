@@ -1,0 +1,89 @@
+name: Cloudflare Terraform
+
+on:
+  pull_request:
+    paths:
+      - 'infra/terraform/cloudflare/**'
+      - '.github/workflows/terraform-cloudflare.yml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        default: plan
+        options:
+          - plan
+          - apply
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  WORKING_DIR: infra/terraform/cloudflare
+
+jobs:
+  terraform:
+    name: Terraform ${{ github.event.inputs.action || 'plan' }}
+    runs-on: [self-hosted, lifecycle]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials (for Route53 + S3 backend)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: us-west-2
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.9.0
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          # Backend uses the S3 bucket — credentials via configure-aws-credentials above.
+          # Strip the explicit profile from the backend so it falls through to env vars.
+          AWS_PROFILE: ""
+        run: |
+          terraform init \
+            -backend-config="profile="
+
+      - name: Terraform Plan
+        if: github.event.inputs.action != 'apply'
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_PROFILE: ""
+        run: terraform plan -var "aws_profile=" -no-color
+
+      - name: Terraform Apply
+        if: github.event.inputs.action == 'apply'
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_PROFILE: ""
+        run: terraform apply -auto-approve -var "aws_profile=" -no-color
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Cloudflare Terraform run"
+            echo
+            echo "- Action: \`${{ github.event.inputs.action || 'plan (PR)' }}\`"
+            echo
+            if [ "${{ github.event.inputs.action }}" = "apply" ]; then
+              echo "Next steps:"
+              echo "1. Retrieve tunnel token: \`cd ${{ env.WORKING_DIR }} && terraform output -raw tunnel_token | pbcopy\`"
+              echo "2. \`sops platform/kubernetes/cloudflared/01-tunnel-token.sops.yaml\` → paste."
+              echo "3. Commit + push; Flux reconciles cloudflared Deployment within ~1min."
+              echo "4. Verify: \`kubectl get pods -n cloudflared\` shows 2/2 Running, \`kubectl logs\` shows 'Connection registered'."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

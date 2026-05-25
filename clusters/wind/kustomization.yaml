@@ -19,6 +19,13 @@ resources:
   # span both. Populate the SOPS secret per
   # docs/runbooks/cloudwatch-to-loki-enable.md to activate.
   - ../../platform/kubernetes/cloudwatch-to-loki
+  # Cloudflare Tunnel (cloudflared daemon). Outbound-only to CF edge;
+  # no inbound ports opened. Routes approve.wind.etherport.net (and
+  # future *.wind.etherport.net public-with-auth services) through
+  # CF Access. Populate token via
+  # docs/runbooks/cloudflare-access-enable.md after `terraform apply`
+  # in infra/terraform/cloudflare.
+  - ../../platform/kubernetes/cloudflared
   # Policy baseline (Pod Security Standards audit+warn, LimitRanges).
   # Phase 1 of the NetworkPolicies+Quotas+PDBs plan — observation-only,
   # no enforcement. See platform/kubernetes/policy-baseline/README.md.

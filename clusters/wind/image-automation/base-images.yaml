@@ -107,3 +107,30 @@ spec:
   policy:
     semver:
       range: ">=1.0.0"
+---
+# cloudflared (Cloudflare Tunnel daemon)
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: cloudflared
+  namespace: flux-system
+spec:
+  image: cloudflare/cloudflared
+  interval: 12h
+  exclusionList:
+    - "^latest$"
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: cloudflared
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: cloudflared
+  filterTags:
+    pattern: '^(?P<ts>\d{4}\.\d+\.\d+)$'
+    extract: '$ts'
+  policy:
+    alphabetical:
+      order: asc
