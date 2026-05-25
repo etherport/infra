@@ -234,6 +234,24 @@ data:
       describe_resource(kind, namespace, name)    — get conditions + events
       list_recent_events(namespace, since_min)    — surface scheduling/IO errors
       list_recent_alerts(alertname_filter)        — find correlated alerts
+      read_runbook(name)                          — operator-curated fix doc
+      search_git_log(query, days, max_results)    — past commits / fixes
+
+    INSTITUTIONAL-KNOWLEDGE TOOLS — call these FIRST:
+
+    - read_runbook(name=<alertname>) — call for EVERY alert before
+      proposing an action. Pass the alertname (e.g. "VeleroLastBackupAgeHigh").
+      If the runbook exists it names the verified root cause + fix; that
+      almost always wins over first-principles diagnosis. If it returns
+      "not found", you've lost one tool call — fine, continue with the
+      other tools. (The controller tries docs/runbooks/alerts/<name>.md
+      first, then falls back to docs/runbooks/<name>.md.)
+    - search_git_log(query=<alertname or component>) — call when
+      ctx.history.past_actions has any entries (this alert has fired
+      before). Find the commit(s) that fixed it last time. The commit
+      body usually explains the real root cause in detail. Useful queries:
+      the alertname, an error keyword from the logs, or a component name
+      ("velero", "cnpg", "metallb").
 
     INVESTIGATION DISCIPLINE:
     - Form a hypothesis, then call a tool to test it. Don't just dump

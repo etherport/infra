@@ -251,6 +251,13 @@ data:
         'ALERTMANAGER_URL',
         'http://monitoring-kube-prometheus-alertmanager.monitoring.svc.cluster.local:9093',
     )
+    # GitHub API access for deep-mode institutional-knowledge tools
+    # (search_git_log + read_runbook). Repo is not mounted into the pod,
+    # so the advisor reads commit history + runbooks via the public API
+    # instead of shelling out to git. Token is optional — unauth requests
+    # work but the 60/hr rate limit makes them unreliable.
+    GITHUB_REPO = os.environ.get('GITHUB_REPO', 'sparked-diamond/infra')
+    GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')
     # Max silence TTL the advisor can set (hours). Anything beyond this
     # should be a human-led operational decision.
     AI_SILENCE_MAX_HOURS = int(os.environ.get('AI_SILENCE_MAX_HOURS', '6'))
@@ -1278,6 +1285,30 @@ data:
                     },
                 },
             },
+            {
+                'name': 'search_git_log',
+                'description': 'Search the infra repo commit history for past fixes. Use this on recurring alerts — query by alertname, error keyword, or component to find the commit that fixed it before. Returns sha, date, author, subject, and first ~20 lines of the commit body. Backed by the GitHub Search API.',
+                'input_schema': {
+                    'type': 'object',
+                    'properties': {
+                        'query': {'type': 'string', 'description': 'Keywords for git log --grep (alertname, error keyword, component, etc.)'},
+                        'days': {'type': 'integer', 'description': 'Lookback window in days (default 365)', 'default': 365},
+                        'max_results': {'type': 'integer', 'description': 'Max commits to return (default 10, max 25)', 'default': 10},
+                    },
+                    'required': ['query'],
+                },
+            },
+            {
+                'name': 'read_runbook',
+                'description': 'Read an operator-curated runbook from docs/runbooks/. Call this BEFORE proposing an action for any alert — the runbook (if present) names known root causes + the verified fix. Tries docs/runbooks/alerts/<name>.md first, then docs/runbooks/<name>.md. <name> can be the alertname or a topic slug, no .md extension.',
+                'input_schema': {
+                    'type': 'object',
+                    'properties': {
+                        'name': {'type': 'string', 'description': 'Runbook name (alertname or slug, no .md extension)'},
+                    },
+                    'required': ['name'],
+                },
+            },
         ]
 
     def _dispatch_tool(name, args):
@@ -1419,10 +1450,96 @@ data:
                         break
                 return '\n'.join(rows) if rows else '(no active alerts matching filter)'
 
+            if name == 'search_git_log':
+                return _tool_search_git_log(args)
+
+            if name == 'read_runbook':
+                return _tool_read_runbook(args)
+
             return f'unknown tool {name!r}'
         except Exception as e:
             logger.error(f"_dispatch_tool {name} error: {e}")
             return f'ERROR: {type(e).__name__}: {str(e)[:200]}'
+
+    def _github_request(url, accept='application/vnd.github+json'):
+        """Authenticated GET against GitHub API/raw, returns (status, body_bytes)."""
+        req = urllib.request.Request(url, headers={
+            'Accept': accept,
+            'User-Agent': 'wind-auto-remediation',
+        })
+        if GITHUB_TOKEN:
+            req.add_header('Authorization', f'Bearer {GITHUB_TOKEN}')
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.status, r.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read()
+
+    def _tool_search_git_log(args):
+        q = str(args.get('query', '')).strip()
+        if not q:
+            return json.dumps({'error': 'query is required'})
+        days = max(1, int(args.get('days', 365) or 365))
+        max_results = min(max(1, int(args.get('max_results', 10) or 10)), 25)
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime('%Y-%m-%d')
+        # GitHub Search API expects `+` as the AND join inside `q=`, so we
+        # build the query manually rather than urlencoding spaces to %20.
+        terms = urllib.parse.quote(q, safe='') + f'+repo:{GITHUB_REPO}+committer-date:>={since}'
+        url = f'https://api.github.com/search/commits?q={terms}&per_page={max_results}&sort=committer-date&order=desc'
+        try:
+            status, body = _github_request(url)
+        except (urllib.error.URLError, TimeoutError) as e:
+            return json.dumps({'error': f'github network error: {e}'})
+        if status == 422:
+            return json.dumps({'error': f'invalid query (422): {body[:200].decode("utf-8", "ignore")}'})
+        if status == 403:
+            return json.dumps({'error': 'github rate limit (403) — token may be missing or exhausted'})
+        if status >= 400:
+            return json.dumps({'error': f'github http {status}: {body[:200].decode("utf-8", "ignore")}'})
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            return json.dumps({'error': 'github returned non-json'})
+        items = []
+        for it in data.get('items', [])[:max_results]:
+            commit = it.get('commit', {}) or {}
+            message = commit.get('message', '') or ''
+            subject, _, rest = message.partition('\n')
+            body_preview = '\n'.join(rest.lstrip('\n').splitlines()[:20])
+            items.append({
+                'sha': (it.get('sha') or '')[:12],
+                'date': (commit.get('committer', {}) or {}).get('date', ''),
+                'author': (commit.get('author', {}) or {}).get('name', ''),
+                'subject': subject[:200],
+                'body_preview': body_preview[:1500],
+            })
+        if not items:
+            return json.dumps({'results': [], 'message': f'no commits matching {q!r} in last {days}d'})
+        return json.dumps({'results': items}, indent=2)
+
+    def _tool_read_runbook(args):
+        nm = str(args.get('name', '')).strip()
+        if not nm:
+            return json.dumps({'error': 'name is required'})
+        nm = nm.replace('..', '').strip('/').removesuffix('.md')
+        candidates = [
+            f'docs/runbooks/alerts/{nm}.md',
+            f'docs/runbooks/{nm}.md',
+        ]
+        for path in candidates:
+            url = f'https://raw.githubusercontent.com/{GITHUB_REPO}/main/{urllib.parse.quote(path)}'
+            try:
+                status, body = _github_request(url, accept='text/plain')
+            except (urllib.error.URLError, TimeoutError) as e:
+                return json.dumps({'error': f'github network error: {e}'})
+            if status == 200:
+                content = body.decode('utf-8', 'replace')
+                if len(content) > 16384:
+                    content = content[:16384] + '\n...(truncated at 16KB)'
+                return json.dumps({'path': path, 'content': content})
+            if status == 403:
+                return json.dumps({'error': 'github rate limit (403)'})
+        return json.dumps({'error': f'not found at either {candidates[0]} or {candidates[1]}'})
 
     def _call_anthropic_with_tools(system_prompt, initial_user_payload, max_iter=None):
         """Multi-turn Claude call with tool-use. Returns (parsed_final_json,

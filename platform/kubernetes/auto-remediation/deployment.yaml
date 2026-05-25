@@ -105,6 +105,21 @@ spec:
               secretKeyRef:
                 name: ai-advisor-anthropic-key
                 key: api_key
+          # Deep-mode institutional-knowledge tools (search_git_log,
+          # read_runbook) talk to the GitHub API. Token is optional —
+          # without it, requests are unauthenticated and rate-limited
+          # to 60/hr per source IP, which is enough for occasional
+          # deep-mode calls but will rate-limit under bursts. Create
+          # secret `ai-advisor-github` with key `token` to populate
+          # (fine-grained PAT, public-repo read access only).
+          - name: GITHUB_REPO
+            value: "sparked-diamond/infra"
+          - name: GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: ai-advisor-github
+                key: token
+                optional: true
           - name: SMTP_USER
             valueFrom:
               secretKeyRef:
