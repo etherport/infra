@@ -1,0 +1,67 @@
+---
+# Probe CRs — Prometheus operator picks these up automatically and
+# creates scrape configs targeting blackbox-exporter. Each probe runs
+# at scrape interval (30s default) and exposes probe_success{instance=...}
+# and probe_duration_seconds{instance=...}.
+#
+# Naming convention: <appliance>-<protocol>. instance label = appliance
+# name (consumed by service-status-report.py via kind="probe").
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: udm
+  namespace: blackbox-exporter
+  labels:
+    appliance: udm
+spec:
+  jobName: blackbox-appliance
+  interval: 30s
+  module: http_2xx_insecure
+  prober:
+    url: blackbox-exporter.blackbox-exporter.svc.cluster.local:9115
+  targets:
+    staticConfig:
+      static:
+        - https://10.10.200.1
+      labels:
+        appliance: udm
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: protect
+  namespace: blackbox-exporter
+  labels:
+    appliance: protect
+spec:
+  jobName: blackbox-appliance
+  interval: 30s
+  module: http_2xx_insecure
+  prober:
+    url: blackbox-exporter.blackbox-exporter.svc.cluster.local:9115
+  targets:
+    staticConfig:
+      static:
+        - https://10.10.212.10
+      labels:
+        appliance: protect
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: unas
+  namespace: blackbox-exporter
+  labels:
+    appliance: unas
+spec:
+  jobName: blackbox-appliance
+  interval: 30s
+  module: http_2xx_insecure
+  prober:
+    url: blackbox-exporter.blackbox-exporter.svc.cluster.local:9115
+  targets:
+    staticConfig:
+      static:
+        - https://10.10.209.10
+      labels:
+        appliance: unas

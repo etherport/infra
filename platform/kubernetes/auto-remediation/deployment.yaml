@@ -21,7 +21,10 @@ spec:
         - /bin/bash
         - -c
         - |
-          pip install kubernetes pyyaml boto3
+          # kubernetes pinned <31 — same v31+ auth bug as cw2loki on py3.14.
+          # paramiko added 2026-05-25 for Tier 3 SSH-based advisor actions
+          # (prune_host_logdir, restart_systemd_unit, journal_vacuum).
+          pip install 'kubernetes>=30,<31' pyyaml boto3 paramiko
           python /scripts/remediate.py
         ports:
         - containerPort: 8080
@@ -119,6 +122,10 @@ spec:
           mountPath: /etc/remediation
         - name: prompts
           mountPath: /etc/prompts
+        # Phase 3 SSH key for non-K8s host actions.
+        - name: advisor-ssh-key
+          mountPath: /etc/advisor-ssh
+          readOnly: true
         resources:
           requests:
             memory: "128Mi"
@@ -137,3 +144,11 @@ spec:
       - name: prompts
         configMap:
           name: ai-advisor-prompt
+      - name: advisor-ssh-key
+        secret:
+          secretName: advisor-ssh-key
+          defaultMode: 0400
+          items:
+          - key: id_ed25519
+            path: id_ed25519
+            mode: 0400

@@ -175,6 +175,11 @@ data:
         'rollback_deployment',
         'cnpg_recreate_replica',
         'bump_resource_request',
+        # Tier 3 — SSH to non-K8s hosts (dns-aws, dns-fallback, vpn-local, vpn-aws).
+        # Strictly bounded by host allowlist + wrapped script on remote side.
+        'prune_host_logdir',
+        'restart_systemd_unit',
+        'journal_vacuum',
     }
 
     # Subset of action types eligible for Phase 3 autonomous execution.
@@ -189,7 +194,27 @@ data:
         'trigger_cnpg_backup_now',
         'force_cert_renewal',
         'silence_alert_temporarily',
+        # Tier 3 SSH actions ARE auto-eligible because the remote-side wrapper
+        # script enforces a hardcoded enum of (action, args) — even if Claude
+        # hallucinates parameters, the worst case is the wrapper rejects them.
+        'prune_host_logdir',
+        'journal_vacuum',
+        # restart_systemd_unit deliberately NOT auto — service restarts are
+        # disruption-bearing and benefit from operator awareness.
     }
+
+    # Tier 3 SSH host allowlist. Map alert.labels.instance → ssh target.
+    # Keys are the names the advisor uses in proposed_action.params.host.
+    # Values: (ip, ssh_user — always advisor-remediation per base.yml setup).
+    ADVISOR_SSH_HOSTS = {
+        'dns-aws':      '10.10.100.5',
+        'dns-fallback': '10.10.201.6',
+        'vpn-local':    '10.10.201.5',
+        'vpn-aws':      '10.10.100.10',
+    }
+    ADVISOR_SSH_USER = 'advisor-remediation'
+    ADVISOR_SSH_KEY_PATH = os.environ.get('ADVISOR_SSH_KEY_PATH', '/etc/advisor-ssh/id_ed25519')
+    ADVISOR_SSH_TIMEOUT = int(os.environ.get('ADVISOR_SSH_TIMEOUT', '30'))
 
     # Namespaces that are off-limits even for the allowed action types.
     # Phase 1 doesn't execute anything but we still validate so the
@@ -623,6 +648,93 @@ data:
             return False, str(e)
 
     # ===================================================================
+    # Tier 3 — SSH to non-K8s hosts via paramiko
+    #
+    # Defense-in-depth: cluster-side validates host + builds the command
+    # from a hardcoded template (no string concat with user/AI input);
+    # host-side wrapper script enforces an enum of (action, args) before
+    # dispatching; sudoers rules permit only the exact commands the
+    # wrapper invokes. Three layers of allowlist between Claude's
+    # proposed_action and `rm -rf /`.
+    # ===================================================================
+
+    def _ssh_exec(host_key, original_command):
+        """Execute `original_command` on host (resolved from ADVISOR_SSH_HOSTS).
+        The remote authorized_keys entry pins SSH to /usr/local/sbin/advisor-remediation.sh,
+        so original_command goes into $SSH_ORIGINAL_COMMAND on the wrapper.
+        Returns (success_bool, message_str)."""
+        if host_key not in ADVISOR_SSH_HOSTS:
+            return False, f'host {host_key!r} not in allowlist'
+        if not os.path.exists(ADVISOR_SSH_KEY_PATH):
+            return False, f'SSH key missing at {ADVISOR_SSH_KEY_PATH}'
+        ip = ADVISOR_SSH_HOSTS[host_key]
+        try:
+            import paramiko
+        except ImportError:
+            return False, 'paramiko not installed in controller image (add to pip install)'
+        try:
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            pkey = paramiko.Ed25519Key.from_private_key_file(ADVISOR_SSH_KEY_PATH)
+            client.connect(
+                hostname=ip,
+                username=ADVISOR_SSH_USER,
+                pkey=pkey,
+                timeout=ADVISOR_SSH_TIMEOUT,
+                allow_agent=False,
+                look_for_keys=False,
+            )
+            stdin, stdout, stderr = client.exec_command(original_command, timeout=ADVISOR_SSH_TIMEOUT)
+            exit_code = stdout.channel.recv_exit_status()
+            out = stdout.read().decode(errors='replace').strip()
+            err = stderr.read().decode(errors='replace').strip()
+            client.close()
+            ok = (exit_code == 0)
+            logger.info(f"ssh_exec {host_key}: exit={exit_code} out={out[:200]!r} err={err[:200]!r}")
+            msg = out if ok else f"exit={exit_code} stderr={err[:200]}"
+            return ok, msg
+        except Exception as e:
+            logger.error(f"ssh_exec {host_key} failed: {e}")
+            return False, str(e)
+
+    def prune_host_logdir(host, logdir_key, days=7):
+        """SSH to host, prune logdir (allowlisted key) older than N days.
+        logdir_key MUST match the remote wrapper's allowlist:
+          technitium-logs  | technitium-stats."""
+        # Defense layer 1: validate days as int 1-365 here too
+        try:
+            days = int(days)
+        except (TypeError, ValueError):
+            return False, 'days must be int'
+        if days < 1 or days > 365:
+            return False, 'days out of range 1-365'
+        # Defense layer 2: validate logdir_key cluster-side
+        if logdir_key not in {'technitium-logs', 'technitium-stats'}:
+            return False, f'logdir_key {logdir_key!r} not allowed'
+        cmd = f'prune-logdir {logdir_key} {days}'
+        return _ssh_exec(host, cmd)
+
+    def restart_systemd_unit(host, unit_key):
+        """SSH to host, restart a systemd unit (allowlisted key).
+        unit_key MUST match the remote wrapper's allowlist:
+          technitium | wireguard | kubelet."""
+        if unit_key not in {'technitium', 'wireguard', 'kubelet'}:
+            return False, f'unit_key {unit_key!r} not allowed'
+        cmd = f'restart-unit {unit_key}'
+        return _ssh_exec(host, cmd)
+
+    def journal_vacuum(host, size_mb=100):
+        """SSH to host, journalctl --vacuum-size=<size_mb>M."""
+        try:
+            size_mb = int(size_mb)
+        except (TypeError, ValueError):
+            return False, 'size_mb must be int'
+        if size_mb < 10 or size_mb > 1000:
+            return False, 'size_mb out of range 10-1000'
+        cmd = f'journal-vacuum {size_mb}'
+        return _ssh_exec(host, cmd)
+
+    # ===================================================================
     # AI Advisor — Phase 1 (advisory only, no execution)
     # ===================================================================
 
@@ -982,6 +1094,10 @@ data:
             'rollback_deployment': {'namespace', 'name'},
             'cnpg_recreate_replica': {'cluster_name', 'instance'},
             'bump_resource_request': {'namespace', 'deployment', 'container'},
+            # Tier 3 SSH:
+            'prune_host_logdir': {'host', 'logdir_key'},
+            'restart_systemd_unit': {'host', 'unit_key'},
+            'journal_vacuum': {'host'},
         }
         if atype != 'noop':
             req = _required.get(atype, set())
@@ -1288,6 +1404,17 @@ data:
                 resource=params.get('resource', 'memory'),
                 percent=int(params.get('percent', 25)),
             )
+
+        # Tier 3 — SSH to non-K8s hosts
+        if atype == 'prune_host_logdir':
+            return prune_host_logdir(
+                params['host'], params['logdir_key'],
+                days=int(params.get('days', 7)),
+            )
+        if atype == 'restart_systemd_unit':
+            return restart_systemd_unit(params['host'], params['unit_key'])
+        if atype == 'journal_vacuum':
+            return journal_vacuum(params['host'], size_mb=int(params.get('size_mb', 100)))
 
         return False, f'unknown action type {atype}'
 

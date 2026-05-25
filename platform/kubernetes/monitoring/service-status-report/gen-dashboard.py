@@ -33,6 +33,8 @@ def query_for(kind, namespace, target):
         return f'kube_daemonset_status_number_ready{{namespace="{namespace}",daemonset="{target}"}}'
     if kind == "external":
         return f'up{{job="{namespace}",instance=~"{target}.*"}}'
+    if kind == "probe":
+        return f'probe_success{{appliance="{target}"}}'
     if kind == "cronjob":
         # Treat "up" as last_successful_time within 24h.
         # Returns 1 when within window, 0 otherwise.

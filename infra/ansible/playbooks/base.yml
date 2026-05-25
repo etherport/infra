@@ -319,6 +319,151 @@
       ignore_errors: yes
 
     # =========================================================================
+    # AI advisor SSH access — Phase 3 remediation actions
+    # =========================================================================
+    # The auto-remediation controller in K8s needs to SSH out to non-K8s
+    # hosts to run a tight allowlist of remediation commands
+    # (technitium log prune, systemd unit restart, journalctl vacuum).
+    #
+    # Security model:
+    #   1. Dedicated `advisor-remediation` user (NOT graham, NOT ubuntu) —
+    #      single-purpose, easy to audit + revoke.
+    #   2. Authorized_key forced to specific commands via `command="..."`
+    #      restriction — even with the key, SSH only runs the wrapped script.
+    #   3. Wrapper script `/usr/local/sbin/advisor-remediation.sh` validates
+    #      its own args against a hardcoded allowlist before dispatching.
+    #   4. NOPASSWD sudo for the wrapper script only — nothing else.
+    #
+    # Public key: cluster-side, in K8s SOPS secret advisor-ssh-key. Updated
+    # 2026-05-25 when key was generated. To rotate, regenerate the key in
+    # 1P "AI Advisor SSH Key" item + re-encrypt the K8s secret + re-run
+    # this play to push the new pubkey.
+    - name: Create advisor-remediation user
+      ansible.builtin.user:
+        name: advisor-remediation
+        comment: "AI advisor remediation actions (Phase 3 SSH)"
+        shell: /bin/bash
+        create_home: true
+        state: present
+      when: inventory_hostname in ['dns-aws', 'dns-fallback', 'vpn-local', 'vpn-aws']
+
+    - name: Install advisor-remediation wrapper script
+      ansible.builtin.copy:
+        dest: /usr/local/sbin/advisor-remediation.sh
+        owner: root
+        group: root
+        mode: '0755'
+        content: |
+          #!/usr/bin/env bash
+          # Wrapped command for the advisor's SSH key. Validates the action +
+          # args against a hardcoded allowlist before dispatching. The key in
+          # ~/.ssh/authorized_keys forces command="/usr/local/sbin/advisor-remediation.sh"
+          # so the client's "original" command is ignored.
+          #
+          # The original SSH command lands in $SSH_ORIGINAL_COMMAND. Parse it
+          # as: <action> <arg1> <arg2> ... (whitespace-separated, no shell).
+          set -euo pipefail
+
+          CMD="${SSH_ORIGINAL_COMMAND:-}"
+          if [ -z "$CMD" ]; then
+            echo "advisor-remediation: empty command" >&2
+            exit 2
+          fi
+
+          # Tokenize on whitespace, NO shell expansion.
+          read -r -a ARGS <<< "$CMD"
+          ACTION="${ARGS[0]:-}"
+
+          # Audit log every invocation (journald + syslog)
+          logger -t advisor-remediation "invoked action=$ACTION args=${ARGS[*]:1}"
+
+          case "$ACTION" in
+            prune-logdir)
+              # args: <logdir-key> <days>
+              KEY="${ARGS[1]:-}"
+              DAYS="${ARGS[2]:-7}"
+              # Allowlist of log dirs (NOT user-input paths)
+              case "$KEY" in
+                technitium-logs)  DIR=/opt/technitium/config/logs ;;
+                technitium-stats) DIR=/opt/technitium/config/stats ;;
+                *) echo "advisor-remediation: unknown logdir key '$KEY'" >&2; exit 3 ;;
+              esac
+              # Validate days as integer between 1 and 365
+              [[ "$DAYS" =~ ^[0-9]+$ ]] || { echo "days not integer"; exit 3; }
+              [ "$DAYS" -ge 1 ] && [ "$DAYS" -le 365 ] || { echo "days out of range"; exit 3; }
+              if [ -d "$DIR" ]; then
+                sudo find "$DIR" -maxdepth 1 -type f -mtime "+${DAYS}" -delete
+                echo "ok: pruned $DIR older than ${DAYS}d"
+              else
+                echo "ok: $DIR does not exist (nothing to prune)"
+              fi
+              ;;
+
+            restart-unit)
+              # args: <unit-key>
+              KEY="${ARGS[1]:-}"
+              # Allowlist of units we permit restart of
+              case "$KEY" in
+                technitium) UNIT=technitium ;;
+                wireguard)  UNIT=wg-quick@wg0 ;;
+                kubelet)    UNIT=kubelet ;;
+                *) echo "advisor-remediation: unknown unit key '$KEY'" >&2; exit 3 ;;
+              esac
+              sudo systemctl restart "$UNIT"
+              echo "ok: restarted $UNIT"
+              ;;
+
+            journal-vacuum)
+              # args: <size-mb>
+              SIZE="${ARGS[1]:-100}"
+              [[ "$SIZE" =~ ^[0-9]+$ ]] || { echo "size not integer"; exit 3; }
+              [ "$SIZE" -ge 10 ] && [ "$SIZE" -le 1000 ] || { echo "size out of range (10-1000 MB)"; exit 3; }
+              sudo journalctl --vacuum-size="${SIZE}M"
+              echo "ok: journalctl vacuumed to ${SIZE}M"
+              ;;
+
+            *)
+              echo "advisor-remediation: unknown action '$ACTION'" >&2
+              echo "allowed: prune-logdir, restart-unit, journal-vacuum" >&2
+              exit 3
+              ;;
+          esac
+      when: inventory_hostname in ['dns-aws', 'dns-fallback', 'vpn-local', 'vpn-aws']
+
+    - name: Install sudoers rule for advisor-remediation
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/advisor-remediation
+        owner: root
+        group: root
+        mode: '0440'
+        validate: visudo -cf %s
+        content: |
+          # NOPASSWD sudo for the exact commands the advisor's wrapper
+          # script invokes. Cmnd_Alias keeps the list narrow + auditable.
+          Cmnd_Alias ADVISOR_FIND_DELETE = \
+            /usr/bin/find /opt/technitium/config/logs -maxdepth 1 -type f -mtime *, \
+            /usr/bin/find /opt/technitium/config/stats -maxdepth 1 -type f -mtime *
+          Cmnd_Alias ADVISOR_SYSTEMCTL = \
+            /usr/bin/systemctl restart technitium, \
+            /usr/bin/systemctl restart wg-quick@wg0, \
+            /usr/bin/systemctl restart kubelet
+          Cmnd_Alias ADVISOR_JOURNALCTL = /usr/bin/journalctl --vacuum-size=*
+          advisor-remediation ALL=(root) NOPASSWD: ADVISOR_FIND_DELETE, ADVISOR_SYSTEMCTL, ADVISOR_JOURNALCTL
+      when: inventory_hostname in ['dns-aws', 'dns-fallback', 'vpn-local', 'vpn-aws']
+
+    - name: Install advisor pubkey with command restriction
+      ansible.posix.authorized_key:
+        user: advisor-remediation
+        state: present
+        # command="..." forces every SSH session to run the wrapper script,
+        # ignoring whatever the client tried to execute.
+        # no-port-forwarding etc. further harden — no tunnels, no PTY, no env.
+        key_options: 'command="/usr/local/sbin/advisor-remediation.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty,no-user-rc'
+        key: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHXO0PZ9MkM+axg0Ml/fYMz3JEfJSGkATB3wGUYdjYug ai-advisor@auto-remediation'
+        comment: 'AI advisor Phase 3 remediation (auto-remediation/remediation-controller)'
+      when: inventory_hostname in ['dns-aws', 'dns-fallback', 'vpn-local', 'vpn-aws']
+
+    # =========================================================================
     # Clean up
     # =========================================================================
     - name: Remove unnecessary packages

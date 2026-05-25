@@ -110,6 +110,13 @@ def check_service(kind, namespace, target):
             f'up{{job="{namespace}",instance=~"{target}.*"}}'))
         # External hosts have no "desired" — 1 means scrape succeeded.
         desired = 1.0 if avail is not None else None
+    elif kind == "probe":
+        # blackbox-exporter Probe — `namespace` carries the appliance label,
+        # `target` is the probe name (also the appliance label value).
+        # probe_success{} returns 1 if the probe got a 2xx/3xx, 0 if not.
+        avail = first_value(prom_query(
+            f'probe_success{{appliance="{target}"}}'))
+        desired = 1.0 if avail is not None else None
     elif kind == "cronjob":
         # CronJobs don't have a steady "up" — instead check most recent run.
         # "up" if last_successful_time within 2× schedule period;

@@ -69,4 +69,11 @@ SERVICES = [
     ("External edge", "dns-aws",      "external", "external-nodes", "dns-aws"),
     ("External edge", "vpn-local",    "external", "external-nodes", "vpn-local"),
     ("External edge", "vpn-aws",      "external", "external-nodes", "vpn-aws"),
+
+    # Appliances (probed via blackbox-exporter HTTPS — see
+    # platform/kubernetes/blackbox-exporter/). namespace arg is unused
+    # for kind="probe"; target is the `appliance` label.
+    ("Appliances", "UDM",      "probe", "blackbox-exporter", "udm"),
+    ("Appliances", "Protect",  "probe", "blackbox-exporter", "protect"),
+    ("Appliances", "UNAS",     "probe", "blackbox-exporter", "unas"),
 ]

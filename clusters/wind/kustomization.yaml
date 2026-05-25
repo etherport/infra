@@ -34,6 +34,11 @@ resources:
   #   3. sops platform/kubernetes/cloudflared/01-tunnel-token.sops.yaml
   # See docs/runbooks/cloudflare-access-enable.md for the full flow.
   - ../../platform/kubernetes/cloudflared
+  # blackbox-exporter for ICMP/HTTPS probes of non-K8s appliances
+  # (UDM at 10.10.200.1, Protect at 10.10.212.10, UNAS at 10.10.209.10).
+  # Surfaces them in service-status email + Grafana dashboard via
+  # `kind="probe"` entries in services.py.
+  - ../../platform/kubernetes/blackbox-exporter
   # Policy baseline (Pod Security Standards audit+warn, LimitRanges).
   # Phase 1 of the NetworkPolicies+Quotas+PDBs plan — observation-only,
   # no enforcement. See platform/kubernetes/policy-baseline/README.md.

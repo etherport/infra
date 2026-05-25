@@ -1,0 +1,29 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blackbox-exporter-config
+  namespace: blackbox-exporter
+data:
+  blackbox.yml: |
+    modules:
+      # Basic HTTPS check that ignores cert validity (UDM, Protect, UNAS
+      # all run self-signed certs on their admin UIs).
+      http_2xx_insecure:
+        prober: http
+        timeout: 5s
+        http:
+          valid_status_codes: [200, 301, 302, 401, 403]
+          method: GET
+          fail_if_ssl: false
+          fail_if_not_ssl: true
+          tls_config:
+            insecure_skip_verify: true
+          preferred_ip_protocol: ip4
+
+      # ICMP ping fallback (needs NET_RAW cap)
+      icmp:
+        prober: icmp
+        timeout: 5s
+        icmp:
+          preferred_ip_protocol: ip4

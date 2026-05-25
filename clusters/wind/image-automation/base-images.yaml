@@ -134,3 +134,31 @@ spec:
   policy:
     alphabetical:
       order: asc
+---
+# blackbox-exporter (Prometheus blackbox prober for non-K8s appliances)
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: blackbox-exporter
+  namespace: flux-system
+spec:
+  image: prom/blackbox-exporter
+  interval: 24h
+  exclusionList:
+    - "^latest$"
+    - "^master$"
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: blackbox-exporter
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: blackbox-exporter
+  filterTags:
+    pattern: '^v(?P<sem>\d+\.\d+\.\d+)$'
+    extract: '$sem'
+  policy:
+    semver:
+      range: ">=0.20.0"

@@ -64,6 +64,11 @@ spec:
           for: 5m
           labels:
             severity: warning
+            # AI advisor Phase 3 opt-in: prune_host_logdir auto-runs when
+            # the culprit is Technitium query-log accumulation (the 2026-05-25
+            # dns-aws pattern). Other disk causes diagnose to noop + recommend
+            # operator investigation.
+            ai_remediation: "auto"
           annotations:
             summary: "Low disk space on {{ $labels.instance }}"
             description: "Disk {{ $labels.mountpoint }} on {{ $labels.instance }} is {{ $value | printf \"%.1f\" }}% full."

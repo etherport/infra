@@ -15,5 +15,6 @@ resources:
   - approval-ingress.yaml
   - approval-public-ingress.yaml
   - aws-cloudwatch-creds.sops.yaml
+  - advisor-ssh-key.sops.yaml
   - deployment.yaml
   - service.yaml
