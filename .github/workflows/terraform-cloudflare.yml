@@ -15,6 +15,7 @@ on:
         options:
           - plan
           - apply
+          - import-zone   # one-time: imports the manually-created etherport.net CF zone into TF state
 
 permissions:
   contents: read
@@ -72,6 +73,28 @@ jobs:
           TF_VAR_cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
           AWS_PROFILE: ""
         run: terraform apply -auto-approve -var "aws_profile=" -no-color
+
+      # One-time bootstrap step: import the manually-created CF zone into
+      # TF state. Skips silently if already imported (resource exists in state).
+      - name: Terraform Import Zone (one-time)
+        if: github.event.inputs.action == 'import-zone'
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          AWS_PROFILE: ""
+        run: |
+          if terraform state list 2>/dev/null | grep -q '^cloudflare_zone\.etherport$'; then
+            echo "✓ cloudflare_zone.etherport already in state — nothing to import"
+            terraform state show cloudflare_zone.etherport | head -10
+          else
+            echo "Importing cloudflare_zone.etherport ${TF_VAR_cloudflare_zone_id}..."
+            terraform import \
+              -var "aws_profile=" \
+              cloudflare_zone.etherport "${TF_VAR_cloudflare_zone_id}"
+            echo "✓ import complete"
+          fi
 
       - name: Summary
         if: always()
