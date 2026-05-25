@@ -41,10 +41,12 @@ SERVICES = [
     ("GitOps", "Flux notification-controller", "deployment", "flux-system",    "notification-controller"),
 
     # Networking + VPN
-    ("Networking", "MetalLB controller", "deployment", "metallb-system",      "controller"),
-    ("Networking", "MetalLB speakers",   "daemonset",  "metallb-system",      "speaker"),
-    ("Networking", "Multus CNI",         "daemonset",  "kube-system",         "kube-multus-ds-amd64"),
-    ("Networking", "WireGuard",          "deployment", "wireguard",           "wireguard"),
+    ("Networking", "MetalLB controller",     "deployment", "metallb-system", "controller"),
+    ("Networking", "MetalLB speakers",       "daemonset",  "metallb-system", "speaker"),
+    ("Networking", "Multus CNI",             "daemonset",  "kube-system",    "kube-multus-ds-amd64"),
+    ("Networking", "WireGuard",              "deployment", "wireguard",      "wireguard"),
+    ("Networking", "Cloudflare Tunnel",      "deployment", "cloudflared",    "cloudflared"),
+    ("Networking", "CloudWatch→Loki forwarder", "cronjob", "cloudwatch-to-loki", "cloudwatch-to-loki"),
 
     # Storage / data
     ("Storage / data", "CNPG operator",         "deployment", "cnpg-system", "cnpg-cloudnative-pg"),

@@ -33,6 +33,13 @@ def query_for(kind, namespace, target):
         return f'kube_daemonset_status_number_ready{{namespace="{namespace}",daemonset="{target}"}}'
     if kind == "external":
         return f'up{{job="{namespace}",instance=~"{target}.*"}}'
+    if kind == "cronjob":
+        # Treat "up" as last_successful_time within 24h.
+        # Returns 1 when within window, 0 otherwise.
+        return (
+            f'((time() - kube_cronjob_status_last_successful_time'
+            f'{{namespace="{namespace}",cronjob="{target}"}}) < 86400)'
+        )
     raise ValueError(kind)
 
 

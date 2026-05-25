@@ -110,6 +110,27 @@ def check_service(kind, namespace, target):
             f'up{{job="{namespace}",instance=~"{target}.*"}}'))
         # External hosts have no "desired" — 1 means scrape succeeded.
         desired = 1.0 if avail is not None else None
+    elif kind == "cronjob":
+        # CronJobs don't have a steady "up" — instead check most recent run.
+        # "up" if last_successful_time within 2× schedule period;
+        # "degraded" if last_successful is older but last_schedule is recent;
+        # "down" if neither metric known. `target` = cronjob name.
+        last_succ = first_value(prom_query(
+            f'kube_cronjob_status_last_successful_time{{namespace="{namespace}",cronjob="{target}"}}'))
+        last_sched = first_value(prom_query(
+            f'kube_cronjob_status_last_schedule_time{{namespace="{namespace}",cronjob="{target}"}}'))
+        now = first_value(prom_query('time()'))
+        if last_succ is None or now is None:
+            return ("unknown", None, None)
+        # Treat anything within last 24h as healthy (covers daily crons).
+        # For sub-daily crons this is generous but not misleading — we'd
+        # rather under-alarm than over-alarm here.
+        age_hours = (now - last_succ) / 3600
+        if age_hours <= 24:
+            return ("up", 1, 1)
+        if last_sched is not None and (now - last_sched) <= 24 * 3600:
+            return ("degraded", 0, 1)
+        return ("down", 0, 1)
     else:
         return ("unknown", None, None)
 

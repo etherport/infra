@@ -78,7 +78,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "count((kube_deployment_status_replicas_available{namespace=\"backups\",deployment=\"kopia\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager-cainjector\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager-webhook\"} or kube_deployment_status_replicas_available{namespace=\"cnpg-system\",deployment=\"cnpg-cloudnative-pg\"} or kube_deployment_status_replicas_available{namespace=\"default\",deployment=\"csi-rbdplugin-provisioner\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"helm-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"kustomize-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"notification-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"source-controller\"} or kube_deployment_status_replicas_available{namespace=\"home-automation\",deployment=\"home-assistant\"} or kube_deployment_status_replicas_available{namespace=\"metallb-system\",deployment=\"controller\"} or kube_deployment_status_replicas_available{namespace=\"monitoring\",deployment=\"monitoring-grafana\"} or kube_deployment_status_replicas_available{namespace=\"ollama\",deployment=\"ollama\"} or kube_deployment_status_replicas_available{namespace=\"plex\",deployment=\"plex\"} or kube_deployment_status_replicas_available{namespace=\"traefik\",deployment=\"traefik\"} or kube_deployment_status_replicas_available{namespace=\"velero\",deployment=\"velero\"} or kube_deployment_status_replicas_available{namespace=\"wireguard\",deployment=\"wireguard\"} or kube_statefulset_status_replicas_ready{namespace=\"dns\",statefulset=\"technitium\"} or kube_statefulset_status_replicas_ready{namespace=\"monitoring\",statefulset=\"alertmanager-monitoring-kube-prometheus-alertmanager\"} or kube_statefulset_status_replicas_ready{namespace=\"monitoring\",statefulset=\"prometheus-monitoring-kube-prometheus-prometheus\"} or kube_daemonset_status_number_ready{namespace=\"kube-system\",daemonset=\"kube-multus-ds-amd64\"} or kube_daemonset_status_number_ready{namespace=\"metallb-system\",daemonset=\"speaker\"} or up{job=\"external-nodes\",instance=~\"dns-aws.*\"} or up{job=\"external-nodes\",instance=~\"dns-fallback.*\"} or up{job=\"external-nodes\",instance=~\"vpn-aws.*\"} or up{job=\"external-nodes\",instance=~\"vpn-local.*\"}) > 0)",
+              "expr": "count((kube_deployment_status_replicas_available{namespace=\"backups\",deployment=\"kopia\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager-cainjector\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager-webhook\"} or kube_deployment_status_replicas_available{namespace=\"cloudflared\",deployment=\"cloudflared\"} or kube_deployment_status_replicas_available{namespace=\"cnpg-system\",deployment=\"cnpg-cloudnative-pg\"} or kube_deployment_status_replicas_available{namespace=\"default\",deployment=\"csi-rbdplugin-provisioner\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"helm-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"kustomize-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"notification-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"source-controller\"} or kube_deployment_status_replicas_available{namespace=\"home-automation\",deployment=\"home-assistant\"} or kube_deployment_status_replicas_available{namespace=\"metallb-system\",deployment=\"controller\"} or kube_deployment_status_replicas_available{namespace=\"monitoring\",deployment=\"monitoring-grafana\"} or kube_deployment_status_replicas_available{namespace=\"ollama\",deployment=\"ollama\"} or kube_deployment_status_replicas_available{namespace=\"plex\",deployment=\"plex\"} or kube_deployment_status_replicas_available{namespace=\"traefik\",deployment=\"traefik\"} or kube_deployment_status_replicas_available{namespace=\"velero\",deployment=\"velero\"} or kube_deployment_status_replicas_available{namespace=\"wireguard\",deployment=\"wireguard\"} or kube_statefulset_status_replicas_ready{namespace=\"dns\",statefulset=\"technitium\"} or kube_statefulset_status_replicas_ready{namespace=\"monitoring\",statefulset=\"alertmanager-monitoring-kube-prometheus-alertmanager\"} or kube_statefulset_status_replicas_ready{namespace=\"monitoring\",statefulset=\"prometheus-monitoring-kube-prometheus-prometheus\"} or kube_daemonset_status_number_ready{namespace=\"kube-system\",daemonset=\"kube-multus-ds-amd64\"} or kube_daemonset_status_number_ready{namespace=\"metallb-system\",daemonset=\"speaker\"} or up{job=\"external-nodes\",instance=~\"dns-aws.*\"} or up{job=\"external-nodes\",instance=~\"dns-fallback.*\"} or up{job=\"external-nodes\",instance=~\"vpn-aws.*\"} or up{job=\"external-nodes\",instance=~\"vpn-local.*\"}) > 0)",
               "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
               "refId": "A"
             }
@@ -144,7 +144,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "count((kube_deployment_status_replicas_available{namespace=\"backups\",deployment=\"kopia\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager-cainjector\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager-webhook\"} or kube_deployment_status_replicas_available{namespace=\"cnpg-system\",deployment=\"cnpg-cloudnative-pg\"} or kube_deployment_status_replicas_available{namespace=\"default\",deployment=\"csi-rbdplugin-provisioner\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"helm-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"kustomize-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"notification-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"source-controller\"} or kube_deployment_status_replicas_available{namespace=\"home-automation\",deployment=\"home-assistant\"} or kube_deployment_status_replicas_available{namespace=\"metallb-system\",deployment=\"controller\"} or kube_deployment_status_replicas_available{namespace=\"monitoring\",deployment=\"monitoring-grafana\"} or kube_deployment_status_replicas_available{namespace=\"ollama\",deployment=\"ollama\"} or kube_deployment_status_replicas_available{namespace=\"plex\",deployment=\"plex\"} or kube_deployment_status_replicas_available{namespace=\"traefik\",deployment=\"traefik\"} or kube_deployment_status_replicas_available{namespace=\"velero\",deployment=\"velero\"} or kube_deployment_status_replicas_available{namespace=\"wireguard\",deployment=\"wireguard\"} or kube_statefulset_status_replicas_ready{namespace=\"dns\",statefulset=\"technitium\"} or kube_statefulset_status_replicas_ready{namespace=\"monitoring\",statefulset=\"alertmanager-monitoring-kube-prometheus-alertmanager\"} or kube_statefulset_status_replicas_ready{namespace=\"monitoring\",statefulset=\"prometheus-monitoring-kube-prometheus-prometheus\"} or kube_daemonset_status_number_ready{namespace=\"kube-system\",daemonset=\"kube-multus-ds-amd64\"} or kube_daemonset_status_number_ready{namespace=\"metallb-system\",daemonset=\"speaker\"} or up{job=\"external-nodes\",instance=~\"dns-aws.*\"} or up{job=\"external-nodes\",instance=~\"dns-fallback.*\"} or up{job=\"external-nodes\",instance=~\"vpn-aws.*\"} or up{job=\"external-nodes\",instance=~\"vpn-local.*\"}) == 0)",
+              "expr": "count((kube_deployment_status_replicas_available{namespace=\"backups\",deployment=\"kopia\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager-cainjector\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager-webhook\"} or kube_deployment_status_replicas_available{namespace=\"cloudflared\",deployment=\"cloudflared\"} or kube_deployment_status_replicas_available{namespace=\"cnpg-system\",deployment=\"cnpg-cloudnative-pg\"} or kube_deployment_status_replicas_available{namespace=\"default\",deployment=\"csi-rbdplugin-provisioner\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"helm-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"kustomize-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"notification-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"source-controller\"} or kube_deployment_status_replicas_available{namespace=\"home-automation\",deployment=\"home-assistant\"} or kube_deployment_status_replicas_available{namespace=\"metallb-system\",deployment=\"controller\"} or kube_deployment_status_replicas_available{namespace=\"monitoring\",deployment=\"monitoring-grafana\"} or kube_deployment_status_replicas_available{namespace=\"ollama\",deployment=\"ollama\"} or kube_deployment_status_replicas_available{namespace=\"plex\",deployment=\"plex\"} or kube_deployment_status_replicas_available{namespace=\"traefik\",deployment=\"traefik\"} or kube_deployment_status_replicas_available{namespace=\"velero\",deployment=\"velero\"} or kube_deployment_status_replicas_available{namespace=\"wireguard\",deployment=\"wireguard\"} or kube_statefulset_status_replicas_ready{namespace=\"dns\",statefulset=\"technitium\"} or kube_statefulset_status_replicas_ready{namespace=\"monitoring\",statefulset=\"alertmanager-monitoring-kube-prometheus-alertmanager\"} or kube_statefulset_status_replicas_ready{namespace=\"monitoring\",statefulset=\"prometheus-monitoring-kube-prometheus-prometheus\"} or kube_daemonset_status_number_ready{namespace=\"kube-system\",daemonset=\"kube-multus-ds-amd64\"} or kube_daemonset_status_number_ready{namespace=\"metallb-system\",daemonset=\"speaker\"} or up{job=\"external-nodes\",instance=~\"dns-aws.*\"} or up{job=\"external-nodes\",instance=~\"dns-fallback.*\"} or up{job=\"external-nodes\",instance=~\"vpn-aws.*\"} or up{job=\"external-nodes\",instance=~\"vpn-local.*\"}) == 0)",
               "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
               "refId": "A"
             }
@@ -210,7 +210,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "27 - count(kube_deployment_status_replicas_available{namespace=\"backups\",deployment=\"kopia\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager-cainjector\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager-webhook\"} or kube_deployment_status_replicas_available{namespace=\"cnpg-system\",deployment=\"cnpg-cloudnative-pg\"} or kube_deployment_status_replicas_available{namespace=\"default\",deployment=\"csi-rbdplugin-provisioner\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"helm-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"kustomize-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"notification-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"source-controller\"} or kube_deployment_status_replicas_available{namespace=\"home-automation\",deployment=\"home-assistant\"} or kube_deployment_status_replicas_available{namespace=\"metallb-system\",deployment=\"controller\"} or kube_deployment_status_replicas_available{namespace=\"monitoring\",deployment=\"monitoring-grafana\"} or kube_deployment_status_replicas_available{namespace=\"ollama\",deployment=\"ollama\"} or kube_deployment_status_replicas_available{namespace=\"plex\",deployment=\"plex\"} or kube_deployment_status_replicas_available{namespace=\"traefik\",deployment=\"traefik\"} or kube_deployment_status_replicas_available{namespace=\"velero\",deployment=\"velero\"} or kube_deployment_status_replicas_available{namespace=\"wireguard\",deployment=\"wireguard\"} or kube_statefulset_status_replicas_ready{namespace=\"dns\",statefulset=\"technitium\"} or kube_statefulset_status_replicas_ready{namespace=\"monitoring\",statefulset=\"alertmanager-monitoring-kube-prometheus-alertmanager\"} or kube_statefulset_status_replicas_ready{namespace=\"monitoring\",statefulset=\"prometheus-monitoring-kube-prometheus-prometheus\"} or kube_daemonset_status_number_ready{namespace=\"kube-system\",daemonset=\"kube-multus-ds-amd64\"} or kube_daemonset_status_number_ready{namespace=\"metallb-system\",daemonset=\"speaker\"} or up{job=\"external-nodes\",instance=~\"dns-aws.*\"} or up{job=\"external-nodes\",instance=~\"dns-fallback.*\"} or up{job=\"external-nodes\",instance=~\"vpn-aws.*\"} or up{job=\"external-nodes\",instance=~\"vpn-local.*\"})",
+              "expr": "29 - count(kube_deployment_status_replicas_available{namespace=\"backups\",deployment=\"kopia\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager-cainjector\"} or kube_deployment_status_replicas_available{namespace=\"cert-manager\",deployment=\"cert-manager-webhook\"} or kube_deployment_status_replicas_available{namespace=\"cloudflared\",deployment=\"cloudflared\"} or kube_deployment_status_replicas_available{namespace=\"cnpg-system\",deployment=\"cnpg-cloudnative-pg\"} or kube_deployment_status_replicas_available{namespace=\"default\",deployment=\"csi-rbdplugin-provisioner\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"helm-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"kustomize-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"notification-controller\"} or kube_deployment_status_replicas_available{namespace=\"flux-system\",deployment=\"source-controller\"} or kube_deployment_status_replicas_available{namespace=\"home-automation\",deployment=\"home-assistant\"} or kube_deployment_status_replicas_available{namespace=\"metallb-system\",deployment=\"controller\"} or kube_deployment_status_replicas_available{namespace=\"monitoring\",deployment=\"monitoring-grafana\"} or kube_deployment_status_replicas_available{namespace=\"ollama\",deployment=\"ollama\"} or kube_deployment_status_replicas_available{namespace=\"plex\",deployment=\"plex\"} or kube_deployment_status_replicas_available{namespace=\"traefik\",deployment=\"traefik\"} or kube_deployment_status_replicas_available{namespace=\"velero\",deployment=\"velero\"} or kube_deployment_status_replicas_available{namespace=\"wireguard\",deployment=\"wireguard\"} or kube_statefulset_status_replicas_ready{namespace=\"dns\",statefulset=\"technitium\"} or kube_statefulset_status_replicas_ready{namespace=\"monitoring\",statefulset=\"alertmanager-monitoring-kube-prometheus-alertmanager\"} or kube_statefulset_status_replicas_ready{namespace=\"monitoring\",statefulset=\"prometheus-monitoring-kube-prometheus-prometheus\"} or kube_daemonset_status_number_ready{namespace=\"kube-system\",daemonset=\"kube-multus-ds-amd64\"} or kube_daemonset_status_number_ready{namespace=\"metallb-system\",daemonset=\"speaker\"} or up{job=\"external-nodes\",instance=~\"dns-aws.*\"} or up{job=\"external-nodes\",instance=~\"dns-fallback.*\"} or up{job=\"external-nodes\",instance=~\"vpn-aws.*\"} or up{job=\"external-nodes\",instance=~\"vpn-local.*\"})",
               "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
               "refId": "A"
             }
@@ -2298,13 +2298,275 @@ data:
         },
         {
           "id": 23,
+          "title": "Cloudflare Tunnel",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 27
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "1": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "2": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "3": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "4": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "5": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "6": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "7": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "8": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "9": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "10": {
+                      "text": "UP",
+                      "color": "green"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "DOWN",
+                      "color": "red"
+                    }
+                  }
+                },
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {
+                      "text": "UNKNOWN",
+                      "color": "orange"
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "kube_deployment_status_replicas_available{namespace=\"cloudflared\",deployment=\"cloudflared\"}",
+              "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 24,
+          "title": "CloudWatch\u2192Loki forwarder",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 27
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "1": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "2": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "3": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "4": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "5": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "6": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "7": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "8": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "9": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "10": {
+                      "text": "UP",
+                      "color": "green"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "DOWN",
+                      "color": "red"
+                    }
+                  }
+                },
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {
+                      "text": "UNKNOWN",
+                      "color": "orange"
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "((time() - kube_cronjob_status_last_successful_time{namespace=\"cloudwatch-to-loki\",cronjob=\"cloudwatch-to-loki\"}) < 86400)",
+              "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 25,
           "title": "",
           "type": "text",
           "gridPos": {
             "h": 2,
             "w": 24,
             "x": 0,
-            "y": 27
+            "y": 31
           },
           "options": {
             "mode": "markdown",
@@ -2312,7 +2574,7 @@ data:
           }
         },
         {
-          "id": 24,
+          "id": 26,
           "title": "CNPG operator",
           "type": "stat",
           "datasource": {
@@ -2323,7 +2585,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 29
+            "y": 33
           },
           "fieldConfig": {
             "defaults": {
@@ -2443,7 +2705,7 @@ data:
           ]
         },
         {
-          "id": 25,
+          "id": 27,
           "title": "Ceph CSI provisioner",
           "type": "stat",
           "datasource": {
@@ -2454,7 +2716,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 6,
-            "y": 29
+            "y": 33
           },
           "fieldConfig": {
             "defaults": {
@@ -2574,14 +2836,14 @@ data:
           ]
         },
         {
-          "id": 26,
+          "id": 28,
           "title": "",
           "type": "text",
           "gridPos": {
             "h": 2,
             "w": 24,
             "x": 0,
-            "y": 33
+            "y": 37
           },
           "options": {
             "mode": "markdown",
@@ -2589,7 +2851,7 @@ data:
           }
         },
         {
-          "id": 27,
+          "id": 29,
           "title": "Technitium DNS",
           "type": "stat",
           "datasource": {
@@ -2600,7 +2862,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 35
+            "y": 39
           },
           "fieldConfig": {
             "defaults": {
@@ -2720,14 +2982,14 @@ data:
           ]
         },
         {
-          "id": 28,
+          "id": 30,
           "title": "",
           "type": "text",
           "gridPos": {
             "h": 2,
             "w": 24,
             "x": 0,
-            "y": 39
+            "y": 43
           },
           "options": {
             "mode": "markdown",
@@ -2735,7 +2997,7 @@ data:
           }
         },
         {
-          "id": 29,
+          "id": 31,
           "title": "Velero",
           "type": "stat",
           "datasource": {
@@ -2746,7 +3008,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 41
+            "y": 45
           },
           "fieldConfig": {
             "defaults": {
@@ -2866,7 +3128,7 @@ data:
           ]
         },
         {
-          "id": 30,
+          "id": 32,
           "title": "Kopia",
           "type": "stat",
           "datasource": {
@@ -2877,7 +3139,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 6,
-            "y": 41
+            "y": 45
           },
           "fieldConfig": {
             "defaults": {
@@ -2997,14 +3259,14 @@ data:
           ]
         },
         {
-          "id": 31,
+          "id": 33,
           "title": "",
           "type": "text",
           "gridPos": {
             "h": 2,
             "w": 24,
             "x": 0,
-            "y": 45
+            "y": 49
           },
           "options": {
             "mode": "markdown",
@@ -3012,7 +3274,7 @@ data:
           }
         },
         {
-          "id": 32,
+          "id": 34,
           "title": "Home Assistant",
           "type": "stat",
           "datasource": {
@@ -3023,7 +3285,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 47
+            "y": 51
           },
           "fieldConfig": {
             "defaults": {
@@ -3143,7 +3405,7 @@ data:
           ]
         },
         {
-          "id": 33,
+          "id": 35,
           "title": "Plex",
           "type": "stat",
           "datasource": {
@@ -3154,7 +3416,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 6,
-            "y": 47
+            "y": 51
           },
           "fieldConfig": {
             "defaults": {
@@ -3274,7 +3536,7 @@ data:
           ]
         },
         {
-          "id": 34,
+          "id": 36,
           "title": "Ollama",
           "type": "stat",
           "datasource": {
@@ -3285,7 +3547,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 12,
-            "y": 47
+            "y": 51
           },
           "fieldConfig": {
             "defaults": {
@@ -3405,14 +3667,14 @@ data:
           ]
         },
         {
-          "id": 35,
+          "id": 37,
           "title": "",
           "type": "text",
           "gridPos": {
             "h": 2,
             "w": 24,
             "x": 0,
-            "y": 51
+            "y": 55
           },
           "options": {
             "mode": "markdown",
@@ -3420,7 +3682,7 @@ data:
           }
         },
         {
-          "id": 36,
+          "id": 38,
           "title": "dns-fallback",
           "type": "stat",
           "datasource": {
@@ -3431,7 +3693,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 53
+            "y": 57
           },
           "fieldConfig": {
             "defaults": {
@@ -3551,7 +3813,7 @@ data:
           ]
         },
         {
-          "id": 37,
+          "id": 39,
           "title": "dns-aws",
           "type": "stat",
           "datasource": {
@@ -3562,7 +3824,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 6,
-            "y": 53
+            "y": 57
           },
           "fieldConfig": {
             "defaults": {
@@ -3682,7 +3944,7 @@ data:
           ]
         },
         {
-          "id": 38,
+          "id": 40,
           "title": "vpn-local",
           "type": "stat",
           "datasource": {
@@ -3693,7 +3955,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 12,
-            "y": 53
+            "y": 57
           },
           "fieldConfig": {
             "defaults": {
@@ -3813,7 +4075,7 @@ data:
           ]
         },
         {
-          "id": 39,
+          "id": 41,
           "title": "vpn-aws",
           "type": "stat",
           "datasource": {
@@ -3824,7 +4086,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 18,
-            "y": 53
+            "y": 57
           },
           "fieldConfig": {
             "defaults": {
@@ -3944,7 +4206,7 @@ data:
           ]
         },
         {
-          "id": 40,
+          "id": 42,
           "title": "Firing alerts",
           "type": "table",
           "datasource": {
@@ -3955,7 +4217,7 @@ data:
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 58
+            "y": 62
           },
           "fieldConfig": {
             "defaults": {
