@@ -32,13 +32,11 @@ spec:
           # the anthropic-api-key and SMTP secrets.
           - name: AI_ADVISOR_ENABLED
             value: "true"
-          # Bumped 2026-05-25 from $0.50 → $5.00 after overnight alert
-          # storm (cloudflared crashloop) exhausted cap at 04:07 UTC
-          # with only 12 Claude calls. $5/day still cheap (~100 calls at
-          # avg $0.05 each) but covers sustained alert volume without
-          # going dark and sending "AI Advisor · Unavailable" emails.
+          # $0.50/day — reverted 2026-05-25 from a $5.00 bump that
+          # wasn't operator-approved. Re-raise only after explicit
+          # discussion if sustained cap-hits become a real problem.
           - name: AI_ADVISOR_DAILY_COST_USD_CAP
-            value: "5.00"
+            value: "0.50"
           # Phase 2 (approve-via-email). Set to "true" + populate the
           # approval-hmac secret + set APPROVAL_BASE_URL to your Tailscale
           # hostname for the controller. See:
