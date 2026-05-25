@@ -3,19 +3,17 @@
 What the controller knows how to do, what Prometheus actually fires,
 and the gap between them.
 
-Last reviewed: 2026-05-22.
+Last reviewed: 2026-05-25.
 
-## Wiring — the elephant in the room
+## Wiring
 
-**Alertmanager is NOT routing alerts to the remediation webhook.**
+**Live.** As of M8 (`7838270`, 2026-05-24) Alertmanager routes
+critical alerts through the webhook receiver in
+`platform/kubernetes/monitoring/03-alertmanager-config.yaml`, with
+`continue: true` so the same alert reaches both inbox + webhook.
+Cooldown (15 min per alert+action) prevents restart loops.
 
-The remediation controller listens on
-`http://remediation-webhook.auto-remediation.svc.cluster.local:8080/webhook`
-but no Alertmanager receiver is configured to call it. All rules
-below are dormant until a webhook receiver is added.
-
-To wire: add a receiver + route in
-`platform/kubernetes/monitoring/03-alertmanager-config.yaml`:
+The receiver:
 
 ```yaml
 receivers:
@@ -23,17 +21,11 @@ receivers:
     webhookConfigs:
       - url: http://remediation-webhook.auto-remediation.svc.cluster.local:8080/webhook
         sendResolved: false
-route:
-  routes:
-    - matchers:
-        - { name: severity, value: critical }
-      receiver: auto-remediation
-      continue: true   # ALSO send to email-alerts
 ```
 
-Use `continue: true` so the same alert reaches both the webhook AND
-your inbox. The remediation controller's 15-min cooldown prevents
-restart loops.
+The advisor layer (Phases 1/2/3) sits behind the same webhook and
+handles any alert that didn't match a static rule (see README.md
+for the dispatch flow).
 
 ## Defined remediation rules (configmap.yaml)
 
