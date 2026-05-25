@@ -141,32 +141,41 @@ spec:
     - name: velero-backups.rules
       rules:
         - alert: VeleroBackupFailed
-          expr: velero_backup_failure_total > 0
+          # velero_backup_*_total are monotonically-increasing counters
+          # (never decrement). Use rate() over a 25h window so this fires
+          # ONLY when a new failure has occurred in the last day, not
+          # forever after a single historical failure.
+          expr: increase(velero_backup_failure_total[25h]) > 0
           for: 5m
           labels:
             severity: warning
             component: backup
             namespace: velero
           annotations:
-            summary: "Velero backup failure recorded for {{ $labels.schedule }}"
+            summary: "Velero backup failure recorded for {{ $labels.schedule }} in last 25h"
             description: |
               At least one backup invocation for schedule
-              `{{ $labels.schedule }}` has failed. Check:
+              `{{ $labels.schedule }}` has failed in the last 25h. Check:
               velero backup logs <name>
               kubectl -n velero get backups
 
         - alert: VeleroBackupPartial
-          expr: velero_backup_partial_failure_total > 0
+          # Same as VeleroBackupFailed: monotonic counter needs a window.
+          # 25h covers the daily backup cadence + small slop.
+          expr: increase(velero_backup_partial_failure_total[25h]) > 0
           for: 5m
           labels:
             severity: warning
             component: backup
             namespace: velero
           annotations:
-            summary: "Velero partial backup recorded for {{ $labels.schedule }}"
+            summary: "Velero partial backup recorded for {{ $labels.schedule }} in last 25h"
             description: |
-              A backup completed with partial failures. Some resources
-              were not backed up. velero describe backup <name>.
+              A backup in the last 25h completed with partial failures.
+              Some resources were not backed up. Investigate:
+              velero describe backup <name> --details
+              Common causes: namespace listed in schedule no longer
+              exists; PV without CSI snapshotter wired.
 
         - alert: VeleroLastBackupAgeHigh
           # If no completion for any schedule in 36h, alert. Adjust per
