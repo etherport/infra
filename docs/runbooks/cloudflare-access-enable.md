@@ -1,308 +1,212 @@
-# Cloudflare Access for approve.wind.etherport.net — enable runbook
+# Cloudflare full-zone migration + Access for approve.wind.etherport.net
 
-Replaces the unadvertised Traefik public ingress + missing auth gate (L13) with **Cloudflare Tunnel + Cloudflare Access**, fronted by Google SSO. Cost: $0/mo (CF Access free tier ≤ 50 users). Sister of `infra/terraform/cloudflare/README.md`.
+Migrates etherport.net DNS from Route53 to Cloudflare, then puts CF Access (Google SSO) in front of the AI advisor approval URL. Cost stays $0/mo; saves ~$15-18/mo if you later drop the ALB by tunneling its services through CF.
 
-## What this enables
+**Email is priority-1.** SES sending (alertmanager, advisor, daily reports) depends on SPF + DKIM + DMARC + MX records being preserved exactly. Test a real send post-cutover before declaring success.
 
-- `https://approve.wind.etherport.net/approve?id=…&token=…` becomes publicly resolvable
-- Hitting that URL redirects to Google SSO → auth check → forwards to cluster
-- The advisor controller can mint these URLs into emails (currently mints Tailscale-only URLs)
-
-## Architecture at a glance
+## Architecture after migration
 
 ```
-You click link in email
-        │
-        ▼
-DNS lookup for approve.wind.etherport.net  ←  served by Cloudflare (post-delegation)
-        │
-        ▼
-Cloudflare edge POP nearest you
-        │
-        ▼
-CF Access checks your CF_Authorization cookie
-   │
-   ├── absent → redirect to Google SSO → returns to CF with id token
-   │           → CF verifies you're in allowed_emails list
-   │           → CF sets CF_Authorization cookie (24h)
-   │
-   └── present + valid → CF forwards request through the tunnel
-                                                            │
-                                                            ▼
-                                                   cloudflared pods in
-                                                   `cloudflared` ns
-                                                            │
-                                                            ▼
-                                                   remediation-webhook
-                                                   service (auto-remediation ns)
-                                                            │
-                                                            ▼
-                                                   advisor controller handles
-                                                   /approve handler → executes
-                                                   or rejects the action
+PUBLIC DNS                                            INTERNAL
+─────────                                             ────────
+etherport.net  ← CF (Free plan, full zone)            aws.etherport.net
+  *.wind, ha.wind, wan1/2.wind, vpn-*,                ← Route53 PRIVATE zone
+  email TXT/MX, ACME CNAMEs, sinkholes                  (VPC-internal, unchanged)
+                ↓
+        CF Tunnel (cloudflared)
+                ↓
+            in-cluster
 ```
 
 ## Prerequisites
 
-- `Cloudflare API (tf)` 1P item created, with token in field `token`
-- `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` set as GitHub repo secrets
-- Google SSO IdP added in CF Zero Trust dashboard (one-time, ~30s)
-
-Full prereq detail in `infra/terraform/cloudflare/README.md`.
+Per `infra/terraform/cloudflare/README.md` — CF zone manually added, API token + secrets configured, Google SSO IdP added, Zone ID captured.
 
 ## Step-by-step
 
-### 1. Dispatch the CF Terraform workflow (plan first)
+### Phase A — pre-cutover (CF zone authoritative for nothing yet)
+
+#### 1. Plan
 
 ```bash
 gh workflow run terraform-cloudflare.yml -f action=plan
 ```
 
-Review the plan — expect to see:
-- `cloudflare_zone.wind` (created)
-- `cloudflare_tunnel.wind_cluster` (created)
-- `cloudflare_tunnel_config.wind_cluster` (created)
-- `cloudflare_record.approve_cname` (created)
-- `cloudflare_zero_trust_access_application.approve` (created)
-- `cloudflare_zero_trust_access_policy.approve_allow` (created)
-- `cloudflare_record.wind_existing[*]` (7 created — these are placeholders until you fill in real values from Route53)
+Expect ~24 created resources:
+- 7 A records (wan1/2.wind, wind apex, vpn-use1/usw2, ceph/pve sinkholes)
+- 8 CNAME records (3 DKIM, 3 ACME, ha.wind, *.wind)
+- 1 MX (mail)
+- 2 TXT (SPF + DMARC)
+- 1 tunnel + tunnel config + approve CNAME
+- 1 Access app + policy
+- 1 Service token (alexa)
 
-Plan should NOT show Route53 changes (delegation is a manual step later).
+Verify no `cloudflare_zone.etherport` create — should show as already in state (imported in setup).
 
-### 2. Apply
+#### 2. Apply
 
 ```bash
 gh workflow run terraform-cloudflare.yml -f action=apply
 ```
 
-### 3. Get the tunnel token + populate the SOPS secret
-
-From your laptop:
+#### 3. Populate cloudflared token + re-enable in Flux
 
 ```bash
 cd infra/terraform/cloudflare
-terraform init -reconfigure   # ensures backend is set up locally
+terraform init -reconfigure
 terraform output -raw tunnel_token | pbcopy
+
 sops ../../../platform/kubernetes/cloudflared/01-tunnel-token.sops.yaml
-# In the editor: replace REPLACE_WITH_terraform_output_-raw_tunnel_token with what's in your clipboard
-# Save + exit. SOPS re-encrypts on save.
+# Paste over placeholder; save.
+
 git add platform/kubernetes/cloudflared/01-tunnel-token.sops.yaml
 git commit -m "cloudflared: populate tunnel token"
+
+# Re-enable Flux include for cloudflared:
+sed -i '' 's|^  # - \.\./\.\./platform/kubernetes/cloudflared|  - ../../platform/kubernetes/cloudflared|' ../../../clusters/wind/kustomization.yaml
+git commit -am "cluster: re-enable cloudflared (token populated)"
 git push
 ```
 
-### 4. Verify cloudflared comes up in the cluster
-
-Flux reconciles within ~1min. Then:
+#### 4. Verify cloudflared
 
 ```bash
-kubectl get pods -n cloudflared
-# Expect: 2/2 Running
-
-kubectl logs -n cloudflared deploy/cloudflared --tail=20
-# Look for: "Connection registered" lines (4 connections per replica = 8 total)
+kubectl get pods -n cloudflared       # expect 2/2 Running
+kubectl logs -n cloudflared deploy/cloudflared --tail=20 | grep "Connection registered"
+# expect 4 connections per replica
 ```
 
-### 5. Pre-delegation sanity check
-
-At this stage, DNS for `approve.wind.etherport.net` still answers from Route53 (no record), so the URL doesn't resolve publicly yet. To verify CF Access setup BEFORE cutting DNS:
-
-- Visit `https://<tunnel-id>.cfargotunnel.com/approve` directly (substitute your tunnel ID from `terraform output -raw tunnel_id`). This bypasses your domain entirely. CF Access should intercept and bounce you to Google SSO.
-- After successful SSO, you should land on the cloudflared-proxied origin. (The advisor `/approve` handler will respond with a 4xx for a missing token — that's fine; the path through CF Access is what we're testing.)
-
-### 6. Cut over DNS — Route53 NS delegation
-
-This is the destructive step. Once delegated, CF answers all `*.wind.etherport.net` queries.
-
-First, copy current Route53 wind.* records into the CF zone with their real values. The TF module ships placeholders; replace them:
+#### 5. Pre-cutover SSO test (DNS hasn't changed yet)
 
 ```bash
-ZONE_ID=$(aws --profile homelab route53 list-hosted-zones \
-  --query 'HostedZones[?Name==`etherport.net.`].Id' --output text | sed 's|/hostedzone/||')
+# Hit the tunnel directly via its cfargotunnel.com name:
+open "https://$(cd infra/terraform/cloudflare && terraform output -raw tunnel_id).cfargotunnel.com/approve"
+```
 
-for NAME in 'wind' '\\052.wind' 'wan1.wind' 'wan2.wind' 'ceph.wind' 'ha.wind' 'pve.wind'; do
-  VAL=$(aws --profile homelab route53 list-resource-record-sets \
-    --hosted-zone-id "$ZONE_ID" \
-    --query "ResourceRecordSets[?Name=='${NAME}.etherport.net.' && Type=='A'].ResourceRecords[*].Value" \
-    --output text)
-  echo "$NAME → $VAL"
+Should bounce to Google SSO → after auth, the approval handler responds. Confirms the tunnel + CF Access wiring works before any DNS change.
+
+#### 6. Pre-cutover DNS verification (CF zone direct query)
+
+Query CF's nameservers directly to confirm the records resolve there:
+
+```bash
+NS=$(cd infra/terraform/cloudflare && terraform output -json cf_nameservers | jq -r '.[0]')
+for HOST in mail.etherport.net _dmarc.etherport.net wan1.wind.etherport.net; do
+  echo "$HOST →"
+  dig +short @$NS $HOST any | head -3
 done
 ```
 
-Update `infra/terraform/cloudflare/variables.tf` `existing_wind_records` with these values. Re-apply:
+Each should return the values from `variables.tf`. If any return NXDOMAIN, fix in TF + re-apply BEFORE touching the registrar.
 
-```bash
-gh workflow run terraform-cloudflare.yml -f action=apply
+### Phase B — cutover (Route53 Registrar NS change — destructive)
+
+> ⚠ Email-priority warning: this is when DNS authority changes hands. Old TTLs (up to 24h for NS records) mean some resolvers may still see Route53 for a while; CF answers for ones that re-look-up. SES sending should keep working because all email records are in CF with same values.
+
+#### 7. Update NS at Route53 Registrar
+
+**Where**: Route53 Registrar console (NOT the Route53 hosted zone). Path:
+- AWS console → Route 53 → Registered domains → `etherport.net` → Add or edit name servers
+
+Replace the 4 current NS values:
+```
+ns-1139.awsdns-14.org
+ns-1606.awsdns-08.co.uk
+ns-1021.awsdns-63.net
+ns-1.awsdns-00.com
 ```
 
-Then add the NS delegation in Route53. Edit `infra/terraform/aws/route53/records-etherport.tf` adding:
-
-```hcl
-resource "aws_route53_record" "wind_ns_delegation" {
-  zone_id = aws_route53_zone.etherport.zone_id
-  name    = "wind.etherport.net"
-  type    = "NS"
-  ttl     = 300
-  records = [
-    # From: terraform -chdir=../cloudflare output cf_nameservers
-    "amelia.ns.cloudflare.com",  # ← replace with your actual CF nameservers
-    "neville.ns.cloudflare.com",
-  ]
-}
+With the 2 from CF:
+```
+<from `terraform -chdir=infra/terraform/cloudflare output cf_nameservers`>
 ```
 
-Run the Route53 workflow:
+Save. Propagation typically <5min for most resolvers; up to 48h for stragglers with cached NS.
+
+#### 8. Watch propagation
 
 ```bash
-gh workflow run terraform-route53.yml -f action=apply
+# Check global resolver view (CF's NS in answer = cut over):
+watch -n 30 'dig +short NS etherport.net @8.8.8.8'
+
+# Once you see CF nameservers, also verify a record resolves correctly:
+dig +short approve.wind.etherport.net @8.8.8.8   # should be CF edge IPs
+dig +short mail.etherport.net MX @8.8.8.8        # should be feedback-smtp.us-west-2.amazonses.com
 ```
 
-Wait ~5min for propagation. Verify:
+#### 9. **CRITICAL: SES end-to-end test send**
 
 ```bash
-dig +short approve.wind.etherport.net @1.1.1.1
-# Should answer with a Cloudflare-edge IP (not Route53)
+# Send a test from one of your SES-verified accounts to yourself.
+# OR trigger an alert that fires an advisor email + verify it lands (not in spam).
 
-dig +short ha.wind.etherport.net @1.1.1.1
-# Should answer with the same A value as before (now served by CF)
+# Verify DKIM signature passes in the received email's "Original message" view.
+# Verify SPF passes.
+# Verify DMARC alignment passes.
 ```
 
-### 7. Flip the advisor to use the public URL
+If ANY of these fail, NS-flip back at registrar immediately (see Rollback below).
+
+### Phase C — post-cutover (migrate DDNS writers)
+
+#### 10. ddns-updater Lambda → CF API
+
+The lambda in `infra/terraform/aws/ddns-lambda/` writes Route53 today. Route53 still ACCEPTS writes after cutover but resolvers won't see them — wan1/wan2.wind go stale on next IP change.
+
+See `infra/terraform/aws/ddns-lambda/CF-MIGRATION.md` (scaffolded — TODO sections marked).
+
+#### 11. route53-ddns K8s CronJob → CF API
+
+The CronJob in `platform/kubernetes/route53-ddns/` updates `wind.etherport.net` every minute. Same story — Route53 writes silently no-op post-cutover.
+
+See `platform/kubernetes/route53-ddns/CF-MIGRATION.md` (scaffolded — TODO sections marked).
+
+#### 12. Switch advisor APPROVAL_BASE_URL to public CF-gated URL
 
 ```bash
-# Edit:
-#   platform/kubernetes/auto-remediation/deployment.yaml
-# Find:
+# Edit platform/kubernetes/auto-remediation/deployment.yaml:
 #   - name: APPROVAL_BASE_URL
-#     value: "https://remediation-approve.<tailnet>.ts.net"
-# Replace with:
-#   - name: APPROVAL_BASE_URL
-#     value: "https://approve.wind.etherport.net"
+#     value: "https://approve.wind.etherport.net"  (was the Tailscale URL)
 
 git add platform/kubernetes/auto-remediation/deployment.yaml
 git commit -m "advisor: switch APPROVAL_BASE_URL to public CF-gated URL"
 git push
 ```
 
-Flux reconciles, controller restarts, next alert that triggers an advisor email uses the public URL.
+Next advisor email with an actionable proposal carries the CF-gated approval URL.
 
-### 8. End-to-end test
+## Rollback
 
-```bash
-# Tail controller logs:
-kubectl logs -n auto-remediation deploy/remediation-controller -f &
+If anything breaks (especially email):
 
-# Trigger any alert that would email you (or wait for one).
-# Click the link in the email.
-# Expect: Google SSO prompt → after auth, the advisor's /approve handler responds.
+1. **NS-flip back at registrar**:
+   - AWS console → Route 53 → Registered domains → `etherport.net` → Edit name servers
+   - Restore the 4 original `awsdns-*` values
+2. Wait ~5min for propagation. Route53 is authoritative again.
+3. Email + everything else returns to pre-cutover behavior.
+4. CF resources stay in place (no data loss); fix and re-cutover when ready.
 
-# In controller logs, look for the request landing:
-# "approve handler hit: id=X token=Y action=Z"
-```
+Routes back to all-Route53 within minutes. No data loss because Route53 zone records were never deleted.
+
+## DDNS Lambda migration detail
+
+(see appendix at end of `infra/terraform/aws/ddns-lambda/CF-MIGRATION.md` once scaffolded)
 
 ## Cost summary
 
 | Service | Cost |
 |---|---|
-| CF zone (Free plan) | $0/mo |
-| CF Tunnel | $0/mo (any volume) |
+| CF zone (Free) | $0/mo |
+| CF Tunnel | $0/mo |
 | CF Access (≤50 users) | $0/mo |
 | **Total** | **$0/mo** |
 
-vs. the ALB+Cognito alternative (~$15-18/mo).
+Position to drop ALB (~$15-18/mo) once `ha.wind.etherport.net` and other ALB-fronted services are tunneled through CF.
 
-## Rollback
+## Audit + observability
 
-If anything breaks:
-
-```bash
-# Fastest: revert APPROVAL_BASE_URL to the Tailscale URL
-# (back to pre-public state — emails route to TS-only URL again).
-
-# Slower: remove the Route53 NS delegation
-git revert <ns-delegation-commit>
-git push
-gh workflow run terraform-route53.yml -f action=apply
-# DNS cuts back to Route53 within TTL.
-
-# Full rollback: `terraform destroy` in infra/terraform/cloudflare
-# leaves CF clean. cloudflared Deployment in cluster goes idle
-# (no tunnel to connect to) but doesn't error.
-```
-
-## Operations going forward
-
-**Adding another service behind CF Access** (e.g., Grafana at `grafana.wind.etherport.net`):
-
-```hcl
-# infra/terraform/cloudflare/main.tf — add to ingress_rule blocks:
-ingress_rule {
-  hostname = "grafana.wind.etherport.net"
-  service  = "http://monitoring-grafana.monitoring.svc.cluster.local"
-}
-
-# Plus a CNAME record + Access app + policy resource for grafana.wind.…
-```
-
-Re-apply. New service is gated by the same CF Access policy.
-
-## Audit / observability
-
-- CF Access logs: Zero Trust dashboard → Logs → Access. Every authenticated request is logged with email + IP.
+- CF Access logs: dash → Zero Trust → Logs → Access. Every authenticated request logged with email + IP.
 - cloudflared metrics: scraped by Prometheus via ServiceMonitor. Key signals:
-  - `cloudflared_tunnel_active_connections` — should be 4 per replica (8 total)
-  - `cloudflared_tunnel_total_requests` — request volume
-  - `cloudflared_tunnel_response_status_code_total` — HTTP code distribution
-
-Add a row to the Grafana service-status dashboard for tunnel up/down (alert if `cloudflared_tunnel_active_connections < 2` for 5min).
-
-## DDNS Lambda migration (post-NS-delegation)
-
-The `ddns-updater` Lambda in `infra/terraform/aws/ddns-lambda/` updates
-`wan1.wind.etherport.net` and `wan2.wind.etherport.net` A records in
-Route53 when home WAN IPs change. After NS delegation:
-
-- Route53 is no longer authoritative for `*.wind.etherport.net`
-- Lambda writes to Route53 still SUCCEED (zone still exists) but resolvers
-  never query Route53 for wind.* → updates effectively disappear
-- `wan1`/`wan2` records in CF go stale on next IP change
-
-**Migration plan** (do after CF apply + NS delegation lands):
-
-1. Create a CF API token scoped to `wind.etherport.net` zone DNS:Edit only
-   (much tighter scope than the full TF token). Save to 1P as
-   `Cloudflare DDNS token (lambda)`.
-
-2. Add the token to AWS Secrets Manager so the Lambda can fetch it:
-   ```bash
-   aws --profile homelab secretsmanager create-secret \
-     --name "ddns-lambda/cloudflare-token" \
-     --secret-string "$(op item get 'Cloudflare DDNS token (lambda)' --fields token --reveal)"
-   ```
-
-3. Update the Lambda code in `infra/terraform/aws/ddns-lambda/lambda/handler.py`
-   to write to CF API instead of Route53. The CF DNS update endpoint:
-   ```
-   PUT https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{record_id}
-   Authorization: Bearer <token>
-   ```
-   Lookup record_id once via `GET /dns_records?name=wan1.wind.etherport.net`.
-
-4. Add the Lambda IAM perm to read the new Secrets Manager secret.
-   Remove the Route53 IAM perm.
-
-5. Update Lambda env vars:
-   - Remove: `HOSTED_ZONE_ID`
-   - Add: `CF_ZONE_ID` (from `terraform output -raw cf_wind_zone_id` — needs to
-     be added to outputs.tf)
-   - Add: `CF_TOKEN_SECRET_ARN` (the Secrets Manager ARN)
-
-6. Apply Lambda TF.
-
-Test by manually invoking once (`aws lambda invoke …`) and verifying the
-CF record updated.
-
-**Until migration done**: wan1/wan2 records in CF are static (from
-`existing_wind_records` defaults). If your WAN IPs change before migration,
-update those defaults + re-apply CF TF.
-
+  - `cloudflared_tunnel_active_connections` — should be 4 per replica
+  - `cloudflared_tunnel_response_status_code_total` — request distribution
+- Add Grafana panel for tunnel up/down (alert if active_connections < 2 for 5min).

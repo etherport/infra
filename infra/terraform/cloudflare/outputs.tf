@@ -15,15 +15,20 @@ output "tunnel_token" {
 
 output "cf_nameservers" {
   description = <<-EOT
-    Cloudflare nameservers for the wind.etherport.net zone. Add these as NS
-    records on `wind.etherport.net` inside the etherport.net Route53 zone
-    to delegate the subdomain to Cloudflare. After delegation propagates,
-    CF answers all *.wind.etherport.net queries.
+    Cloudflare nameservers for the etherport.net zone. Update etherport.net's
+    NS records at the Route53 Registrar (registrar console — NOT the Route53
+    hosted zone). After delegation propagates (~5min typical, up to 48h max),
+    CF answers all etherport.net queries. This is the destructive cut-over.
   EOT
-  value       = cloudflare_zone.wind.name_servers
+  value       = cloudflare_zone.etherport.name_servers
 }
 
 output "approval_url" {
   description = "Public URL gated by CF Access (used by advisor controller)."
   value       = "https://${var.approval_hostname}/approve"
+}
+
+output "zone_id" {
+  description = "Zone ID for the etherport.net CF zone — used by future modules / scripts."
+  value       = cloudflare_zone.etherport.id
 }

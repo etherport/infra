@@ -17,14 +17,23 @@ terraform {
 }
 
 # Cloudflare provider — uses CLOUDFLARE_API_TOKEN env var.
-# Token scopes required (created at https://dash.cloudflare.com/profile/api-tokens):
-#   - Account: Cloudflare Tunnel:Edit
-#   - Account: Access: Apps and Policies:Edit
-#   - Zone: DNS:Edit (scoped to the wind.etherport.net zone once created,
-#     or "All zones from an account" if simpler for now)
-#   - Zone: Zone:Read
-# Store the token in 1Password as "Cloudflare API (tf)" → field `token`,
-# then in the workflow env: CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+#
+# Token scopes (created at https://dash.cloudflare.com/profile/api-tokens):
+#   - Account: Cloudflare Tunnel: Edit
+#   - Account: Access: Apps and Policies: Edit
+#   - Account: Access: Service Tokens: Edit  (for Alexa service token)
+#   - Zone: DNS: Edit                        (all DNS record management)
+#   - Zone: Zone: Edit                       (zone settings post-import)
+#
+# Zone creation is NOT done via API (Free plan limitation) — zone is added
+# manually via dashboard, then imported into TF state. So no "Account: Zone: Edit"
+# perm needed.
+#
+# Store the token in 1Password as "Cloudflare API (tf)" → field `token`.
+# Then in GitHub repo secrets:
+#   CLOUDFLARE_API_TOKEN  = <the token>
+#   CLOUDFLARE_ACCOUNT_ID = <hex account id from dashboard URL>
+#   CLOUDFLARE_ZONE_ID    = <hex zone id from CF zone overview → API section>
 provider "cloudflare" {}
 
 # AWS provider — used for Route53 to add the NS delegation record for

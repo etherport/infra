@@ -2,20 +2,25 @@
 
 variable "cloudflare_account_id" {
   description = <<-EOT
-    Cloudflare account ID. Find at https://dash.cloudflare.com → Workers & Pages → right sidebar shows "Account ID".
-    Do NOT commit a real value to this file — pass via tfvars or workflow env var TF_VAR_cloudflare_account_id.
+    Cloudflare account ID. Find at https://dash.cloudflare.com → click your account in top-left
+    → URL becomes https://dash.cloudflare.com/<32-hex-account-id> → that hex is your Account ID.
+    Pass via TF_VAR_cloudflare_account_id (workflow env var) — do NOT commit a real value here.
   EOT
   type        = string
 }
 
-variable "cf_subdomain" {
-  description = "Subdomain to delegate to Cloudflare (e.g., wind.etherport.net)."
+variable "cloudflare_zone_id" {
+  description = <<-EOT
+    Cloudflare Zone ID for the etherport.net zone. Zone is created manually via the CF dashboard
+    ("+ Add a site" → etherport.net → Free) — CF Free doesn't allow API-based zone creation.
+    After creation, grab the Zone ID from the zone overview page → API section.
+    Pass via TF_VAR_cloudflare_zone_id.
+  EOT
   type        = string
-  default     = "wind.etherport.net"
 }
 
-variable "route53_parent_zone_name" {
-  description = "The parent zone (in Route53) where the NS delegation record gets added."
+variable "cf_zone_domain" {
+  description = "Full domain name of the CF zone (matches the manually-created zone)."
   type        = string
   default     = "etherport.net"
 }
@@ -42,116 +47,147 @@ variable "allowed_emails" {
   default     = ["grahamsm@gmail.com"]
 }
 
-variable "existing_wind_records" {
-  description = <<-EOT
-    Map of records to recreate inside Cloudflare for the wind.etherport.net zone, mirroring
-    what currently exists in Route53. After NS delegation lands, these become the authoritative
-    answers. Default proxied=false (DNS-only) so traffic still reaches existing origins
-    unchanged. Switch to proxied=true per-record once you want the CF edge in the path.
+// ===========================================================================
+// DNS records to recreate in CF zone, mirroring current Route53 state.
+// Audit done 2026-05-25. Drop the 2 stale `wan1/wan2.etherport.net` (apex)
+// records — they're not in lambda allowlist, not in TF, not in any active
+// path. All other 20 records preserved exactly.
+//
+// Email-critical records (SES) are FIRST in each map for visibility. Test
+// these end-to-end before declaring cutover success.
+// ===========================================================================
 
-    Values pre-filled from Route53 audit on 2026-05-25:
-      wind apex    A     47.159.189.5         # home primary WAN IP (matches wan1)
-      wan1         A     47.159.189.5         # DDNS lambda updates this — see note below
-      wan2         A     66.215.210.75        # DDNS lambda updates this — see note below
-      ceph         A     127.0.0.1            # ⚠ placeholder? probably wants real IP
-      pve          A     127.0.0.1            # ⚠ placeholder? probably wants real IP
-      ha           ALIAS dualstack.private-infra-alb-….amazonaws.com  # ALB alias (see below)
-      *            ALIAS dualstack.private-infra-alb-….amazonaws.com  # ALB alias (see below)
-
-    ALB aliases (ha + *): CF doesn't support AWS-style aliases. Two options when
-    you're ready:
-      1. CNAME to the ALB DNS name (keeps current routing through ALB)
-      2. Drop the wildcard from CF; tunnel-route each `*.wind.etherport.net`
-         service explicitly to its in-cluster service via a new entry in
-         main.tf cloudflare_tunnel_config.config.ingress_rule[] +
-         a CNAME to <tunnel>.cfargotunnel.com.
-    Option 2 is the cost-saving end-state (drops the ALB once everything's
-    tunneled). For now we ship Option 1 so cutover is non-breaking.
-
-    DDNS lambda follow-up: infra/terraform/aws/ddns-lambda updates wan1/wan2
-    in Route53. After NS delegation, Route53 writes become no-ops (CF is
-    authoritative). The lambda needs to switch to writing CF DNS records.
-    Tracked separately — see docs/runbooks/cloudflare-access-enable.md
-    "DDNS lambda migration" section.
-
-    ACME validation CNAMEs (_8e3818…wind.etherport.net.,
-    _1ccc76b4…ha.wind.etherport.net.) MUST be carried over too so
-    cert-manager can renew the wildcard + ha-specific certs. These are
-    appended via existing_wind_acme_records below.
-  EOT
+variable "dns_records_a" {
+  description = "A records to create in the etherport.net CF zone."
   type = map(object({
-    type    = string
     value   = string
     ttl     = optional(number, 300)
     proxied = optional(bool, false)
+    comment = optional(string, "")
   }))
   default = {
-    "@" = {
-      type    = "A"
-      value   = "47.159.189.5"   # home primary WAN
-      proxied = false
-    }
-    "wan1" = {
-      type    = "A"
+    // ---- DDNS-updated (post-cutover the K8s CronJob + ddns Lambda
+    //      need to switch to writing CF DNS; static values until then) ----
+    "wan1.wind" = {
       value   = "47.159.189.5"
-      proxied = false
+      comment = "WAN1 IP — ddns-updater Lambda writes (Route53 today, CF post-migration)"
     }
-    "wan2" = {
-      type    = "A"
+    "wan2.wind" = {
       value   = "66.215.210.75"
-      proxied = false
+      comment = "WAN2 IP — ddns-updater Lambda writes (Route53 today, CF post-migration)"
     }
-    # ⚠ ceph and pve point to 127.0.0.1 in Route53 — looks like a placeholder
-    # left over from setup. Carried forward as-is so we don't change behavior
-    # during the cutover. Replace with real values (or remove) before flipping
-    # proxied=true on them.
-    "ceph" = {
-      type    = "A"
+    "wind" = {
+      value   = "47.159.189.5"
+      comment = "Active WAN — k8s route53-ddns CronJob writes every minute"
+    }
+
+    // ---- AWS VPN endpoints (static EIPs) ----
+    "vpn-use1" = {
+      value   = "35.169.37.16"
+      comment = "AWS us-east-1 regional VPN EIP"
+    }
+    "vpn-usw2" = {
+      value   = "44.240.60.80"
+      comment = "AWS us-west-2 regional VPN EIP"
+    }
+
+    // ---- Internal-only sinkholes (resolve to loopback, preserve naming
+    //      without leaking to public internet) ----
+    "ceph.wind" = {
       value   = "127.0.0.1"
-      proxied = false
+      comment = "Sinkhole — internal-only hostname, prevents accidental public access"
     }
-    "pve" = {
-      type    = "A"
+    "pve.wind" = {
       value   = "127.0.0.1"
-      proxied = false
-    }
-    # ALB aliases as CNAMEs (CF doesn't have AWS aliases). Same end-IP via
-    # the ALB DNS lookup. Switch to tunnel-route + CNAME-to-cfargotunnel.com
-    # per service when ready to drop the ALB.
-    "ha" = {
-      type    = "CNAME"
-      value   = "dualstack.private-infra-alb-687735217.us-west-2.elb.amazonaws.com"
-      proxied = false
-    }
-    "*" = {
-      type    = "CNAME"
-      value   = "dualstack.private-infra-alb-687735217.us-west-2.elb.amazonaws.com"
-      proxied = false
+      comment = "Sinkhole — internal-only hostname, prevents accidental public access"
     }
   }
 }
 
-variable "existing_wind_acme_records" {
-  description = <<-EOT
-    ACME validation CNAMEs for cert-manager's wildcard wind.etherport.net
-    cert + the ha.wind.etherport.net cert. These MUST exist in whichever
-    DNS is authoritative or cert renewals fail. Pre-filled from Route53
-    audit 2026-05-25. CF zone names can contain dots so we use the bare
-    label including the leading underscore + trailing zone-relative form.
-  EOT
+variable "dns_records_cname" {
+  description = "CNAME records to create in the etherport.net CF zone."
   type = map(object({
-    type  = string
-    value = string
-    ttl   = optional(number, 300)
+    value   = string
+    ttl     = optional(number, 300)
+    proxied = optional(bool, false)
+    comment = optional(string, "")
   }))
   default = {
-    "_8e381876b8967e8fa6ba2c810f7c420c" = {
-      type  = "CNAME"
-      value = "_0d84538a58eaaee14b4e6fe7720c526d.jkddzztszm.acm-validations.aws."
+    // ---- SES DKIM (email-critical — verify post-cutover with test send) ----
+    "5gniifohq7dsyc2lphgcnx4j3a74ofco._domainkey" = {
+      value   = "5gniifohq7dsyc2lphgcnx4j3a74ofco.dkim.amazonses.com"
+      ttl     = 1800
+      comment = "SES DKIM — email-critical"
     }
-    "_1ccc76b4b2b06ff626fc1c649b61ab26.ha" = {
-      type  = "CNAME"
-      value = "_93aad1195f5deb9d8d22297d5166c990.jkddzztszm.acm-validations.aws."
+    "dy5wbhsewzcikzt45twscs2dl4g4vma2._domainkey" = {
+      value   = "dy5wbhsewzcikzt45twscs2dl4g4vma2.dkim.amazonses.com"
+      ttl     = 1800
+      comment = "SES DKIM — email-critical"
+    }
+    "j5gqverli76qyzmlg6ulzs2ey36w6rgb._domainkey" = {
+      value   = "j5gqverli76qyzmlg6ulzs2ey36w6rgb.dkim.amazonses.com"
+      ttl     = 1800
+      comment = "SES DKIM — email-critical"
+    }
+
+    // ---- ACME DNS-01 validation (cert-manager renewals depend on these) ----
+    "_8e381876b8967e8fa6ba2c810f7c420c.wind" = {
+      value   = "_0d84538a58eaaee14b4e6fe7720c526d.jkddzztszm.acm-validations.aws."
+      comment = "ACME validation — wildcard *.wind.etherport.net cert (cert-manager renewals)"
+    }
+    "_1ccc76b4b2b06ff626fc1c649b61ab26.ha.wind" = {
+      value   = "_93aad1195f5deb9d8d22297d5166c990.jkddzztszm.acm-validations.aws."
+      comment = "ACME validation — ha.wind.etherport.net cert (cert-manager renewals)"
+    }
+    "_f6abe49fcaf7ee83c8013566f97ee85a" = {
+      value   = "_2bab704205eefe6455fdb32fcc37c0c2.jkddzztszm.acm-validations.aws."
+      comment = "ACME validation — apex etherport.net cert (cert-manager renewals)"
+    }
+
+    // ---- ALB aliases (Route53 had these as ALIAS; CF uses CNAME — same target) ----
+    "ha.wind" = {
+      value   = "dualstack.private-infra-alb-687735217.us-west-2.elb.amazonaws.com"
+      comment = "HA UI — currently via ALB; migrate to CF Tunnel to drop ALB cost"
+    }
+    "*.wind" = {
+      value   = "dualstack.private-infra-alb-687735217.us-west-2.elb.amazonaws.com"
+      comment = "Wildcard for *.wind.etherport.net — currently via ALB"
+    }
+  }
+}
+
+variable "dns_records_mx" {
+  description = "MX records — currently just the SES bounce/feedback endpoint."
+  type = map(object({
+    value    = string
+    priority = number
+    ttl      = optional(number, 300)
+    comment  = optional(string, "")
+  }))
+  default = {
+    "mail" = {
+      value    = "feedback-smtp.us-west-2.amazonses.com"
+      priority = 10
+      comment  = "SES bounce/feedback receiver — email-critical"
+    }
+  }
+}
+
+variable "dns_records_txt" {
+  description = "TXT records — SPF + DMARC for email auth."
+  type = map(object({
+    value   = string
+    ttl     = optional(number, 300)
+    comment = optional(string, "")
+  }))
+  default = {
+    "mail" = {
+      value   = "v=spf1 include:amazonses.com ~all"
+      comment = "SPF for SES sender — email-critical"
+    }
+    "_dmarc" = {
+      value   = "v=DMARC1; p=none;"
+      comment = "DMARC policy — currently p=none (monitor only)"
     }
   }
 }

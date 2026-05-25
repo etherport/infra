@@ -26,7 +26,7 @@ resource "cloudflare_zero_trust_access_service_token" "alexa_skill" {
   // 1y; explicit here for visibility. To rotate: `terraform taint
   // cloudflare_zero_trust_access_service_token.alexa_skill && terraform apply`,
   // then update the Lambda env vars with the new client_id/client_secret.
-  duration = "8760h"  # 1y
+  duration = "8760h" # 1y
 }
 
 output "alexa_service_token_client_id" {
@@ -35,7 +35,7 @@ output "alexa_service_token_client_id" {
     CF_ACCESS_CLIENT_ID. Not sensitive on its own (it's just an
     identifier — secret is below).
   EOT
-  value = cloudflare_zero_trust_access_service_token.alexa_skill.client_id
+  value       = cloudflare_zero_trust_access_service_token.alexa_skill.client_id
 }
 
 output "alexa_service_token_client_secret" {
@@ -44,8 +44,8 @@ output "alexa_service_token_client_secret" {
     CF_ACCESS_CLIENT_SECRET. Retrieve with:
       terraform output -raw alexa_service_token_client_secret | pbcopy
   EOT
-  value     = cloudflare_zero_trust_access_service_token.alexa_skill.client_secret
-  sensitive = true
+  value       = cloudflare_zero_trust_access_service_token.alexa_skill.client_secret
+  sensitive   = true
 }
 
 // -------------------------------------------------------------------------
