@@ -132,6 +132,105 @@ data:
             "refId": "A",
             "maxLines": 50
           }]
+        },
+        {
+          "type": "row",
+          "title": "Action execution + verification (Phase 2/3)",
+          "gridPos": {"x": 0, "y": 32, "w": 24, "h": 1},
+          "collapsed": false
+        },
+        {
+          "type": "stat",
+          "title": "Auto-executed (24h)",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 0, "y": 33, "w": 4, "h": 4},
+          "targets": [{
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=\"auto_executed\" [24h]))",
+            "refId": "A", "instant": true
+          }]
+        },
+        {
+          "type": "stat",
+          "title": "Verification passed",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 4, "y": 33, "w": 4, "h": 4},
+          "targets": [{
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=\"verification_passed\" [24h]))",
+            "refId": "A", "instant": true
+          }],
+          "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}, "color": {"mode": "thresholds"}}}
+        },
+        {
+          "type": "stat",
+          "title": "Verification FAILED",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 8, "y": 33, "w": 4, "h": 4},
+          "targets": [{
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=\"verification_failed\" [24h]))",
+            "refId": "A", "instant": true
+          }],
+          "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}, "color": {"mode": "thresholds"}}}
+        },
+        {
+          "type": "stat",
+          "title": "Deep-mode runs (24h)",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 12, "y": 33, "w": 4, "h": 4},
+          "targets": [{
+            "expr": "sum(count_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=\"success\" | mode=\"deep\" [24h]))",
+            "refId": "A", "instant": true
+          }]
+        },
+        {
+          "type": "stat",
+          "title": "Avg tool calls / deep run",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 16, "y": 33, "w": 4, "h": 4},
+          "targets": [{
+            "expr": "avg_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=\"success\" | mode=\"deep\" | unwrap tool_calls [24h])",
+            "refId": "A", "instant": true
+          }]
+        },
+        {
+          "type": "stat",
+          "title": "Daily $ spent",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 20, "y": 33, "w": 4, "h": 4},
+          "targets": [{
+            "expr": "last_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=\"success\" | unwrap daily_usd_spent [24h])",
+            "refId": "A", "instant": true
+          }]
+        },
+        {
+          "type": "barchart",
+          "title": "Auto-executed actions by type (24h)",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 0, "y": 37, "w": 12, "h": 8},
+          "targets": [{
+            "expr": "sum by (action_type) (count_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=\"auto_executed\" [24h]))",
+            "refId": "A", "instant": true
+          }]
+        },
+        {
+          "type": "barchart",
+          "title": "Verification outcomes by action type (24h)",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 12, "y": 37, "w": 12, "h": 8},
+          "targets": [{
+            "expr": "sum by (action_type, event) (count_over_time({namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=~\"verification_(passed|failed|uncertain)\" [24h]))",
+            "refId": "A", "instant": true
+          }]
+        },
+        {
+          "type": "table",
+          "title": "Verification failures (7d) — alerts that auto-actions didn't fix",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "gridPos": {"x": 0, "y": 45, "w": 24, "h": 8},
+          "targets": [{
+            "expr": "{namespace=\"auto-remediation\"} | json | tag=\"ai_advisor\" | event=\"verification_failed\" | line_format \"{{.ts}}  {{.alertname}}  action={{.action_type}}  vid={{.verification_id}}\"",
+            "refId": "A",
+            "maxLines": 50
+          }]
         }
       ]
     }
