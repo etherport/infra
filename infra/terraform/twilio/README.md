@@ -23,13 +23,16 @@ turns the 3 pending Talk tasks into TF apply'd changes:
 
 ### 2. Store in 1Password
 
-Create a new 1P item:
-- Title: `Twilio API (tf)`
-- Category: API Credential
-- Fields:
-  - `account_sid` = your Account SID (starts with `AC...`, find on console homepage)
-  - `api_key_sid` = the SK... from step 1
-  - `api_key_secret` = the secret from step 1 (Concealed)
+1P item: `twilio-tf-token` (ID `xb2652itobj4k3ytnz53b3hm7y`).
+
+Field mapping (note the spaces — exact field names as stored):
+- `username` = the **API Key SID** (starts with `SK...`)
+- `credential` = the **API Key Secret** (Concealed)
+- `account name` = the **Account SID** (starts with `AC...`)
+
+The Account SID is distinct from the API Key SID. Find it on the
+[console homepage](https://console.twilio.com) top-right, or pull from
+any console URL (`.../console/account/{AC...}/...`).
 
 ### 3. Add GitHub repo secrets
 
@@ -47,9 +50,9 @@ cd infra/terraform/twilio
 terraform init
 
 # Set env vars from 1P
-export TWILIO_ACCOUNT_SID=$(op item get "Twilio API (tf)" --fields account_sid --reveal)
-export TWILIO_API_KEY_SID=$(op item get "Twilio API (tf)" --fields api_key_sid --reveal)
-export TWILIO_API_KEY_SECRET=$(op item get "Twilio API (tf)" --fields api_key_secret --reveal)
+export TWILIO_ACCOUNT_SID=$(op item get twilio-tf-token --fields 'account name' --reveal)
+export TWILIO_API_KEY_SID=$(op item get twilio-tf-token --fields username --reveal)
+export TWILIO_API_KEY_SECRET=$(op item get twilio-tf-token --fields credential --reveal)
 
 # Discover current state — what's actually in the account today
 # (these listings will be the source of SIDs to import)
@@ -150,7 +153,7 @@ env vars set as above.
 
 To rotate the API Key:
 1. Console → API keys & tokens → click your `terraform` key → **Reset Secret**
-2. Copy new Secret → update 1P
+2. Copy new Secret → `op item edit twilio-tf-token credential=<new>`
 3. Update GitHub repo secret `TWILIO_API_KEY_SECRET`
 4. Account SID + Key SID don't change, just the Secret
 

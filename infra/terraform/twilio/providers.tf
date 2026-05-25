@@ -17,5 +17,9 @@ terraform {
 # Create API Key one-time in console:
 #   console.twilio.com → Account → API keys & tokens → Create API key
 #     → Standard scope (sufficient for IaC)
-#     → save SID + Secret to 1P item "Twilio API (tf)"
+#     → save SID + Secret to 1P item "twilio-tf-token":
+#         username    = SK... (API Key SID)
+#         credential  = the secret (Concealed)
+#         account_sid = AC... (Account SID, find on console homepage —
+#                       distinct from API Key SID!)
 provider "twilio" {}
