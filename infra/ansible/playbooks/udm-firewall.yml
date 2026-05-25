@@ -1,0 +1,390 @@
+---
+# UDM firewall policies via the UniFi 10+ zone-policy API.
+#
+# Why this playbook exists (and not Terraform):
+#   paultyng/unifi only speaks the legacy /rest/firewallrule endpoint,
+#   which on UniFi 10+ rejects address-group creates + applies stricter
+#   rule_index ranges (FirewallGroupInvalidArgs, FirewallRuleIndexOutOfRange).
+#   The "modern" zone-based v2 API at /proxy/network/v2/api/.../firewall-policies
+#   has no Terraform provider with reliable coverage.
+#
+# This playbook drives that v2 API directly via uri{} tasks. Idempotent:
+#   1. Login → capture TOKEN cookie + CSRF.
+#   2. Resolve zone IDs by name (Internal, External, Gateway, IoT, …).
+#   3. Reconcile address-groups + port-groups (objects). Update if drifted.
+#   4. Reconcile firewall policies by name. Create or update.
+#
+# Configure rules via the `udm_firewall_*` vars below.
+#
+# Auth: 1Password "UDM (tf-admin)" item. Username + password fetched via
+# `op item get` at runtime (op CLI must be in PATH; agent must be unlocked).
+#
+# Usage (check / apply against the real UDM):
+#   ansible-playbook -i inventory/wind/inventory.ini \
+#     playbooks/udm-firewall.yml --check --diff
+#   ansible-playbook -i inventory/wind/inventory.ini \
+#     playbooks/udm-firewall.yml
+#
+# This playbook runs on `localhost` (your laptop or the gh-runner) using
+# the local `op` CLI + HTTPS to the UDM at https://10.10.200.1.
+
+- name: UDM firewall policies (zone-based v2 API)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  # Override any inherited become: true from group_vars — we're just
+  # running local CLI + HTTPS calls, no sudo needed.
+  become: false
+
+  vars:
+    udm_base: "https://10.10.200.1"
+    udm_site: default
+    # Validate the UDM controller cert? Defaults to no because it's a
+    # self-signed UniFi-internal cert. Set true once a real cert is wired.
+    udm_validate_certs: false
+
+    # ---- Address-group objects to reconcile ----
+    # Keys: name (str), members (list of CIDRs or IPs)
+    udm_address_groups:
+      - name: syslog-sources-unvr-unas
+        members:
+          - "10.10.212.10"   # UNVR / Protect controller (VLAN 212 Unifi zone=Internal)
+          - "10.10.209.10"   # UNAS / Sequoia (VLAN 209 vSAN, currently zoneless)
+      - name: syslog-receiver-alloy
+        members:
+          - "10.10.201.73"   # Alloy MetalLB LB (VLAN 201 Servers, currently zoneless)
+
+    # Reuse the syslog-port-514 port group that the legacy paultyng/unifi
+    # attempt left behind (id `6a138b2e92b8269077a388a3` in our test).
+    # If it doesn't exist (fresh rebuild), this task creates it.
+    udm_port_groups:
+      - name: syslog-port-514
+        members: ["514"]
+
+    # ---- Firewall policies (zone-based v2 API) ----
+    # Each policy must specify:
+    #   name, action (ALLOW|BLOCK), protocol (udp|tcp|tcp_udp|all|...),
+    #   index (sort priority — lower=earlier; user rules typically 10000+),
+    #   source: { zone_name, ip_group_name? | ips? | matching_target=ANY }
+    #   destination: same shape + optional port_group_name
+    # The playbook resolves zone_name → zone_id and ip_group_name → object_id
+    # at runtime so the rules stay readable + survive controller rebuilds
+    # (new IDs minted on rebuild won't break the manifests).
+    udm_firewall_policies:
+      - name: "Allow syslog UNVR+UNAS → Alloy UDP/514"
+        action: ALLOW
+        protocol: udp
+        index: 11000
+        enabled: true
+        logging: false
+        source:
+          # Match by IP-object; zone=Internal works because UNVR's VLAN
+          # is Internal. UNAS's vSAN VLAN isn't in any zone today, but
+          # source-side matching is by IP-group, so the zone is just a
+          # scope hint — actual match is on the IPs in the object.
+          zone_name: Internal
+          ip_group_name: syslog-sources-unvr-unas
+        destination:
+          # Destination Servers VLAN isn't in any zone; using "Internal"
+          # as the destination zone with explicit IP-object matching
+          # gives the policy a concrete target. If the rule fails to
+          # match due to zone mismatch, switch dst zone to a wildcard
+          # (UniFi may expose a 'Network' zone for unzoned nets).
+          zone_name: Internal
+          ip_group_name: syslog-receiver-alloy
+          port_group_name: syslog-port-514
+
+  pre_tasks:
+    - name: Verify op CLI present
+      ansible.builtin.command: op --version
+      changed_when: false
+
+    # Use command modules (not pipe lookup) so we get proper terminal
+    # access to the 1Password CLI session/agent. Lookups run in a stripped
+    # subprocess that can't see OP_SESSION. The `op` calls below honor
+    # OP_SESSION_<token> or the desktop-app SSH agent depending on setup.
+    - name: Fetch UDM username from 1Password
+      ansible.builtin.command:
+        argv: [op, item, get, "UDM (tf-admin)", --fields, username]
+      register: udm_user_op
+      changed_when: false
+      no_log: true
+
+    - name: Fetch UDM password from 1Password
+      ansible.builtin.command:
+        argv: [op, item, get, "UDM (tf-admin)", --fields, password, --reveal]
+      register: udm_pass_op
+      changed_when: false
+      no_log: true
+
+    - name: Set UDM credential facts
+      ansible.builtin.set_fact:
+        udm_username: "{{ udm_user_op.stdout | trim }}"
+        udm_password: "{{ udm_pass_op.stdout | trim }}"
+      no_log: true
+
+    - name: Assert UDM credentials present
+      ansible.builtin.assert:
+        that:
+          - udm_username | length > 0
+          - udm_password | length > 0
+        fail_msg: "Failed to fetch UDM creds from 1Password (item: 'UDM (tf-admin)'). Ensure 1P agent is unlocked."
+
+  tasks:
+    # -----------------------------------------------------------------
+    # 1. Login → capture TOKEN + CSRF
+    # -----------------------------------------------------------------
+    - name: UDM login
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/api/auth/login"
+        method: POST
+        validate_certs: "{{ udm_validate_certs }}"
+        body_format: json
+        body:
+          username: "{{ udm_username }}"
+          password: "{{ udm_password }}"
+        status_code: 200
+        return_content: false
+      register: udm_login
+      no_log: true
+
+    - name: Extract TOKEN cookie + CSRF from login headers
+      ansible.builtin.set_fact:
+        udm_token: "{{ udm_login.set_cookie | regex_search('TOKEN=([^;]+)', '\\1') | first }}"
+        udm_csrf: "{{ udm_login['x_updated_csrf_token'] | default(udm_login.x_csrf_token | default('')) }}"
+      no_log: true
+
+    - name: Sanity-check session captured
+      ansible.builtin.assert:
+        that:
+          - udm_token | length > 0
+          - udm_csrf | length > 0
+        fail_msg: "Failed to capture UDM session (TOKEN+CSRF) from login response."
+
+    - name: Build common auth headers
+      ansible.builtin.set_fact:
+        udm_headers:
+          Cookie: "TOKEN={{ udm_token }}"
+          X-Csrf-Token: "{{ udm_csrf }}"
+          Content-Type: application/json
+      no_log: true
+
+    # -----------------------------------------------------------------
+    # 2. Discover zones (resolve zone names → ids)
+    # -----------------------------------------------------------------
+    - name: GET zones
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/proxy/network/v2/api/site/{{ udm_site }}/firewall/zone"
+        method: GET
+        headers: "{{ udm_headers }}"
+        validate_certs: "{{ udm_validate_certs }}"
+        status_code: 200
+        return_content: true
+      register: udm_zones
+
+    - name: Build zone-name → zone-id map
+      ansible.builtin.set_fact:
+        udm_zone_id_by_name: "{{ udm_zones.json | items2dict(key_name='name', value_name='_id') }}"
+
+    - name: Show zone map
+      ansible.builtin.debug:
+        var: udm_zone_id_by_name
+
+    # -----------------------------------------------------------------
+    # 3. Reconcile address-group + port-group objects
+    # -----------------------------------------------------------------
+    - name: GET existing firewall groups (objects)
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/proxy/network/api/s/{{ udm_site }}/rest/firewallgroup"
+        method: GET
+        headers: "{{ udm_headers }}"
+        validate_certs: "{{ udm_validate_certs }}"
+        status_code: 200
+        return_content: true
+      register: udm_existing_groups
+
+    - name: Build group-name → group dict
+      ansible.builtin.set_fact:
+        udm_group_by_name: >-
+          {{ udm_existing_groups.json.data
+             | items2dict(key_name='name', value_name='_id') }}
+
+    # --- address-groups ---
+    - name: Create missing address-groups
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/proxy/network/api/s/{{ udm_site }}/rest/firewallgroup"
+        method: POST
+        headers: "{{ udm_headers }}"
+        validate_certs: "{{ udm_validate_certs }}"
+        body_format: json
+        body:
+          name: "{{ item.name }}"
+          group_type: address-group
+          group_members: "{{ item.members }}"
+        status_code: [200, 201]
+      loop: "{{ udm_address_groups }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.name not in udm_group_by_name
+      register: udm_addr_grp_create
+
+    - name: Update drifted address-groups (members changed)
+      block:
+        - name: GET each address-group's current members
+          ansible.builtin.uri:
+            url: "{{ udm_base }}/proxy/network/api/s/{{ udm_site }}/rest/firewallgroup/{{ udm_group_by_name[item.name] }}"
+            method: GET
+            headers: "{{ udm_headers }}"
+            validate_certs: "{{ udm_validate_certs }}"
+            status_code: 200
+            return_content: true
+          register: udm_addr_grp_current
+          loop: "{{ udm_address_groups }}"
+          loop_control:
+            label: "{{ item.name }}"
+          when: item.name in udm_group_by_name
+
+        - name: PUT updated members where drifted
+          ansible.builtin.uri:
+            url: "{{ udm_base }}/proxy/network/api/s/{{ udm_site }}/rest/firewallgroup/{{ udm_group_by_name[item.item.name] }}"
+            method: PUT
+            headers: "{{ udm_headers }}"
+            validate_certs: "{{ udm_validate_certs }}"
+            body_format: json
+            body:
+              _id: "{{ udm_group_by_name[item.item.name] }}"
+              name: "{{ item.item.name }}"
+              group_type: address-group
+              group_members: "{{ item.item.members }}"
+            status_code: 200
+          loop: "{{ udm_addr_grp_current.results | default([]) }}"
+          loop_control:
+            label: "{{ item.item.name }}"
+          when:
+            - item.json is defined
+            - (item.json.data[0].group_members | default([]) | sort) != (item.item.members | sort)
+
+    # --- port-groups ---
+    - name: Create missing port-groups
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/proxy/network/api/s/{{ udm_site }}/rest/firewallgroup"
+        method: POST
+        headers: "{{ udm_headers }}"
+        validate_certs: "{{ udm_validate_certs }}"
+        body_format: json
+        body:
+          name: "{{ item.name }}"
+          group_type: port-group
+          group_members: "{{ item.members | map('string') | list }}"
+        status_code: [200, 201]
+      loop: "{{ udm_port_groups }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.name not in udm_group_by_name
+
+    # Refresh group map after creates (so policy resolution sees them)
+    - name: GET firewall groups (refresh after creates)
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/proxy/network/api/s/{{ udm_site }}/rest/firewallgroup"
+        method: GET
+        headers: "{{ udm_headers }}"
+        validate_certs: "{{ udm_validate_certs }}"
+        status_code: 200
+        return_content: true
+      register: udm_groups_refresh
+
+    - name: Rebuild group-name → id map
+      ansible.builtin.set_fact:
+        udm_group_by_name: "{{ udm_groups_refresh.json.data | items2dict(key_name='name', value_name='_id') }}"
+
+    # -----------------------------------------------------------------
+    # 4. Reconcile firewall policies (v2 zone-based)
+    # -----------------------------------------------------------------
+    - name: GET existing firewall policies (v2)
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/proxy/network/v2/api/site/{{ udm_site }}/firewall-policies"
+        method: GET
+        headers: "{{ udm_headers }}"
+        validate_certs: "{{ udm_validate_certs }}"
+        status_code: 200
+        return_content: true
+      register: udm_existing_policies
+
+    - name: Build policy-name → id map (skip predefined)
+      ansible.builtin.set_fact:
+        udm_policy_id_by_name: >-
+          {{ udm_existing_policies.json
+             | selectattr('predefined', 'equalto', false)
+             | items2dict(key_name='name', value_name='_id') }}
+
+    - name: Render policy bodies (for create+update)
+      ansible.builtin.set_fact:
+        udm_policy_bodies: >-
+          {{ udm_firewall_policies
+             | map('combine', {})
+             | list }}
+
+    - name: Build full policy POST bodies (resolve zone/group names → ids)
+      ansible.builtin.set_fact:
+        udm_policy_rendered: >-
+          {{ udm_policy_rendered | default([]) + [
+            {
+              "name": pol.name,
+              "action": pol.action,
+              "enabled": pol.enabled | default(true),
+              "logging": pol.logging | default(false),
+              "protocol": pol.protocol,
+              "index": pol.index,
+              "connection_state_type": "ALL",
+              "connection_states": [],
+              "create_allow_respond": true,
+              "icmp_typename": "ANY",
+              "icmp_v6_typename": "ANY",
+              "ip_version": "BOTH",
+              "match_ip_sec": false,
+              "match_opposite_protocol": false,
+              "schedule": { "mode": "ALWAYS" },
+              "source": {
+                "zone_id": udm_zone_id_by_name[pol.source.zone_name],
+                "matching_target": ("IP" if (pol.source.ip_group_name | default(false)) else "ANY"),
+                "matching_target_type": ("OBJECT" if (pol.source.ip_group_name | default(false)) else None),
+                "ip_group_id": (udm_group_by_name[pol.source.ip_group_name] if (pol.source.ip_group_name | default(false)) else None),
+                "port_matching_type": "ANY",
+                "match_opposite_ports": false,
+                "ips": [],
+                "match_mac": false,
+                "match_opposite_ips": false
+              },
+              "destination": {
+                "zone_id": udm_zone_id_by_name[pol.destination.zone_name],
+                "matching_target": ("IP" if (pol.destination.ip_group_name | default(false)) else "ANY"),
+                "matching_target_type": ("OBJECT" if (pol.destination.ip_group_name | default(false)) else None),
+                "ip_group_id": (udm_group_by_name[pol.destination.ip_group_name] if (pol.destination.ip_group_name | default(false)) else None),
+                "port_matching_type": ("OBJECT" if (pol.destination.port_group_name | default(false)) else "ANY"),
+                "port_group_id": (udm_group_by_name[pol.destination.port_group_name] if (pol.destination.port_group_name | default(false)) else None),
+                "match_opposite_ports": false
+              }
+            }
+          ] }}
+      loop: "{{ udm_firewall_policies }}"
+      loop_control:
+        loop_var: pol
+
+    - name: Create policies that don't exist yet
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/proxy/network/v2/api/site/{{ udm_site }}/firewall-policies"
+        method: POST
+        headers: "{{ udm_headers }}"
+        validate_certs: "{{ udm_validate_certs }}"
+        body_format: json
+        body: "{{ item }}"
+        status_code: [200, 201]
+      loop: "{{ udm_policy_rendered }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.name not in udm_policy_id_by_name
+      register: udm_policy_create_results
+
+    - name: Show policy create results
+      ansible.builtin.debug:
+        msg: "Created {{ udm_policy_create_results.results | rejectattr('skipped', 'defined') | list | length }} new policy/policies"
