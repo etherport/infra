@@ -927,6 +927,84 @@ data:
             logger.warning(f"Prometheus query failed: {e}")
         return 0
 
+    def _past_actions_for_alert(alertname, days=7):
+        """Query Loki for the advisor's past actions on this alertname,
+        and any verification outcomes that followed. Returns a compact
+        summary the LLM can use to avoid repeating known-bad actions.
+
+        Returns dict like:
+          {
+            'action_attempts': [
+              {'ts': ..., 'action_type': 'delete_completed_jobs',
+               'mode': 'single', 'confidence': 0.72, 'event': 'auto_executed'},
+              ...
+            ],
+            'verification_outcomes': {
+              'delete_completed_jobs': {'passed': 3, 'failed': 1, 'uncertain': 0},
+              ...
+            },
+            'summary': '3 attempts at delete_completed_jobs in last 7d, 2 cleared, 1 failed'
+          }
+        """
+        try:
+            q = (f'{{namespace="auto-remediation"}} | json | tag="ai_advisor" '
+                 f'| alertname="{alertname}" '
+                 f'| event=~"auto_executed|approved_executed|verification_(passed|failed|uncertain)"')
+            now_ns = int(datetime.now(timezone.utc).timestamp() * 1_000_000_000)
+            start_ns = now_ns - days * 86400 * 1_000_000_000
+            params = urllib.parse.urlencode({
+                'query': q,
+                'start': str(start_ns),
+                'end': str(now_ns),
+                'limit': '50',
+                'direction': 'backward',
+            })
+            url = f"{LOKI_URL}/loki/api/v1/query_range?{params}"
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                data = json.loads(resp.read())
+            entries = []
+            for stream in data.get('data', {}).get('result', []):
+                for ts_ns, line in stream.get('values', []):
+                    try:
+                        entries.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+            # Aggregate verification outcomes per action_type
+            verif = {}
+            attempts = []
+            for e in entries:
+                ev = e.get('event', '')
+                at = e.get('action_type', '?')
+                if ev in ('auto_executed', 'approved_executed'):
+                    attempts.append({
+                        'ts': e.get('ts', ''),
+                        'action_type': at,
+                        'mode': e.get('mode', ''),
+                        'confidence': e.get('confidence'),
+                        'event': ev,
+                    })
+                elif ev.startswith('verification_'):
+                    outcome = ev.replace('verification_', '')
+                    bucket = verif.setdefault(at, {'passed': 0, 'failed': 0, 'uncertain': 0})
+                    bucket[outcome] = bucket.get(outcome, 0) + 1
+            # Human summary line
+            parts = []
+            for at, counts in verif.items():
+                total = sum(counts.values())
+                if total > 0:
+                    parts.append(f"{at}: {counts.get('passed', 0)}/{total} cleared")
+            summary = ('; '.join(parts) if parts
+                       else (f"{len(attempts)} attempts in last {days}d, no verification data yet"
+                             if attempts else f"no advisor action history for {alertname} in last {days}d"))
+            return {
+                'action_attempts': attempts[:20],   # cap context size
+                'verification_outcomes': verif,
+                'summary': summary,
+            }
+        except Exception as e:
+            logger.warning(f"_past_actions_for_alert error: {e}")
+            return {'error': str(e)}
+
     def _build_context(alert):
         """Gather context the LLM needs to diagnose this alert."""
         labels = alert.get('labels', {})
@@ -1022,8 +1100,16 @@ data:
             except Exception as e:
                 ctx['k8s_events_error'] = str(e)
 
-        # History
+        # History — alert fires + advisor actions over last 7d
         ctx['history']['last_24h_fires'] = _fetch_alert_history(alertname)
+        # Cross-session memory: surface past advisor actions on THIS alertname
+        # so Claude knows "we tried delete_completed_jobs 4× last week, 3
+        # cleared the alert, 1 didn't" — informs whether to repeat the same
+        # action or try something different.
+        try:
+            ctx['history']['past_actions'] = _past_actions_for_alert(alertname, days=7)
+        except Exception as e:
+            ctx['history']['past_actions_error'] = str(e)
 
         # M45 Phase B: if the alert references an AWS-side resource,
         # pull a CloudWatch Logs window so the LLM sees Lambda /
