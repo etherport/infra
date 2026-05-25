@@ -42,7 +42,10 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v4
         with:
-          terraform_version: 1.9.0
+          terraform_version: 1.14.3
+          # Self-hosted runner doesn't have Node; the wrapper requires it.
+          # Matches the pattern in terraform-unifi.yml / other working workflows.
+          terraform_wrapper: false
 
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
@@ -52,7 +55,8 @@ jobs:
           AWS_PROFILE: ""
         run: |
           terraform init \
-            -backend-config="profile="
+            -backend-config="profile=" \
+            -reconfigure
 
       - name: Terraform Plan
         if: github.event.inputs.action != 'apply'
