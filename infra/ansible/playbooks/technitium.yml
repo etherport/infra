@@ -412,6 +412,76 @@
         method: POST
       when: restore_backup | length == 0
 
+    # Filesystem-level log retention. Technitium's built-in maxLogFileDays
+    # setting is the *preferred* way to bound log size, but it requires API
+    # access with the admin password — and the standalone (non-cluster)
+    # Technitium nodes (dns-aws, dns-fallback) have different admin
+    # credentials than the K8s cluster Technitium, so the
+    # `technitium-set-log-retention` K8s CronJob can't reach them. This
+    # systemd timer is the durable fallback: deletes log files older than
+    # 7 days on every node managed by this playbook.
+    # First-discovered 2026-05-25 when dns-aws hit 80% disk with 144 days
+    # of query logs (1.3GB on a 6.8GB volume).
+    - name: Install log-prune script for Technitium
+      copy:
+        dest: /usr/local/sbin/technitium-prune-logs.sh
+        owner: root
+        group: root
+        mode: '0755'
+        content: |
+          #!/usr/bin/env bash
+          # Prune Technitium daily log files older than 7 days.
+          # Matches Technitium's own maxLogFileDays=7 setting used in cluster.
+          set -euo pipefail
+          LOGS_DIR=/opt/technitium/config/logs
+          if [ -d "$LOGS_DIR" ]; then
+            find "$LOGS_DIR" -maxdepth 1 -type f -name '*.log' -mtime +7 -delete
+          fi
+          STATS_DIR=/opt/technitium/config/stats
+          if [ -d "$STATS_DIR" ]; then
+            # Stat files are JSON, much smaller (~5KB each), keep 90d.
+            find "$STATS_DIR" -maxdepth 1 -type f -mtime +90 -delete
+          fi
+
+    - name: Install systemd service for log prune
+      copy:
+        dest: /etc/systemd/system/technitium-prune-logs.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Prune old Technitium DNS query logs
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/sbin/technitium-prune-logs.sh
+
+    - name: Install systemd timer for log prune (daily at 03:15)
+      copy:
+        dest: /etc/systemd/system/technitium-prune-logs.timer
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Daily Technitium log prune
+
+          [Timer]
+          OnCalendar=*-*-* 03:15:00
+          # Run shortly after boot if missed (e.g. instance was stopped at scheduled time)
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+
+    - name: Enable + start log-prune timer
+      systemd:
+        name: technitium-prune-logs.timer
+        state: started
+        enabled: true
+        daemon_reload: true
+
     - name: Display access information
       debug:
         msg: |
