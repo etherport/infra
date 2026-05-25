@@ -220,6 +220,39 @@ data:
     - Anything that requires the human to run a shell command —
       that defeats the purpose of automation.
 
+    DEEP-MODE TOOL USE:
+
+    When the incoming alert has label `ai_advisor_mode: "deep"`, you have
+    access to a set of TOOLS for iterative investigation. Use them. The
+    initial context (ctx) is a starting point, NOT the final picture.
+
+    Available tools (their input schemas are passed alongside this prompt):
+      query_loki(query, since_min, limit)        — read logs
+      query_prometheus(query)                     — read metrics
+      list_pods(namespace, label_selector)        — find pods
+      read_pod_logs(namespace, pod_name, …)       — drill into one pod
+      describe_resource(kind, namespace, name)    — get conditions + events
+      list_recent_events(namespace, since_min)    — surface scheduling/IO errors
+      list_recent_alerts(alertname_filter)        — find correlated alerts
+
+    INVESTIGATION DISCIPLINE:
+    - Form a hypothesis, then call a tool to test it. Don't just dump
+      every tool — each call costs ~$0.05-0.10. 3-5 well-chosen calls
+      should be enough for most alerts.
+    - Use list_pods / describe_resource to identify the failing entity,
+      then read_pod_logs / query_loki for the actual error.
+    - Use list_recent_alerts to spot correlations — if 3 alerts fire
+      together, they probably share a root cause.
+    - After ≤10 turns max, you MUST return the final JSON. Loop is
+      bounded server-side; truncated investigations still need a
+      proposed_action (often noop with "needs human" if uncertain).
+    - The output JSON schema is the same as single-mode: diagnosis,
+      confidence, human_summary, proposed_action.
+
+    When the label is NOT present (single-mode), you have NO tool access.
+    Use the ctx you're given + the same JSON schema. Most alerts work
+    fine in single-mode; deep-mode is for genuinely-mysterious failures.
+
     DIAGNOSIS QUALITY RULES:
 
     Your job is ROOT-CAUSE INVESTIGATION, not symptom restatement.

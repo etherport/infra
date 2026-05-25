@@ -1053,6 +1053,342 @@ data:
             logger.error(f"Failed to parse Anthropic response: {e}")
             return None, None
 
+    # ===================================================================
+    # Tool-use mode (Anthropic Messages API tools)
+    # ===================================================================
+    # Per the user's "log event → MORE RESEARCH → root cause" spec,
+    # alerts labeled `ai_advisor_mode: "deep"` get a multi-turn Claude
+    # call where Claude can iteratively call tools (query Loki, read
+    # pod logs, list events, etc.) until it has enough evidence to
+    # propose a confident action. Single-call mode (default) still
+    # works for simpler alerts where cost > value of iteration.
+    # ===================================================================
+
+    # Per-call iteration cap. Bounded to keep cost predictable —
+    # at ~$0.06/call typical, 10 iterations = ~$0.60 worst case per
+    # alert. Daily cap ($0.50 default) still applies on top.
+    AI_DEEP_MAX_ITERATIONS = int(os.environ.get('AI_DEEP_MAX_ITERATIONS', '10'))
+
+    def _advisor_tools():
+        """Return JSON schemas for tools Claude can call in deep mode.
+        Each tool maps to a function in _dispatch_tool below."""
+        return [
+            {
+                'name': 'query_loki',
+                'description': 'Run a LogQL query against the in-cluster Loki. Use this to read application logs, syslog, or any log stream. Examples: {namespace="postgres"} |~ "ERROR", {job="syslog", source_ip="10.10.200.1"}',
+                'input_schema': {
+                    'type': 'object',
+                    'properties': {
+                        'query': {'type': 'string', 'description': 'LogQL query (with stream selector + optional filters/parsers)'},
+                        'since_min': {'type': 'integer', 'description': 'Lookback window in minutes (default 30, max 1440)', 'default': 30},
+                        'limit': {'type': 'integer', 'description': 'Max log lines (default 50, max 200)', 'default': 50},
+                    },
+                    'required': ['query'],
+                },
+            },
+            {
+                'name': 'query_prometheus',
+                'description': 'Run a PromQL instant query. Use this to check current values of metrics — pod status, node usage, alert state, custom app metrics.',
+                'input_schema': {
+                    'type': 'object',
+                    'properties': {
+                        'query': {'type': 'string', 'description': 'PromQL query'},
+                    },
+                    'required': ['query'],
+                },
+            },
+            {
+                'name': 'list_pods',
+                'description': 'List pods in a namespace, optionally filtered by label selector. Returns name, status, restart count, age, node.',
+                'input_schema': {
+                    'type': 'object',
+                    'properties': {
+                        'namespace': {'type': 'string'},
+                        'label_selector': {'type': 'string', 'description': 'K8s label selector, e.g. "app=foo" (optional)', 'default': ''},
+                    },
+                    'required': ['namespace'],
+                },
+            },
+            {
+                'name': 'read_pod_logs',
+                'description': 'Read the last N lines of logs from a pod. Use this when you have a specific pod that you suspect is failing — the stack trace is usually in the last line before crash.',
+                'input_schema': {
+                    'type': 'object',
+                    'properties': {
+                        'namespace': {'type': 'string'},
+                        'pod_name': {'type': 'string'},
+                        'container': {'type': 'string', 'description': 'Container name (optional — defaults to first container)', 'default': ''},
+                        'tail_lines': {'type': 'integer', 'description': 'Number of lines from end (default 100, max 500)', 'default': 100},
+                        'previous': {'type': 'boolean', 'description': 'Read logs from the previous (crashed) container instance, not current. Use when pod is in CrashLoopBackOff.', 'default': False},
+                    },
+                    'required': ['namespace', 'pod_name'],
+                },
+            },
+            {
+                'name': 'describe_resource',
+                'description': 'Get detailed status + recent events for a K8s resource. Equivalent of `kubectl describe`. Returns events, conditions, current status.',
+                'input_schema': {
+                    'type': 'object',
+                    'properties': {
+                        'kind': {'type': 'string', 'enum': ['pod', 'deployment', 'statefulset', 'job', 'cronjob', 'pvc', 'node'], 'description': 'Resource kind'},
+                        'namespace': {'type': 'string', 'description': 'Required for namespaced kinds; empty for node'},
+                        'name': {'type': 'string'},
+                    },
+                    'required': ['kind', 'name'],
+                },
+            },
+            {
+                'name': 'list_recent_events',
+                'description': 'List recent K8s events in a namespace (or cluster-wide if empty). Events surface things like pod scheduling failures, image pull errors, volume mount issues.',
+                'input_schema': {
+                    'type': 'object',
+                    'properties': {
+                        'namespace': {'type': 'string', 'description': 'Namespace or empty for all-namespaces', 'default': ''},
+                        'since_min': {'type': 'integer', 'description': 'Lookback minutes (default 30, max 360)', 'default': 30},
+                        'type_filter': {'type': 'string', 'enum': ['', 'Warning', 'Normal'], 'description': 'Filter by event type', 'default': ''},
+                    },
+                },
+            },
+            {
+                'name': 'list_recent_alerts',
+                'description': 'List currently-firing alerts (optionally filtered by alertname) from Alertmanager. Use this to find correlated alerts that might share a root cause.',
+                'input_schema': {
+                    'type': 'object',
+                    'properties': {
+                        'alertname_filter': {'type': 'string', 'description': 'Optional alertname substring filter', 'default': ''},
+                    },
+                },
+            },
+        ]
+
+    def _dispatch_tool(name, args):
+        """Execute a tool call from Claude. Returns a string result (will be
+        sent back as tool_result content)."""
+        try:
+            if name == 'query_loki':
+                q = str(args.get('query', ''))[:500]
+                since = min(int(args.get('since_min', 30) or 30), 1440)
+                limit = min(int(args.get('limit', 50) or 50), 200)
+                now = int(datetime.now(timezone.utc).timestamp() * 1_000_000_000)
+                start = now - since * 60 * 1_000_000_000
+                lines = _fetch_loki_window(q, start, now, limit=limit) or []
+                if not lines:
+                    return f'(no log lines for query in last {since}min)'
+                return '\n'.join(f'  {line[:300]}' for line in lines[:limit])
+
+            if name == 'query_prometheus':
+                q = str(args.get('query', ''))[:500]
+                url = f"{PROMETHEUS_URL}/api/v1/query?query={urllib.parse.quote(q)}"
+                with urllib.request.urlopen(url, timeout=10) as r:
+                    data = json.loads(r.read())
+                results = data.get('data', {}).get('result', [])
+                if not results:
+                    return '(no result)'
+                # Compact: metric labels + value, max 20 rows
+                lines = []
+                for r in results[:20]:
+                    labels = ','.join(f'{k}={v}' for k, v in r.get('metric', {}).items() if k != '__name__')
+                    val = r.get('value', [None, None])[1]
+                    lines.append(f'  {labels} → {val}')
+                if len(results) > 20:
+                    lines.append(f'  ...({len(results)-20} more)')
+                return '\n'.join(lines)
+
+            if name == 'list_pods':
+                ns = str(args.get('namespace', ''))
+                sel = str(args.get('label_selector', ''))
+                pods = v1.list_namespaced_pod(ns, label_selector=sel) if sel else v1.list_namespaced_pod(ns)
+                if not pods.items:
+                    return f'(no pods in {ns} matching {sel!r})'
+                lines = []
+                for p in pods.items[:30]:
+                    age_s = (datetime.now(timezone.utc) - p.metadata.creation_timestamp).total_seconds()
+                    age = f"{int(age_s // 3600)}h" if age_s >= 3600 else f"{int(age_s // 60)}m"
+                    restarts = sum(cs.restart_count for cs in (p.status.container_statuses or []))
+                    lines.append(f'  {p.metadata.name}\tphase={p.status.phase}\trestarts={restarts}\tage={age}\tnode={p.spec.node_name or "?"}')
+                return '\n'.join(lines)
+
+            if name == 'read_pod_logs':
+                ns = str(args.get('namespace', ''))
+                pod = str(args.get('pod_name', ''))
+                container = str(args.get('container', '')) or None
+                tail = min(int(args.get('tail_lines', 100) or 100), 500)
+                prev = bool(args.get('previous', False))
+                logs = v1.read_namespaced_pod_log(
+                    pod, ns,
+                    container=container,
+                    tail_lines=tail,
+                    previous=prev,
+                    timestamps=False,
+                )
+                # Trim to ~12k chars to avoid swamping context
+                if len(logs) > 12000:
+                    logs = logs[-12000:]
+                    logs = '...(truncated)...\n' + logs
+                return logs or '(empty)'
+
+            if name == 'describe_resource':
+                kind = str(args.get('kind', '')).lower()
+                ns = str(args.get('namespace', ''))
+                nm = str(args.get('name', ''))
+                # Get the resource + its recent events
+                getters = {
+                    'pod': lambda: v1.read_namespaced_pod(nm, ns),
+                    'deployment': lambda: apps_v1.read_namespaced_deployment(nm, ns),
+                    'statefulset': lambda: apps_v1.read_namespaced_stateful_set(nm, ns),
+                    'job': lambda: batch_v1.read_namespaced_job(nm, ns),
+                    'cronjob': lambda: batch_v1.read_namespaced_cron_job(nm, ns),
+                    'pvc': lambda: v1.read_namespaced_persistent_volume_claim(nm, ns),
+                    'node': lambda: v1.read_node(nm),
+                }
+                if kind not in getters:
+                    return f'unknown kind {kind!r}'
+                obj = getters[kind]()
+                # Summarize: status conditions + first 80 lines of YAML
+                out = {
+                    'name': obj.metadata.name,
+                    'namespace': getattr(obj.metadata, 'namespace', None),
+                    'status_phase': getattr(obj.status, 'phase', None),
+                    'creation_timestamp': str(obj.metadata.creation_timestamp),
+                    'labels': obj.metadata.labels or {},
+                    'conditions': [
+                        {'type': c.type, 'status': c.status, 'reason': getattr(c, 'reason', ''), 'message': getattr(c, 'message', '')[:200]}
+                        for c in (getattr(obj.status, 'conditions', None) or [])
+                    ],
+                }
+                # Recent events for this object
+                field_sel = f'involvedObject.name={nm},involvedObject.kind={kind.capitalize()}'
+                events = v1.list_namespaced_event(ns, field_selector=field_sel) if ns else v1.list_event_for_all_namespaces(field_selector=field_sel)
+                out['recent_events'] = [
+                    {'type': e.type, 'reason': e.reason, 'message': e.message[:200], 'count': e.count, 'last_seen': str(e.last_timestamp)}
+                    for e in events.items[-10:]
+                ]
+                return json.dumps(out, indent=2, default=str)[:8000]
+
+            if name == 'list_recent_events':
+                ns = str(args.get('namespace', ''))
+                since = min(int(args.get('since_min', 30) or 30), 360)
+                tf = str(args.get('type_filter', ''))
+                cutoff = datetime.now(timezone.utc) - timedelta(minutes=since)
+                events = v1.list_namespaced_event(ns) if ns else v1.list_event_for_all_namespaces()
+                rows = []
+                for e in events.items:
+                    if e.last_timestamp and e.last_timestamp < cutoff:
+                        continue
+                    if tf and e.type != tf:
+                        continue
+                    rows.append(f"  {e.type}/{e.reason}\t{e.involved_object.kind}/{e.involved_object.name}\tcount={e.count}\t{e.message[:150]}")
+                    if len(rows) >= 40:
+                        break
+                return '\n'.join(rows) if rows else f'(no events in last {since}min)'
+
+            if name == 'list_recent_alerts':
+                af = str(args.get('alertname_filter', ''))
+                req = urllib.request.Request(f"{ALERTMANAGER_URL}/api/v2/alerts?active=true")
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    alerts = json.loads(r.read())
+                rows = []
+                for a in alerts:
+                    nm = a.get('labels', {}).get('alertname', '?')
+                    if af and af.lower() not in nm.lower():
+                        continue
+                    sev = a.get('labels', {}).get('severity', '?')
+                    ns = a.get('labels', {}).get('namespace', '-')
+                    starts = a.get('startsAt', '')[:19]
+                    rows.append(f'  {sev}\t{nm}\tns={ns}\tsince={starts}')
+                    if len(rows) >= 30:
+                        break
+                return '\n'.join(rows) if rows else '(no active alerts matching filter)'
+
+            return f'unknown tool {name!r}'
+        except Exception as e:
+            logger.error(f"_dispatch_tool {name} error: {e}")
+            return f'ERROR: {type(e).__name__}: {str(e)[:200]}'
+
+    def _call_anthropic_with_tools(system_prompt, initial_user_payload, max_iter=None):
+        """Multi-turn Claude call with tool-use. Returns (parsed_final_json,
+        total_usage_dict, tool_call_log)."""
+        max_iter = max_iter or AI_DEEP_MAX_ITERATIONS
+        tools = _advisor_tools()
+        # Conversation state
+        messages = [{'role': 'user', 'content': json.dumps(initial_user_payload, default=str)}]
+        total_usage = {'input_tokens': 0, 'output_tokens': 0}
+        tool_log = []
+
+        for turn in range(max_iter):
+            body = json.dumps({
+                'model': AI_MODEL,
+                'max_tokens': 2048,
+                'system': system_prompt,
+                'tools': tools,
+                'messages': messages,
+            }).encode('utf-8')
+            req = urllib.request.Request(
+                'https://api.anthropic.com/v1/messages',
+                data=body, method='POST',
+                headers={
+                    'Content-Type': 'application/json',
+                    'x-api-key': ANTHROPIC_API_KEY,
+                    'anthropic-version': '2023-06-01',
+                },
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    result = json.loads(resp.read())
+            except urllib.error.HTTPError as e:
+                logger.error(f"Anthropic tool-use HTTP error: {e.code} {e.read().decode('utf-8', 'ignore')[:500]}")
+                return None, total_usage, tool_log
+            except (urllib.error.URLError, TimeoutError) as e:
+                logger.error(f"Anthropic tool-use network error: {e}")
+                return None, total_usage, tool_log
+
+            usage = result.get('usage', {})
+            total_usage['input_tokens'] += usage.get('input_tokens', 0)
+            total_usage['output_tokens'] += usage.get('output_tokens', 0)
+
+            content_blocks = result.get('content', [])
+            stop_reason = result.get('stop_reason')
+
+            # Add Claude's response to history
+            messages.append({'role': 'assistant', 'content': content_blocks})
+
+            if stop_reason != 'tool_use':
+                # Final response — extract JSON from text blocks
+                text = ''.join(b.get('text', '') for b in content_blocks if b.get('type') == 'text')
+                if '```' in text:
+                    s = text.find('{'); e = text.rfind('}')
+                    if s >= 0 and e > s:
+                        text = text[s:e+1]
+                try:
+                    return json.loads(text), total_usage, tool_log
+                except json.JSONDecodeError as e:
+                    logger.error(f"Final response not parseable JSON: {e}; text[:500]={text[:500]!r}")
+                    return None, total_usage, tool_log
+
+            # Execute tool calls + send results back
+            tool_results = []
+            for block in content_blocks:
+                if block.get('type') != 'tool_use':
+                    continue
+                tool_name = block.get('name', '')
+                tool_input = block.get('input', {}) or {}
+                tool_id = block.get('id', '')
+                logger.info(f"tool_use turn={turn} {tool_name}({list(tool_input.keys())})")
+                result_text = _dispatch_tool(tool_name, tool_input)
+                # Cap result size to avoid blowing context
+                if len(result_text) > 10000:
+                    result_text = result_text[:10000] + '\n...(truncated)'
+                tool_log.append({'turn': turn, 'tool': tool_name, 'input_keys': list(tool_input.keys()), 'result_len': len(result_text)})
+                tool_results.append({
+                    'type': 'tool_result',
+                    'tool_use_id': tool_id,
+                    'content': result_text,
+                })
+            messages.append({'role': 'user', 'content': tool_results})
+
+        logger.warning(f"tool-use loop hit max_iter={max_iter} without final response")
+        return None, total_usage, tool_log
+
     def _validate_response(parsed):
         """Strip any field outside the schema. Enum-check proposed_action.type."""
         if not isinstance(parsed, dict):
@@ -1474,9 +1810,19 @@ data:
         if not prompt:
             return
 
-        _audit('start', alertname=alert_name)
+        # Deep-mode dispatch: alerts labeled `ai_advisor_mode: "deep"` get a
+        # tool-use loop where Claude can iteratively query Loki/Prometheus/K8s
+        # before proposing an action. Higher cost (N API calls vs 1) but
+        # much better root-cause analysis for complex alerts.
+        deep_mode = (alert.get('labels', {}) or {}).get('ai_advisor_mode', '').lower() == 'deep'
+
+        _audit('start', alertname=alert_name, mode='deep' if deep_mode else 'single')
         ctx = _build_context(alert)
-        parsed, usage = _call_anthropic(prompt, ctx)
+        tool_log = []
+        if deep_mode:
+            parsed, usage, tool_log = _call_anthropic_with_tools(prompt, ctx)
+        else:
+            parsed, usage = _call_anthropic(prompt, ctx)
 
         if parsed is None:
             _audit('api_failed', alertname=alert_name)
@@ -1519,12 +1865,15 @@ data:
         _audit(
             'success',
             alertname=alert_name,
+            mode='deep' if deep_mode else 'single',
             confidence=clean['confidence'],
             proposed_action_type=clean['proposed_action']['type'],
             input_tokens=usage.get('input_tokens'),
             output_tokens=usage.get('output_tokens'),
             cost_usd=round(cost, 4),
             daily_usd_spent=round(_cost_tracker['usd_spent'], 4),
+            tool_calls=len(tool_log) if deep_mode else 0,
+            tools_used=[t['tool'] for t in tool_log] if deep_mode else [],
         )
 
         # ---- Phase 3: autonomous execution (gated per-alert) ----

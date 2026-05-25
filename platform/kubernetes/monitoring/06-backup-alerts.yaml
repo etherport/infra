@@ -106,6 +106,10 @@ spec:
           labels:
             severity: critical
             component: backup
+            # Deep-mode investigation: CNPG backup failure can be operator
+            # issue, network to S3, storage exhaustion, or app bug. Advisor
+            # iterates with tool-use to find root cause.
+            ai_advisor_mode: "deep"
             namespace: postgres
           annotations:
             summary: "CNPG cluster {{ $labels.cluster }} has a backup failure"
