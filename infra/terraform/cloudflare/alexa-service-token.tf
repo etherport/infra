@@ -14,39 +14,35 @@
 //
 // Both policies attached to the same Application.
 //
-// This file is INERT until you uncomment the cloudflare_zero_trust_access_application.ha
-// resource below (after the HA migration to CF Tunnel). Until then it sits as
-// documentation + a ready-to-go template.
+// This file is INERT until you uncomment the resources below (after the HA
+// migration to CF Tunnel). Until then it sits as documentation + a ready-to-go
+// template. Service token resource is commented because:
+//   (a) HA Access app isn't created yet — token would be unbound
+//   (b) Service Tokens may require a separate token perm
+//       (Account: Access: Service Tokens: Edit) beyond Apps and Policies.
+//       Add that perm before uncommenting if it isn't already.
 
-resource "cloudflare_zero_trust_access_service_token" "alexa_skill" {
-  account_id = var.cloudflare_account_id
-  name       = "alexa-skill-lambda"
-
-  // Duration the token is valid before requiring rotation. CF default is
-  // 1y; explicit here for visibility. To rotate: `terraform taint
-  // cloudflare_zero_trust_access_service_token.alexa_skill && terraform apply`,
-  // then update the Lambda env vars with the new client_id/client_secret.
-  duration = "8760h" # 1y
-}
-
-output "alexa_service_token_client_id" {
-  description = <<-EOT
-    CF Access Service Token client ID. Set as Lambda env var
-    CF_ACCESS_CLIENT_ID. Not sensitive on its own (it's just an
-    identifier — secret is below).
-  EOT
-  value       = cloudflare_zero_trust_access_service_token.alexa_skill.client_id
-}
-
-output "alexa_service_token_client_secret" {
-  description = <<-EOT
-    CF Access Service Token client secret. Set as Lambda env var
-    CF_ACCESS_CLIENT_SECRET. Retrieve with:
-      terraform output -raw alexa_service_token_client_secret | pbcopy
-  EOT
-  value       = cloudflare_zero_trust_access_service_token.alexa_skill.client_secret
-  sensitive   = true
-}
+// resource "cloudflare_zero_trust_access_service_token" "alexa_skill" {
+//   account_id = var.cloudflare_account_id
+//   name       = "alexa-skill-lambda"
+//
+//   // Duration the token is valid before requiring rotation. CF default is
+//   // 1y; explicit here for visibility. To rotate: `terraform taint
+//   // cloudflare_zero_trust_access_service_token.alexa_skill && terraform apply`,
+//   // then update the Lambda env vars with the new client_id/client_secret.
+//   duration = "8760h" # 1y
+// }
+//
+// output "alexa_service_token_client_id" {
+//   description = "CF Access Service Token client ID. Set as Lambda env var CF_ACCESS_CLIENT_ID."
+//   value       = cloudflare_zero_trust_access_service_token.alexa_skill.client_id
+// }
+//
+// output "alexa_service_token_client_secret" {
+//   description = "CF Access Service Token client secret. Retrieve via terraform output -raw alexa_service_token_client_secret"
+//   value       = cloudflare_zero_trust_access_service_token.alexa_skill.client_secret
+//   sensitive   = true
+// }
 
 // -------------------------------------------------------------------------
 // HA Access Application + dual-policy (SSO + service token) — uncomment

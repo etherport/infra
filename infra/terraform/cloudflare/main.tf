@@ -51,6 +51,9 @@ resource "cloudflare_record" "a" {
   ttl     = each.value.ttl
   proxied = each.value.proxied
   comment = each.value.comment
+  # CF auto-creates default records on zone create (e.g. mail MX) — let TF
+  # overwrite them instead of conflicting. We're the source of truth.
+  allow_overwrite = true
 }
 
 resource "cloudflare_record" "cname" {
@@ -63,29 +66,34 @@ resource "cloudflare_record" "cname" {
   ttl     = each.value.ttl
   proxied = each.value.proxied
   comment = each.value.comment
+  # CF auto-creates default records on zone create (e.g. mail MX) — let TF
+  # overwrite them instead of conflicting. We're the source of truth.
+  allow_overwrite = true
 }
 
 resource "cloudflare_record" "mx" {
   for_each = var.dns_records_mx
 
-  zone_id  = var.cloudflare_zone_id
-  name     = each.key
-  type     = "MX"
-  value    = each.value.value
-  priority = each.value.priority
-  ttl      = each.value.ttl
-  comment  = each.value.comment
+  zone_id         = var.cloudflare_zone_id
+  name            = each.key
+  type            = "MX"
+  value           = each.value.value
+  priority        = each.value.priority
+  ttl             = each.value.ttl
+  comment         = each.value.comment
+  allow_overwrite = true
 }
 
 resource "cloudflare_record" "txt" {
   for_each = var.dns_records_txt
 
-  zone_id = var.cloudflare_zone_id
-  name    = each.key
-  type    = "TXT"
-  value   = each.value.value
-  ttl     = each.value.ttl
-  comment = each.value.comment
+  zone_id         = var.cloudflare_zone_id
+  name            = each.key
+  type            = "TXT"
+  value           = each.value.value
+  ttl             = each.value.ttl
+  comment         = each.value.comment
+  allow_overwrite = true
 }
 
 // ---------------------------------------------------------------------------
