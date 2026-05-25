@@ -66,12 +66,19 @@ data:
 
     cw = boto3.client('logs', region_name=AWS_REGION)
 
-    # In-cluster only. Falling back to load_kube_config silently
-    # would leave the client unauthenticated (system:anonymous),
-    # producing baffling 403s instead of a clear "not in a cluster"
-    # error. CronJob will retry on next tick if this fails.
-    config.load_incluster_config()
-    kv1 = client.CoreV1Api()
+    # In-cluster only. The default-singleton pattern
+    # (`load_incluster_config(); client.CoreV1Api()`) silently
+    # produced system:anonymous requests under kubernetes-python
+    # v31+ on python 3.14 — the singleton's bearer_token wasn't
+    # propagating to new API instances. Build an explicit
+    # Configuration + ApiClient instead so the token is bound
+    # directly to the client we use.
+    cfg = client.Configuration()
+    config.load_incluster_config(client_configuration=cfg)
+    print(f"k8s host: {cfg.host}; token present: {bool(cfg.api_key.get('authorization'))}",
+          file=sys.stderr, flush=True)
+    api_client = client.ApiClient(configuration=cfg)
+    kv1 = client.CoreV1Api(api_client=api_client)
 
 
     def load_state():
