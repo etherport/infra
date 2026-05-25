@@ -250,6 +250,17 @@ data:
     # GC'd opportunistically in _gc_pending().
     _pending_proposals = {}
 
+    # Pending closed-loop verifications: after an action executes (auto
+    # OR operator-approved), schedule a check N minutes later to confirm
+    # the alert actually cleared. Keyed by verification_id (uuid).
+    # Each value: {fingerprint, alertname, action_type, action_msg,
+    #              executed_at, timer (threading.Timer obj)}
+    # In-memory like _pending_proposals — pod restart cancels in-flight
+    # verifications (the audit log still has the auto_executed entry
+    # so nothing's silently lost).
+    _pending_verifications = {}
+    AI_VERIFY_DELAY_MIN = int(os.environ.get('AI_VERIFY_DELAY_MIN', '5'))
+
     def _today_utc():
         return datetime.now(timezone.utc).date()
 
@@ -1754,6 +1765,123 @@ data:
 
         return False, f'unknown action type {atype}'
 
+    # ===================================================================
+    # Closed-loop verification: after an action executes, schedule a
+    # check N minutes later. If the alert is still firing, the action
+    # didn't work — emit an audit event + email the operator. If the
+    # alert cleared, audit success (= confidence-boosting evidence for
+    # future similar cases).
+    # ===================================================================
+
+    def _query_alert_active(fingerprint):
+        """Return True iff Alertmanager currently has an active alert
+        matching the given fingerprint."""
+        try:
+            req = urllib.request.Request(f"{ALERTMANAGER_URL}/api/v2/alerts?active=true")
+            with urllib.request.urlopen(req, timeout=10) as r:
+                alerts = json.loads(r.read())
+            for a in alerts:
+                if a.get('fingerprint') == fingerprint:
+                    return True
+            return False
+        except Exception as e:
+            logger.error(f"_query_alert_active error: {e}")
+            return None  # None = uncertain (don't email a false-failure)
+
+    def _verify_action_outcome(verification_id):
+        """Timer callback: check if the alert is still firing after the
+        action's verify delay. Emits audit + emails operator if failed."""
+        entry = _pending_verifications.pop(verification_id, None)
+        if entry is None:
+            return
+        fingerprint = entry['fingerprint']
+        still_firing = _query_alert_active(fingerprint)
+        if still_firing is None:
+            _audit('verification_uncertain',
+                   alertname=entry['alertname'], action_type=entry['action_type'],
+                   verification_id=verification_id)
+            return
+        if not still_firing:
+            _audit('verification_passed',
+                   alertname=entry['alertname'], action_type=entry['action_type'],
+                   verification_id=verification_id,
+                   minutes_to_clear=AI_VERIFY_DELAY_MIN)
+            return
+        # Still firing → action didn't work. Audit + email.
+        _audit('verification_failed',
+               alertname=entry['alertname'], action_type=entry['action_type'],
+               verification_id=verification_id,
+               minutes_after_action=AI_VERIFY_DELAY_MIN)
+        _fail_text = (
+            f"AI advisor verification FAILED for {entry['alertname']}.\n\n"
+            f"Action {AI_VERIFY_DELAY_MIN}min ago: {entry['action_type']} — {entry['action_msg']}\n"
+            f"Result: alert is STILL FIRING. The action didn't resolve it.\n\n"
+            f"Recommended next steps:\n"
+            f"  1. Check what the action actually did (audit log: "
+            f"{{namespace=\"auto-remediation\"}} | json | action_type=\"{entry['action_type']}\")\n"
+            f"  2. Investigate the underlying cause directly — the alert "
+            f"may need a non-allowlisted action or a deeper fix.\n"
+            f"  3. Consider whether this alert should be removed from the "
+            f"`ai_remediation: auto` opt-in if it's not auto-fixable.\n"
+        )
+        _fail_html = _render_email(
+            eyebrow='AI Advisor &middot; Verification FAILED',
+            title=entry['alertname'],
+            subhead=f"{entry['action_type']} ran {AI_VERIFY_DELAY_MIN}min ago but the alert is still firing",
+            status_pill_html='<span class="pill pill-err"><span class="dot"></span>Action didn\'t work</span>',
+            body_html=(
+                '<div class="card"><div class="card-label">What this means</div>'
+                f'<p class="card-body">The auto-remediation took an action but the underlying '
+                f'condition persists. This is a learning signal — either the diagnosis was wrong, '
+                f'the action was insufficient, or the action allowlist doesn\'t cover this root '
+                f'cause. Investigate manually + consider whether to remove this alert from '
+                f'<code>ai_remediation: auto</code>.</p></div>'
+                '<div class="card"><div class="card-label">Action that ran</div>'
+                f'<p class="card-body"><code>{entry["action_type"]}</code> — {entry["action_msg"]}</p></div>'
+            ),
+            meta_pairs=[
+                ('Action', entry['action_type']),
+                ('Delay before check', f'{AI_VERIFY_DELAY_MIN}min'),
+                ('Alert state', 'Still firing'),
+            ],
+            raw_alert={'alertname': entry['alertname'], 'fingerprint': fingerprint},
+            footer_extra='Verification only checks alert state — it does NOT undo the action.',
+        )
+        _send_email(
+            subject=f"[Etherport AI Advisor: verification FAILED] {entry['alertname']}",
+            body=_fail_text,
+            html_body=_fail_html,
+        )
+
+    def _schedule_verification(alert, action_type, action_msg):
+        """Called after an action runs. Schedules a Timer to verify outcome."""
+        import threading
+        import uuid
+        fingerprint = alert.get('fingerprint', '')
+        if not fingerprint:
+            return  # nothing to verify against
+        vid = uuid.uuid4().hex
+        timer = threading.Timer(
+            AI_VERIFY_DELAY_MIN * 60,
+            _verify_action_outcome,
+            args=(vid,),
+        )
+        timer.daemon = True   # don't block shutdown
+        _pending_verifications[vid] = {
+            'fingerprint': fingerprint,
+            'alertname': alert.get('labels', {}).get('alertname', 'unknown'),
+            'action_type': action_type,
+            'action_msg': action_msg,
+            'executed_at': datetime.now(timezone.utc).isoformat(),
+            'timer': timer,
+        }
+        timer.start()
+        _audit('verification_scheduled',
+               alertname=_pending_verifications[vid]['alertname'],
+               action_type=action_type,
+               verification_id=vid,
+               check_in_min=AI_VERIFY_DELAY_MIN)
+
     def _advise(alert):
         """Top-level: fetch context, call Claude, email diagnosis. Bounded
         by daily cost cap + cooldown."""
@@ -1911,6 +2039,12 @@ data:
                 confidence=clean['confidence'],
                 result_msg=msg,
             )
+            # Closed-loop: after a successful auto-execute, schedule a
+            # verification check N min later. If the alert is still firing
+            # then, the action didn't actually fix the underlying issue —
+            # operator gets a follow-up email + audit signal for tuning.
+            if ok:
+                _schedule_verification(alert, atype, msg)
             # Cooldown on BOTH success and failure — a flapping
             # auto-execute failure (e.g. K8s API hiccup) shouldn't
             # re-burn LLM budget on every AM repeat (4h default).
@@ -2164,6 +2298,10 @@ data:
             )
             if ok:
                 recent_actions[alertname] = datetime.now()
+                # Closed-loop verification on operator-approved actions too —
+                # if a click-to-approve fix didn't work, operator deserves
+                # the same "I tried but it's still firing" feedback as auto.
+                _schedule_verification(entry['alert'], atype, msg)
             del _pending_proposals[pid]
             if ok:
                 html_response(200, f"Executed: {alertname}",
