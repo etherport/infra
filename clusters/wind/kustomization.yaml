@@ -22,10 +22,18 @@ resources:
   # Cloudflare Tunnel (cloudflared daemon). Outbound-only to CF edge;
   # no inbound ports opened. Routes approve.wind.etherport.net (and
   # future *.wind.etherport.net public-with-auth services) through
-  # CF Access. Populate token via
-  # docs/runbooks/cloudflare-access-enable.md after `terraform apply`
-  # in infra/terraform/cloudflare.
-  - ../../platform/kubernetes/cloudflared
+  # CF Access.
+  #
+  # DISABLED until the SOPS tunnel token is populated — without a real
+  # token the pods CrashLoopBackOff ("Provided Tunnel token is not valid"),
+  # which triggers the AI advisor on KubePodCrashLooping / TargetDown /
+  # KubeDeploymentReplicasMismatch every couple of minutes. Re-enable
+  # AFTER:
+  #   1. terraform apply in infra/terraform/cloudflare
+  #   2. terraform output -raw tunnel_token | pbcopy
+  #   3. sops platform/kubernetes/cloudflared/01-tunnel-token.sops.yaml
+  # See docs/runbooks/cloudflare-access-enable.md for the full flow.
+  # - ../../platform/kubernetes/cloudflared
   # Policy baseline (Pod Security Standards audit+warn, LimitRanges).
   # Phase 1 of the NetworkPolicies+Quotas+PDBs plan — observation-only,
   # no enforcement. See platform/kubernetes/policy-baseline/README.md.
