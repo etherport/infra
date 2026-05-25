@@ -51,6 +51,23 @@ resource "cloudflare_record" "wind_existing" {
 }
 
 // ---------------------------------------------------------------------------
+// 2b. ACME validation CNAMEs (cert-manager needs these). Same shape as
+//     existing_wind_records but separated for clarity since these are
+//     "infrastructure for cert renewal" not "user-facing service DNS".
+// ---------------------------------------------------------------------------
+resource "cloudflare_record" "wind_acme" {
+  for_each = var.existing_wind_acme_records
+
+  zone_id = cloudflare_zone.wind.id
+  name    = each.key
+  type    = each.value.type
+  value   = each.value.value
+  ttl     = each.value.ttl
+  proxied = false   # ACME validation must be DNS-only (no CF in path)
+  comment = "ACME DNS-01 validation CNAME — cert-manager renewals depend on this"
+}
+
+// ---------------------------------------------------------------------------
 // 3. Cloudflare Tunnel — the bridge from cluster to CF edge.
 //    Tunnel secret is generated locally + passed into the tunnel resource.
 //    The secret + tunnel_id together form the TUNNEL_TOKEN that cloudflared

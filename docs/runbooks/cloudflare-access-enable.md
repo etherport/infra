@@ -255,3 +255,54 @@ Re-apply. New service is gated by the same CF Access policy.
   - `cloudflared_tunnel_response_status_code_total` — HTTP code distribution
 
 Add a row to the Grafana service-status dashboard for tunnel up/down (alert if `cloudflared_tunnel_active_connections < 2` for 5min).
+
+## DDNS Lambda migration (post-NS-delegation)
+
+The `ddns-updater` Lambda in `infra/terraform/aws/ddns-lambda/` updates
+`wan1.wind.etherport.net` and `wan2.wind.etherport.net` A records in
+Route53 when home WAN IPs change. After NS delegation:
+
+- Route53 is no longer authoritative for `*.wind.etherport.net`
+- Lambda writes to Route53 still SUCCEED (zone still exists) but resolvers
+  never query Route53 for wind.* → updates effectively disappear
+- `wan1`/`wan2` records in CF go stale on next IP change
+
+**Migration plan** (do after CF apply + NS delegation lands):
+
+1. Create a CF API token scoped to `wind.etherport.net` zone DNS:Edit only
+   (much tighter scope than the full TF token). Save to 1P as
+   `Cloudflare DDNS token (lambda)`.
+
+2. Add the token to AWS Secrets Manager so the Lambda can fetch it:
+   ```bash
+   aws --profile homelab secretsmanager create-secret \
+     --name "ddns-lambda/cloudflare-token" \
+     --secret-string "$(op item get 'Cloudflare DDNS token (lambda)' --fields token --reveal)"
+   ```
+
+3. Update the Lambda code in `infra/terraform/aws/ddns-lambda/lambda/handler.py`
+   to write to CF API instead of Route53. The CF DNS update endpoint:
+   ```
+   PUT https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{record_id}
+   Authorization: Bearer <token>
+   ```
+   Lookup record_id once via `GET /dns_records?name=wan1.wind.etherport.net`.
+
+4. Add the Lambda IAM perm to read the new Secrets Manager secret.
+   Remove the Route53 IAM perm.
+
+5. Update Lambda env vars:
+   - Remove: `HOSTED_ZONE_ID`
+   - Add: `CF_ZONE_ID` (from `terraform output -raw cf_wind_zone_id` — needs to
+     be added to outputs.tf)
+   - Add: `CF_TOKEN_SECRET_ARN` (the Secrets Manager ARN)
+
+6. Apply Lambda TF.
+
+Test by manually invoking once (`aws lambda invoke …`) and verifying the
+CF record updated.
+
+**Until migration done**: wan1/wan2 records in CF are static (from
+`existing_wind_records` defaults). If your WAN IPs change before migration,
+update those defaults + re-apply CF TF.
+
