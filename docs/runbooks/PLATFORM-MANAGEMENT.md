@@ -74,10 +74,10 @@ done
 # DNS
 dig @10.10.201.5 google.com +short
 
-# VPN
-# Note: vpn-local still uses the `graham` user; rebuild pending Task #4
-# (will move to ubuntu + /tmp/auto-key like the K8s nodes).
-ssh graham@10.10.201.15 "sudo wg show"
+# VPN — vpn-local + dns-fallback rebuilt 2026-05 onto the Ubuntu 24.04
+# template (VM 9001); both now use `ubuntu` + /tmp/auto-key like the
+# K8s nodes (C2 done).
+ssh -i /tmp/auto-key ubuntu@10.10.201.15 "sudo wg show"
 ```
 
 ---
@@ -122,10 +122,16 @@ ssh graham@10.10.201.15 "sudo wg show"
 
 ### Backup Coverage
 
+Full ownership matrix + restore procedures: [`disaster-recovery.md`](disaster-recovery.md) §10.
+
 | Component | Method | Frequency |
 |-----------|--------|-----------|
-| K8s workloads | Velero | Daily |
-| K8s PVCs | Velero + Restic | Daily |
+| K8s workloads + PVs | Velero (10 schedules) → Kopia → S3 | Daily |
+| Postgres (CNPG) | Barman continuous WAL + nightly base → S3 | Continuous |
+| etcd | systemd timer per CP + Velero ships /var/lib/etcd-snapshots | Daily 02:00 PT |
+| UDM + Protect config | unifi-backup CronJob → S3 | Daily 04:00 PT |
+| NAS shares (7) | s3-sync CronJob per share → per-share S3 buckets | Daily 01:00 PT |
+| Google Drive | rclone gdrive-sync → NFS mirror | Daily 00:00 PT |
 | Proxmox VMs | Proxmox Backup | Weekly |
 | Git repo | GitHub | Every push |
 | DNS zones | Technitium cluster sync | Real-time |
@@ -133,11 +139,14 @@ ssh graham@10.10.201.15 "sudo wg show"
 ### Self-Healing Capabilities
 
 The infrastructure is designed to self-heal:
-- **DNS failure**: Technitium cluster (4 nodes) provides redundancy
-- **VPN failure**: Local services continue; AWS isolated but functional
-- **K8s node failure**: Workloads reschedule to other nodes
-- **Pod crash**: Kubernetes restarts automatically
-- **Security updates**: Auto-applied with coordinated reboots
+- **DNS failure**: Technitium cluster (in-cluster STS pair + dns-fallback + dns-aws) provides redundancy
+- **VPN failure**: K8s WireGuard pod ⇄ `vpn-local` VRRP failover (VIP 10.10.201.20); on K8s pod loss, vpn-local takes over in ~10-15s
+- **K8s node failure**: Workloads reschedule; Prometheus + Alertmanager run replicas=2 with podAntiAffinity
+- **Pod crash**: Kubernetes restarts automatically; auto-remediation controller layers static rules + AI advisor (Phase 3 live for opted-in alerts — `ai_remediation: auto`)
+- **Closed-loop verification**: every advisor auto-execute is re-checked N min later; failure surfaces as a `verification_failed` audit event + email
+- **Security updates**: Auto-applied with coordinated reboots via kured + unattended-upgrades
+- **Appliance probing**: blackbox-exporter (ICMP + HTTPS) on UDM / Protect / UNAS → status email + Grafana dashboard
+- **AWS-side observability**: cloudwatch-to-loki forwarder makes Lambda + EC2 cw-agent logs queryable in the same Loki as on-prem K8s/syslog
 
 ---
 

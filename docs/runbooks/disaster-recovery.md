@@ -314,10 +314,9 @@ echo "nameserver 1.1.1.1" | sudo tee /etc/resolv.conf
 
 **Recovery:**
 ```bash
-# SSH to dns-fallback (standalone, always available)
-# Note: dns-fallback still uses the `graham` user; rebuild pending Task #4
-# (will move to ubuntu + /tmp/auto-key like the K8s nodes).
-ssh graham@10.10.201.6
+# SSH to dns-fallback (standalone, always available). C2 (2026-05): rebuilt
+# onto the Ubuntu 24.04 template; uses `ubuntu` + /tmp/auto-key now.
+ssh -i /tmp/auto-key ubuntu@10.10.201.6
 
 # Restart Technitium
 sudo systemctl restart technitium

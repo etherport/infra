@@ -78,11 +78,26 @@ ansible dns_servers -i inventory/wind/inventory.ini -i inventory/aws/inventory.i
 
 ### Available Playbooks
 
-| Playbook | Purpose | Target Hosts |
-|----------|---------|--------------|
-| base.yml | System config (NTP, upgrades, SSH) | dns_servers, vpn_servers |
-| wireguard.yml | WireGuard VPN configuration | vpn_servers |
-| technitium.yml | Technitium DNS Server | dns_servers |
+`infra/ansible/playbooks/`:
+
+| Playbook | Purpose | Typical target |
+|----------|---------|----------------|
+| base.yml | System config (NTP, upgrades, SSH, swap, node_exporter, cw-agent) | all standalone VMs |
+| wireguard.yml | WireGuard config (server + keepalived for vpn-local) | vpn_servers |
+| technitium.yml | Technitium DNS install + cluster bootstrap | dns_servers |
+| swap.yml | Provision swap files on standalone VMs | dns_servers + vpn_servers |
+| cloudwatch-agent.yml | Install AWS cw-agent on external VMs (dns-aws, vpn-aws) | aws hosts |
+| etcd-backup.yml | Install systemd timer for daily etcd snapshots | k8s_cp |
+| proxmox.yml + proxmox-setup.yml | PVE host management (root-over-key, see `pve-ansible-model`) | proxmox_hosts |
+| pve-sshd.yml | Manage `/etc/ssh/sshd_config.d/` on PVE (PerSourcePenalty fix) | proxmox_hosts |
+| pve-network.yml | Manage PVE bridges + VLANs (idempotent netplan-equivalent) | proxmox_hosts |
+| ceph-msgr2.yml | Enable + verify msgr2 (v2 protocol) on Ceph mons | proxmox_hosts |
+| gh-runner.yml | Bootstrap + maintain the self-hosted GH Actions runner VM | gh_runner |
+| ipmi-monitoring.yml | ipmi_exporter + ipmievd setup on PVE (M40) | proxmox_hosts |
+| tailscale.yml | Tailscale install + auth on standalone VMs | all standalone VMs |
+| udm-firewall.yml | UDM-side firewall rules (limited; most config in TF) | udm |
+| k8s-node-fixes.yml | OS-level fixes for K8s nodes (NIC tunables, sysctl) | k8s_all |
+| ceph/ | Ceph operator manifests + helpers (legacy, mostly superseded by external ceph on PVE) | n/a |
 
 ### Running Playbooks
 
@@ -322,12 +337,13 @@ done
 
 ## VPN (WireGuard) Operations
 
-> The primary site-to-site WireGuard now runs as a Kubernetes pod
+> The primary site-to-site WireGuard runs as a Kubernetes pod
 > (`wireguard/wireguard` deployment) with `vpn-local` as the VRRP backup.
 > "Restart WireGuard" on the K8s side means restarting that pod, not a
-> systemd unit. The `vpn-local`/`dns-fallback` VMs still use the `graham`
-> user; rebuild pending Task #4 (they'll move to `ubuntu` +
-> `/tmp/auto-key` like the K8s nodes).
+> systemd unit. As of 2026-05 (C2 done) the `vpn-local` and
+> `dns-fallback` VMs were rebuilt onto the Ubuntu 24.04 cloud-init
+> template (VM 9001) and use `ubuntu` + `/tmp/auto-key` like the K8s
+> nodes.
 
 ### Check Status
 
@@ -336,8 +352,8 @@ done
 kubectl get pods -n wireguard
 kubectl exec -n wireguard deployment/wireguard -c wireguard -- wg show wg0
 
-# Local VPN server (backup - rebuild pending Task #4)
-ssh graham@vpn-local.wind.etherport.net "sudo wg show"
+# Local VPN server (backup) — uses ubuntu + /tmp/auto-key like K8s nodes
+ssh -i /tmp/auto-key ubuntu@vpn-local.wind.etherport.net "sudo wg show"
 
 # AWS VPN server
 ssh ubuntu@10.10.100.10 "sudo wg show"
@@ -349,8 +365,8 @@ ssh ubuntu@10.10.100.10 "sudo wg show"
 # K8s (primary) - restart the pod, not a systemd unit
 kubectl rollout restart deployment wireguard -n wireguard
 
-# On vpn-local (backup VM - rebuild pending Task #4)
-ssh graham@vpn-local.wind.etherport.net "sudo systemctl restart wg-quick@wg0"
+# On vpn-local (backup VM - ubuntu + /tmp/auto-key since C2 rebuild)
+ssh -i /tmp/auto-key ubuntu@vpn-local.wind.etherport.net "sudo systemctl restart wg-quick@wg0"
 
 # On vpn-aws
 ssh ubuntu@10.10.100.10 "sudo systemctl restart wg-quick@wg0 wg-quick@wg1"
@@ -570,8 +586,8 @@ flux reconcile helmrelease gpu-operator -n flux-system
 
 If site-to-site VPN is down:
 1. Check K8s WireGuard (primary): `kubectl get pods -n wireguard`
-2. Check vpn-local (VRRP backup): `ssh graham@10.10.201.15 "sudo wg show"`
-   (rebuild pending Task #4 — will move to `ubuntu` user)
+2. Check vpn-local (VRRP backup): `ssh -i /tmp/auto-key ubuntu@10.10.201.15 "sudo wg show"`
+   (rebuilt onto VM 9001 template in C2; now uses ubuntu + /tmp/auto-key)
 3. Check AWS VPN: Access via AWS console if needed
 4. Restart WireGuard on the appropriate side (pod restart for K8s; systemd
    for vpn-local/vpn-aws)

@@ -65,8 +65,13 @@ Edit `platform/kubernetes/auto-remediation/deployment.yaml`:
 Commit + push. Controller rolls. Startup banner now says
 `phase3=on (opt-in via alert label)`.
 
-**Nothing changes yet** — Phase 3 candidates are zero because no
-alerts carry the label.
+Adding the toggle alone doesn't auto-execute anything — Phase 3
+only fires for alerts that carry the `ai_remediation: "auto"` label.
+Currently opted in (verify with `grep -rn 'ai_remediation: "auto"' platform/kubernetes/monitoring/`):
+
+- `CNPGBackupFailed` — paired with `ai_advisor_mode: "deep"` so the
+  advisor runs the multi-turn tool-use loop before proposing.
+- (expand as comfort grows; see rollout table below)
 
 ### 2. Pick the first alert to opt in
 
@@ -181,17 +186,34 @@ the label + investigate.
 | `AI_NAMESPACE_DENYLIST` | hardcoded | Defense in depth; Phase 3 inherits Phase 2's denylist |
 | `AI_ACTION_TYPES_ALLOWED` | `{noop, restart_pods, scale_deployment_temp}` | Phase 3 inherits; no expansion ever |
 
+## What's already shipped beyond the original Phase 3 scope
+
+- **Closed-loop verification** (live): after every auto-execute (and
+  every approve-execute), the controller schedules a re-check of
+  the original alert N min later. Outcome emitted as
+  `verification_passed` / `verification_failed` / `verification_uncertain`
+  audit events; a `verification_failed` triggers a separate email so
+  you find out within minutes rather than waiting for the alert to
+  re-fire.
+- **Cross-session memory** (live): each advisor invocation reads
+  recent prior attempts on the same alertname (last 14d from the
+  Loki audit log) + their verification outcomes, and surfaces them
+  in the Claude prompt. Discourages re-proposing actions that
+  recently failed verification on the same alert.
+- **Deep mode tool-use** (live): alerts labeled `ai_advisor_mode: "deep"`
+  trigger a multi-turn Claude session where the model can call
+  `promql_query` / `loki_query` / `kubectl_describe` etc. inline
+  before committing to a proposal. Currently opted in for
+  `CNPGBackupFailed`. Costs ~3-5x single-shot — expand selectively.
+- **Tier 3 SSH actions** (live): `prune_host_logdir`,
+  `restart_systemd_unit`, `journal_vacuum`. Pubkey deployed to
+  dns-aws / dns-fallback / vpn-local / vpn-aws. SSH actions auto-eligible
+  except `restart_systemd_unit` which is approve-only.
+
 ## Open follow-ups (Phase 4-ish)
 
-- **Post-action verification**: after auto-restart, re-query the
-  metric that triggered the alert. If it's still red 5min later,
-  email + log "auto-execute didn't fix it". Currently you find out
-  when the alert re-fires.
 - **Feedback loop**: "this was wrong" button on receipt emails
   that adds the alertname to a do-not-auto list. Currently you
   revert via git.
 - **Stats tracking**: track Phase 3 success/false-positive rate in
   Prometheus metrics + dashboard. Currently in the audit log only.
-
-These are all easy adds when Phase 3 has 30 days of clean operation
-and you want to extend further.

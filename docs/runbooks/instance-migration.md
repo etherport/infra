@@ -163,10 +163,9 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 - **Services**: WireGuard (wg0)
 - **Config stored in**: `platform/wireguard/servers/vpn-local.sops.yaml`
 
-> **Rebuild pending Task #4.** vpn-local is still on the legacy template
-> with the `graham` user; once rebuilt from the current Packer template
-> (VM 9001) it will switch to `ubuntu` + `/tmp/auto-key` like the K8s
-> nodes. SSH examples below reflect the pre-rebuild state.
+> **C2 done (2026-05).** vpn-local was rebuilt from the current Packer
+> template (VM 9001) and now uses `ubuntu` + `/tmp/auto-key` like the
+> K8s nodes. Updated SSH examples below.
 
 > **Watchdog reattach:** if you import this VM from a backup rather than
 > recreating via Terraform, the `i6300esb` hardware watchdog device is not
@@ -206,7 +205,7 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 
 3. **Verify tunnel reconnection**
    ```bash
-   ssh graham@10.10.201.15 "sudo wg show"
+   ssh -i /tmp/auto-key ubuntu@10.10.201.15 "sudo wg show"
    # Check for recent handshake timestamp
    ```
 
@@ -228,10 +227,9 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 - **Services**: Technitium DNS Server
 - **Config**: Part of DNS cluster, syncs automatically
 
-> **Rebuild pending Task #4.** dns-fallback is still on the legacy template
-> with the `graham` user; once rebuilt from the current Packer template
-> (VM 9001) it will switch to `ubuntu` + `/tmp/auto-key` like the K8s
-> nodes. SSH examples below reflect the pre-rebuild state.
+> **C2 done (2026-05).** dns-fallback was rebuilt from the current
+> Packer template (VM 9001) and now uses `ubuntu` + `/tmp/auto-key`
+> like the K8s nodes. Updated SSH examples below.
 
 > **Watchdog reattach:** as with vpn-local, imported VMs need a full
 > stop+start (not just reboot) to reattach the `i6300esb` watchdog
@@ -241,8 +239,8 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 
 1. **Backup Technitium config** (optional - cluster will sync)
    ```bash
-   ssh graham@10.10.201.6 "sudo tar -czvf /tmp/technitium-backup.tar.gz -C /opt/technitium config/"
-   scp graham@10.10.201.6:/tmp/technitium-backup.tar.gz ./backups/technitium-local-$(date +%Y%m%d).tar.gz
+   ssh -i /tmp/auto-key ubuntu@10.10.201.6 "sudo tar -czvf /tmp/technitium-backup.tar.gz -C /opt/technitium config/"
+   scp -i /tmp/auto-key ubuntu@10.10.201.6:/tmp/technitium-backup.tar.gz ./backups/technitium-local-$(date +%Y%m%d).tar.gz
    ```
 
 ### Migration Steps
