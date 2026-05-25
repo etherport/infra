@@ -187,7 +187,12 @@ spec:
         - alert: VeleroLastBackupAgeHigh
           # If no completion for any schedule in 36h, alert. Adjust per
           # schedule once Velero exposes the metric by schedule name.
-          expr: time() - velero_backup_last_successful_timestamp > 129600
+          # `{schedule!=""}` filter: Velero exposes BOTH a per-schedule metric
+          # and a global label-less metric. The global one isn't updated as
+          # individual schedules complete — it's stuck at the oldest value,
+          # which keeps the alert firing forever. Per-schedule is the actual
+          # signal.
+          expr: time() - velero_backup_last_successful_timestamp{schedule!=""} > 129600
           for: 1h
           labels:
             severity: warning
