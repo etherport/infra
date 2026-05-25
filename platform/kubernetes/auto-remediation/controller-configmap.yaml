@@ -114,6 +114,28 @@ data:
     # alerts to Phase 2 (approve-via-email) behavior immediately.
     AI_PHASE3_ENABLED = os.environ.get('AI_PHASE3_ENABLED', 'false').lower() == 'true'
     AI_PHASE3_CONFIDENCE_THRESHOLD = float(os.environ.get('AI_PHASE3_CONFIDENCE_THRESHOLD', '0.85'))
+
+    # Per-action confidence calibration. Override the global threshold for
+    # specific action types where the risk profile differs from the default.
+    # Lower bar (e.g. 0.70) for clearly-safe actions that just clean up
+    # terminal state — even at 0.7, the operator gets an email so we still
+    # see what happened. Higher bar (e.g. 0.95) for actions that cause real
+    # change to running infra (PVC resize, deployment rollback).
+    # Falls back to AI_PHASE3_CONFIDENCE_THRESHOLD for any action not listed.
+    AI_PHASE3_ACTION_THRESHOLDS = {
+        # Clean-up actions on terminal state — very low risk
+        'delete_completed_jobs': 0.70,
+        'delete_evicted_pods':   0.70,
+        # Triggers + restarts — bounded but worth checking
+        'trigger_velero_backup_now': 0.75,
+        'trigger_cnpg_backup_now':   0.75,
+        'force_cert_renewal':        0.80,
+        'silence_alert_temporarily': 0.80,
+        # SSH-host actions — extra layer (remote wrapper enum) gives confidence
+        'prune_host_logdir': 0.75,
+        'journal_vacuum':    0.75,
+        # Default 0.85 covers restart_pods + scale_deployment_temp
+    }
     # Phase 3 inherits the SAME action allowlist + namespace denylist
     # as Phase 2. No expansion. Phase 3 is purely about who pulls the
     # trigger (operator click vs controller itself), not what actions
@@ -2023,12 +2045,16 @@ data:
         #   - Confidence above threshold
         #   - Namespace not in denylist (skipped for actions without a `namespace` param)
         ns_check_ok = (not ns) or (ns not in AI_NAMESPACE_DENYLIST)
+        # Per-action threshold override (clean-up actions can fire at 0.70;
+        # high-stakes actions can require 0.95). Falls back to the global
+        # default for any action type not in the table.
+        threshold = AI_PHASE3_ACTION_THRESHOLDS.get(atype, AI_PHASE3_CONFIDENCE_THRESHOLD)
         auto_ok = (
             AI_PHASE3_ENABLED
             and labels.get('ai_remediation', '').lower() == 'auto'
             and atype in AI_AUTO_ELIGIBLE_ACTIONS
             and ns_check_ok
-            and float(clean.get('confidence', 0.0)) >= AI_PHASE3_CONFIDENCE_THRESHOLD
+            and float(clean.get('confidence', 0.0)) >= threshold
         )
         if auto_ok:
             ok, msg = _execute_proposal(clean)
