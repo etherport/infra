@@ -26,7 +26,14 @@ spec:
                 - /bin/bash
                 - -c
                 - |
-                  pip install --quiet boto3 kubernetes
+                  # kubernetes==30.* — pinned because v31+ broke the
+                  # in-cluster auth chain on python 3.14: the bearer
+                  # token loaded by load_incluster_config wasn't being
+                  # attached to ApiClient requests, even when passed
+                  # explicitly via client_configuration. Every API call
+                  # went out as system:anonymous and got 403'd. 30.x
+                  # is the last known-good major.
+                  pip install --quiet boto3 'kubernetes>=30,<31'
                   python /scripts/forward.py
               env:
                 - name: LOG_GROUP_PREFIXES
