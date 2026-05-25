@@ -18,9 +18,16 @@ metadata:
   name: cloudwatch-to-loki-state
   namespace: cloudwatch-to-loki
 rules:
+  # `create` cannot be filtered by resourceNames in RBAC — the
+  # resource doesn't exist yet, so name-matching can't apply.
+  # Split into two rules: create scoped only to namespace (no
+  # resourceNames), other verbs scoped to the specific CM.
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs: ["get", "list", "create", "update", "patch", "replace"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "update", "patch", "replace"]
     resourceNames:
       - "cloudwatch-to-loki-state"
 ---
