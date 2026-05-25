@@ -5,7 +5,7 @@ metadata:
     namespace: cloudflared
 type: Opaque
 stringData:
-    token: ENC[AES256_GCM,data:BVpBlz+8Kcw8UJVhctgJPSSdKumu89WIpQgXDfO/UXFjLxcGliCeJTynGuXuKww=,iv:RBuig7TEEwB/+a+WKNrcyoRwj3FukWholgcO+LKdp1Y=,tag:jul037cRcOOy5WvR2DQ23w==,type:str]
+    token: ENC[AES256_GCM,data:N6VnQ7iLGCdgnlPrZPIlI/fRlDAuZv5g0tzIxF0b0PwoS3NbGx4QBsZ5ASwXY3Xz5gq5haVb0UO/GNplmIhsJ01+jJ9bz/ThUU0s2ZxG3SNv/wvStdF6Ogha31tHTCR8V5OMxF2jHOYwTUdCdLcIkBld30ikgv1i28WwOHvvBkY+EG9SNHdSjhMA8UNNltHkNouAMBLjn5LULN6vuezUgMgrGqIawMP1+teNKNIH+yz3XAtN7aYoyQ==,iv:14MDDEbeqBOCTR9tixn46PpV+GHuRAPawZRzALS5jJ8=,tag:WInPa/s4NZN4j+2BacAExQ==,type:str]
 sops:
     age:
         - enc: |
@@ -18,6 +18,6 @@ sops:
             -----END AGE ENCRYPTED FILE-----
           recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
     encrypted_regex: ^(data|stringData)$
-    lastmodified: "2026-05-25T05:02:35Z"
-    mac: ENC[AES256_GCM,data:6iKzHPZbvPinmED99VHGNcxFo8Nlcbo0Z33wXdkF2PI2jP4qJa3ENbxQ73nwdgj791+eETSHNgZn5OHwdmxBjzXAY5KyzTepY7J9D/GpcJWjswjDhoozLbnDgazU7xZkOXLO3HBU6Tj4pxR6fUn9mm5J5zWPIjNrH8fUBy+1Th4=,iv:BH4LFV8gGDJV3XMJCo4rDNaeDs9AozAqcLe4D3nCTGg=,tag:B7Jw0vE6qxtTes2QPAKDdg==,type:str]
+    lastmodified: "2026-05-25T14:34:25Z"
+    mac: ENC[AES256_GCM,data:KboHaIcY3mIn4DQJeUttaDHsgpSrhRPtaFsfA17HJDxwJFuQLO8lTuOQQ6H0kvg6PQT5r7ykyAt0TYo/hWUZSSHhniHw30gukIBuMBBoRuJ4OFtVImov0vxgzWfWnDoneutCdtLVs/0T/FE7g8sSTh1F9eZtLOsL6bpCbQiWcrk=,iv:dRO3X0vMrClXcnT7gXhnFRctK89iLHeCURTA++eIsKI=,tag:Lg1xhfaWzSGGNYx1/cpDtw==,type:str]
     version: 3.13.0
