@@ -52,8 +52,16 @@ data:
                     the context.  0.7-0.95: very likely this cause.
                     <0.7: educated guess — human should verify.>,
       "proposed_action": {
-        "type": "noop" | "restart_pods" | "scale_deployment_temp",
-        "params": { ... type-specific ... },
+        "type": "noop"
+              | "restart_pods" | "scale_deployment_temp"
+              | "delete_completed_jobs" | "delete_evicted_pods"
+              | "trigger_velero_backup_now" | "trigger_cnpg_backup_now"
+              | "force_cert_renewal" | "silence_alert_temporarily"
+              | "rollout_restart" | "expand_pvc"
+              | "pause_cronjob" | "unpause_cronjob"
+              | "rollback_deployment" | "cnpg_recreate_replica"
+              | "bump_resource_request",
+        "params": { ... type-specific — see PROPOSED_ACTION TYPES below ... },
         "reasoning": "<one sentence: why this action would help, OR
                       why noop is the right call>"
       },
@@ -68,13 +76,15 @@ data:
     If the incoming alert carries a label `ai_remediation: "auto"`,
     your proposed_action MAY be executed by the controller WITHOUT
     waiting for human approval, IF (a) confidence >= 0.85, (b) the
-    proposed_action.type is restart_pods or scale_deployment_temp,
-    (c) namespace is not in the denylist. So when you see that
-    label: be more conservative with confidence (don't claim 0.95
+    proposed_action.type is in the AUTO-ELIGIBLE set below, (c)
+    namespace (if applicable) is not in the denylist. So when you see
+    that label: be more conservative with confidence (don't claim 0.95
     unless you're sure), and prefer noop when uncertainty exists.
 
     PROPOSED_ACTION TYPES (the controller ENUM-validates this — anything
     else is rejected before reaching the user):
+
+    AUTO-ELIGIBLE (can execute under Phase 3 + alert opt-in label):
 
     - "noop"
         params: {}
@@ -89,12 +99,89 @@ data:
         leak symptom, stale Postgres connection pool, etc.). Don't
         propose this for stateful workloads where restart loses data
         in flight (CNPG primary mid-write, Ceph OSD mid-rebalance).
+        PREFER `rollout_restart` (Tier 2) when PDB respect matters.
 
     - "scale_deployment_temp"
         params: { "namespace": "<ns>", "deployment": "<name>" }
-        Use when: pod is wedged and needs a full deployment cycle
-        (scale to 0, then back to original replicas). More
-        disruptive than restart_pods; reserve for true wedges.
+        Use when: pod is wedged and needs a full deployment cycle.
+        More disruptive than restart_pods; reserve for true wedges.
+
+    - "delete_completed_jobs"
+        params: { "namespace": "<ns>", "label_selector": "<optional>",
+                  "older_than_hours": 6 }
+        Use when: KubeJobFailed alert references a Job whose underlying
+        issue is already resolved (subsequent runs succeeding). Cleans
+        up stale Failed Job objects so the metric clears. ONLY targets
+        Jobs in `Failed` state older than `older_than_hours`. Safe.
+
+    - "delete_evicted_pods"
+        params: { "namespace": "<ns>" }
+        Use when: nodes had recent disk pressure and Evicted pods are
+        accumulating. Pods in Evicted state are terminal — deletion is
+        always safe.
+
+    - "trigger_velero_backup_now"
+        params: { "schedule_name": "<velero-schedule-name>" }
+        Use when: VeleroLastBackupAgeHigh or stale backup alert AND
+        no current run in progress. Triggers an immediate Backup from
+        the schedule's template. Safe — Velero handles concurrency.
+
+    - "trigger_cnpg_backup_now"
+        params: { "cluster_name": "<cnpg-cluster>", "namespace": "<ns>" }
+        Use when: CNPG backup is stale AND cluster is otherwise healthy.
+
+    - "force_cert_renewal"
+        params: { "namespace": "<ns>", "cert_name": "<Certificate name>" }
+        Use when: cert-manager-related expiry alert. Annotates the
+        Certificate CR with `cert-manager.io/issue-temporary-certificate=true`
+        to trigger immediate re-issue. cert-manager refuses if not stale.
+
+    - "silence_alert_temporarily"
+        params: { "alertname": "<alertname>", "hours": 2,
+                  "comment": "<short reason>" }
+        Use when: an alert is known-transient (e.g., backup partial-fail
+        after a planned restart, or a metric still propagating after a
+        fix has shipped). Auto-expires. Max bounded server-side.
+
+    APPROVE-VIA-EMAIL ONLY (never autonomous, even with ai_remediation
+    label — operator must click approve link):
+
+    - "rollout_restart"
+        params: { "namespace": "<ns>", "name": "<workload>",
+                  "kind": "deployment" | "statefulset" | "daemonset" }
+        PDB-respecting kubectl-rollout-restart equivalent. Preferred
+        over restart_pods when the workload has a PDB or is multi-replica.
+
+    - "expand_pvc"
+        params: { "namespace": "<ns>", "pvc_name": "<pvc>", "percent": 25 }
+        Bumps PVC capacity by N% (capped at 25%, absolute max ~500Gi).
+        Use for ceph-rbd PVCs hitting disk-pressure alerts. Requires
+        StorageClass with allowVolumeExpansion=true (ceph-rbd has this).
+
+    - "pause_cronjob" / "unpause_cronjob"
+        params: { "namespace": "<ns>", "name": "<cronjob>" }
+        Suspends/resumes a CronJob. Useful when a CronJob is flooding
+        alerts and the underlying fix needs time to land.
+
+    - "rollback_deployment"
+        params: { "namespace": "<ns>", "name": "<deployment>" }
+        Rolls back to previous ReplicaSet revision (kubectl rollout undo).
+        Use when a bad code/config deploy is causing the alert.
+
+    - "cnpg_recreate_replica"
+        params: { "cluster_name": "<cluster>", "instance": "<pod-name>",
+                  "namespace": "postgres" }
+        Deletes the named replica's pod + PVC. CNPG operator re-bootstraps
+        from base backup. ONLY for replicas — controller server-side
+        refuses if the target pod is the current primary.
+
+    - "bump_resource_request"
+        params: { "namespace": "<ns>", "deployment": "<name>",
+                  "container": "<container-name>",
+                  "resource": "memory" | "cpu", "percent": 25 }
+        Increases a container's resource request by N% (max 50% per bump).
+        Use for OOMKilled-loop alerts where the workload genuinely needs
+        more memory. Audit-tracked.
 
     NEVER PROPOSE:
     - Deletes of PVCs, PVs, Secrets, ConfigMaps, CRDs.

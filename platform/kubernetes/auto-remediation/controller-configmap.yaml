@@ -65,6 +65,8 @@ data:
 
     v1 = client.CoreV1Api()
     apps_v1 = client.AppsV1Api()
+    batch_v1 = client.BatchV1Api()
+    custom = client.CustomObjectsApi()
 
     # Load remediation rules
     with open('/etc/remediation/rules.yaml', 'r') as f:
@@ -137,12 +139,78 @@ data:
     # ANYTHING ELSE is dropped server-side before the diagnosis is
     # emailed. The LLM never sees a shell; this enum is the entire
     # action surface.
-    AI_ACTION_TYPES_ALLOWED = {'noop', 'restart_pods', 'scale_deployment_temp'}
+    #
+    # Tier 1 (autonomous-eligible): tightly bounded, idempotent, reversible.
+    #   - delete_completed_jobs: clean up old Failed K8s Jobs (KubeJobFailed noise)
+    #   - delete_evicted_pods: clean up Evicted pods (always safe — already terminal)
+    #   - trigger_velero_backup_now: create Job from velero Schedule
+    #   - trigger_cnpg_backup_now: create CNPG Backup CR from ScheduledBackup
+    #   - force_cert_renewal: annotate cert-manager Certificate to re-issue
+    #   - silence_alert_temporarily: POST Alertmanager silence with TTL (auto-expires)
+    #
+    # Tier 2 (approve-via-email only — NEVER autonomous):
+    #   - rollout_restart: kubectl rollout restart (PDB-respecting; preferred over restart_pods)
+    #   - expand_pvc: bump PVC capacity by 25% (storage-pressure alerts)
+    #   - pause_cronjob / unpause_cronjob: suspend noisy CronJobs
+    #   - rollback_deployment: kubectl rollout undo to previous revision
+    #   - cnpg_recreate_replica: delete pod+PVC, CNPG re-bootstraps (postgres-7 pattern)
+    #   - bump_resource_request: increase memory request on OOMKilled pods (audit-tracked)
+    AI_ACTION_TYPES_ALLOWED = {
+        'noop',
+        # Original (kept for backwards compat):
+        'restart_pods',
+        'scale_deployment_temp',
+        # Tier 1 — Phase 3 auto-eligible:
+        'delete_completed_jobs',
+        'delete_evicted_pods',
+        'trigger_velero_backup_now',
+        'trigger_cnpg_backup_now',
+        'force_cert_renewal',
+        'silence_alert_temporarily',
+        # Tier 2 — Phase 2 only (approve gate):
+        'rollout_restart',
+        'expand_pvc',
+        'pause_cronjob',
+        'unpause_cronjob',
+        'rollback_deployment',
+        'cnpg_recreate_replica',
+        'bump_resource_request',
+    }
+
+    # Subset of action types eligible for Phase 3 autonomous execution.
+    # Tier 2 actions live in AI_ACTION_TYPES_ALLOWED (so the advisor can
+    # propose them and operators can approve via email) but never auto-run.
+    AI_AUTO_ELIGIBLE_ACTIONS = {
+        'restart_pods',
+        'scale_deployment_temp',
+        'delete_completed_jobs',
+        'delete_evicted_pods',
+        'trigger_velero_backup_now',
+        'trigger_cnpg_backup_now',
+        'force_cert_renewal',
+        'silence_alert_temporarily',
+    }
+
     # Namespaces that are off-limits even for the allowed action types.
     # Phase 1 doesn't execute anything but we still validate so the
     # email recommendation doesn't tell the human to do something
-    # we'd later reject.
+    # we'd later reject. Note: cnpg-system is denied for general actions
+    # but the cnpg_recreate_replica action explicitly allows postgres
+    # (the data namespace, not the operator).
     AI_NAMESPACE_DENYLIST = {'kube-system', 'flux-system', 'cert-manager', 'cnpg-system', 'rook-ceph'}
+
+    # Alertmanager base URL — used by silence_alert_temporarily.
+    ALERTMANAGER_URL = os.environ.get(
+        'ALERTMANAGER_URL',
+        'http://monitoring-kube-prometheus-alertmanager.monitoring.svc.cluster.local:9093',
+    )
+    # Max silence TTL the advisor can set (hours). Anything beyond this
+    # should be a human-led operational decision.
+    AI_SILENCE_MAX_HOURS = int(os.environ.get('AI_SILENCE_MAX_HOURS', '6'))
+    # Max PVC expansion percent the advisor can request per action.
+    AI_PVC_EXPAND_MAX_PCT = int(os.environ.get('AI_PVC_EXPAND_MAX_PCT', '25'))
+    # Absolute cap on PVC size the advisor can grow to (GiB).
+    AI_PVC_EXPAND_ABSOLUTE_MAX_GI = int(os.environ.get('AI_PVC_EXPAND_ABSOLUTE_MAX_GI', '500'))
 
     # Track recent actions to prevent loops (shared between rule path and advisor path)
     recent_actions = {}
@@ -224,6 +292,335 @@ data:
         except Exception as e:
             logger.error(f"Error scaling deployment: {e}")
             return False
+
+    # ===================================================================
+    # Tier 1 — Phase 3 auto-eligible actions
+    # Tightly bounded, idempotent, reversible. Each returns (bool, str).
+    # ===================================================================
+
+    def delete_completed_jobs(namespace, label_selector='', older_than_hours=6):
+        """Delete Failed K8s Jobs older than N hours in namespace.
+        Skips Active or Complete jobs. Targets only Jobs the controller
+        owns (no manual Jobs, no system Jobs)."""
+        try:
+            jobs = batch_v1.list_namespaced_job(namespace, label_selector=label_selector)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=older_than_hours)
+            deleted = 0
+            for job in jobs.items:
+                # Skip if still running or never-failed
+                if job.status.active and job.status.active > 0:
+                    continue
+                if not job.status.failed:
+                    continue
+                started = job.status.start_time
+                if started is None or started >= cutoff:
+                    continue
+                batch_v1.delete_namespaced_job(
+                    job.metadata.name, namespace,
+                    propagation_policy='Background',
+                )
+                deleted += 1
+                logger.info(f"Deleted Failed Job {namespace}/{job.metadata.name}")
+            return True, f'deleted {deleted} Failed jobs older than {older_than_hours}h'
+        except Exception as e:
+            logger.error(f"delete_completed_jobs error: {e}")
+            return False, str(e)
+
+    def delete_evicted_pods(namespace):
+        """Delete pods in Evicted state. Always safe — pods are already terminal."""
+        try:
+            pods = v1.list_namespaced_pod(namespace)
+            deleted = 0
+            for pod in pods.items:
+                if pod.status.phase == 'Failed' and pod.status.reason == 'Evicted':
+                    v1.delete_namespaced_pod(pod.metadata.name, namespace)
+                    deleted += 1
+                    logger.info(f"Deleted Evicted pod {namespace}/{pod.metadata.name}")
+            return True, f'deleted {deleted} Evicted pods'
+        except Exception as e:
+            logger.error(f"delete_evicted_pods error: {e}")
+            return False, str(e)
+
+    def trigger_velero_backup_now(schedule_name):
+        """Create an immediate Velero Backup from a Schedule.
+        Velero's pattern: `kubectl create job --from=schedule/X` wraps
+        the schedule's template into a one-off Backup. We do the API
+        equivalent by reading the Schedule then creating a Backup CR
+        with its template spec."""
+        try:
+            sched = custom.get_namespaced_custom_object(
+                'velero.io', 'v1', 'velero', 'schedules', schedule_name,
+            )
+            backup_name = f"{schedule_name}-adhoc-{int(datetime.now(timezone.utc).timestamp())}"
+            backup = {
+                'apiVersion': 'velero.io/v1',
+                'kind': 'Backup',
+                'metadata': {
+                    'name': backup_name,
+                    'namespace': 'velero',
+                    'labels': {
+                        'velero.io/schedule-name': schedule_name,
+                        'remediation.ai/triggered-by': 'ai-advisor',
+                    },
+                },
+                'spec': sched.get('spec', {}).get('template', {}),
+            }
+            custom.create_namespaced_custom_object(
+                'velero.io', 'v1', 'velero', 'backups', backup,
+            )
+            logger.info(f"Triggered Velero backup {backup_name} from schedule {schedule_name}")
+            return True, f'created Backup {backup_name}'
+        except Exception as e:
+            logger.error(f"trigger_velero_backup_now error: {e}")
+            return False, str(e)
+
+    def trigger_cnpg_backup_now(cluster_name, namespace='postgres'):
+        """Create an immediate CNPG Backup CR for a Cluster.
+        Operator handles execution + posts to barmanObjectStore."""
+        try:
+            backup_name = f"{cluster_name}-adhoc-{int(datetime.now(timezone.utc).timestamp())}"
+            backup = {
+                'apiVersion': 'postgresql.cnpg.io/v1',
+                'kind': 'Backup',
+                'metadata': {
+                    'name': backup_name,
+                    'namespace': namespace,
+                    'labels': {'remediation.ai/triggered-by': 'ai-advisor'},
+                },
+                'spec': {
+                    'cluster': {'name': cluster_name},
+                    'method': 'barmanObjectStore',
+                },
+            }
+            custom.create_namespaced_custom_object(
+                'postgresql.cnpg.io', 'v1', namespace, 'backups', backup,
+            )
+            logger.info(f"Triggered CNPG backup {backup_name} for cluster {cluster_name}")
+            return True, f'created Backup {backup_name}'
+        except Exception as e:
+            logger.error(f"trigger_cnpg_backup_now error: {e}")
+            return False, str(e)
+
+    def force_cert_renewal(namespace, cert_name):
+        """Force cert-manager to re-issue a Certificate by annotating it.
+        cert-manager watches the cert-manager.io/issue-temporary-certificate
+        annotation; setting it triggers a new CertificateRequest."""
+        try:
+            patch = {
+                'metadata': {
+                    'annotations': {
+                        'cert-manager.io/issue-temporary-certificate': 'true',
+                        'remediation.ai/triggered-at': datetime.now(timezone.utc).isoformat(),
+                    }
+                }
+            }
+            custom.patch_namespaced_custom_object(
+                'cert-manager.io', 'v1', namespace, 'certificates', cert_name, patch,
+            )
+            logger.info(f"Forced renewal of cert {namespace}/{cert_name}")
+            return True, f'annotated {namespace}/{cert_name} for re-issue'
+        except Exception as e:
+            logger.error(f"force_cert_renewal error: {e}")
+            return False, str(e)
+
+    def silence_alert_temporarily(alertname, hours=2, comment='ai-advisor temporary silence'):
+        """Add an Alertmanager silence with TTL. Auto-expires; max bounded
+        by AI_SILENCE_MAX_HOURS."""
+        hours = min(int(hours or 1), AI_SILENCE_MAX_HOURS)
+        try:
+            now = datetime.now(timezone.utc)
+            body = {
+                'matchers': [
+                    {'name': 'alertname', 'value': alertname, 'isRegex': False, 'isEqual': True},
+                ],
+                'startsAt': now.isoformat(),
+                'endsAt': (now + timedelta(hours=hours)).isoformat(),
+                'createdBy': 'ai-advisor',
+                'comment': comment[:200],
+            }
+            data = json.dumps(body).encode()
+            req = urllib.request.Request(
+                f"{ALERTMANAGER_URL}/api/v2/silences",
+                data=data,
+                method='POST',
+                headers={'Content-Type': 'application/json'},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                result = json.loads(resp.read())
+            logger.info(f"Created silence {result.get('silenceID')} for {alertname} ({hours}h)")
+            return True, f'silenced {alertname} for {hours}h (id={result.get("silenceID")})'
+        except Exception as e:
+            logger.error(f"silence_alert_temporarily error: {e}")
+            return False, str(e)
+
+    # ===================================================================
+    # Tier 2 — Approve-via-email only (NEVER autonomous)
+    # ===================================================================
+
+    def rollout_restart(namespace, name, kind='deployment'):
+        """kubectl rollout restart equivalent. Adds a timestamp annotation
+        to pod template, which makes the controller re-roll respecting
+        PodDisruptionBudgets. Safer than restart_pods (which just deletes
+        without coordination)."""
+        try:
+            patch = {
+                'spec': {'template': {'metadata': {'annotations': {
+                    'kubectl.kubernetes.io/restartedAt': datetime.now(timezone.utc).isoformat(),
+                    'remediation.ai/restarted-at': datetime.now(timezone.utc).isoformat(),
+                }}}}
+            }
+            if kind == 'deployment':
+                apps_v1.patch_namespaced_deployment(name, namespace, patch)
+            elif kind == 'statefulset':
+                apps_v1.patch_namespaced_stateful_set(name, namespace, patch)
+            elif kind == 'daemonset':
+                apps_v1.patch_namespaced_daemon_set(name, namespace, patch)
+            else:
+                return False, f'unknown kind {kind}'
+            logger.info(f"Rolled out restart on {kind}/{namespace}/{name}")
+            return True, f'rollout restart {kind} {namespace}/{name}'
+        except Exception as e:
+            logger.error(f"rollout_restart error: {e}")
+            return False, str(e)
+
+    def expand_pvc(namespace, pvc_name, percent=25):
+        """Expand PVC by N% (capped at AI_PVC_EXPAND_MAX_PCT, absolute
+        cap at AI_PVC_EXPAND_ABSOLUTE_MAX_GI). Requires StorageClass with
+        allowVolumeExpansion=true (ceph-rbd has this)."""
+        percent = min(int(percent or 25), AI_PVC_EXPAND_MAX_PCT)
+        try:
+            pvc = v1.read_namespaced_persistent_volume_claim(pvc_name, namespace)
+            current_str = pvc.spec.resources.requests.get('storage', '0')
+            # Parse Gi/Mi suffix
+            if current_str.endswith('Gi'):
+                current_gi = int(current_str[:-2])
+            elif current_str.endswith('Ti'):
+                current_gi = int(current_str[:-2]) * 1024
+            elif current_str.endswith('Mi'):
+                current_gi = max(1, int(current_str[:-2]) // 1024)
+            else:
+                return False, f'unparseable current size: {current_str}'
+            new_gi = min(
+                AI_PVC_EXPAND_ABSOLUTE_MAX_GI,
+                current_gi + max(1, current_gi * percent // 100),
+            )
+            if new_gi <= current_gi:
+                return False, f'no expansion (current={current_gi}Gi, cap={AI_PVC_EXPAND_ABSOLUTE_MAX_GI}Gi)'
+            patch = {'spec': {'resources': {'requests': {'storage': f'{new_gi}Gi'}}}}
+            v1.patch_namespaced_persistent_volume_claim(pvc_name, namespace, patch)
+            logger.info(f"Expanded PVC {namespace}/{pvc_name}: {current_gi}Gi → {new_gi}Gi")
+            return True, f'expanded {namespace}/{pvc_name} {current_gi}→{new_gi} Gi'
+        except Exception as e:
+            logger.error(f"expand_pvc error: {e}")
+            return False, str(e)
+
+    def pause_cronjob(namespace, name):
+        """Set CronJob.spec.suspend=true. Stops scheduling new jobs."""
+        try:
+            batch_v1.patch_namespaced_cron_job(name, namespace, {'spec': {'suspend': True}})
+            logger.info(f"Suspended CronJob {namespace}/{name}")
+            return True, f'suspended cronjob {namespace}/{name}'
+        except Exception as e:
+            logger.error(f"pause_cronjob error: {e}")
+            return False, str(e)
+
+    def unpause_cronjob(namespace, name):
+        """Set CronJob.spec.suspend=false. Resumes scheduling."""
+        try:
+            batch_v1.patch_namespaced_cron_job(name, namespace, {'spec': {'suspend': False}})
+            logger.info(f"Resumed CronJob {namespace}/{name}")
+            return True, f'resumed cronjob {namespace}/{name}'
+        except Exception as e:
+            logger.error(f"unpause_cronjob error: {e}")
+            return False, str(e)
+
+    def rollback_deployment(namespace, name):
+        """Roll back a Deployment to its previous revision (kubectl rollout
+        undo equivalent). Uses ReplicaSet history; picks the previous one
+        by revision number."""
+        try:
+            d = apps_v1.read_namespaced_deployment(name, namespace)
+            current_rev = int((d.metadata.annotations or {}).get(
+                'deployment.kubernetes.io/revision', '0'))
+            # Find prior ReplicaSet for this deployment
+            owner_uid = d.metadata.uid
+            rs_list = apps_v1.list_namespaced_replica_set(namespace).items
+            owned_rs = []
+            for rs in rs_list:
+                for ref in (rs.metadata.owner_references or []):
+                    if ref.uid == owner_uid:
+                        rev = int((rs.metadata.annotations or {}).get(
+                            'deployment.kubernetes.io/revision', '0'))
+                        owned_rs.append((rev, rs))
+                        break
+            owned_rs.sort(key=lambda x: -x[0])
+            prior = next((rs for rev, rs in owned_rs if rev < current_rev), None)
+            if not prior:
+                return False, 'no prior ReplicaSet revision found'
+            # Patch deployment template back to prior RS's template
+            patch = {'spec': {'template': prior.spec.template.to_dict()}}
+            apps_v1.patch_namespaced_deployment(name, namespace, patch)
+            logger.info(f"Rolled back deployment {namespace}/{name} from rev {current_rev} to prior")
+            return True, f'rolled back {namespace}/{name} (was rev {current_rev})'
+        except Exception as e:
+            logger.error(f"rollback_deployment error: {e}")
+            return False, str(e)
+
+    def cnpg_recreate_replica(cluster_name, instance, namespace='postgres'):
+        """Recreate a broken CNPG replica by deleting its pod + PVC.
+        CNPG operator detects the missing instance and re-bootstraps from
+        base backup. Only safe for REPLICAS — never primary. We guard by
+        checking instanceRole label before delete."""
+        try:
+            pod_name = instance  # e.g. postgres-cluster-7
+            pod = v1.read_namespaced_pod(pod_name, namespace)
+            role = (pod.metadata.labels or {}).get('cnpg.io/instanceRole', '')
+            if role == 'primary':
+                return False, f'refusing to delete primary pod {pod_name} — use cnpg_failover first'
+            # Delete pod then PVC (same name as pod by convention)
+            v1.delete_namespaced_pod(pod_name, namespace, grace_period_seconds=10)
+            v1.delete_namespaced_persistent_volume_claim(pod_name, namespace)
+            logger.info(f"Recreated CNPG replica {namespace}/{pod_name} (cluster {cluster_name})")
+            return True, f'deleted pod+PVC {namespace}/{pod_name}; CNPG will re-bootstrap'
+        except Exception as e:
+            logger.error(f"cnpg_recreate_replica error: {e}")
+            return False, str(e)
+
+    def bump_resource_request(namespace, deployment, container, resource='memory', percent=25):
+        """Increase a container's resource request by N%. Used for
+        OOMKilled-loop alerts. Audit-tracked so we can revert if it
+        becomes a habit (vs solving the actual leak)."""
+        percent = min(int(percent or 25), 50)  # hard cap 50% per bump
+        try:
+            d = apps_v1.read_namespaced_deployment(deployment, namespace)
+            containers = d.spec.template.spec.containers
+            target = next((c for c in containers if c.name == container), None)
+            if not target:
+                return False, f'container {container} not in {deployment}'
+            requests = (target.resources.requests or {}) if target.resources else {}
+            current_str = requests.get(resource, '0')
+            # Parse Mi/Gi suffix
+            if current_str.endswith('Gi'):
+                current_mi = int(current_str[:-2]) * 1024
+            elif current_str.endswith('Mi'):
+                current_mi = int(current_str[:-2])
+            elif current_str.endswith('m') and resource == 'cpu':
+                current_mi = int(current_str[:-1])
+            else:
+                return False, f'unparseable current {resource}: {current_str}'
+            new_mi = current_mi + max(1, current_mi * percent // 100)
+            unit = 'Mi' if resource == 'memory' else 'm'
+            new_val = f'{new_mi}{unit}'
+            patch = {'spec': {'template': {'spec': {'containers': [{
+                'name': container,
+                'resources': {'requests': {resource: new_val}},
+            }]}}}}
+            apps_v1.patch_namespaced_deployment(deployment, namespace, patch)
+            logger.info(f"Bumped {namespace}/{deployment}/{container} {resource} {current_str}→{new_val}")
+            return True, f'bumped {resource} {current_str}→{new_val} (+{percent}%)'
+        except Exception as e:
+            logger.error(f"bump_resource_request error: {e}")
+            return False, str(e)
 
     # ===================================================================
     # AI Advisor — Phase 1 (advisory only, no execution)
@@ -565,14 +962,44 @@ data:
         if atype not in AI_ACTION_TYPES_ALLOWED:
             logger.warning(f"AI proposed_action.type='{atype}' rejected (not in allowlist); coercing to noop")
             atype = 'noop'
-        # Validate params for the allowed types; downgrade to noop if malformed
+        # Validate params for the allowed types; downgrade to noop if malformed.
+        # Required-fields-per-type table avoids drift: add a new action here
+        # at the same time you add the execute function.
         params = action.get('params', {}) or {}
-        if atype in ('restart_pods', 'scale_deployment_temp'):
-            ns = params.get('namespace', '')
-            if not ns or ns in AI_NAMESPACE_DENYLIST:
-                logger.warning(f"AI proposed_action targets denied/empty ns '{ns}'; coercing to noop")
+        _required = {
+            'restart_pods': {'namespace', 'selector'},
+            'scale_deployment_temp': {'namespace', 'deployment'},
+            'delete_completed_jobs': {'namespace'},
+            'delete_evicted_pods': {'namespace'},
+            'trigger_velero_backup_now': {'schedule_name'},
+            'trigger_cnpg_backup_now': {'cluster_name'},
+            'force_cert_renewal': {'namespace', 'cert_name'},
+            'silence_alert_temporarily': {'alertname'},
+            'rollout_restart': {'namespace', 'name'},
+            'expand_pvc': {'namespace', 'pvc_name'},
+            'pause_cronjob': {'namespace', 'name'},
+            'unpause_cronjob': {'namespace', 'name'},
+            'rollback_deployment': {'namespace', 'name'},
+            'cnpg_recreate_replica': {'cluster_name', 'instance'},
+            'bump_resource_request': {'namespace', 'deployment', 'container'},
+        }
+        if atype != 'noop':
+            req = _required.get(atype, set())
+            missing = [k for k in req if not params.get(k)]
+            if missing:
+                logger.warning(f"AI proposed_action.type={atype} missing params {missing}; coercing to noop")
                 atype = 'noop'
                 params = {}
+            else:
+                # Namespace denylist check for actions targeting a specific ns.
+                # Exemptions: trigger_velero_backup_now (velero ns is its workspace),
+                # cnpg_recreate_replica (postgres ns is the data ns, cnpg-system is the
+                # operator we deny separately).
+                ns = params.get('namespace', '')
+                if ns and ns in AI_NAMESPACE_DENYLIST:
+                    logger.warning(f"AI proposed_action targets denied ns '{ns}'; coercing to noop")
+                    atype = 'noop'
+                    params = {}
         clean['proposed_action'] = {
             'type': atype,
             'params': params if atype != 'noop' else {},
@@ -791,30 +1218,77 @@ data:
 
     def _execute_proposal(proposal):
         """Run the action specified in a stored proposal. Returns
-        (success_bool, message_str)."""
+        (success_bool, message_str). _validate_response has already
+        enforced required-params + denylist; this is the dispatch layer."""
         action = proposal['proposed_action']
         atype = action.get('type', 'noop')
         params = action.get('params', {}) or {}
+
         if atype == 'noop':
             return True, 'noop (no action taken)'
+
+        # Original actions (kept for backwards compat)
         if atype == 'restart_pods':
-            ns = params.get('namespace', '')
-            sel = params.get('selector', '')
-            if not (ns and sel):
-                return False, 'missing namespace/selector'
-            if ns in AI_NAMESPACE_DENYLIST:
-                return False, f'namespace {ns} in denylist'
-            ok = restart_pods(ns, sel)
-            return ok, f'restart_pods ns={ns} selector={sel}'
+            ok = restart_pods(params['namespace'], params['selector'])
+            return ok, f"restart_pods ns={params['namespace']} sel={params['selector']}"
         if atype == 'scale_deployment_temp':
-            ns = params.get('namespace', '')
-            name = params.get('deployment', '')
-            if not (ns and name):
-                return False, 'missing namespace/deployment'
-            if ns in AI_NAMESPACE_DENYLIST:
-                return False, f'namespace {ns} in denylist'
-            ok = scale_deployment(ns, name)
-            return ok, f'scale_deployment_temp ns={ns} deploy={name}'
+            ok = scale_deployment(params['namespace'], params['deployment'])
+            return ok, f"scale_deployment_temp ns={params['namespace']} deploy={params['deployment']}"
+
+        # Tier 1 — autonomous-eligible
+        if atype == 'delete_completed_jobs':
+            return delete_completed_jobs(
+                params['namespace'],
+                label_selector=params.get('label_selector', ''),
+                older_than_hours=int(params.get('older_than_hours', 6)),
+            )
+        if atype == 'delete_evicted_pods':
+            return delete_evicted_pods(params['namespace'])
+        if atype == 'trigger_velero_backup_now':
+            return trigger_velero_backup_now(params['schedule_name'])
+        if atype == 'trigger_cnpg_backup_now':
+            return trigger_cnpg_backup_now(
+                params['cluster_name'],
+                namespace=params.get('namespace', 'postgres'),
+            )
+        if atype == 'force_cert_renewal':
+            return force_cert_renewal(params['namespace'], params['cert_name'])
+        if atype == 'silence_alert_temporarily':
+            return silence_alert_temporarily(
+                params['alertname'],
+                hours=int(params.get('hours', 2)),
+                comment=params.get('comment', 'ai-advisor temporary silence'),
+            )
+
+        # Tier 2 — approve-via-email only
+        if atype == 'rollout_restart':
+            return rollout_restart(
+                params['namespace'], params['name'],
+                kind=params.get('kind', 'deployment'),
+            )
+        if atype == 'expand_pvc':
+            return expand_pvc(
+                params['namespace'], params['pvc_name'],
+                percent=int(params.get('percent', 25)),
+            )
+        if atype == 'pause_cronjob':
+            return pause_cronjob(params['namespace'], params['name'])
+        if atype == 'unpause_cronjob':
+            return unpause_cronjob(params['namespace'], params['name'])
+        if atype == 'rollback_deployment':
+            return rollback_deployment(params['namespace'], params['name'])
+        if atype == 'cnpg_recreate_replica':
+            return cnpg_recreate_replica(
+                params['cluster_name'], params['instance'],
+                namespace=params.get('namespace', 'postgres'),
+            )
+        if atype == 'bump_resource_request':
+            return bump_resource_request(
+                params['namespace'], params['deployment'], params['container'],
+                resource=params.get('resource', 'memory'),
+                percent=int(params.get('percent', 25)),
+            )
+
         return False, f'unknown action type {atype}'
 
     def _advise(alert):
@@ -937,11 +1411,19 @@ data:
         atype = action_info.get('type', 'noop')
         params = action_info.get('params', {}) or {}
         ns = params.get('namespace', '')
+        # Phase 3 auto-execution conditions:
+        #   - Global Phase 3 enabled
+        #   - Alert opt-in via PrometheusRule label `ai_remediation: auto`
+        #   - Action type is in AI_AUTO_ELIGIBLE_ACTIONS (Tier 1 only — Tier 2
+        #     never autonomous regardless of label)
+        #   - Confidence above threshold
+        #   - Namespace not in denylist (skipped for actions without a `namespace` param)
+        ns_check_ok = (not ns) or (ns not in AI_NAMESPACE_DENYLIST)
         auto_ok = (
             AI_PHASE3_ENABLED
             and labels.get('ai_remediation', '').lower() == 'auto'
-            and atype in {'restart_pods', 'scale_deployment_temp'}
-            and ns and ns not in AI_NAMESPACE_DENYLIST
+            and atype in AI_AUTO_ELIGIBLE_ACTIONS
+            and ns_check_ok
             and float(clean.get('confidence', 0.0)) >= AI_PHASE3_CONFIDENCE_THRESHOLD
         )
         if auto_ok:

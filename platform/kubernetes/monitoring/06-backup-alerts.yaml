@@ -127,6 +127,9 @@ spec:
             severity: warning
             component: backup
             namespace: postgres
+            # AI advisor Phase 3 opt-in: can autonomously call
+            # trigger_cnpg_backup_now (uses cluster from $labels.cluster).
+            ai_remediation: "auto"
           annotations:
             summary: "CNPG cluster {{ $labels.cluster }} backup stale (>36h)"
             description: |
@@ -186,6 +189,9 @@ spec:
             severity: warning
             component: backup
             namespace: velero
+            # AI advisor Phase 3 opt-in: can autonomously call
+            # trigger_velero_backup_now to kick a fresh backup.
+            ai_remediation: "auto"
           annotations:
             summary: "Velero hasn't completed a backup in >36h"
             description: |
