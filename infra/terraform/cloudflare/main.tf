@@ -150,29 +150,43 @@ resource "cloudflare_record" "approve_cname" {
 }
 
 // ---------------------------------------------------------------------------
-// 6. CF Access Application — gates the approval URL
-// ---------------------------------------------------------------------------
-resource "cloudflare_zero_trust_access_application" "approve" {
-  account_id                = var.cloudflare_account_id
-  name                      = "AI Advisor Approval URL"
-  domain                    = var.approval_hostname
-  type                      = "self_hosted"
-  session_duration          = "24h"
-  app_launcher_visible      = false
-  auto_redirect_to_identity = true
-}
+// 6 + 7. CF Access Application + Policy — gates the approval URL
+//
+// COMMENTED OUT until after the registrar NS flip activates the etherport.net
+// CF zone. CF Access validates `domain` against zones in your account, and
+// rejects with "domain does not belong to zone (12130)" while the zone is
+// still in "Pending Nameserver Update" status (which it stays in until the
+// registrar NS records actually point to CF).
+//
+// Cutover sequence:
+//   1. Apply DNS records + tunnel (this state)
+//   2. Verify email DNS lookups via CF nameservers directly (pre-flip)
+//   3. Flip NS at Route53 Registrar → wait for zone to go Active
+//   4. SES test send
+//   5. Uncomment these resources + re-apply
+//
+// Until uncommented, the tunnel still works at <tunnel-id>.cfargotunnel.com
+// (no Access gate), so end-to-end testing of the tunnel path is possible
+// without DNS or Access being in place.
 
-// ---------------------------------------------------------------------------
-// 7. CF Access Policy — allow only specified emails
-// ---------------------------------------------------------------------------
-resource "cloudflare_zero_trust_access_policy" "approve_allow" {
-  account_id     = var.cloudflare_account_id
-  application_id = cloudflare_zero_trust_access_application.approve.id
-  name           = "Allow listed emails"
-  precedence     = 1
-  decision       = "allow"
-
-  include {
-    email = var.allowed_emails
-  }
-}
+// resource "cloudflare_zero_trust_access_application" "approve" {
+//   account_id                = var.cloudflare_account_id
+//   name                      = "AI Advisor Approval URL"
+//   domain                    = var.approval_hostname
+//   type                      = "self_hosted"
+//   session_duration          = "24h"
+//   app_launcher_visible      = false
+//   auto_redirect_to_identity = true
+// }
+//
+// resource "cloudflare_zero_trust_access_policy" "approve_allow" {
+//   account_id     = var.cloudflare_account_id
+//   application_id = cloudflare_zero_trust_access_application.approve.id
+//   name           = "Allow listed emails"
+//   precedence     = 1
+//   decision       = "allow"
+//
+//   include {
+//     email = var.allowed_emails
+//   }
+// }
