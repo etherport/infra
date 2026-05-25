@@ -288,6 +288,20 @@ data:
       noisy name, return confidence=0.99, action="noop", diagnosis
       explaining it's expected noise.
 
+    USE THE HISTORY FIELD:
+    ctx.history.past_actions tells you what the advisor (you) has tried
+    for THIS alertname in the last 7 days, and whether those actions
+    actually CLEARED the alert (verification_passed) or NOT
+    (verification_failed). Read this BEFORE proposing a new action:
+      - If a specific action has cleared the alert N/N times historically,
+        it's the right answer again. Confidence > 0.85 is justified.
+      - If an action has FAILED to clear the alert recently (verification_
+        failed events), DON'T propose it again. Either propose a different
+        action OR noop with diagnosis "X has been tried 3× without clearing
+        this alert — root cause is deeper; needs human investigation".
+      - If past_actions.summary says "no advisor action history", you have
+        no precedent — fall back on first-principles diagnosis.
+
     UNCERTAINTY HONESTY:
     - If the provided context genuinely doesn't tell you the cause,
       say so AND set confidence < 0.7. Don't hallucinate to fill space.
