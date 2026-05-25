@@ -44,7 +44,23 @@ docs/
 | [dns-resolution-issues.md](runbooks/dns-resolution-issues.md) | DNS troubleshooting |
 | [vlan-interfaces-netplan.md](runbooks/vlan-interfaces-netplan.md) | VLAN interface configuration |
 | [cert-manager-wildcard.md](runbooks/cert-manager-wildcard.md) | Wildcard cert issuance + Traefik TLSStore |
-| [auto-remediation/](runbooks/auto-remediation/) | Automated issue resolution system |
+| [ceph-vlan-migration.md](runbooks/ceph-vlan-migration.md) | Ceph mon/OSD migration to VLAN 210 (2026-05-18, done) |
+| [regional-vpn-deployment.md](runbooks/regional-vpn-deployment.md) | Multi-region AWS spoke VPN deployment |
+| [grafana-admin-password.md](runbooks/grafana-admin-password.md) | Rotate/recover Grafana admin password |
+| [syslog-onboard-device.md](runbooks/syslog-onboard-device.md) | Add a new syslog-emitting device to Alloy |
+| [postgres-barman.md](runbooks/postgres-barman.md) | CNPG Barman backup config + tuning |
+| [etcd-backup-restore.md](runbooks/etcd-backup-restore.md) | etcd snapshot + restore (cluster-rebuild path) |
+| [image-pinning-policy.md](runbooks/image-pinning-policy.md) | Container image pinning + Renovate cadence |
+| [dependency-update-cadence.md](runbooks/dependency-update-cadence.md) | Renovate/Helm-release update cadence |
+| [auto-remediation/](runbooks/auto-remediation/) | Automated issue resolution system (legacy rule-based) |
+| **AI advisor (M41 / M45)** | |
+| [ai-advisor-phase1-enable.md](runbooks/ai-advisor-phase1-enable.md) | Enable advisory-only diagnosis email path |
+| [ai-advisor-phase2-enable.md](runbooks/ai-advisor-phase2-enable.md) | Enable approve-via-email (HMAC-signed buttons) |
+| [ai-advisor-phase3-enable.md](runbooks/ai-advisor-phase3-enable.md) | Enable opt-in autonomous execute (`ai_remediation: auto`) |
+| [ai-advisor-phase-b-cloudwatch.md](runbooks/ai-advisor-phase-b-cloudwatch.md) | M45 Phase B — IAM + creds so advisor reads AWS CW Logs |
+| [cloudwatch-to-loki-enable.md](runbooks/cloudwatch-to-loki-enable.md) | M45 Phase C — CW Logs → in-cluster Loki forwarder |
+| **Cloudflare cutover** | |
+| [cloudflare-access-enable.md](runbooks/cloudflare-access-enable.md) | Full-zone migration (Route53 → CF) + CF Access for approve.wind |
 
 ## Operations
 
@@ -116,12 +132,14 @@ captured yet.
 
 | Document | Description |
 |----------|-------------|
-| [outstanding-work.md](planning/outstanding-work.md) | **Source of truth** for prioritized open work (H/M/L tiers) + completed index |
-| [ai-alert-remediation-2026-05-23.md](planning/ai-alert-remediation-2026-05-23.md) | AI advisor system design (M41) |
+| [outstanding-work.md](planning/outstanding-work.md) | **Source of truth** for prioritized open work (C/H/M/L tiers) + completed index |
+| [ai-alert-remediation-2026-05-23.md](planning/ai-alert-remediation-2026-05-23.md) | AI advisor system design spec (M41) |
 | [ai-advisor-phases-2-3-scope.md](planning/ai-advisor-phases-2-3-scope.md) | M41 Phase 2/3 implementation scope |
 | [firewall-zones-future-state.md](planning/firewall-zones-future-state.md) | Proposed 4-zone UDM design (M30) |
 | [hardcoded-ephemeral-ip-audit-2026-05-23.md](planning/hardcoded-ephemeral-ip-audit-2026-05-23.md) | EIP / ephemeral-IP audit |
 | [udm-audit-2026-05-23.md](planning/udm-audit-2026-05-23.md) | UDM / UniFi config audit (M25) |
+| [udm-config-drift-2026-05-17.md](planning/udm-config-drift-2026-05-17.md) | UDM config drift snapshot |
+| [ubiquiti-config-as-code-2026-05-16.md](planning/ubiquiti-config-as-code-2026-05-16.md) | UniFi config-as-code design (terraform-unifi) |
 | [public-web-infrastructure.md](planning/public-web-infrastructure.md) | Status of public-facing web hosting |
 | [VERSIONING-STRATEGY.md](planning/VERSIONING-STRATEGY.md) | Container image versioning approach |
 | [sops-vs-ansible-vault.md](planning/sops-vs-ansible-vault.md) | SOPS vs Ansible-Vault comparison |
@@ -134,24 +152,51 @@ context only) live in [docs/planning/archive/](planning/archive/).
 ## Platform Components
 
 ```
-Infrastructure Layer:
-├── Proxmox (Terraform)      - VM provisioning
-├── Kubernetes (Kubespray)   - Container orchestration
-└── AWS (Terraform)          - Hybrid cloud extension
+Infrastructure layer:
+├── Proxmox (Terraform)               VM provisioning + SDN bridges
+├── Kubernetes (Kubespray)            Container orchestration (Cilium CNI + Multus)
+├── AWS (Terraform)                   VPC, EC2 (vpn-aws/dns-aws), ALB, Route53, SES, Lambdas
+├── UniFi (Terraform — terraform-unifi) Networks/VLANs/routes/reservations/port-forwards
+└── Cloudflare (Terraform)            etherport.net zone (NS-cutover pending), Tunnel, Access
 
-Configuration Layer:
-├── Ansible                  - Non-K8s host configuration
-├── Flux                     - K8s GitOps deployments
-└── Helm                     - Complex K8s applications
+Configuration layer:
+├── Ansible                  Non-K8s host config (PVE, standalone VMs, UDM)
+├── Flux                     K8s GitOps reconciler (clusters/wind/)
+├── Helm                     Complex K8s apps via HelmRelease CRDs
+└── Tailscale ACL (TF)       infra/tailscale/, applied via tailscale-policy.yml
 
 Observability:
-├── Prometheus               - Metrics collection
-├── Grafana                  - Visualization
-├── Alertmanager             - Alert routing
-└── node_exporter            - Host metrics
+├── Prometheus (kube-prometheus-stack, replicas=2 antiAffinity)
+├── Alertmanager → SES email (+ webhook to auto-remediation)
+├── Grafana (https://grafana.wind.etherport.net)
+├── Loki (single-binary) + Alloy DaemonSet
+├── blackbox-exporter        ICMP/HTTPS probes for UDM / Protect / UNAS
+├── cloudwatch-to-loki       AWS CW Logs → Loki every 5 min (M45 Phase C)
+├── ipmi_exporter + ipmievd  PVE BMC metrics + syslog (M40)
+└── service-status-report    Daily HTML email + Grafana dashboard
 
-Data Layer:
-├── Ceph (rook-ceph)         - K8s persistent storage
-├── Velero                   - Backup/restore
-└── SOPS                     - Secret encryption
+AI alert advisor (auto-remediation namespace):
+├── Phase 1                  Advisory-only diagnosis emails (live)
+├── Phase 2                  Approve-via-email HMAC buttons (live)
+├── Phase 3                  Opt-in autonomous execute via `ai_remediation: auto` label (live)
+├── 18 action types          3 tiers — pod/deploy, workload-aware, host-level via SSH
+├── Closed-loop verification After-execute re-check; verification_passed/failed audit events
+├── Cross-session memory     Prior-attempt outcomes surfaced to Claude prompt
+├── Deep mode tool-use       Multi-turn promql/loki/kubectl tools (opt-in per alert)
+└── CloudWatch context (M45 Phase B) AWS-side log fetch for Lambda/EC2 alerts
+
+Data layer:
+├── Ceph (external on PVE, mon 10.10.210.41 VLAN 210) + ceph-csi
+├── Velero (10 schedules) → Kopia → S3 infra.wind.etherport.net/velero/
+├── CNPG Barman              continuous WAL + nightly base → S3 postgres/barman/
+├── unifi-backup CronJob     UDM controller-db + UDM/Protect core-config → S3 unifi/
+├── s3-sync CronJobs (7)     per NAS share → per-share S3 buckets
+├── rclone gdrive-sync       Google Drive → NFS mirror
+└── SOPS + age               Secret encryption (per-workstation age key)
+
+Edge / public access:
+├── Traefik (10.10.201.70)   Wildcard cert via cert-manager TLSStore
+├── AWS ALB                  Public *.wind.etherport.net (planned drop after CF migration)
+├── Cloudflare Tunnel        cloudflared deploy → CF Access → approve.wind.etherport.net
+└── Tailscale operator       Per-service ingresses + subnet router for tailnet-only access
 ```
