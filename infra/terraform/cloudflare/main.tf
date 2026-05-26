@@ -6,7 +6,7 @@
 //   2. TF imports the zone via cloudflare_zone_id var
 //   3. TF creates all DNS records (mirrors current Route53 state)
 //   4. TF creates Tunnel + Tunnel config + Access app + policy for the
-//      AI advisor approval URL (approve.wind.etherport.net)
+//      AI advisor approval URL (approve.etherport.net)
 //   5. User changes etherport.net NS at Route53 Registrar → CF nameservers
 //      (the destructive cut-over; reversible)
 //
@@ -138,7 +138,7 @@ resource "cloudflare_tunnel_config" "wind_cluster" {
 // 5. CNAME for approve.etherport.net → tunnel
 //    Apex-level subdomain ("approve" relative to etherport.net zone), so the
 //    free Universal SSL cert (covers root + *.etherport.net) handles TLS.
-//    Two-deep hostnames like approve.wind.etherport.net would have needed
+//    Two-deep hostnames like approve.etherport.net would have needed
 //    paid Total TLS / ACM.
 // ---------------------------------------------------------------------------
 resource "cloudflare_record" "approve_cname" {

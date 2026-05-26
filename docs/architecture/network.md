@@ -35,7 +35,7 @@ External Request
       |                        |
       v                        v
   AWS ALB                Cloudflare Tunnel (cloudflared)
-  *.wind.etherport.net   approve.wind.etherport.net + CF Access
+  *.wind.etherport.net   approve.etherport.net + CF Access
       |                        |
       +------------+-----------+
                    |

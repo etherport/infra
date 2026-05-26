@@ -53,7 +53,7 @@ High-level infrastructure design for the homelab environment.
 |---|---|
 | Traefik | LoadBalancer on 10.10.201.70; serves `*.wind.etherport.net` via cert-manager wildcard + TLSStore default |
 | AWS ALB | Public `*.wind.etherport.net` reverse-proxy through VPN; planned drop after Cloudflare migration |
-| Cloudflare Tunnel | `cloudflared` deploy (`platform/kubernetes/cloudflared/`) outbound-only; routes `approve.wind.etherport.net` through CF Access (Google SSO). Used for AI advisor approve URL. Full-zone migration scaffold lives in `infra/terraform/cloudflare/`; NS-cutover at registrar pending. |
+| Cloudflare Tunnel | `cloudflared` deploy (`platform/kubernetes/cloudflared/`) outbound-only; routes `approve.etherport.net` through CF Access (Google SSO). Used for AI advisor approve URL. Full-zone migration scaffold lives in `infra/terraform/cloudflare/`; NS-cutover at registrar pending. |
 | Tailscale | Per-service ingresses managed by the Tailscale operator (e.g. `remediation-approve.<tailnet>.ts.net`) for tailnet-only access |
 
 ## Cluster automation (auto-remediation namespace)

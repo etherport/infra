@@ -1,4 +1,4 @@
-# Cloudflare full-zone migration + Access for approve.wind.etherport.net
+# Cloudflare full-zone migration + Access for approve.etherport.net
 
 Migrates etherport.net DNS from Route53 to Cloudflare, then puts CF Access (Google SSO) in front of the AI advisor approval URL. Cost stays $0/mo; saves ~$15-18/mo if you later drop the ALB by tunneling its services through CF.
 
@@ -130,7 +130,7 @@ Save. Propagation typically <5min for most resolvers; up to 48h for stragglers w
 watch -n 30 'dig +short NS etherport.net @8.8.8.8'
 
 # Once you see CF nameservers, also verify a record resolves correctly:
-dig +short approve.wind.etherport.net @8.8.8.8   # should be CF edge IPs
+dig +short approve.etherport.net @8.8.8.8   # should be CF edge IPs
 dig +short mail.etherport.net MX @8.8.8.8        # should be feedback-smtp.us-west-2.amazonses.com
 ```
 
@@ -166,7 +166,7 @@ See `platform/kubernetes/route53-ddns/CF-MIGRATION.md` (scaffolded — TODO sect
 ```bash
 # Edit platform/kubernetes/auto-remediation/deployment.yaml:
 #   - name: APPROVAL_BASE_URL
-#     value: "https://approve.wind.etherport.net"  (was the Tailscale URL)
+#     value: "https://approve.etherport.net"  (was the Tailscale URL)
 
 git add platform/kubernetes/auto-remediation/deployment.yaml
 git commit -m "advisor: switch APPROVAL_BASE_URL to public CF-gated URL"

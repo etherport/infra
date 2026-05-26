@@ -152,7 +152,7 @@ Phase 2 ships TWO ingresses:
 | URL | Route via | Reach | Default? |
 |---|---|---|---|
 | `https://remediation-approve.tail48f596.ts.net/approve?...` | Tailscale | Tailnet-only devices | ✅ in `APPROVAL_BASE_URL` |
-| `https://approve.wind.etherport.net/approve?...` | Traefik public ingress + wildcard cert | Any device, any network | available, not default |
+| `https://approve.etherport.net/approve?...` | Traefik public ingress + wildcard cert | Any device, any network | available, not default |
 
 Both hit the same controller `/approve` endpoint. The HMAC-signed
 `token` parameter is the auth — anyone with a valid token can
@@ -166,7 +166,7 @@ Tailscale, e.g. from a phone that isn't on TS):
 ```yaml
 # In platform/kubernetes/auto-remediation/deployment.yaml:
 - name: APPROVAL_BASE_URL
-  value: "https://approve.wind.etherport.net"
+  value: "https://approve.etherport.net"
 ```
 
 Commit + push, Flux reconciles, the controller emails new links

@@ -53,8 +53,8 @@ audit log + cools down.
 firing alert → controller → _advise() → diagnose +
   generate approval token + store proposal in pending map →
   email with two URLs:
-    https://approve.wind.etherport.net/?token=<HMAC>
-    https://approve.wind.etherport.net/?token=<HMAC>&action=reject
+    https://approve.etherport.net/?token=<HMAC>
+    https://approve.etherport.net/?token=<HMAC>&action=reject
 
 user clicks Approve →
   approval endpoint (NEW: small HTTP handler on the same controller pod) →
@@ -82,7 +82,7 @@ user clicks Approve →
    carries `proposal_id + signature`; the handler re-signs to
    verify. Replay-resistant via ts + proposal expiry.
 
-4. **Public ingress** — `approve.wind.etherport.net` → controller
+4. **Public ingress** — `approve.etherport.net` → controller
    service. Either: (a) Tailscale-only (your devices have TS, so
    approval works from phone/laptop without VPN), or (b) public
    ALB with auth gate (Cloudflare Access?). Recommendation: TS-only.
@@ -108,7 +108,7 @@ user clicks Approve →
 - `platform/kubernetes/auto-remediation/service.yaml`:
   - Already exposes 8080; just add an Ingress on a Tailscale domain
 - `clusters/wind/ingress/` (or wherever Tailscale ingress lives):
-  - New IngressRoute `approve.wind.etherport.net` → service
+  - New IngressRoute `approve.etherport.net` → service
 
 ### Milestones
 

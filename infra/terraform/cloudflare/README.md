@@ -5,8 +5,8 @@
 1. **The etherport.net zone in CF** (manually created, then imported)
 2. **All 20 DNS records** mirroring current Route53 state (audited 2026-05-25)
 3. **Cloudflare Tunnel** `wind-cluster` (cloudflared daemon runs in-cluster, outbound-only)
-4. **Tunnel ingress config** routing `approve.wind.etherport.net` → cluster
-5. **CNAME** `approve.wind.etherport.net → <tunnel-id>.cfargotunnel.com`
+4. **Tunnel ingress config** routing `approve.etherport.net` → cluster
+5. **CNAME** `approve.etherport.net → <tunnel-id>.cfargotunnel.com`
 6. **CF Access Application** on the approval hostname
 7. **CF Access Policy** allowing only `grahamsm@gmail.com` (Google SSO)
 8. **CF Access Service Token** for the Alexa skill Lambda (file `alexa-service-token.tf`)

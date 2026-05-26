@@ -32,7 +32,7 @@ PrometheusRule → Alertmanager → webhook (this controller)
 - **Namespace**: `auto-remediation`
 - **Service**: `remediation-webhook` (ClusterIP, port 8080) — Alertmanager target
 - **Tailscale Ingress**: `remediation-approve.<tailnet>.ts.net` — Approve/Reject URLs
-- **Public Ingress** (alt): `https://approve.wind.etherport.net` via Traefik (current default APPROVAL_BASE_URL); ready to route through CF Tunnel after the NS-cutover
+- **Public Ingress** (alt): `https://approve.etherport.net` via Traefik (current default APPROVAL_BASE_URL); ready to route through CF Tunnel after the NS-cutover
 - **ConfigMaps**:
   - `remediation-rules` (`configmap.yaml`) — static alert→action mappings
   - `remediation-script` (`controller-configmap.yaml`) — controller Python; this is the real source of truth, the legacy `controller.py` placeholder is unused
@@ -57,7 +57,7 @@ PrometheusRule → Alertmanager → webhook (this controller)
 | `controller-configmap.yaml` | Real controller Python (~2400 lines) |
 | `advisor-prompt-configmap.yaml` | System prompt + action taxonomy |
 | `approval-ingress.yaml` | Tailscale Ingress |
-| `approval-public-ingress.yaml` | Traefik public Ingress for `approve.wind.etherport.net` |
+| `approval-public-ingress.yaml` | Traefik public Ingress for `approve.etherport.net` |
 | `*.sops.yaml` | Secrets (SOPS-encrypted) |
 | `COVERAGE.md` | What static rules + advisor cover, where the gaps are |
 | `README.md` | This file |

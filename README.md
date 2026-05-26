@@ -189,7 +189,7 @@ Restore procedures + RTO/RPO targets:
 | Ingress | Traefik (10.10.201.70), wildcard cert `*.wind.etherport.net` via cert-manager + TLSStore default |
 | Site-to-site VPN | K8s WireGuard pod primary (VRRP prio 150), `vpn-local` backup (prio 100), shared VIP 10.10.201.20 |
 | AWS VPC | 10.10.100.0/22, peered with future spokes; ALB at `*.wind.etherport.net` (planned drop after CF migration) |
-| Cloudflare Tunnel | `cloudflared` deployment routes `approve.wind.etherport.net` through CF Access (Google SSO) |
+| Cloudflare Tunnel | `cloudflared` deployment routes `approve.etherport.net` through CF Access (Google SSO) |
 | Remote access | Tailscale (operator-managed K8s ingresses + subnet router) |
 
 ## DNS

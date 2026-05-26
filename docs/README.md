@@ -197,6 +197,6 @@ Data layer:
 Edge / public access:
 ├── Traefik (10.10.201.70)   Wildcard cert via cert-manager TLSStore
 ├── AWS ALB                  Public *.wind.etherport.net (planned drop after CF migration)
-├── Cloudflare Tunnel        cloudflared deploy → CF Access → approve.wind.etherport.net
+├── Cloudflare Tunnel        cloudflared deploy → CF Access → approve.etherport.net
 └── Tailscale operator       Per-service ingresses + subnet router for tailnet-only access
 ```
