@@ -47,6 +47,18 @@ variable "allowed_emails" {
   default     = ["grahamsm@gmail.com"]
 }
 
+variable "google_idp_id" {
+  description = <<-EOT
+    UUID of the Google SSO Identity Provider in the CF Zero Trust org. Required
+    on the Access app when auto_redirect_to_identity = true. Find it via API
+    (GET /accounts/{id}/access/identity_providers) or dashboard
+    (Zero Trust → Settings → Authentication → click Google → URL has the UUID).
+    Pretty stable infra — rotates roughly never.
+  EOT
+  type        = string
+  default     = "d51942ea-5d8d-4fbf-8b57-8bfae2ea4ef5"
+}
+
 // ===========================================================================
 // DNS records to recreate in CF zone, mirroring current Route53 state.
 // Audit done 2026-05-25. Drop the 2 stale `wan1/wan2.etherport.net` (apex)
