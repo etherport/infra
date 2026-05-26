@@ -1,27 +1,31 @@
 ---
-# Public approval URL for the AI advisor (M41 P2.5).
+# LEGACY FALLBACK PUBLIC APPROVAL URL — kept for resilience.
 #
-# DO NOT POINT EMAIL LINKS HERE YET. Default email links still go to
-# the Tailscale-only URL. This Ingress exists but is unadvertised
-# until an auth gate is in front (tracked as L13). The HMAC token
-# alone is not a sufficient security boundary for a public URL —
-# anyone with email access can approve.
+# Current default: APPROVAL_BASE_URL=https://approve.etherport.net
+# (CF Access gated, Google SSO) flipped 2026-05-26 in commit cb56187.
+# Email links go to that apex-level URL; this Traefik IngressRoute is
+# no longer the primary path.
 #
-# Sister to approval-ingress.yaml (Tailscale-only). Same backend
-# service. Reasoning for keeping it deployed but unadvertised:
-# - The Traefik IngressRoute is harmless on its own; you'd have to
-#   know the URL pattern AND have a valid HMAC token to do anything.
-#   Both come from access to the email inbox.
-# - When L13 lands (Cloudflare Access or similar zero-trust gate in
-#   front of *.wind.etherport.net for sensitive endpoints), flipping
-#   APPROVAL_BASE_URL to the public URL becomes a 1-line change.
-# - Removing + re-adding the Ingress later is fine but commits to a
-#   "Tailscale forever" model. Keeping it positions for future.
+# Why keep it?
+# - Defense in depth — if the CF Tunnel or CF Access has an outage,
+#   the Tailscale URL + this public-but-HMAC-gated URL still work as
+#   manual approval paths.
+# - Costs ~0 to leave deployed — it's a Traefik IngressRoute, no extra
+#   resource consumption.
+# - Removing requires a manual revert if we ever want to roll back the
+#   CF setup. Keeping it costs nothing.
 #
-# To advertise (after auth gate is in place):
-#   1. Switch APPROVAL_BASE_URL in deployment.yaml.
-#   2. Commit + push.
-#   3. New advisor emails carry the public URL.
+# Security posture (same as before):
+# - HMAC token validates the click came from a recipient of the proposal
+#   email; replay-protected via single-use proposal lookup.
+# - No zero-trust gate in front of THIS path (unlike approve.etherport.net
+#   which has Google SSO via CF Access).
+# - DNS resolves via the *.wind.etherport.net wildcard → AWS ALB →
+#   Traefik IngressRoute matches Host → controller.
+#
+# If you ever want to retire this route entirely: just delete the file
+# + bump kustomization.yaml. The functionality is fully covered by the
+# CF Tunnel path; this is purely defense-in-depth.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
