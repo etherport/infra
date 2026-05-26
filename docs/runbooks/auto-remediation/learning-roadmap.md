@@ -19,7 +19,9 @@ Last updated: 2026-05-25.
 
 Tracked separately from main task list since these are advisor-internal R&D.
 
-### R1 — Structured commit trailers convention
+### R1 — Structured commit trailers convention (guide landed 2026-05-26)
+
+**Status:** Convention documented at [commit-trailers.md](commit-trailers.md). Adoption ongoing — every new fix-commit should include the trailers; back-filling old commits is not worth the effort.
 
 **Problem.** `search_git_log` works on free-text commit messages today. Search quality depends on whether the author happened to mention the alert name. Misses are common.
 
