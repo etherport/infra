@@ -56,7 +56,7 @@ spec:
           - name: AI_PHASE3_CONFIDENCE_THRESHOLD
             value: "0.85"
           - name: APPROVAL_BASE_URL
-            value: "https://remediation-approve.tail48f596.ts.net"
+            value: "https://approve.etherport.net"
           - name: APPROVAL_TTL_HOURS
             value: "24"
           - name: APPROVAL_HMAC_KEY
