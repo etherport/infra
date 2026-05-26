@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: Secret
-metadata:
-    name: cloudflared-tunnel
-    namespace: cloudflared
-type: Opaque
-stringData:
-    token: eyJhIjoiNTU3NmMyMWEwZGRjYWYyMDIxOTIxMDUxNGMyNjVmMTIiLCJ0IjoiZTNjZGQxMTktMjRjZi00OGIxLWIwYWMtZDE5MzVkNDU3NmRiIiwicyI6Im5CRGlWMGk3b3REcjZJeHJXRFB3cWt4TFRTc0pZM20vWGk0bi9rc1RIT0FiZW53PSJ9
