@@ -26,9 +26,16 @@ variable "cf_zone_domain" {
 }
 
 variable "approval_hostname" {
-  description = "FQDN for the AI advisor approval URL — gets a CF Access app + tunnel route."
+  description = <<-EOT
+    FQDN for the AI advisor approval URL — gets a CF Access app + tunnel route.
+
+    Note: kept at apex-level (`approve.etherport.net`) NOT under `wind.` because
+    CF Universal SSL only covers root + one subdomain level for free. Two-deep
+    hostnames (`*.wind.etherport.net`) would require Total TLS or ACM (paid).
+    Apex-level subdomains get free per-hostname certs from Universal SSL.
+  EOT
   type        = string
-  default     = "approve.wind.etherport.net"
+  default     = "approve.etherport.net"
 }
 
 variable "approval_origin_url" {

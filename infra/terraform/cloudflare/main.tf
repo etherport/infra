@@ -135,13 +135,15 @@ resource "cloudflare_tunnel_config" "wind_cluster" {
 }
 
 // ---------------------------------------------------------------------------
-// 5. CNAME for approve.wind.etherport.net → tunnel
-//    Note: name is "approve.wind" because record names are relative to the
-//    zone (etherport.net), so "approve.wind" → approve.wind.etherport.net.
+// 5. CNAME for approve.etherport.net → tunnel
+//    Apex-level subdomain ("approve" relative to etherport.net zone), so the
+//    free Universal SSL cert (covers root + *.etherport.net) handles TLS.
+//    Two-deep hostnames like approve.wind.etherport.net would have needed
+//    paid Total TLS / ACM.
 // ---------------------------------------------------------------------------
 resource "cloudflare_record" "approve_cname" {
   zone_id = var.cloudflare_zone_id
-  name    = "approve.wind"
+  name    = "approve"
   type    = "CNAME"
   value   = "${cloudflare_tunnel.wind_cluster.id}.cfargotunnel.com"
   ttl     = 1    # 1 = auto when proxied
