@@ -246,6 +246,38 @@ data:
     # (the data namespace, not the operator).
     AI_NAMESPACE_DENYLIST = {'kube-system', 'flux-system', 'cert-manager', 'cnpg-system', 'rook-ceph'}
 
+    # ---------------------------------------------------------------------------
+    # Per-action daily execution caps (R4 robustness: prevent runaway loops).
+    # Counted per (alertname, action_type) over the last 24h via Loki audit
+    # search. When the cap is hit, _execute_proposal refuses with a clear
+    # message rather than risk repeated execution of an action that didn't
+    # actually fix the issue. Operator can still manually intervene; the cap
+    # protects against autonomous + approval-loop runaways.
+    AI_ACTION_DAILY_LIMITS = {
+        # Aggressive cleanup actions — generous limit; they're cheap + reversible
+        'delete_completed_jobs': 10,
+        'delete_evicted_pods':   10,
+        # Triggers — should rarely fire more than a couple times a day
+        'trigger_velero_backup_now': 4,
+        'trigger_cnpg_backup_now':   4,
+        'force_cert_renewal':        3,
+        'silence_alert_temporarily': 5,
+        # Restart-class — fewer; if this isn't fixing it, more restarts won't help
+        'rollout_restart':       3,
+        'restart_pods':          5,
+        'scale_deployment_temp': 5,
+        # High-stakes — strictly limited
+        'rollback_deployment':    2,
+        'cnpg_recreate_replica':  1,
+        'expand_pvc':             2,
+        # Tier 3 SSH actions — moderate; cleanup-like
+        'prune_host_logdir':   5,
+        'restart_systemd_unit': 5,
+        'journal_vacuum':      3,
+    }
+    # Default cap for any action type not listed above.
+    AI_ACTION_DAILY_LIMIT_DEFAULT = 5
+
     # Alertmanager base URL — used by silence_alert_temporarily.
     ALERTMANAGER_URL = os.environ.get(
         'ALERTMANAGER_URL',
@@ -1898,22 +1930,83 @@ data:
     def _store_proposal(proposal_id, alert, clean):
         """Stash a proposal for later approval."""
         _gc_pending()
+        # Stash alertname inside the proposal so _execute_proposal can
+        # query it for the frequency-cap check without re-walking the
+        # full alert payload.
+        clean['_alertname_for_cap'] = alert.get('labels', {}).get('alertname', '')
         _pending_proposals[proposal_id] = {
             'ts': datetime.now(timezone.utc),
             'alert': alert,
             'proposal': clean,
         }
 
+    def _count_recent_executions(alertname, action_type, hours=24):
+        """Count successful executions of (alertname, action_type) in the
+        last <hours> via Loki audit search. Used to enforce per-action
+        daily caps and prevent runaway loops. Returns int (0 on any error
+        — fail-open so a Loki outage doesn't block legitimate remediation)."""
+        try:
+            q = (f'{{namespace="auto-remediation"}} | json | tag="ai_advisor" '
+                 f'| alertname="{alertname}" '
+                 f'| action_type="{action_type}" '
+                 f'| event=~"auto_executed|approved_executed"')
+            now_ns = int(datetime.now(timezone.utc).timestamp() * 1_000_000_000)
+            start_ns = now_ns - hours * 3600 * 1_000_000_000
+            params = urllib.parse.urlencode({
+                'query': q,
+                'start': str(start_ns),
+                'end': str(now_ns),
+                'limit': '100',
+                'direction': 'backward',
+            })
+            url = f"{LOKI_URL}/loki/api/v1/query_range?{params}"
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                data = json.loads(resp.read())
+            n = 0
+            for stream in data.get('data', {}).get('result', []):
+                n += len(stream.get('values', []))
+            return n
+        except Exception as e:
+            logger.warning(f"_count_recent_executions Loki query failed for "
+                           f"{alertname}/{action_type}: {e} — failing open (count=0)")
+            return 0
+
+    def _within_frequency_cap(alertname, action_type):
+        """Per-action daily cap check. Returns (allowed_bool, message_str)."""
+        if action_type == 'noop':
+            return True, ''
+        cap = AI_ACTION_DAILY_LIMITS.get(action_type, AI_ACTION_DAILY_LIMIT_DEFAULT)
+        recent = _count_recent_executions(alertname, action_type)
+        if recent >= cap:
+            return False, (
+                f"frequency cap hit: {action_type} for {alertname} executed "
+                f"{recent} times in last 24h (cap={cap}). Repeated execution "
+                f"isn't fixing the underlying issue — operator review needed."
+            )
+        return True, ''
+
     def _execute_proposal(proposal):
         """Run the action specified in a stored proposal. Returns
         (success_bool, message_str). _validate_response has already
-        enforced required-params + denylist; this is the dispatch layer."""
+        enforced required-params + denylist; this is the dispatch layer.
+        Per-action daily-cap check happens before dispatch."""
         action = proposal['proposed_action']
         atype = action.get('type', 'noop')
         params = action.get('params', {}) or {}
+        # Need alertname for the cap check — proposals carry it as a sibling
+        # field set by _advise() before calling _store_proposal.
+        alertname = proposal.get('_alertname_for_cap', '')
 
         if atype == 'noop':
             return True, 'noop (no action taken)'
+
+        # Frequency cap — prevent runaway loops on alerts that keep firing.
+        if alertname:
+            ok_cap, cap_msg = _within_frequency_cap(alertname, atype)
+            if not ok_cap:
+                _audit('frequency_cap_hit', alertname=alertname, action_type=atype,
+                       reason=cap_msg)
+                return False, cap_msg
 
         # Original actions (kept for backwards compat)
         if atype == 'restart_pods':
@@ -2260,6 +2353,9 @@ data:
             and float(clean.get('confidence', 0.0)) >= threshold
         )
         if auto_ok:
+            # Set alertname on the proposal so _execute_proposal's frequency
+            # cap check has it (auto path doesn't go through _store_proposal).
+            clean['_alertname_for_cap'] = alert_name
             ok, msg = _execute_proposal(clean)
             _audit(
                 'auto_executed' if ok else 'auto_execute_failed',
