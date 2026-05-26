@@ -368,6 +368,47 @@ revision use the next free ID per tier. Status legend:
 - **AI advisor spec:** `docs/planning/ai-alert-remediation-2026-05-23.md` — full design for extending the existing M8 auto-remediation webhook with a Claude API path that handles alerts falling through the rule-based dispatch. Three-mode safety model (advisory/propose/auto), hard guardrails enforced in code not prompt, ~$5/mo cost estimate. Phase 1 (advisory-only) is ready to build pending user decisions on Slack-vs-email sink + API key.
 - **Open:** build Phase 1 of the advisor. ETA 1 week of implementation.
 
+### ⏳ M47. UDM Network App modernization — API key + Integration API
+- **Source:** 2026-05-26 audit while working Twilio Talk (#22). Found that `infra/ansible/playbooks/udm-firewall.yml` still uses the legacy username/password + `POST /api/auth/login` cookie auth flow against `/proxy/network/v2/api/...` and `/proxy/network/api/s/...`. UniFi Network Application ≥10.1.84 ships an official **Integration API** at `/proxy/network/integration/v1/...` with API-key auth (`X-API-Key` header), which is more durable + key-rotatable than the cookie dance.
+- **Scope:**
+  - User creates UDM API key in console → Control Plane → Admins → Create API Key. Stored in 1P as `unifi-udm-api` (API Credential category: `credential` = key value). Least-privilege scope; only widen if a playbook requires it.
+  - Add `udm_api_key` to `infra/ansible/inventory/group_vars/all/secrets.sops.yml`.
+  - Update `udm-firewall.yml` (+ any future UDM playbooks) to swap login flow → `headers: { X-API-Key: "{{ udm_api_key }}" }`.
+  - Where Integration API covers the resource, migrate the endpoint (`/proxy/network/integration/v1/sites/{site}/...`); where it doesn't, keep `/proxy/network/v2/api/...` but with the new auth header (still supported).
+  - Add `UNIFI_UDM_API_KEY` GH Actions secret for CI runs.
+- **Effort:** ~half day. Mirror the auth-modernization pattern used elsewhere.
+- **Source:** memory `reference_udm_zone_policy_api.md` for current state.
+
+### ⏳ M48. UNAS Pro — bring under IaC via new per-device API key
+- **Source:** 2026-05-26 user spotted the new "Create API Key" option in the UNAS app. Today UNAS config is fully UI-managed.
+- **Scope:**
+  - User creates API key in UNAS app → Settings → API. Stored in 1P as `unifi-unas-api`.
+  - Add `unas_api_key` to SOPS secrets.
+  - Net-new Ansible playbook `infra/ansible/playbooks/udm-unas.yml`. Start with a low-risk resource (e.g., admin user list or share permission audit), expand as patterns settle.
+  - Use case: durability for whatever's currently UI-only (share configs, retention, accounts, SMB/NFS exports).
+- **Effort:** ~1 day for first playbook; subsequent resources faster.
+- **Note:** UNAS is a recent Ubiquiti product; API docs evolving. Pin Network App version in safety-check if endpoints stabilize per major release.
+
+### ⏳ M49. UniFi Protect — bring under IaC via new per-device API key
+- **Source:** 2026-05-26 (same trigger as M48). New per-device API key feature.
+- **Scope:** mirror M48 but for Protect. 1P item `unifi-protect-api`. Playbook `udm-protect.yml`. Resources to manage as IaC: camera config (resolution, bitrate, motion zones), retention policies, user permissions, NVR-level alert rules. Start with a single resource type.
+- **Effort:** ~1 day initial.
+
+### ⏳ M50. Audit + gap-fill UDM/UNAS/Protect IaC coverage
+- **Source:** 2026-05-26 outflow of #63 work. After M47-M49 land, walk through every UI page on UDM Network app, UNAS, and Protect; enumerate every setting NOT yet IaC-managed.
+- **Scope:**
+  - Output: a `docs/runbooks/udm-iac-coverage.md` table — UI page × management state × (durable / UI-only / needs-IaC).
+  - Triage to critical-for-rebuild vs. nice-to-have.
+  - Land the critical gaps as additional playbook resources.
+- **Effort:** 1-3 days depending on triage scope.
+- **Dependency:** M47 done first.
+
+### ⏳ M51. UniFi Talk IaC — DEFERRED pending public API
+- **Source:** 2026-05-26 research during Twilio Talk #22 work. Investigated whether UniFi Talk 3rd-party SIP provider config can be managed as IaC; conclusion = no public API exists today, and reverse-engineering the `/proxy/talk/...` endpoints is feasible (1-2 days) but undocumented (Ubiquiti can change them silently on any upgrade).
+- **Decision:** wait for Ubiquiti to ship a public Talk API. Track via the open community feature request. Until then, the SIP provider config in [twilio-talk.md](../runbooks/twilio-talk.md) is the source-of-truth (UI-managed, documented).
+- **Trigger to revisit:** Ubiquiti announces Talk API support.
+- **Effort when unblocked:** ~1 day to write the playbook.
+
 ### ⏳ M34. Disable site-wide UniFi auto-upgrade (extends H23)
 - H23 closed because the UDM itself has `mgmt.auto_upgrade: false`, but all 9 switches + 7 APs still have `safe_for_autoupgrade: true` and the site-wide policy upgrades them nightly at 03:00. A future firmware bug would auto-deploy to the fleet before you see it.
 - **Fix:** flip `mgmt.auto_upgrade: false` site-wide (or per-device on non-UDM devices). Manual updates via Network UI on a planned cadence.
