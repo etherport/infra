@@ -88,6 +88,20 @@ automatically).
 - All actions log an email via the same SES SMTP secret as alertmanager (visible via `kubectl logs -n auto-remediation -l app=remediation-controller`).
 - No exponential backoff. Repeated alerts within cooldown are silently dropped, not queued.
 
+### Advisor guardrails (Phase 3) — added 2026-05-26
+
+Two independent layers prevent runaway loops on alerts that keep firing:
+
+1. **Per-action daily frequency cap** (`AI_ACTION_DAILY_LIMITS` in `controller-configmap.yaml`). Capped per `(alertname, action_type)` over the last 24h via Loki audit search. Defaults: 10/day for cleanups (delete_completed_jobs etc.), 3-5/day for triggers + restarts, 1-2/day for high-stakes (rollback_deployment, cnpg_recreate_replica). When hit, the action returns failure with explanation and emits a `frequency_cap_hit` audit event.
+
+2. **Self-tuning Phase 3 thresholds.** When `(alertname, action_type)` has recorded `verification_failed` events in the last 7 days, the auto-execute confidence requirement rises by 0.05 per failure (capped at +0.15 = 3 failures). Plottable in the AI advisor dashboard via the new `dynamic_threshold_applied` audit event.
+
+### Advisor knowledge layer — added 2026-05-26
+
+- **17 alert runbooks** at `docs/runbooks/alerts/*.md` — the advisor's `read_runbook` tool reads these BEFORE proposing actions, short-circuiting first-principles diagnosis for recurring alerts.
+- **`search_git_log` + `read_runbook` tools** (deep-mode only) let the advisor pull institutional knowledge from the repo's commit history + curated runbooks during root-cause investigation.
+- **Commit-trailer convention** (`docs/runbooks/auto-remediation/commit-trailers.md`) — adopt `Fixes-alert:` / `Root-cause:` trailers in fix commits so `search_git_log` queries become precise.
+
 ## To do — concrete follow-ups
 
 1. **Wire the webhook receiver** (above) — until then, all rules are dormant.
