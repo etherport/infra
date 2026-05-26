@@ -31,6 +31,35 @@ rules:
 - apiGroups: ["apps"]
   resources: ["deployments/scale", "statefulsets/scale"]
   verbs: ["get", "update"]
+# ReplicaSets: rollback_deployment action lists RS history to find the
+# previous revision before patching the Deployment spec back.
+- apiGroups: ["apps"]
+  resources: ["replicasets"]
+  verbs: ["get", "list"]
+# Jobs + CronJobs: delete_completed_jobs / prune_completed_jobs scan
+# batch.Jobs and delete the failed/completed ones. suspend_cronjob /
+# resume_cronjob patch the .spec.suspend field on CronJobs.
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["get", "list", "delete"]
+- apiGroups: ["batch"]
+  resources: ["cronjobs"]
+  verbs: ["get", "list", "patch"]
+# PVCs: expand_pvc patches .spec.resources.requests.storage. CNPG replica
+# reseed (recreate_replica) deletes the PVC for the failed replica so the
+# operator re-provisions it from the primary.
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "patch", "delete"]
+# CNPG (postgresql.cnpg.io/v1): cnpg_recreate_replica patches the Cluster
+# CR's status to drop a misbehaving replica; the operator reseeds.
+- apiGroups: ["postgresql.cnpg.io"]
+  resources: ["clusters"]
+  verbs: ["get", "patch", "update"]
+# Velero: trigger_backup creates an ad-hoc Backup CR off an existing Schedule.
+- apiGroups: ["velero.io"]
+  resources: ["backups", "schedules"]
+  verbs: ["get", "list", "create", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
