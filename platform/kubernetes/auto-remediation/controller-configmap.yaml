@@ -1985,6 +1985,61 @@ data:
             )
         return True, ''
 
+    def _count_verification_failures(alertname, action_type, days=7):
+        """Count verification_failed events for (alertname, action_type) in
+        the last <days>. Used by _dynamic_threshold to self-tune Phase 3
+        confidence requirements upward after observed repeat failures.
+        Fail-open: returns 0 on Loki errors so observability outages don't
+        artificially relax the gate."""
+        try:
+            q = (f'{{namespace="auto-remediation"}} | json | tag="ai_advisor" '
+                 f'| alertname="{alertname}" '
+                 f'| action_type="{action_type}" '
+                 f'| event="verification_failed"')
+            now_ns = int(datetime.now(timezone.utc).timestamp() * 1_000_000_000)
+            start_ns = now_ns - days * 86400 * 1_000_000_000
+            params = urllib.parse.urlencode({
+                'query': q,
+                'start': str(start_ns),
+                'end': str(now_ns),
+                'limit': '50',
+                'direction': 'backward',
+            })
+            url = f"{LOKI_URL}/loki/api/v1/query_range?{params}"
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                data = json.loads(resp.read())
+            n = 0
+            for stream in data.get('data', {}).get('result', []):
+                n += len(stream.get('values', []))
+            return n
+        except Exception as e:
+            logger.warning(f"_count_verification_failures query failed for "
+                           f"{alertname}/{action_type}: {e} — failing open (count=0)")
+            return 0
+
+    def _dynamic_threshold(alertname, action_type, base_threshold):
+        """Compute effective Phase 3 confidence threshold, self-tuned by
+        recent verification failures. Each recent failure raises the bar
+        by 0.05 (capped at 3 failures = +0.15). The result never exceeds
+        0.99 (otherwise an alert pattern could become impossible to
+        auto-fix even when an operator wants it). Audit-logs every bump
+        so we can observe + tune in Grafana."""
+        failures = _count_verification_failures(alertname, action_type)
+        if failures == 0:
+            return base_threshold
+        bump = 0.05 * min(failures, 3)
+        effective = min(base_threshold + bump, 0.99)
+        if effective > base_threshold:
+            _audit(
+                'dynamic_threshold_applied',
+                alertname=alertname,
+                action_type=action_type,
+                base_threshold=base_threshold,
+                effective_threshold=round(effective, 2),
+                recent_failures=failures,
+            )
+        return effective
+
     def _execute_proposal(proposal):
         """Run the action specified in a stored proposal. Returns
         (success_bool, message_str). _validate_response has already
@@ -2344,7 +2399,13 @@ data:
         # Per-action threshold override (clean-up actions can fire at 0.70;
         # high-stakes actions can require 0.95). Falls back to the global
         # default for any action type not in the table.
-        threshold = AI_PHASE3_ACTION_THRESHOLDS.get(atype, AI_PHASE3_CONFIDENCE_THRESHOLD)
+        base_threshold = AI_PHASE3_ACTION_THRESHOLDS.get(atype, AI_PHASE3_CONFIDENCE_THRESHOLD)
+        # Self-tuning (R4 second half): if this (alertname, action_type)
+        # has recently failed verification, raise the threshold so the
+        # advisor is forced to be more confident before auto-executing
+        # again. Encodes "if your last 2 tries didn't actually fix it,
+        # don't try a 3rd at the same confidence level."
+        threshold = _dynamic_threshold(alert_name, atype, base_threshold)
         auto_ok = (
             AI_PHASE3_ENABLED
             and labels.get('ai_remediation', '').lower() == 'auto'
