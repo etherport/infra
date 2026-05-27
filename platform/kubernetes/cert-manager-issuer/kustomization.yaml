@@ -7,13 +7,8 @@ kind: Kustomization
 # secret lookup (it reads from cert-manager namespace by default).
 
 resources:
-  # The actual encrypted secret. Created from the .template by the
-  # user — until then this entry is commented out so Flux doesn't fail
-  # reconciliation on the missing file.
-  #
-  # To activate:
-  #   1. cp cloudflare-credentials.sops.yaml.template cloudflare-credentials.sops.yaml
-  #   2. sops cloudflare-credentials.sops.yaml  → replace REPLACE_WITH_CF_TOKEN
-  #   3. Uncomment the line below
-  #   4. git add + commit + push
-  # - cloudflare-credentials.sops.yaml
+  # SOPS-encrypted Secret with the CF API token (Zone:DNS:Edit on
+  # etherport.net). Created from cloudflare-credentials.sops.yaml.template
+  # 2026-05-27 — see docs/runbooks/cert-manager-dns01-cf-migration.md
+  # for the cutover history.
+  - cloudflare-credentials.sops.yaml
