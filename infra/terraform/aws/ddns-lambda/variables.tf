@@ -10,10 +10,17 @@ variable "aws_region" {
   default     = "us-west-2"
 }
 
-variable "hosted_zone_id" {
-  description = "Route53 hosted zone ID for etherport.net"
+variable "cf_zone_id" {
+  description = <<-EOT
+    Cloudflare zone ID for etherport.net. The Lambda makes
+    https://api.cloudflare.com/client/v4/zones/<id>/dns_records calls
+    against this zone using the cf_api_token stored in Secrets Manager.
+
+    Migrated 2026-05-27 from `hosted_zone_id` (Route53). The original
+    Route53 zone was deleted as part of the broader DNS-to-CF migration.
+  EOT
   type        = string
-  default     = "Z03500581XDWV5SKF5PK8"
+  default     = "c45213cbf36fc634b6b75ae9abd49c59"
 }
 
 variable "allowed_hostnames" {

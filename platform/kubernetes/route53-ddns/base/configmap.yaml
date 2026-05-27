@@ -4,10 +4,13 @@ metadata:
   name: route53-ddns-config
   namespace: route53-ddns
 data:
-  # Comma-separated list of Route53 hosted zone IDs
-  hosted_zones: "Z03500581XDWV5SKF5PK8"
+  # Cloudflare zone ID for etherport.net (migrated 2026-05-27 from
+  # Route53 zone Z03500581XDWV5SKF5PK8, which was deleted).
+  cf_zone_id: "c45213cbf36fc634b6b75ae9abd49c59"
 
-  # Comma-separated list of DNS record names (must match order of hosted_zones)
+  # Comma-separated list of DNS record names to keep in sync with
+  # the current public IP. Order doesn't matter — each record is
+  # processed independently against the same target IP.
   record_names: "wind.etherport.net"
 
   # DNS record TTL in seconds

@@ -66,11 +66,14 @@ spec:
                   memory: "128Mi"
                   cpu: "100m"
               env:
-                - name: HOSTED_ZONES
+                # CF migration 2026-05-27: HOSTED_ZONES (Route53 ID) replaced
+                # by CF_ZONE_ID. All AWS_* envs dropped (no aws-cli call).
+                # CF_API_TOKEN comes from the SOPS secret loaded via envFrom.
+                - name: CF_ZONE_ID
                   valueFrom:
                     configMapKeyRef:
                       name: route53-ddns-config
-                      key: hosted_zones
+                      key: cf_zone_id
                 - name: RECORD_NAMES
                   valueFrom:
                     configMapKeyRef:
@@ -106,18 +109,15 @@ spec:
                       name: route53-ddns-config
                       key: ip_wan2_dns
                       optional: true
-                - name: AWS_REGION
-                  value: "us-west-2"
-                - name: AWS_DEFAULT_REGION
-                  value: "us-west-2"
-                - name: AWS_EC2_METADATA_DISABLED
-                  value: "true"
-                - name: AWS_PAGER
-                  value: ""
-                - name: AWS_ACCOUNT_ID
-                  value: "830881980142"
                 - name: PUSHGATEWAY_URL
                   value: "http://pushgateway.monitoring.svc.cluster.local:9091"
               envFrom:
+                # Holds CF_API_TOKEN. Create from
+                # cloudflare-credentials.sops.yaml.template per
+                # docs/runbooks/route53-ddns-cf-migration.md, then
+                # rename to cloudflare-credentials.sops.yaml + add to
+                # kustomization.yaml. The old route53-ddns-credentials
+                # secret (AWS access key) is dropped from kustomization
+                # at the same time.
                 - secretRef:
-                    name: route53-ddns-credentials
+                    name: cloudflare-credentials

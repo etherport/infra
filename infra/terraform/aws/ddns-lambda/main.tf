@@ -72,13 +72,18 @@ resource "aws_lambda_function" "ddns" {
 
   environment {
     variables = {
-      HOSTED_ZONE_ID    = var.hosted_zone_id
+      CF_ZONE_ID        = var.cf_zone_id
       ALLOWED_HOSTNAMES = join(",", var.allowed_hostnames)
       SECRET_ARN        = aws_secretsmanager_secret.api_key.arn
       TTL               = tostring(var.ttl)
     }
   }
 
+  # Note: route53 IAM policy is no longer needed (CF writes go over
+  # HTTPS, not via IAM-authenticated AWS API). Leaving the dep here
+  # for now — drop in a follow-up PR after the CF migration is
+  # verified end-to-end. Keeping the policy attached is harmless;
+  # the Lambda just won't exercise it.
   depends_on = [
     aws_iam_role_policy.route53,
     aws_iam_role_policy.secrets,
