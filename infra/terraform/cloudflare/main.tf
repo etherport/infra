@@ -35,6 +35,15 @@ resource "cloudflare_zone" "etherport" {
   }
 }
 
+// DNSSEC: CF generates the signing keys + a DS record; the DS record
+// must then be published at the REGISTRAR for the parent zone to chain
+// trust. Output `etherport_dnssec_ds` shows the DS values to paste into
+// the registrar console. Until that step, the zone is signed but the
+// chain isn't validated — no security gain or harm.
+resource "cloudflare_zone_dnssec" "etherport" {
+  zone_id = cloudflare_zone.etherport.id
+}
+
 // ---------------------------------------------------------------------------
 // 2. DNS records — A, CNAME, MX, TXT.
 //    Each resource block uses for_each over the corresponding variable map
