@@ -5,7 +5,7 @@ turns the 3 pending Talk tasks into TF apply'd changes:
 
 | Task | Resolution path |
 |---|---|
-| #20 fix 911 emergency address | New `twilio_api_accounts_addresses_v2010` resource + bound to primary DID via `emergency_address_sid` |
+| #20 fix 911 emergency address | New `twilio_api_accounts_addresses` resource + bound to primary DID via `emergency_address_sid` |
 | #21 route or release orphan DID | `orphan_did_action` variable: `release`, `route_voicemail`, or `route_forward` |
 | #22 migrate SIP trunk UDP→TLS+sRTP | `twilio_trunking_trunks_v1.secure = true` + `sips:` scheme in origination URL |
 
@@ -67,19 +67,19 @@ Then import each resource. The exact SIDs come from the discovery step above:
 
 ```bash
 # Primary DID (substitute the PN... SID)
-terraform import twilio_api_accounts_incoming_phone_numbers_v2010.primary <PN-sid>
+terraform import twilio_api_accounts_incoming_phone_numbers.primary <PN-sid>
 
 # Orphan DID (if keeping)
-terraform import 'twilio_api_accounts_incoming_phone_numbers_v2010.orphan[0]' <PN-sid>
+terraform import 'twilio_api_accounts_incoming_phone_numbers.orphan[0]' <PN-sid>
 
 # Existing emergency address if any
-terraform import twilio_api_accounts_addresses_v2010.primary <AD-sid>
+terraform import twilio_api_accounts_addresses.primary <AD-sid>
 
 # SIP trunk
 terraform import twilio_trunking_trunks_v1.talk <TK-sid>
 
 # Origination URLs for the trunk (one per URL)
-terraform import twilio_trunking_origination_urls_v1.talk_primary <TK-sid>/<OU-sid>
+terraform import twilio_trunking_trunks_origination_urls_v1.talk_primary <TK-sid>/<OU-sid>
 ```
 
 Run `terraform plan` after import — should show only the deltas representing your INTENDED changes (e.g., new emergency address, secure=true if trunk was UDP).

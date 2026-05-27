@@ -21,7 +21,7 @@
 // from a number with this address attached, the address is what EMS uses
 // to find the caller.
 // ---------------------------------------------------------------------------
-resource "twilio_api_accounts_addresses_v2010" "primary" {
+resource "twilio_api_accounts_addresses" "primary" {
   friendly_name    = var.emergency_address.friendly_name
   customer_name    = var.emergency_address.customer_name
   street           = var.emergency_address.street
@@ -35,14 +35,15 @@ resource "twilio_api_accounts_addresses_v2010" "primary" {
 
 // ---------------------------------------------------------------------------
 // Primary DID — attach the emergency address.
-// To IMPORT: terraform import twilio_api_accounts_incoming_phone_numbers_v2010.primary <PN-sid>
+// To IMPORT: terraform import twilio_api_accounts_incoming_phone_numbers.primary <PN-sid>
 //   (find the SID in console → Phone Numbers → Active Numbers → click number → "Number SID")
 // ---------------------------------------------------------------------------
-resource "twilio_api_accounts_incoming_phone_numbers_v2010" "primary" {
+resource "twilio_api_accounts_incoming_phone_numbers" "primary" {
   phone_number          = var.primary_did
-  address_sid           = twilio_api_accounts_addresses_v2010.primary.sid
+  // address_sid (regulatory billing address) deliberately unmanaged —
+  // US DIDs don't need it; only emergency_address_sid matters for E911.
   emergency_status      = "Active"
-  emergency_address_sid = twilio_api_accounts_addresses_v2010.primary.sid
+  emergency_address_sid = twilio_api_accounts_addresses.primary.sid
 
   // After import, these fields will be set to current values — drop
   // any here that you don't want TF to manage / will manually tune
@@ -71,7 +72,7 @@ resource "twilio_api_accounts_incoming_phone_numbers_v2010" "primary" {
 // "release" path: don't define the resource at all → no TF management.
 // "route_voicemail" / "route_forward": import + manage voice_url.
 
-resource "twilio_api_accounts_incoming_phone_numbers_v2010" "orphan" {
+resource "twilio_api_accounts_incoming_phone_numbers" "orphan" {
   count = var.orphan_did_action == "release" ? 0 : 1
 
   // SID-only attach (no phone_number on import lookup)
@@ -97,14 +98,19 @@ resource "twilio_api_accounts_incoming_phone_numbers_v2010" "orphan" {
 // Pre-migration: UDP + RTP. Post-migration: TLS + sRTP.
 resource "twilio_trunking_trunks_v1" "talk" {
   friendly_name = var.sip_trunk_friendly_name
-  secure        = true // TLS signaling + sRTP media
+  // secure=true forces TLS+sRTP. Currently false (matches reality);
+  // flip to true after the SIP endpoint (sip_origination_url) is
+  // TLS-ready. See #22.
+  secure = var.sip_trunk_secure
 }
 
-resource "twilio_trunking_origination_urls_v1" "talk_primary" {
+resource "twilio_trunking_trunks_origination_urls_v1" "talk_primary" {
   trunk_sid    = twilio_trunking_trunks_v1.talk.sid
-  friendly_name = "primary (sips/tls)"
-  sip_url      = var.sip_origination_url   // expect "sips:host:5061;transport=tls"
-  weight       = 10
-  priority     = 1
-  enabled      = true
+  // friendly_name kept null in Twilio for legacy reasons; ignore_changes
+  // accommodates that without forcing a diff on every plan.
+  friendly_name = var.sip_origination_friendly_name
+  sip_url       = var.sip_origination_url   // currently sip:wind.gmsmeg.net:6767 (broken — see #22)
+  weight        = var.sip_origination_weight
+  priority      = var.sip_origination_priority
+  enabled       = true
 }

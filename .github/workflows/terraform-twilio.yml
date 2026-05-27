@@ -1,0 +1,94 @@
+name: Twilio Terraform
+
+on:
+  pull_request:
+    paths:
+      - 'infra/terraform/twilio/**'
+      - '.github/workflows/terraform-twilio.yml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        default: plan
+        options:
+          - plan
+          - apply
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  WORKING_DIR: infra/terraform/twilio
+
+jobs:
+  terraform:
+    name: Terraform ${{ github.event.inputs.action || 'plan' }}
+    runs-on: [self-hosted, lifecycle]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials (for S3 backend)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: us-west-2
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.14.3
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          AWS_PROFILE: ""
+        run: |
+          terraform init \
+            -backend-config="profile=" \
+            -reconfigure
+
+      - name: Terraform Plan
+        if: github.event.inputs.action != 'apply'
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          # Twilio provider reads these for auth. API Key (SK...) preferred
+          # over master Auth Token — rotatable + scoped per CF best practice.
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_API_KEY: ${{ secrets.TWILIO_API_KEY }}
+          TWILIO_API_SECRET: ${{ secrets.TWILIO_API_SECRET }}
+          AWS_PROFILE: ""
+        run: terraform plan -no-color
+
+      - name: Terraform Apply
+        if: github.event.inputs.action == 'apply'
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_API_KEY: ${{ secrets.TWILIO_API_KEY }}
+          TWILIO_API_SECRET: ${{ secrets.TWILIO_API_SECRET }}
+          AWS_PROFILE: ""
+        run: terraform apply -auto-approve -no-color
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Twilio Terraform run"
+            echo
+            echo "- Action: \`${{ github.event.inputs.action || 'plan (PR)' }}\`"
+            echo
+            echo "Module manages:"
+            echo "- Primary DID +19094142433 + emergency address (Cabin, Skyforest CA)"
+            echo "- Windtryst SIP trunk + origination URL"
+            echo
+            echo "Required GH secrets:"
+            echo "- TWILIO_ACCOUNT_SID (AC...)"
+            echo "- TWILIO_API_KEY (SK...)"
+            echo "- TWILIO_API_SECRET (the secret)"
+          } >> "$GITHUB_STEP_SUMMARY"
