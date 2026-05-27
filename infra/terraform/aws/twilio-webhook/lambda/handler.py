@@ -132,9 +132,14 @@ def _verify_signature(event: dict, params: dict) -> bool:
         if hmac.compare_digest(expected, sig):
             return True
 
+    safe_headers = {
+        k: v for k, v in headers.items()
+        if "auth" not in k.lower() and "cookie" not in k.lower()
+    }
     _log.error(
-        "signature mismatch — tried %d url candidates: %s | sig_recv=%s",
-        len(candidates), candidates, sig,
+        "signature mismatch — sig_recv=%s | urls_tried=%s | "
+        "raw_path=%s raw_qs=%s domain=%s | headers=%s",
+        sig, candidates, raw_path, raw_qs, domain, json.dumps(safe_headers),
     )
     return False
 
@@ -152,6 +157,13 @@ def lambda_handler(event, context):
     }
     _log.info("Twilio webhook: %s", json.dumps(safe_params))
 
+    # Whisper path: Twilio fetches /whisper?did=<E164> when the callee
+    # picks up, BEFORE bridging the caller. Skip signature verification
+    # for this URL — Twilio doesn't include the original request params,
+    # and the URL itself is constructed by us (not user-supplied).
+    if (event.get("rawPath") or "").rstrip("/").endswith("whisper"):
+        return _handle_whisper(event)
+
     if not _verify_signature(event, params):
         _log.error("signature verification failed")
         return {"statusCode": 403, "body": "forbidden"}
@@ -160,23 +172,53 @@ def lambda_handler(event, context):
     if params.get("MessageSid"):
         return _handle_sms(params)
     if params.get("CallSid"):
-        return _handle_voice(params)
+        return _handle_voice(event, params)
 
     _log.warning("unknown webhook type — neither MessageSid nor CallSid present")
     return _twiml("<Response/>")
 
 
-def _handle_voice(params: dict) -> dict:
+# Friendly labels for the whisper announcement. Numbers map 1:1 with
+# forward_dids in infra/terraform/twilio/variables.tf.
+_DID_LABELS = {
+    "+19094308285": "Campaign mobile",
+    "+447545911500": "U K mobile",        # Polly reads "UK" as "uck" — space it
+    "+14246257334": "U S personal",
+    "+19094142433": "Cabin primary",
+}
+
+
+def _handle_voice(event: dict, params: dict) -> dict:
     forward = os.environ["FORWARD_NUMBER"]
-    # callerId on the outbound leg = the DID the caller dialed. Lets the
-    # user's phone show "Campaign" / "UK" / "US-personal" via the contact
-    # labels they have saved for each Twilio DID, so they know which line
-    # was called without losing time on a TTS announcement.
-    caller_id = params.get("To", forward)
+    to_num = params.get("To", "")
+    # Whisper preserves caller ID (callee sees the real caller) AND
+    # announces which DID was called before bridging. Build the whisper
+    # URL using the current request's host so it works in any env.
+    req_ctx = event.get("requestContext", {})
+    domain = req_ctx.get("domainName", "")
+    whisper_url = f"https://{domain}/whisper?did={urllib.parse.quote(to_num)}"
+
     twiml = (
         '<?xml version="1.0" encoding="UTF-8"?>'
-        f"<Response><Dial answerOnBridge=\"true\" callerId=\"{html.escape(caller_id)}\">"
-        f"{html.escape(forward)}</Dial></Response>"
+        '<Response>'
+        '<Dial answerOnBridge="true">'
+        f'<Number url="{html.escape(whisper_url)}">{html.escape(forward)}</Number>'
+        '</Dial></Response>'
+    )
+    return _twiml(twiml)
+
+
+def _handle_whisper(event: dict) -> dict:
+    # Twilio fetches the whisper URL with query params; we passed `did=<E164>`.
+    raw_qs = event.get("rawQueryString", "") or ""
+    qs = dict(urllib.parse.parse_qsl(raw_qs))
+    did = qs.get("did", "")
+    label = _DID_LABELS.get(did, did or "unknown line")
+    twiml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<Response>'
+        f'<Say voice="Polly.Joanna-Neural">Call forwarded from {html.escape(label)}.</Say>'
+        '</Response>'
     )
     return _twiml(twiml)
 
