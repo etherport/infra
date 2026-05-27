@@ -64,3 +64,6 @@ platform/kubernetes/route53-ddns/base/secret.yaml
 **/wg1.conf
 **/wg-private-*.key
 .vscode/
+
+# Lambda build artifacts — TF rebuilds these from handler.py on apply
+**/lambda/handler.zip
