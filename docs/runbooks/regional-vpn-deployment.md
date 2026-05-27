@@ -196,21 +196,34 @@ terraform output vpn_public_ip
 terraform output homelab_peer_config  # Add to K8s deployment
 terraform output client_config        # Your device config
 
-# 5. Update DNS manually
-aws route53 change-resource-record-sets \
-  --hosted-zone-id Z03500581XDWV5SKF5PK8 \
-  --change-batch '{
-    "Changes": [{
-      "Action": "UPSERT",
-      "ResourceRecordSet": {
-        "Name": "vpn-travel.etherport.net",
-        "Type": "A",
-        "TTL": 300,
-        "ResourceRecords": [{"Value": "<VPN_IP>"}]
-      }
-    }]
-  }'
+# 5. Update DNS manually (Cloudflare — migrated from Route53 2026-05-27)
+CF_TOKEN=$(op item get cloudflare-tf-token --field credential --reveal)
+CF_ZONE=c45213cbf36fc634b6b75ae9abd49c59  # etherport.net
+VPN_IP=<the EIP from terraform output vpn_public_ip>
+NAME=vpn-travel.etherport.net
+
+RID=$(curl -fsS -H "Authorization: Bearer $CF_TOKEN" \
+  "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/dns_records?type=A&name=$NAME" \
+  | jq -r '.result[0].id // empty')
+
+BODY=$(jq -n --arg name "$NAME" --arg ip "$VPN_IP" \
+  '{type:"A", name:$name, content:$ip, ttl:300, proxied:false, comment:"Managed by terraform-regional-vpn workflow"}')
+
+if [ -n "$RID" ]; then
+  curl -fsS -X PUT -H "Authorization: Bearer $CF_TOKEN" \
+    -H "Content-Type: application/json" \
+    "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/dns_records/$RID" \
+    -d "$BODY" | jq -e '.success'
+else
+  curl -fsS -X POST -H "Authorization: Bearer $CF_TOKEN" \
+    -H "Content-Type: application/json" \
+    "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/dns_records" \
+    -d "$BODY" | jq -e '.success'
+fi
 ```
+
+This is the same snippet baked into `.github/workflows/terraform-regional-vpn.yml`
+— normally you don't run it manually; the workflow does it post-apply.
 
 ### Destroy
 

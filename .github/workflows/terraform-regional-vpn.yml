@@ -183,23 +183,35 @@ jobs:
             -var="vpc_cidr=${{ github.event.inputs.vpc_cidr }}" \
             -var="wg0_tunnel_ip=${{ github.event.inputs.tunnel_ip }}"
 
-      # Update DNS after apply
+      # Update DNS after apply — UPSERT vpn-travel.etherport.net on
+      # the Cloudflare zone. Migrated 2026-05-27 from Route53 (zone
+      # deleted). CLOUDFLARE_API_TOKEN must have Zone:DNS:Edit on
+      # etherport.net; CLOUDFLARE_ZONE_ID is the etherport.net zone.
       - name: Update vpn-travel DNS
         if: github.event.inputs.action == 'apply' && steps.apply.outputs.vpn_ip != ''
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ZONE: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          VPN_IP: ${{ steps.apply.outputs.vpn_ip }}
         run: |
-          aws route53 change-resource-record-sets \
-            --hosted-zone-id Z03500581XDWV5SKF5PK8 \
-            --change-batch '{
-              "Changes": [{
-                "Action": "UPSERT",
-                "ResourceRecordSet": {
-                  "Name": "vpn-travel.etherport.net",
-                  "Type": "A",
-                  "TTL": 300,
-                  "ResourceRecords": [{"Value": "${{ steps.apply.outputs.vpn_ip }}"}]
-                }
-              }]
-            }'
+          set -euo pipefail
+          NAME="vpn-travel.etherport.net"
+          # Look up existing record id (if any)
+          RID=$(curl -fsS -H "Authorization: Bearer $CF_TOKEN" \
+            "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/dns_records?type=A&name=$NAME" \
+            | jq -r '.result[0].id // empty')
+          BODY=$(jq -n --arg name "$NAME" --arg ip "$VPN_IP" \
+            '{type:"A", name:$name, content:$ip, ttl:300, proxied:false, comment:"Managed by terraform-regional-vpn workflow"}')
+          if [ -n "$RID" ]; then
+            curl -fsS -X PUT -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/dns_records/$RID" \
+              -d "$BODY" | jq -e '.success'
+          else
+            curl -fsS -X POST -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/dns_records" \
+              -d "$BODY" | jq -e '.success'
+          fi
+          echo "vpn-travel.etherport.net → $VPN_IP"
 
       # Update regional peers config after apply
       - name: Update Regional Peers Config

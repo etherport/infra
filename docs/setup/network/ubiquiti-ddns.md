@@ -128,14 +128,21 @@ dig wind.etherport.net +short
 aws logs tail /aws/lambda/ddns-updater --follow --profile homelab
 ```
 
-### Check Route53 via AWS CLI
+### Check the record value via Cloudflare API
+
+After the 2026-05-27 Route53 → CF migration the wan1/wan2 records
+live in CF (Route53 zone deleted). To inspect via API:
 
 ```bash
-aws route53 list-resource-record-sets \
-  --hosted-zone-id Z03500581XDWV5SKF5PK8 \
-  --query "ResourceRecordSets[?contains(Name, 'wan')]" \
-  --profile homelab
+CF_TOKEN=$(op item get cloudflare-tf-token --field credential --reveal)
+CF_ZONE=c45213cbf36fc634b6b75ae9abd49c59  # etherport.net
+curl -s -H "Authorization: Bearer $CF_TOKEN" \
+  "https://api.cloudflare.com/client/v4/zones/$CF_ZONE/dns_records?type=A&name=wan1.wind.etherport.net" \
+  | jq '.result[0].content, .result[0].modified_on'
 ```
+
+Or just `dig +short wan1.wind.etherport.net @1.1.1.1` for a public
+view.
 
 ## Troubleshooting
 
