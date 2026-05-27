@@ -127,6 +127,18 @@ resource "cloudflare_tunnel_config" "wind_cluster" {
         connect_timeout = "10s"
       }
     }
+    // wiki-js — first migration off the AWS ALB / Traefik public path
+    // (2026-05-26). Traefik IngressRoute at wiki.wind.etherport.net is
+    // retained as split-horizon fallback for VPN/local access; this CF
+    // path is the primary external route, gated by CF Access (Google SSO).
+    ingress_rule {
+      hostname = "wiki.etherport.net"
+      service  = "http://wiki-js.wikijs.svc.cluster.local:3000"
+      origin_request {
+        no_tls_verify   = false
+        connect_timeout = "10s"
+      }
+    }
     // Catch-all required by cloudflared
     ingress_rule {
       service = "http_status:404"
@@ -173,6 +185,55 @@ resource "cloudflare_zero_trust_access_application" "approve" {
 resource "cloudflare_zero_trust_access_policy" "approve_allow" {
   account_id     = var.cloudflare_account_id
   application_id = cloudflare_zero_trust_access_application.approve.id
+  name           = "Allow listed emails"
+  precedence     = 1
+  decision       = "allow"
+
+  include {
+    email = var.allowed_emails
+  }
+}
+
+// ---------------------------------------------------------------------------
+// wiki-js — first ALB → CF Tunnel migration.
+//
+// Pattern (mirror of approve.* above):
+//   - CNAME wiki.etherport.net → tunnel (proxied for CF Access interception)
+//   - Access Application with self_hosted type + Google IdP
+//   - Access Policy allowing listed emails
+//
+// The matching ingress_rule lives in cloudflare_tunnel_config.wind_cluster
+// above. Origin is the in-cluster wiki-js Service (ClusterIP).
+//
+// Split-horizon fallback: the existing Traefik IngressRoute at
+// wiki.wind.etherport.net stays untouched. VPN/local clients resolve
+// wiki.etherport.net to the internal Traefik LB via Technitium so the
+// same URL works both on + off CF.
+// ---------------------------------------------------------------------------
+resource "cloudflare_record" "wiki_cname" {
+  zone_id = var.cloudflare_zone_id
+  name    = "wiki"
+  type    = "CNAME"
+  value   = "${cloudflare_tunnel.wind_cluster.id}.cfargotunnel.com"
+  ttl     = 1
+  proxied = true
+  comment = "CF tunnel for wiki-js (CF Access in front)"
+}
+
+resource "cloudflare_zero_trust_access_application" "wiki" {
+  account_id                = var.cloudflare_account_id
+  name                      = "Wiki.js"
+  domain                    = "wiki.etherport.net"
+  type                      = "self_hosted"
+  session_duration          = "24h"
+  app_launcher_visible      = true
+  auto_redirect_to_identity = true
+  allowed_idps              = [var.google_idp_id]
+}
+
+resource "cloudflare_zero_trust_access_policy" "wiki_allow" {
+  account_id     = var.cloudflare_account_id
+  application_id = cloudflare_zero_trust_access_application.wiki.id
   name           = "Allow listed emails"
   precedence     = 1
   decision       = "allow"
