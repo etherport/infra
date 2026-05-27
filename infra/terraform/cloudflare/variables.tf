@@ -54,6 +54,63 @@ variable "allowed_emails" {
   default     = ["grahamsm@gmail.com"]
 }
 
+variable "cf_tunnel_services" {
+  description = <<-EOT
+    Services exposed publicly via CF Tunnel + CF Access (Google SSO).
+
+    Key: subdomain-relative-to-zone (e.g., "kopia.wind" becomes
+         kopia.wind.etherport.net). Use the .wind. namespace for
+         site-specific services. ACM on etherport.net + Total TLS
+         provide free per-hostname certs for 2-level subdomains.
+
+    Value: cluster_service_url = http://<svc>.<ns>.svc.cluster.local:<port>
+           access_name        = friendly name shown in CF Access UI
+
+    To add a service:
+      1. Add an entry here
+      2. terraform apply (creates CNAME + tunnel ingress + Access app + policy)
+      3. (optional) Add Technitium A record for split-horizon LAN access
+      4. (optional) Tighten origin's auth model — e.g., for Plex add the
+         cloudflared pod CIDR (10.42.0.0/16) to "LAN Networks" so it
+         treats tunnel traffic as local + skips its own login
+
+    Legacy fallback: existing Traefik IngressRoutes at the same hostname
+    keep functioning via the *.wind.etherport.net wildcard → ALB path.
+    CF explicit records take precedence over the wildcard for external
+    resolution.
+  EOT
+  type = map(object({
+    cluster_service_url = string
+    access_name         = string
+  }))
+  default = {
+    "kopia.wind" = {
+      cluster_service_url = "http://kopia.backups.svc.cluster.local:80"
+      access_name         = "Kopia"
+    }
+    "technitium.wind" = {
+      cluster_service_url = "http://technitium.dns.svc.cluster.local:5380"
+      access_name         = "Technitium DNS"
+    }
+    "grafana.wind" = {
+      cluster_service_url = "http://monitoring-grafana.monitoring.svc.cluster.local:80"
+      access_name         = "Grafana"
+    }
+    "plex.wind" = {
+      cluster_service_url = "http://plex.plex.svc.cluster.local:32400"
+      access_name         = "Plex"
+    }
+    "ollama.wind" = {
+      cluster_service_url = "http://ollama.ollama.svc.cluster.local:11434"
+      access_name         = "Ollama API"
+    }
+    "chat.wind" = {
+      cluster_service_url = "http://open-webui.ollama.svc.cluster.local:8080"
+      access_name         = "Chat (Open-WebUI)"
+    }
+  }
+}
+
 variable "google_idp_id" {
   description = <<-EOT
     UUID of the Google SSO Identity Provider in the CF Zero Trust org. Required
