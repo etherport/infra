@@ -220,14 +220,15 @@ variable "dns_records_cname" {
       comment = "ACME validation — apex etherport.net cert (cert-manager renewals)"
     }
 
-    // ---- ALB aliases (Route53 had these as ALIAS; CF uses CNAME — same target) ----
-    "ha.wind" = {
-      value   = "dualstack.private-infra-alb-687735217.us-west-2.elb.amazonaws.com"
-      comment = "HA UI — currently via ALB; migrate to CF Tunnel to drop ALB cost"
-    }
+    // ---- ALB aliases — last remaining users of the legacy public path ----
+    // ha.wind moved to CF Tunnel 2026-05-27 (see alexa-service-token.tf).
+    // *.wind wildcard still serves: operator UIs (pdu1/2, ups1/2, prox-ipmi,
+    //  proxmox, traefik-dashboard) which intentionally stay behind the ALB +
+    // Traefik path (no public CF-Access exposure). Decom the ALB only after
+    // those move to Tailscale-only or get their own CF Access policies.
     "*.wind" = {
       value   = "dualstack.private-infra-alb-687735217.us-west-2.elb.amazonaws.com"
-      comment = "Wildcard for *.wind.etherport.net — currently via ALB"
+      comment = "Wildcard for *.wind.etherport.net — legacy ALB path; serves operator UIs"
     }
   }
 }

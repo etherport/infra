@@ -143,6 +143,17 @@ resource "cloudflare_tunnel_config" "wind_cluster" {
         connect_timeout = "10s"
       }
     }
+    // Home Assistant — needs dual-policy Access app (service token for
+    // Alexa Lambda + SSO for browser users). Inline rather than in the
+    // map (which generates single-policy apps). See alexa-service-token.tf.
+    ingress_rule {
+      hostname = "ha.wind.etherport.net"
+      service  = "http://home-assistant.home-automation.svc.cluster.local:8123"
+      origin_request {
+        no_tls_verify   = false
+        connect_timeout = "10s"
+      }
+    }
     // All other CF-Tunnel-exposed services come from the
     // cf_tunnel_services map (variables.tf). Add new services there;
     // this dynamic block generates the matching ingress rule.

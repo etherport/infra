@@ -57,9 +57,11 @@ resource "aws_lambda_function" "homeassistant_alexa" {
 
   environment {
     variables = {
-      BASE_URL    = var.ha_base_url
-      SECRET_NAME = aws_secretsmanager_secret.ha_token.name
-      DEBUG       = var.debug ? "True" : ""
+      BASE_URL                = var.ha_base_url
+      SECRET_NAME             = aws_secretsmanager_secret.ha_token.name
+      DEBUG                   = var.debug ? "True" : ""
+      CF_ACCESS_CLIENT_ID     = var.cf_access_client_id
+      CF_ACCESS_CLIENT_SECRET = var.cf_access_client_secret
     }
   }
 

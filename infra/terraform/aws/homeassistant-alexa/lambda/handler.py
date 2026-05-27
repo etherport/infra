@@ -75,13 +75,25 @@ def lambda_handler(event, context):
         timeout=urllib3.Timeout(connect=2.0, read=10.0)
     )
 
+    # CF Access Service Token headers — required when ha.wind.etherport.net
+    # is fronted by CF Access (since 2026-05-27). Lambda can't follow SSO
+    # redirects, so we authenticate as a non-identity service token. Env
+    # vars are optional: if unset, requests skip the headers (works only
+    # if HA isn't behind CF Access — e.g., the ALB fallback path).
+    headers = {
+        'Authorization': 'Bearer {}'.format(token),
+        'Content-Type': 'application/json',
+    }
+    cf_id = os.environ.get('CF_ACCESS_CLIENT_ID')
+    cf_secret = os.environ.get('CF_ACCESS_CLIENT_SECRET')
+    if cf_id and cf_secret:
+        headers['CF-Access-Client-Id'] = cf_id
+        headers['CF-Access-Client-Secret'] = cf_secret
+
     response = http.request(
         'POST',
         '{}/api/alexa/smart_home'.format(base_url),
-        headers={
-            'Authorization': 'Bearer {}'.format(token),
-            'Content-Type': 'application/json',
-        },
+        headers=headers,
         body=json.dumps(event).encode('utf-8'),
     )
     if response.status >= 400:
