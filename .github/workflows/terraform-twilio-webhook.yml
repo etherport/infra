@@ -1,0 +1,88 @@
+name: Twilio Webhook Lambda
+
+on:
+  pull_request:
+    paths:
+      - 'infra/terraform/aws/twilio-webhook/**'
+      - '.github/workflows/terraform-twilio-webhook.yml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        default: plan
+        options:
+          - plan
+          - apply
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  WORKING_DIR: infra/terraform/aws/twilio-webhook
+
+jobs:
+  terraform:
+    name: Terraform ${{ github.event.inputs.action || 'plan' }}
+    runs-on: [self-hosted, lifecycle]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: us-west-2
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.14.3
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          AWS_PROFILE: ""
+        run: |
+          terraform init \
+            -backend-config="profile=" \
+            -reconfigure
+
+      - name: Terraform Plan
+        if: github.event.inputs.action != 'apply'
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_VAR_twilio_auth_token: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          AWS_PROFILE: ""
+        run: terraform plan -var "aws_profile=" -no-color
+
+      - name: Terraform Apply
+        if: github.event.inputs.action == 'apply'
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          TF_VAR_twilio_auth_token: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          AWS_PROFILE: ""
+        run: terraform apply -auto-approve -var "aws_profile=" -no-color
+
+      - name: Summary
+        if: always()
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          {
+            echo "## Twilio Webhook Lambda — Terraform run"
+            echo
+            echo "- Action: \`${{ github.event.inputs.action || 'plan (PR)' }}\`"
+            echo
+            if [ "${{ github.event.inputs.action }}" = "apply" ]; then
+              echo "Next steps:"
+              echo "1. Copy function_url: \`terraform output -raw function_url\`"
+              echo "2. Update the 3 Twilio DIDs in infra/terraform/twilio/ to use that URL as voice_url + sms_url."
+              echo "3. Apply the Twilio TF module."
+              echo "4. Verify: call/text a migrated DID; check CloudWatch logs for /aws/lambda/twilio-webhook."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
