@@ -93,14 +93,19 @@ def _verify_signature(event: dict, params: dict) -> bool:
     concat(sorted(k+v for k,v in params)))). full_url MUST include the
     query string (with leading "?") if one was present on the request,
     or signatures mismatch for any region where Twilio's edge appends
-    routing params (observed on UK +44 DIDs vs US DIDs).
+    routing params.
 
-    If TWILIO_AUTH_TOKEN is unset, skip verification (return True) —
-    relies on URL unguessability.
+    Twilio auth tokens are REGION-SCOPED. A number provisioned in IE1
+    (Dublin) is signed with the IE1 auth token, not US1's. Accept a
+    comma-separated TWILIO_AUTH_TOKEN env var — we'll try each against
+    the received signature and accept if any region's token validates.
+    If unset, skip verification (return True) — relies on URL
+    unguessability.
     """
-    token = os.environ.get("TWILIO_AUTH_TOKEN", "")
-    if not token:
+    token_csv = os.environ.get("TWILIO_AUTH_TOKEN", "")
+    if not token_csv:
         return True
+    tokens = [t.strip() for t in token_csv.split(",") if t.strip()]
 
     headers = event.get("headers", {}) or {}
     sig = headers.get("x-twilio-signature") or headers.get("X-Twilio-Signature")
@@ -126,22 +131,24 @@ def _verify_signature(event: dict, params: dict) -> bool:
 
     suffix = "".join(f"{k}{v}" for k, v in sorted(params.items()))
     for url in candidates:
-        expected = base64.b64encode(
-            hmac.new(token.encode(), (url + suffix).encode(), hashlib.sha1).digest()
-        ).decode()
-        if hmac.compare_digest(expected, sig):
-            return True
+        for token in tokens:
+            expected = base64.b64encode(
+                hmac.new(token.encode(), (url + suffix).encode(), hashlib.sha1).digest()
+            ).decode()
+            if hmac.compare_digest(expected, sig):
+                return True
 
     safe_headers = {
         k: v for k, v in headers.items()
         if "auth" not in k.lower() and "cookie" not in k.lower()
     }
     raw_body = event.get("_rawBody", "")
+    token_prefixes = [f"{t[:4]}..." for t in tokens]
     _log.error(
-        "signature mismatch — sig_recv=%s | urls_tried=%s | "
+        "signature mismatch — sig_recv=%s | tokens_tried=%s | urls_tried=%s | "
         "raw_path=%s raw_qs=%s domain=%s | "
         "raw_body=%r | param_keys=%s | headers=%s",
-        sig, candidates, raw_path, raw_qs, domain,
+        sig, token_prefixes, candidates, raw_path, raw_qs, domain,
         raw_body, sorted(params.keys()), json.dumps(safe_headers),
     )
     return False
