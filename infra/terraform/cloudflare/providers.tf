@@ -34,7 +34,20 @@ terraform {
 #   CLOUDFLARE_API_TOKEN  = <the token>
 #   CLOUDFLARE_ACCOUNT_ID = <hex account id from dashboard URL>
 #   CLOUDFLARE_ZONE_ID    = <hex zone id from CF zone overview → API section>
-provider "cloudflare" {}
+provider "cloudflare" {
+  # CF API rate limit is 1200 req / 5 min per token. v4 provider does
+  # many parallel reads during refresh — across DNS + Access + tunnel
+  # resources this trips the limit, then CF returns Authentication
+  # error (10000) which compounds the cooldown.
+  #
+  # Stretching retries + backoff so a transient 429/auth-throttle slips
+  # past the window instead of failing the whole plan. Combined with
+  # workflow parallelism=2 this keeps applies stable. Durable fix is
+  # to split the module by API surface — tracked as task #81.
+  retries     = 8   # default 3
+  min_backoff = 4   # default 1 (seconds)
+  max_backoff = 120 # default 30
+}
 
 # AWS provider — used for Route53 to add the NS delegation record for
 # wind.etherport.net under the etherport.net zone. Uses the existing
