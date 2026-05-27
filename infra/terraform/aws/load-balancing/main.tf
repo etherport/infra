@@ -62,7 +62,10 @@ resource "aws_lb" "main" {
   }
 
   lifecycle {
-    prevent_destroy = true
+    # Decom 2026-05-27: all *.wind hostnames moved to either CF Tunnel
+    # (public+SSO) or VPN-only (operator UIs via Technitium → Traefik).
+    # ALB no longer serves any live traffic. Flag flipped to enable destroy.
+    prevent_destroy = false
   }
 }
 
