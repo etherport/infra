@@ -61,7 +61,7 @@ resources:
   # Monitoring
   - ../../platform/kubernetes/monitoring
   # Utilities
-  - ../../platform/kubernetes/route53-ddns/base
+  - ../../platform/kubernetes/cloudflare-ddns/base
   # Backups - S3 sync shares (all managed by Flux)
   - ../../platform/kubernetes/backups/aws-s3/shares/archive
   - ../../platform/kubernetes/backups/aws-s3/shares/backups

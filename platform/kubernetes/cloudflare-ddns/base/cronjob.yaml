@@ -1,8 +1,8 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: route53-ddns
-  namespace: route53-ddns
+  name: cloudflare-ddns
+  namespace: cloudflare-ddns
 spec:
   # Un-suspended 2026-05-27 after script + manifests migrated to CF
   # API (commit acfc978 onward). The image still bundles aws-cli but
@@ -22,11 +22,11 @@ spec:
       template:
         metadata:
           labels:
-            app: route53-ddns
+            app: cloudflare-ddns
             component: ddns-updater
             version: v1.0.1
         spec:
-          serviceAccountName: route53-ddns
+          serviceAccountName: cloudflare-ddns
           restartPolicy: Never
           securityContext:
             runAsNonRoot: true
@@ -37,14 +37,14 @@ spec:
               type: RuntimeDefault
           containers:
             - name: ddns
-              image: ghcr.io/sparked-diamond/route53-ddns:main
+              image: ghcr.io/sparked-diamond/cloudflare-ddns:main
               imagePullPolicy: Always
               command: ["/bin/bash", "-lc"]
               args:
                 - |
                   set -euo pipefail
                   # Run DDNS update (auth validation happens in Route53 API calls)
-                  /scripts/update-route53.sh
+                  /scripts/update-cf-dns.sh
               securityContext:
                 allowPrivilegeEscalation: false
                 capabilities:
@@ -65,41 +65,41 @@ spec:
                 - name: CF_ZONE_ID
                   valueFrom:
                     configMapKeyRef:
-                      name: route53-ddns-config
+                      name: cloudflare-ddns-config
                       key: cf_zone_id
                 - name: RECORD_NAMES
                   valueFrom:
                     configMapKeyRef:
-                      name: route53-ddns-config
+                      name: cloudflare-ddns-config
                       key: record_names
                 - name: TTL
                   valueFrom:
                     configMapKeyRef:
-                      name: route53-ddns-config
+                      name: cloudflare-ddns-config
                       key: ttl
                       optional: true
                 - name: IP_SERVICE_URL
                   valueFrom:
                     configMapKeyRef:
-                      name: route53-ddns-config
+                      name: cloudflare-ddns-config
                       key: ip_service_url
                       optional: true
                 - name: IP_DNS_SOURCE
                   valueFrom:
                     configMapKeyRef:
-                      name: route53-ddns-config
+                      name: cloudflare-ddns-config
                       key: ip_dns_source
                       optional: true
                 - name: IP_WAN1_DNS
                   valueFrom:
                     configMapKeyRef:
-                      name: route53-ddns-config
+                      name: cloudflare-ddns-config
                       key: ip_wan1_dns
                       optional: true
                 - name: IP_WAN2_DNS
                   valueFrom:
                     configMapKeyRef:
-                      name: route53-ddns-config
+                      name: cloudflare-ddns-config
                       key: ip_wan2_dns
                       optional: true
                 - name: PUSHGATEWAY_URL
@@ -107,9 +107,9 @@ spec:
               envFrom:
                 # Holds CF_API_TOKEN. Create from
                 # cloudflare-credentials.sops.yaml.template per
-                # docs/runbooks/route53-ddns-cf-migration.md, then
+                # docs/runbooks/cloudflare-ddns-cf-migration.md, then
                 # rename to cloudflare-credentials.sops.yaml + add to
-                # kustomization.yaml. The old route53-ddns-credentials
+                # kustomization.yaml. The old cloudflare-ddns-credentials
                 # secret (AWS access key) is dropped from kustomization
                 # at the same time.
                 - secretRef:

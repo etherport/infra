@@ -4,7 +4,10 @@ kind: Kustomization
 namespace: traefik
 
 resources:
-  - route53-credentials.sops.yaml
+  # route53-credentials.sops.yaml removed 2026-05-27 — was the AWS
+  # access key for the cert-manager DNS-01 Route53 solver; both
+  # ClusterIssuers now use Cloudflare via
+  # platform/kubernetes/cert-manager-issuer/cloudflare-credentials.sops.yaml.
   - ingressroute-infrastructure.yaml
   - ingressroute-proxmox.yaml
   # cert-manager integration for OCSP stapling

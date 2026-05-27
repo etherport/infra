@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: route53-ddns
+namespace: cloudflare-ddns
 
 resources:
   - namespace.yaml
@@ -11,5 +11,5 @@ resources:
   # Migrated 2026-05-27 from 01-route53-secret.sops.yaml (AWS creds for
   # Route53 — zone deleted) to a Cloudflare API token. Old SOPS file
   # left in tree as historical reference; delete after Flux pruning
-  # cycles + AWS access key revocation per route53-ddns-cf-migration.md.
+  # cycles + AWS access key revocation per cloudflare-ddns-cf-migration.md.
   - cloudflare-credentials.sops.yaml

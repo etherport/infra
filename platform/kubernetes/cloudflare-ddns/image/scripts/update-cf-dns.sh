@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# update-route53.sh — Cloudflare DDNS updater
+# update-cf-dns.sh — Cloudflare DDNS updater
 #
 # Despite the filename, this script writes to **Cloudflare**, not
 # Route53. Migrated 2026-05-27 from aws-cli + Route53 to curl + the
@@ -12,7 +12,7 @@
 # Required Environment Variables:
 #   CF_ZONE_ID       - Cloudflare zone ID for the target zone
 #   CF_API_TOKEN     - CF API token with Zone:DNS:Edit on the zone
-#                      (provided via Secret in K8s; see route53-ddns
+#                      (provided via Secret in K8s; see cloudflare-ddns
 #                       namespace secret manifest)
 #   RECORD_NAMES     - Comma-separated list of DNS record names to keep
 #                      in sync with the current public IP
@@ -158,7 +158,7 @@ cf_upsert_record() {
   local name="$1" ip="$2" rid="$3"
   local body
   body=$(jq -n --arg name "$name" --arg ip "$ip" --argjson ttl "$TTL" \
-    '{type:"A", name:$name, content:$ip, ttl:$ttl, proxied:false, comment:"Managed by route53-ddns CronJob"}')
+    '{type:"A", name:$name, content:$ip, ttl:$ttl, proxied:false, comment:"Managed by cloudflare-ddns CronJob"}')
 
   local resp
   if [[ -n "$rid" ]]; then
@@ -286,33 +286,33 @@ if [[ -n "${PUSHGATEWAY_URL:-}" ]]; then
   SUCCESS_VAL=$([[ $UPDATES_FAILED -eq 0 ]] && echo 1 || echo 0)
 
   cat > /tmp/metrics.txt <<METRICS
-# HELP route53_ddns_success Whether the DDNS update succeeded
-# TYPE route53_ddns_success gauge
-route53_ddns_success $SUCCESS_VAL
+# HELP cloudflare_ddns_success Whether the DDNS update succeeded
+# TYPE cloudflare_ddns_success gauge
+cloudflare_ddns_success $SUCCESS_VAL
 
-# HELP route53_ddns_updates_made Number of DNS records updated
-# TYPE route53_ddns_updates_made gauge
-route53_ddns_updates_made $UPDATES_MADE
+# HELP cloudflare_ddns_updates_made Number of DNS records updated
+# TYPE cloudflare_ddns_updates_made gauge
+cloudflare_ddns_updates_made $UPDATES_MADE
 
-# HELP route53_ddns_updates_skipped Number of DNS records skipped (no change)
-# TYPE route53_ddns_updates_skipped gauge
-route53_ddns_updates_skipped $UPDATES_SKIPPED
+# HELP cloudflare_ddns_updates_skipped Number of DNS records skipped (no change)
+# TYPE cloudflare_ddns_updates_skipped gauge
+cloudflare_ddns_updates_skipped $UPDATES_SKIPPED
 
-# HELP route53_ddns_updates_failed Number of DNS record updates that failed
-# TYPE route53_ddns_updates_failed gauge
-route53_ddns_updates_failed $UPDATES_FAILED
+# HELP cloudflare_ddns_updates_failed Number of DNS record updates that failed
+# TYPE cloudflare_ddns_updates_failed gauge
+cloudflare_ddns_updates_failed $UPDATES_FAILED
 
-# HELP route53_ddns_duration_seconds Duration of the update process
-# TYPE route53_ddns_duration_seconds gauge
-route53_ddns_duration_seconds $DURATION
+# HELP cloudflare_ddns_duration_seconds Duration of the update process
+# TYPE cloudflare_ddns_duration_seconds gauge
+cloudflare_ddns_duration_seconds $DURATION
 
-# HELP route53_ddns_last_run_timestamp Timestamp of last run
-# TYPE route53_ddns_last_run_timestamp gauge
-route53_ddns_last_run_timestamp $END_EPOCH
+# HELP cloudflare_ddns_last_run_timestamp Timestamp of last run
+# TYPE cloudflare_ddns_last_run_timestamp gauge
+cloudflare_ddns_last_run_timestamp $END_EPOCH
 METRICS
 
   if curl -s --data-binary @/tmp/metrics.txt \
-      "${PUSHGATEWAY_URL}/metrics/job/route53-ddns/instance/ddns" > /dev/null; then
+      "${PUSHGATEWAY_URL}/metrics/job/cloudflare-ddns/instance/ddns" > /dev/null; then
     echo "Metrics pushed successfully"
   else
     echo "WARNING: Failed to push metrics to $PUSHGATEWAY_URL" >&2

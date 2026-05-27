@@ -19,10 +19,10 @@ Containerized dynamic DNS updater for AWS Route53. Automatically updates DNS A r
 ### 1. Create AWS Credentials Secret
 
 ```bash
-kubectl create namespace route53-ddns
+kubectl create namespace cloudflare-ddns
 
-kubectl create secret generic route53-ddns-credentials \
-  --namespace=route53-ddns \
+kubectl create secret generic cloudflare-ddns-credentials \
+  --namespace=cloudflare-ddns \
   --from-literal=AWS_ACCESS_KEY_ID=<your-key-id> \
   --from-literal=AWS_SECRET_ACCESS_KEY=<your-secret-key>
 ```
@@ -76,11 +76,11 @@ This application is managed by Flux. Configuration changes are made via git:
 
 ```bash
 # Edit configuration (e.g., add/remove DNS records)
-vim platform/kubernetes/route53-ddns/base/configmap.yaml
+vim platform/kubernetes/cloudflare-ddns/base/configmap.yaml
 
 # Commit and push
-git add platform/kubernetes/route53-ddns/base/configmap.yaml
-git commit -m "route53-ddns: update DNS records"
+git add platform/kubernetes/cloudflare-ddns/base/configmap.yaml
+git commit -m "cloudflare-ddns: update DNS records"
 git push
 
 # Force Flux to sync immediately (or wait ~10 minutes)
@@ -88,12 +88,12 @@ flux reconcile source git flux-system
 flux reconcile kustomization flux-system
 
 # Verify CronJob is updated
-kubectl get cronjob -n route53-ddns
-kubectl describe cronjob route53-ddns -n route53-ddns
+kubectl get cronjob -n cloudflare-ddns
+kubectl describe cronjob cloudflare-ddns -n cloudflare-ddns
 
 # Test immediately (don't wait for cron schedule)
-kubectl create job --from=cronjob/route53-ddns route53-test-$(date +%s) -n route53-ddns
-kubectl logs -n route53-ddns job/route53-test-<timestamp>
+kubectl create job --from=cronjob/cloudflare-ddns route53-test-$(date +%s) -n cloudflare-ddns
+kubectl logs -n cloudflare-ddns job/route53-test-<timestamp>
 ```
 
 See [Making Changes to GitOps Apps](../../docs/gitops/making-changes.md) for detailed workflows.
@@ -104,24 +104,24 @@ If you need to bypass GitOps (changes will be reverted by Flux):
 
 ```bash
 # Apply all resources
-kubectl apply -k platform/kubernetes/route53-ddns/base
+kubectl apply -k platform/kubernetes/cloudflare-ddns/base
 
 # Verify deployment
-kubectl get cronjob -n route53-ddns
-kubectl get pods -n route53-ddns
+kubectl get cronjob -n cloudflare-ddns
+kubectl get pods -n cloudflare-ddns
 ```
 
 ### 4. Monitor Updates
 
 ```bash
 # Watch CronJob schedule
-kubectl get cronjob -n route53-ddns route53-ddns
+kubectl get cronjob -n cloudflare-ddns cloudflare-ddns
 
 # View recent job runs
-kubectl get jobs -n route53-ddns --sort-by=.metadata.creationTimestamp
+kubectl get jobs -n cloudflare-ddns --sort-by=.metadata.creationTimestamp
 
 # Check logs from latest run
-kubectl logs -n route53-ddns -l job-name=$(kubectl get jobs -n route53-ddns -o name | tail -1 | cut -d'/' -f2)
+kubectl logs -n cloudflare-ddns -l job-name=$(kubectl get jobs -n cloudflare-ddns -o name | tail -1 | cut -d'/' -f2)
 ```
 
 ## Configuration
@@ -141,7 +141,7 @@ Default: `*/5 * * * *` (every 5 minutes)
 
 To change:
 ```bash
-kubectl edit cronjob -n route53-ddns route53-ddns
+kubectl edit cronjob -n cloudflare-ddns cloudflare-ddns
 # Modify spec.schedule
 ```
 
@@ -195,16 +195,16 @@ If Prometheus Pushgateway is available, the following metrics are exported:
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `route53_ddns_success` | Gauge | 1 if update succeeded, 0 if failed |
-| `route53_ddns_updates_made` | Gauge | Number of DNS records updated |
-| `route53_ddns_updates_skipped` | Gauge | Number of records skipped (no change) |
-| `route53_ddns_updates_failed` | Gauge | Number of failed updates |
-| `route53_ddns_duration_seconds` | Gauge | Duration of update process |
-| `route53_ddns_last_run_timestamp` | Gauge | Unix timestamp of last run |
+| `cloudflare_ddns_success` | Gauge | 1 if update succeeded, 0 if failed |
+| `cloudflare_ddns_updates_made` | Gauge | Number of DNS records updated |
+| `cloudflare_ddns_updates_skipped` | Gauge | Number of records skipped (no change) |
+| `cloudflare_ddns_updates_failed` | Gauge | Number of failed updates |
+| `cloudflare_ddns_duration_seconds` | Gauge | Duration of update process |
+| `cloudflare_ddns_last_run_timestamp` | Gauge | Unix timestamp of last run |
 
 Access metrics:
 ```bash
-curl http://pushgateway.monitoring.svc.cluster.local:9091/metrics | grep route53_ddns
+curl http://pushgateway.monitoring.svc.cluster.local:9091/metrics | grep cloudflare_ddns
 ```
 
 ## Troubleshooting
@@ -213,10 +213,10 @@ curl http://pushgateway.monitoring.svc.cluster.local:9091/metrics | grep route53
 
 ```bash
 # List recent jobs
-kubectl get jobs -n route53-ddns
+kubectl get jobs -n cloudflare-ddns
 
 # Get logs from failed job
-kubectl logs -n route53-ddns job/route53-ddns-TIMESTAMP
+kubectl logs -n cloudflare-ddns job/cloudflare-ddns-TIMESTAMP
 ```
 
 ### Common Issues
@@ -232,9 +232,9 @@ kubectl logs -n route53-ddns job/route53-ddns-TIMESTAMP
 - Ensure hosted zone IDs are correct
 
 **3. Job not running**
-- Check CronJob: `kubectl get cronjob -n route53-ddns`
+- Check CronJob: `kubectl get cronjob -n cloudflare-ddns`
 - Verify schedule is correct
-- Check for failed jobs: `kubectl get jobs -n route53-ddns`
+- Check for failed jobs: `kubectl get jobs -n cloudflare-ddns`
 
 **4. Updates not persisting**
 - Verify TTL is appropriate (300s = 5min)
@@ -245,11 +245,11 @@ kubectl logs -n route53-ddns job/route53-ddns-TIMESTAMP
 
 ```bash
 # Create a one-off test job
-kubectl create job test-ddns -n route53-ddns \
-  --from=cronjob/route53-ddns
+kubectl create job test-ddns -n cloudflare-ddns \
+  --from=cronjob/cloudflare-ddns
 
 # Watch logs
-kubectl logs -n route53-ddns -f job/test-ddns
+kubectl logs -n cloudflare-ddns -f job/test-ddns
 ```
 
 ## Example Output
@@ -353,14 +353,14 @@ Cost: 25,920 / 1,000,000 × $0.40 = $0.01/month
 ### Building Locally
 
 ```bash
-cd platform/kubernetes/route53-ddns/image
-docker build -t route53-ddns:test .
+cd platform/kubernetes/cloudflare-ddns/image
+docker build -t cloudflare-ddns:test .
 docker run --rm \
   -e AWS_ACCESS_KEY_ID=xxx \
   -e AWS_SECRET_ACCESS_KEY=xxx \
   -e HOSTED_ZONES=Z123... \
   -e RECORD_NAMES=test.example.com \
-  route53-ddns:test
+  cloudflare-ddns:test
 ```
 
 ### Testing Script Changes
@@ -370,7 +370,7 @@ docker run --rm \
 export HOSTED_ZONES="Z123..."
 export RECORD_NAMES="test.example.com"
 export TTL=300
-bash platform/kubernetes/route53-ddns/image/scripts/update-route53.sh
+bash platform/kubernetes/cloudflare-ddns/image/scripts/update-cf-dns.sh
 ```
 
 ## License

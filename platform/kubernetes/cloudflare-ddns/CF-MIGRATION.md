@@ -1,4 +1,4 @@
-# route53-ddns CronJob — migration to Cloudflare DNS API
+# cloudflare-ddns CronJob — migration to Cloudflare DNS API
 
 ## Why
 
@@ -21,7 +21,7 @@ Same `Cloudflare DDNS token (lambda)` 1P item works — `Zone / DNS / Edit` on e
 
 ### 2. Update the script
 
-`image/scripts/update-route53.sh` currently uses `aws cli`. Rewrite the update block to use `curl` against `https://api.cloudflare.com/client/v4`:
+`image/scripts/update-cf-dns.sh` currently uses `aws cli`. Rewrite the update block to use `curl` against `https://api.cloudflare.com/client/v4`:
 
 ```bash
 # Lookup record_id (cache for the script's lifetime):
@@ -80,13 +80,13 @@ For the AWS IAM user that backed those creds (if a dedicated one exists), remove
 ### 6. Apply + verify
 
 ```bash
-git add platform/kubernetes/route53-ddns/
-git commit -m "route53-ddns: migrate from Route53 to Cloudflare DNS API"
+git add platform/kubernetes/cloudflare-ddns/
+git commit -m "cloudflare-ddns: migrate from Route53 to Cloudflare DNS API"
 git push
 # Flux reconciles, next cron tick uses CF.
 
 # Verify in logs:
-kubectl logs -n route53-ddns -l app=route53-ddns --tail=20 | grep -E "Updated|Skipped"
+kubectl logs -n cloudflare-ddns -l app=cloudflare-ddns --tail=20 | grep -E "Updated|Skipped"
 
 # Verify the record reflects in CF:
 dig +short wind.etherport.net @1.1.1.1
@@ -94,7 +94,7 @@ dig +short wind.etherport.net @1.1.1.1
 
 ## Rename consideration
 
-Once migrated, the namespace + workload name `route53-ddns` is misleading. Rename to `cloudflare-ddns` for clarity. Bundled with the migration commit or done as a follow-up.
+Once migrated, the namespace + workload name `cloudflare-ddns` is misleading. Rename to `cloudflare-ddns` for clarity. Bundled with the migration commit or done as a follow-up.
 
 ## Estimated effort
 
