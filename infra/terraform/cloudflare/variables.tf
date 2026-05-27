@@ -167,6 +167,12 @@ variable "dns_records_a" {
       comment = "AWS us-west-2 regional VPN EIP"
     }
 
+    // ---- SIP trunk inbound (Twilio → UDM Talk) ----
+    "sip.wind" = {
+      value   = "47.159.189.5"
+      comment = "Twilio Windtryst trunk → UDM Talk inbound (replaces dead sip:wind.gmsmeg.net)"
+    }
+
     // ---- Internal-only sinkholes (resolve to loopback, preserve naming
     //      without leaking to public internet) ----
     "ceph.wind" = {

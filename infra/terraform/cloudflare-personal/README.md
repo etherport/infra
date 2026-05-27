@@ -25,7 +25,7 @@ puts everything in one DNS provider.
 
 - `autodiscover.` CNAMEs (Outlook autodiscovery — no longer used)
 - `vpn.grahamsmith.net` A (35.161.127.152, migrated)
-- `windtryst.grahamsmith.net` CNAME → wind.gmsmeg.net (dead, migrated)
+- `windtryst.grahamsmith.net` CNAME → wind.gmsmeg.net (gmsmeg.net deprecated; SIP now reaches the UDM via sip.wind.etherport.net)
 - `_4239d363....grahamsmith.net` CNAME (validation for orphan ACM cert
   `*.grahamsmith.net` — cert deleted as part of this migration)
 - `scph1023._domainkey.smithforsb.com` TXT (legacy SendGrid DKIM)

@@ -77,12 +77,17 @@ variable "sip_trunk_secure" {
 variable "sip_origination_url" {
   description = <<-EOT
     URI for inbound SIP routing — Twilio sends incoming calls here.
-    Currently sip:wind.gmsmeg.net:6767 — gmsmeg.net is a dead zone (no
-    DNS), so inbound is silently broken. See #22 for the migration plan
-    (target: sips:<new-host>:5061;transport=tls with sip_trunk_secure=true).
+    Migrated 2026-05-27 from dead sip:wind.gmsmeg.net:6767 to
+    sips:sip.wind.etherport.net:5061;transport=tls. The hostname is a
+    CF DNS A record pointing at the UDM WAN IP (47.159.189.5).
+
+    Uses `sips:` scheme for TLS-encrypted signaling. sip_trunk_secure
+    stays false (no Twilio Secure Trunking) because UniFi Talk doesn't
+    support sRTP — Twilio would reject calls under full secure mode.
+    Plan: revisit when Ubiquiti ships sRTP, or insert an SBC (task #80).
   EOT
   type        = string
-  default     = "sip:wind.gmsmeg.net:6767"
+  default     = "sips:sip.wind.etherport.net:5061;transport=tls"
 }
 
 variable "sip_origination_friendly_name" {

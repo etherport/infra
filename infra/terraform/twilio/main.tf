@@ -109,7 +109,7 @@ resource "twilio_trunking_trunks_origination_urls_v1" "talk_primary" {
   // friendly_name kept null in Twilio for legacy reasons; ignore_changes
   // accommodates that without forcing a diff on every plan.
   friendly_name = var.sip_origination_friendly_name
-  sip_url       = var.sip_origination_url   // currently sip:wind.gmsmeg.net:6767 (broken — see #22)
+  sip_url       = var.sip_origination_url   // sips:sip.wind.etherport.net:5061;transport=tls
   weight        = var.sip_origination_weight
   priority      = var.sip_origination_priority
   enabled       = true

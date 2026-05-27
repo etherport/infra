@@ -5,7 +5,8 @@
 //
 // Kept records: SES inbound + sending (DKIM/SPF/DMARC) + mail. subdomain
 // (SES feedback). Removed: autodiscover (Outlook), vpn (migrated),
-// windtryst (gmsmeg.net dead), _4239d3 (validation for orphan ACM cert).
+// windtryst (legacy gmsmeg.net target — zone deprecated, replaced by
+// sip.wind.etherport.net), _4239d3 (validation for orphan ACM cert).
 
 locals {
   grahamsmith_records = {
