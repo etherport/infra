@@ -86,28 +86,13 @@ resource "cloudflare_record" "smithforsb" {
   comment  = each.value.comment
 }
 
-# Single Redirect rule: smithforsb.com (+ www) → IG profile, 301, drop
-# any path / query string (IG URLs don't share our path space).
-resource "cloudflare_ruleset" "smithforsb_to_instagram" {
-  zone_id     = var.smithforsb_zone_id
-  name        = "smithforsb -> Instagram"
-  description = "Redirect all traffic to https://www.instagram.com/graham.m.smith/"
-  kind        = "zone"
-  phase       = "http_request_dynamic_redirect"
-
-  rules {
-    action      = "redirect"
-    expression  = "(http.host eq \"smithforsb.com\") or (http.host eq \"www.smithforsb.com\")"
-    description = "All paths to graham.m.smith IG profile"
-    enabled     = true
-    action_parameters {
-      from_value {
-        status_code           = 301
-        preserve_query_string = false
-        target_url {
-          value = "https://www.instagram.com/graham.m.smith/"
-        }
-      }
-    }
-  }
-}
+# Single Redirect rule is managed MANUALLY in the CF dashboard for now —
+# CF API token scoping for Dynamic Redirect rulesets is fiddly, and this
+# entire domain (along with grahamsmith.net + stopthecastle.com) is
+# being split into a separate `public-web` repository per task #82.
+# Re-IaC'ing the redirect lives in that repo, not here.
+#
+# Manual rule (smithforsb.com zone → Rules → Redirect Rules):
+#   When: http.host eq "smithforsb.com" OR eq "www.smithforsb.com"
+#   Then: static redirect 301 → https://www.instagram.com/graham.m.smith/
+#         preserve_query_string=false
