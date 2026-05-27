@@ -37,8 +37,8 @@ locals {
     "google-site-verify" = {
       name    = "@"
       type    = "TXT"
-      content = "google-site-verification=xbHjqWi7fU7u3xlPqKsvnWFAp3gFLpQAlR-h3GBgrUw"
-      comment = "Google Search Console verification (capture full value from current Route53 if mismatch)"
+      content = "google-site-verification=xbHjqWi7fU7u3xlPqKsvnWFAp3gFLW7fb88N3AkNmqk"
+      comment = "Google Search Console verification"
     }
     "amazonses" = {
       name    = "_amazonses"
