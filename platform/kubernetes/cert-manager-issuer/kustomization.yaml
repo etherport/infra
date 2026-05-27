@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# DELIBERATELY no `namespace:` field at this level — the resources here
+# pin their own namespace (cert-manager). Forcing a namespace transform
+# would override the in-resource setting and break the ClusterIssuer's
+# secret lookup (it reads from cert-manager namespace by default).
+
+resources:
+  # The actual encrypted secret. Created from the .template by the
+  # user — until then this entry is commented out so Flux doesn't fail
+  # reconciliation on the missing file.
+  #
+  # To activate:
+  #   1. cp cloudflare-credentials.sops.yaml.template cloudflare-credentials.sops.yaml
+  #   2. sops cloudflare-credentials.sops.yaml  → replace REPLACE_WITH_CF_TOKEN
+  #   3. Uncomment the line below
+  #   4. git add + commit + push
+  # - cloudflare-credentials.sops.yaml

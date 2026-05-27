@@ -34,7 +34,6 @@ jobs:
       fail-fast: false
       matrix:
         module:
-          - { name: route53,             dir: infra/terraform/aws/route53,              region: us-west-2 }
           - { name: s3,                  dir: infra/terraform/aws/s3,                   region: us-west-2 }
           - { name: networking,          dir: infra/terraform/aws/networking,           region: us-west-2 }
           - { name: compute,             dir: infra/terraform/aws/compute,              region: us-west-2 }

@@ -13,15 +13,16 @@ spec:
     privateKeySecretRef:
       name: letsencrypt-prod-account-key
     solvers:
+      # Migrated 2026-05-27 from Route53 → Cloudflare. The etherport.net
+      # Route53 hosted zone was deleted as part of the CF migration;
+      # DNS-01 challenges via Route53 fail with NoSuchHostedZone.
+      # Pre-cutover this file used route53 solver — git blame for the
+      # legacy spec if needed. Secret `cloudflare-credentials` lives in
+      # cert-manager namespace; see ../cloudflare-credentials.sops.yaml.
       - dns01:
-          route53:
-            region: us-west-2
-            hostedZoneID: Z03500581XDWV5SKF5PK8
-            accessKeyIDSecretRef:
-              name: route53-credentials
-              key: AWS_ACCESS_KEY_ID
-            secretAccessKeySecretRef:
-              name: route53-credentials
-              key: AWS_SECRET_ACCESS_KEY
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-credentials
+              key: api-token
         # Note: cert-manager uses --dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53
         # (configured in Helm values) for public DNS propagation checks

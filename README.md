@@ -196,14 +196,14 @@ Restore procedures + RTO/RPO targets:
 
 | Zone | Authoritative | Notes |
 |---|---|---|
-| `etherport.net` public | Route53 (current) | Cloudflare zone exists with all 20 records mirrored; NS-cutover at registrar pending. Manage CF side via `infra/terraform/cloudflare/`. |
-| `aws.etherport.net` private | Route53 (VPC-scoped) | Stays on Route53 — VPC-internal, no CF equivalent |
+| `etherport.net` public | Cloudflare (since 2026-05-25) | DNSSEC-signed, ~30 records. Manage via `infra/terraform/cloudflare/`. Route53 zone deleted. |
+| `aws.etherport.net` private | Deleted 2026-05-27 | Never had real content; private zone removed with route53 module decom |
 | `wind.etherport.net` internal | Technitium (in-cluster pair + dns-fallback + dns-aws) | MetalLB VIP 10.10.201.5 |
-| DDNS writers | ddns-updater Lambda + route53-ddns CronJob | Still write Route53; migration to CF API scaffolded (`CF-MIGRATION.md` stubs) |
+| 3 personal zones (grahamsmith / smithforsb / stopthecastle) | Cloudflare | Migrated 2026-05-27, DNSSEC enabled, public-web repo split tracked as task #82 |
+| DDNS writers | ddns-updater Lambda + route53-ddns CronJob | **BROKEN** — both still target the deleted Route53 zone. CronJob suspended; Lambda dormant (no invokers in last hour). Migration to CF API tracked as task #84. |
 
-Cutover runbook: `docs/runbooks/cloudflare-access-enable.md`. Module
-docs: `infra/terraform/cloudflare/README.md`. Cost target post-cutover:
-$0/mo for CF (Free plan) + drop ~$15-18/mo when ALB retires.
+Module docs: `infra/terraform/cloudflare/README.md`. CF Free plan + ALB
+decom + 5 Route53 zones deleted saves ~$27/mo vs pre-2026-05 baseline.
 
 ## Secrets
 
@@ -254,10 +254,10 @@ Project → workflow map:
 | `infra/terraform/proxmox/sdn` | `terraform-proxmox-sdn.yml` |
 | `infra/terraform/unifi` | `terraform-unifi.yml` |
 | `infra/terraform/cloudflare` | `terraform-cloudflare.yml` |
+| `infra/terraform/google` | `terraform-google.yml` |
 | `infra/terraform/aws/networking` | `terraform-networking.yml` |
 | `infra/terraform/aws/compute` | `terraform-compute.yml` |
 | `infra/terraform/aws/load-balancing` | `terraform-load-balancing.yml` |
-| `infra/terraform/aws/route53` | `terraform-route53.yml` |
 | `infra/terraform/aws/acm` | `terraform-acm.yml` |
 | `infra/terraform/aws/ses` | `terraform-ses.yml` |
 | `infra/terraform/aws/s3` | `terraform-s3.yml` |

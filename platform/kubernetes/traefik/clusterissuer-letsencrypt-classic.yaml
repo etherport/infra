@@ -30,13 +30,11 @@ spec:
       # email, same rate-limit bucket. No need for a separate account.
       name: letsencrypt-prod-account-key
     solvers:
+      # Migrated 2026-05-27 from Route53 → Cloudflare alongside the
+      # main letsencrypt-prod issuer. See clusterissuer-letsencrypt.yaml
+      # and ../cloudflare-credentials.sops.yaml for the secret.
       - dns01:
-          route53:
-            region: us-west-2
-            hostedZoneID: Z03500581XDWV5SKF5PK8
-            accessKeyIDSecretRef:
-              name: route53-credentials
-              key: AWS_ACCESS_KEY_ID
-            secretAccessKeySecretRef:
-              name: route53-credentials
-              key: AWS_SECRET_ACCESS_KEY
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-credentials
+              key: api-token

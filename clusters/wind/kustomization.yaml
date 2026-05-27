@@ -9,6 +9,13 @@ resources:
   - ../../platform/kubernetes/metallb
   - ../../platform/kubernetes/traefik
   - ../../platform/kubernetes/technitium
+  # cert-manager DNS-01 secret (Cloudflare API token). Lives separately
+  # from traefik/ because the secret targets cert-manager ns + the
+  # kustomization there forces namespace=traefik. SOPS file is committed
+  # as a template until the user pastes a real CF token — Flux reconciles
+  # a no-op until the resource line is uncommented in the dir's
+  # kustomization.yaml. See docs/runbooks/cert-manager-dns01-cf-migration.md.
+  - ../../platform/kubernetes/cert-manager-issuer
   # Storage
   - ../../platform/kubernetes/storage/ceph-csi
   # Cluster utilities

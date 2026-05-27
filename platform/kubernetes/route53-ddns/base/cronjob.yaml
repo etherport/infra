@@ -4,6 +4,16 @@ metadata:
   name: route53-ddns
   namespace: route53-ddns
 spec:
+  # SUSPENDED 2026-05-27: the Route53 etherport.net hosted zone was
+  # deleted as part of the CF migration, so every-minute runs of this
+  # CronJob fail with NoSuchHostedZone. The static value
+  # `wind = 47.159.189.5` in infra/terraform/cloudflare/variables.tf
+  # is currently authoritative; WAN failover detection is BROKEN until
+  # the script is rewritten against the CF API (see CF-MIGRATION.md in
+  # this dir + task #84). Suspend stops the failure spam without
+  # removing the manifest, so the cutover is a single suspend=false +
+  # image rebuild diff.
+  suspend: true
   schedule: "* * * * *"  # Every minute (for fast failover response)
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3

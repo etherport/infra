@@ -1,0 +1,101 @@
+name: Google Cloud Terraform
+
+on:
+  pull_request:
+    paths:
+      - 'infra/terraform/google/**'
+      - '.github/workflows/terraform-google.yml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        default: plan
+        options:
+          - plan
+          - apply
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  WORKING_DIR: infra/terraform/google
+
+jobs:
+  terraform:
+    name: Terraform ${{ github.event.inputs.action || 'plan' }}
+    runs-on: [self-hosted, lifecycle]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials (S3 backend)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: us-west-2
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.14.3
+          # Self-hosted runner doesn't have Node; the wrapper requires it.
+          terraform_wrapper: false
+
+      - name: Auth to GCP
+        # Service-account JSON stored as repo secret. The SA needs:
+        #   roles/serviceusage.serviceUsageAdmin (for API enablements)
+        #   roles/resourcemanager.projectIamAdmin (for IAM bindings)
+        #   roles/owner (only for initial bootstrap; downgrade later)
+        # Workload-identity-federation would be cleaner long-term but
+        # the SA-key path is simpler for a self-hosted runner.
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          if [ -z "$GCP_SA_KEY" ]; then
+            echo "::error::GCP_SA_KEY secret is empty. Either add it or skip this module."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/gcp"
+          echo "$GCP_SA_KEY" > "$RUNNER_TEMP/gcp/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/gcp/sa.json" >> "$GITHUB_ENV"
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          AWS_PROFILE: ""
+        run: |
+          terraform init \
+            -backend-config="profile=" \
+            -reconfigure
+
+      - name: Terraform Plan
+        if: github.event.inputs.action != 'apply'
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          AWS_PROFILE: ""
+          TF_VAR_gcp_project_id: ${{ secrets.GCP_PROJECT_ID }}
+        run: terraform plan -no-color
+
+      - name: Terraform Apply
+        if: github.event.inputs.action == 'apply'
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          AWS_PROFILE: ""
+          TF_VAR_gcp_project_id: ${{ secrets.GCP_PROJECT_ID }}
+        run: terraform apply -auto-approve -no-color
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Google Cloud Terraform run"
+            echo
+            echo "- Action: \`${{ github.event.inputs.action || 'plan (PR)' }}\`"
+            echo
+            echo "Scope: project + API enablements. OAuth consent screen + OAuth Client IDs remain manual"
+            echo "(Google API doesn't expose them programmatically) — see infra/terraform/google/README.md."
+          } >> "$GITHUB_STEP_SUMMARY"
