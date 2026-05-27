@@ -2,16 +2,22 @@
 DNS-Restrict-IP Lambda — multi-SG, multi-port ingress sync.
 
 Keeps one or more (security_group, port, protocols) tuples in sync with
-the current public IPs resolved from a set of Route53 A records.
+the current public IPs resolved from a set of DNS A records.
 
 For each rule spec:
-  - IPs in Route53 but not in SG → ingress rule added
-  - IPs in SG but not in Route53 → ingress rule removed
+  - IPs in DNS but not in SG → ingress rule added
+  - IPs in SG but not in DNS → ingress rule removed
   - Same IP across multiple records is deduplicated
 
 Originally written for the single dns_server SG (port 53 TCP+UDP). On
 2026-05-23 extended to also manage the allow_ssh SG (port 22 TCP) so
 that the same homelab WAN IPs that gate DNS access also gate SSH.
+
+Originally read records directly from the Route53 API. After the
+2026-05-27 Cloudflare migration deleted the Route53 zone, switched to
+DNS resolution via 1.1.1.1 — zone-provider-agnostic, no API key
+needed, works against Cloudflare or any future authoritative source.
+HOSTED_ZONE_ID is still accepted for backward compat but ignored.
 
 Env (one of these two is required):
   RULE_SPECS          JSON array of {security_group_id, port, protocols}.
@@ -23,23 +29,30 @@ Env (one of these two is required):
                       if RULE_SPECS isn't set.
 
 Always required:
-  HOSTED_ZONE_ID      Route53 hosted zone ID
   RECORD_NAMES        Comma-separated list of A record FQDNs
+
+Deprecated:
+  HOSTED_ZONE_ID      Ignored. Kept for backward compat with old env
+                      configurations; can be removed once TF settles.
 """
 
 import json
 import logging
 import os
+import socket
 
 import boto3
 
-route53 = boto3.client("route53")
 ec2 = boto3.client("ec2")
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-HOSTED_ZONE_ID = os.environ["HOSTED_ZONE_ID"]
+# Public resolvers. Cloudflare 1.1.1.1 first (matches the new auth
+# DNS provider — sees its own caches first), Google 8.8.8.8 second
+# as a sanity backstop in case CF's resolver returns NXDOMAIN for a
+# moment during a record edit.
+_RESOLVERS = ["1.1.1.1", "8.8.8.8"]
 RECORD_NAMES = os.environ.get(
     "RECORD_NAMES",
     "wind.etherport.net,wan1.wind.etherport.net,wan2.wind.etherport.net",
@@ -61,33 +74,69 @@ def _resolve_rule_specs():
     raise RuntimeError("Neither RULE_SPECS nor SECURITY_GROUP_ID set")
 
 
-def get_route53_ips(hosted_zone_id, record_names):
+def _resolve_a(name):
+    """Resolve A records for `name` via the public resolvers, return list of IPs.
+
+    Tries getaddrinfo first (system stub resolver); falls back to a
+    tiny stub UDP query against the public resolvers if that returns
+    nothing. The fallback is just bytes-on-the-wire, no dnspython dep.
+    """
+    try:
+        ai = socket.getaddrinfo(name, None, socket.AF_INET, socket.SOCK_STREAM)
+        ips = sorted({entry[4][0] for entry in ai})
+        if ips:
+            return ips
+    except socket.gaierror:
+        pass
+    qname_parts = name.rstrip(".").split(".")
+    qname = b"".join(bytes([len(p)]) + p.encode("ascii") for p in qname_parts) + b"\0"
+    query = (
+        b"\xab\xcd"      # transaction id
+        b"\x01\x00"      # standard query, RD=1
+        b"\x00\x01"      # QDCOUNT=1
+        b"\x00\x00\x00\x00\x00\x00"
+        + qname
+        + b"\x00\x01\x00\x01"  # qtype=A, qclass=IN
+    )
+    for resolver in _RESOLVERS:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.settimeout(2.0)
+                sock.sendto(query, (resolver, 53))
+                resp, _ = sock.recvfrom(512)
+            # Skip header (12 bytes) + question section.
+            offset = 12
+            while resp[offset] != 0:
+                offset += resp[offset] + 1
+            offset += 5  # null label + qtype + qclass
+            ancount = (resp[6] << 8) | resp[7]
+            ips = []
+            for _ in range(ancount):
+                rtype = (resp[offset + 2] << 8) | resp[offset + 3]
+                rdlen = (resp[offset + 10] << 8) | resp[offset + 11]
+                rdata = resp[offset + 12 : offset + 12 + rdlen]
+                if rtype == 1 and rdlen == 4:  # A record, IPv4
+                    ips.append(".".join(str(b) for b in rdata))
+                offset += 12 + rdlen
+            if ips:
+                return sorted(set(ips))
+        except (socket.timeout, OSError) as e:
+            logger.warning(f"DNS query via {resolver} for {name} failed: {e}")
+            continue
+    return []
+
+
+def get_dns_ips(record_names):
     """Return the union set of A record IPs across all names."""
     ips = set()
     for record_name in record_names:
-        fqdn = record_name if record_name.endswith(".") else f"{record_name}."
-        try:
-            response = route53.list_resource_record_sets(
-                HostedZoneId=hosted_zone_id,
-                StartRecordName=fqdn,
-                StartRecordType="A",
-                MaxItems="1",
-            )
-            record_sets = response.get("ResourceRecordSets", [])
-            if (
-                record_sets
-                and record_sets[0]["Name"] == fqdn
-                and record_sets[0]["Type"] == "A"
-            ):
-                for rr in record_sets[0].get("ResourceRecords", []):
-                    ip = rr.get("Value")
-                    if ip:
-                        ips.add(ip)
-                        logger.info(f"Found IP {ip} for {record_name}")
-            else:
-                logger.warning(f"No A record found for {record_name}")
-        except Exception as e:
-            logger.error(f"Error fetching Route53 record for {record_name}: {e}")
+        rs = _resolve_a(record_name)
+        if rs:
+            for ip in rs:
+                ips.add(ip)
+                logger.info(f"Resolved {record_name} → {ip}")
+        else:
+            logger.warning(f"No A record resolved for {record_name}")
     return ips
 
 
@@ -198,11 +247,11 @@ def lambda_handler(event, context):
     logger.info(f"Starting DNS-restrict-IP sync for {len(rule_specs)} rule(s)")
     logger.info(f"Monitoring records: {RECORD_NAMES}")
 
-    expected_ips = get_route53_ips(HOSTED_ZONE_ID, RECORD_NAMES)
-    logger.info(f"Expected IPs from Route53: {expected_ips}")
+    expected_ips = get_dns_ips(RECORD_NAMES)
+    logger.info(f"Expected IPs from DNS: {expected_ips}")
     if not expected_ips:
-        logger.error("No IPs found in Route53 — refusing to remove all rules")
-        return {"statusCode": 500, "body": "No IPs found in Route53 records"}
+        logger.error("No IPs resolved via DNS — refusing to remove all rules")
+        return {"statusCode": 500, "body": "No IPs resolved from DNS records"}
 
     results = [sync_rule(spec, expected_ips) for spec in rule_specs]
 
