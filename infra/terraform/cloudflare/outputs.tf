@@ -33,20 +33,20 @@ output "zone_id" {
   value       = cloudflare_zone.etherport.id
 }
 
-output "etherport_dnssec_ds" {
+output "etherport_dnssec" {
   description = <<-EOT
-    DNSSEC DS record values to publish at the etherport.net registrar
-    (AWS Route53 Domains). Without this DS record, the zone is signed
-    but the chain isn't validated by resolvers.
-      key_tag, algorithm, digest_type, digest
-    Set them in: AWS Console -> Route53 -> Registered domains ->
-    etherport.net -> DNSSEC status -> Add key.
+    DNSSEC key + DS values for etherport.net. Registrar-side delegation
+    is IaC'd via aws_route53domains_delegation_signer_record.etherport
+    in dnssec-registrar.tf — these outputs exist for visibility.
   EOT
   value = {
-    key_tag      = cloudflare_zone_dnssec.etherport.key_tag
-    algorithm    = cloudflare_zone_dnssec.etherport.algorithm
-    digest_type  = cloudflare_zone_dnssec.etherport.digest_type
-    digest       = cloudflare_zone_dnssec.etherport.digest
-    ds           = cloudflare_zone_dnssec.etherport.ds
+    key_tag     = cloudflare_zone_dnssec.etherport.key_tag
+    algorithm   = cloudflare_zone_dnssec.etherport.algorithm
+    flags       = cloudflare_zone_dnssec.etherport.flags
+    key_type    = cloudflare_zone_dnssec.etherport.key_type
+    public_key  = cloudflare_zone_dnssec.etherport.public_key
+    digest_type = cloudflare_zone_dnssec.etherport.digest_type
+    digest      = cloudflare_zone_dnssec.etherport.digest
+    ds          = cloudflare_zone_dnssec.etherport.ds
   }
 }

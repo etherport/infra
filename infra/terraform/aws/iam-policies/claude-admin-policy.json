@@ -68,6 +68,8 @@
         "ec2:Describe*",
         "route53:List*",
         "route53:Get*",
+        "route53domains:Get*",
+        "route53domains:List*",
         "lambda:List*",
         "lambda:GetFunction",
         "lambda:GetFunctionConfiguration",

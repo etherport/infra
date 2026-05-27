@@ -1,31 +1,28 @@
-// DNSSEC DS records to publish at each domain's registrar
-// (AWS Route53 Domains). Without the DS record at the parent, the
-// zone is signed but resolvers won't validate the chain.
+// DNSSEC values for each zone. The registrar (AWS Route53 Domains)
+// takes the PUBLIC KEY (not the digest) when adding a DS record via UI;
+// the DS record itself is for parent zones that accept the DS form.
 //
-// Retrieve with: terraform output -json dnssec_ds
-output "dnssec_ds" {
-  description = "DNSSEC DS record values for each zone — publish at the registrar."
+// Full IaC of the registrar side happens in dnssec.tf via
+// aws_route53domains_delegation_signer_record — these outputs exist
+// for visibility and as a manual fallback.
+//
+// Retrieve with: terraform output -json dnssec
+output "dnssec" {
+  description = "DNSSEC key + DS values per zone."
   value = {
-    grahamsmith = {
-      key_tag     = cloudflare_zone_dnssec.grahamsmith.key_tag
-      algorithm   = cloudflare_zone_dnssec.grahamsmith.algorithm
-      digest_type = cloudflare_zone_dnssec.grahamsmith.digest_type
-      digest      = cloudflare_zone_dnssec.grahamsmith.digest
-      ds          = cloudflare_zone_dnssec.grahamsmith.ds
-    }
-    smithforsb = {
-      key_tag     = cloudflare_zone_dnssec.smithforsb.key_tag
-      algorithm   = cloudflare_zone_dnssec.smithforsb.algorithm
-      digest_type = cloudflare_zone_dnssec.smithforsb.digest_type
-      digest      = cloudflare_zone_dnssec.smithforsb.digest
-      ds          = cloudflare_zone_dnssec.smithforsb.ds
-    }
-    stopthecastle = {
-      key_tag     = cloudflare_zone_dnssec.stopthecastle.key_tag
-      algorithm   = cloudflare_zone_dnssec.stopthecastle.algorithm
-      digest_type = cloudflare_zone_dnssec.stopthecastle.digest_type
-      digest      = cloudflare_zone_dnssec.stopthecastle.digest
-      ds          = cloudflare_zone_dnssec.stopthecastle.ds
+    for name, r in {
+      grahamsmith   = cloudflare_zone_dnssec.grahamsmith
+      smithforsb    = cloudflare_zone_dnssec.smithforsb
+      stopthecastle = cloudflare_zone_dnssec.stopthecastle
+      } : name => {
+      key_tag     = r.key_tag
+      algorithm   = r.algorithm    # 13 = ECDSAP256SHA256
+      flags       = r.flags        # 257 = KSK
+      key_type    = r.key_type     # ECDSAP256SHA256
+      public_key  = r.public_key   # what Route53 Domains UI wants
+      digest_type = r.digest_type  # 2 = SHA-256
+      digest      = r.digest       # what the DS record contains
+      ds          = r.ds           # full DS RR
     }
   }
 }

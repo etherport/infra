@@ -49,33 +49,41 @@ This infrastructure hosts public-facing campaign websites, completely separate f
 
 ### S3 Buckets
 
-| Bucket | Purpose |
-|--------|---------|
-| `smithforsb.com` | Static website hosting |
-| `static.stopthecastle.com` | WordPress static assets |
-| `cflogs.grahamsmith.net` | CloudFront access logs |
+| Bucket | Purpose | Status |
+|--------|---------|--------|
+| ~~`smithforsb.com`~~ | Static website hosting | **Deleted 2026-05-27** — replaced by CF Single Redirect to Instagram |
+| `static.stopthecastle.com` | WordPress static assets | Active |
+| `cflogs.grahamsmith.net` | CloudFront access logs | Active |
 
 ### CloudFront Distributions
 
-| ID | Domain | Origin |
-|----|--------|--------|
-| `E1877NKA6OHGR2` | smithforsb.com | S3: smithforsb.com |
-| `EGLD2S71PI0A` | static.stopthecastle.com | S3: static.stopthecastle.com |
+| ID | Domain | Origin | Status |
+|----|--------|--------|--------|
+| ~~`E1877NKA6OHGR2`~~ | smithforsb.com | (was S3: smithforsb.com) | **Deleted 2026-05-27** |
+| `EGLD2S71PI0A` | static.stopthecastle.com | S3: static.stopthecastle.com | Active |
 
 ### Route53 Hosted Zones
 
-| Zone | Purpose |
-|------|---------|
-| `stopthecastle.com` | Primary campaign domain |
-| `smithforsb.com` | Alternate campaign domain |
+All migrated to Cloudflare 2026-05 (saves $1.50/mo, see commit history).
+Route53 hosted zones for these domains have been deleted; CF is now the
+authoritative DNS for stopthecastle.com, smithforsb.com, grahamsmith.net.
+Registrar (Route53 Domains) still owns the NS delegation + DNSSEC DS.
 
 ### ACM Certificates (us-east-1 for CloudFront)
 
-| Domain | Purpose |
-|--------|---------|
-| `smithforsb.com` | CloudFront SSL |
-| `stopthecastle.com` | CloudFront SSL |
-| `smith4sb.com` | Alternate domain SSL |
+| Domain | Purpose | Status |
+|--------|---------|--------|
+| ~~`smithforsb.com`~~ | (was CloudFront SSL) | **Deleted 2026-05-27** with distribution |
+| `stopthecastle.com` | CloudFront SSL (static.* distribution) | Active |
+| `smith4sb.com` | Alternate domain SSL | Active |
+
+### Current state of smithforsb.com (2026-05-27)
+
+DNS only — apex + www proxied through CF, hitting a Single Redirect rule
+to `https://www.instagram.com/graham.m.smith/`. No origin, no S3, no
+CloudFront. Email forwarding via SES still active (graham@, info@).
+The redirect rule itself is manually managed in the CF dashboard for now
+(task #82 covers full IaC in the public-web repo).
 
 ### SES Identities
 
