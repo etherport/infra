@@ -126,21 +126,40 @@ kubectl -n unifi-cert-sync create job manual-sync-$(date +%s) \
     --from=cronjob/unifi-cert-sync
 ```
 
-### Rotate the Route53 credentials
+### Rotate the Cloudflare credentials
 
-The issuer uses an AWS access key stored in
-`platform/kubernetes/traefik/route53-credentials.sops.yaml`.
+The DNS-01 solver moved from Route53 to Cloudflare on 2026-05-27 (the
+etherport.net Route53 zone was deleted as part of the CF migration).
+See `docs/runbooks/cert-manager-dns01-cf-migration.md` for the
+historical cutover.
 
-1. Create a new access key on the IAM user `cert-manager-route53`
-   (terraform-managed; see `infra/terraform/aws/route53/iam.tf`).
+The issuer now uses a CF API token stored in
+`platform/kubernetes/cert-manager-issuer/cloudflare-credentials.sops.yaml`.
+
+1. Create a new CF API token (CF dashboard → My Profile → API Tokens).
+   Scopes:
+     Zone — Zone — Read
+     Zone — DNS  — Edit
+   Zone resources: include — specific zone — etherport.net
 2. Edit the SOPS file:
    ```
-   sops platform/kubernetes/traefik/route53-credentials.sops.yaml
+   sops platform/kubernetes/cert-manager-issuer/cloudflare-credentials.sops.yaml
    ```
-3. Commit + push. Flux reconciles. cert-manager picks up the new
-   secret on the next DNS-01 challenge.
-4. Force a renewal (above) to confirm the new creds work.
-5. Disable / delete the old IAM access key.
+3. Replace the `api-token` value with the new token. Save + quit;
+   SOPS re-encrypts on close.
+4. Commit + push. Flux reconciles; cert-manager picks up the new
+   secret on the next DNS-01 challenge (or force-renew to test
+   immediately — see "Force a renewal" above).
+5. Revoke the old token in CF dashboard once the new one is verified.
+
+### Historical: rotate the Route53 credentials (pre-2026-05-27)
+
+Kept here as breadcrumb in case the migration is ever reversed. The
+issuer USED to read an AWS access key from
+`platform/kubernetes/traefik/route53-credentials.sops.yaml` for an
+IAM user `cert-manager-route53` (managed by the now-deleted
+`infra/terraform/aws/route53` module — find iam.tf in git history if
+needed).
 
 ### Force-regenerate the ACME account key
 

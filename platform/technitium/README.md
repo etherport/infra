@@ -79,14 +79,18 @@ clients (or anything that resolves via 1.1.1.1 instead of the Technitium
 cluster) can't accidentally reach our infrastructure UIs. The
 authoritative on-net answers still come from this Technitium cluster.
 
-### AWS private hosted zone `aws.etherport.net`
+### AWS private hosted zone `aws.etherport.net` (DELETED 2026-05-27)
 
-AWS-side resources (Barman bucket endpoint, future VPC-internal
-services) are served by an AWS Route53 private hosted zone. Local
-clients reach it via the Route53 Resolver inbound endpoint, with
-Technitium forwarding `aws.etherport.net` to that endpoint. See
-[`docs/runbooks/aws-private-dns.md`](../../docs/runbooks/aws-private-dns.md)
-for the forwarder configuration and how to add records.
+This Route53 private hosted zone was deleted as part of the
+etherport.net → Cloudflare migration. It never had any real content,
+so no clients are affected. The Technitium conditional forwarder for
+`aws.etherport.net` was removed in `infra/ansible/playbooks/technitium.yml`.
+The `us-west-2.compute.internal` forwarder (EC2 internal hostnames)
+remains — it's served by the same dns-aws hop and is unaffected.
+
+See [`docs/runbooks/aws-private-dns.md`](../../docs/runbooks/aws-private-dns.md)
+for historical context and a restoration recipe should a future
+VPC-internal DNS need arise.
 
 ## Initial Setup (New Instance)
 

@@ -1,5 +1,19 @@
 # AWS Private DNS — `aws.etherport.net`
 
+> **HISTORICAL — DELETED 2026-05-27.** The Route53 private hosted zone
+> `aws.etherport.net` was deleted as part of the etherport.net →
+> Cloudflare migration. It never had any real content (no RDS, no
+> private LBs, etc. ever landed on it). The Technitium conditional
+> forwarder + the Resolver Inbound Endpoint at `52.40.219.113` are
+> dormant — the forwarder returns SERVFAIL for `*.aws.etherport.net`
+> queries because the zone no longer exists.
+>
+> If a future need for VPC-internal DNS arises, the cleanest revival
+> path is a new Route53 private zone (the `terraform-dns` IAM policy
+> already has the perms — see H19 in `docs/planning/outstanding-work.md`)
+> + restore the Technitium forwarder pair below. The doc is kept as a
+> reference for that scenario.
+
 ## Background
 
 AWS-native resources (RDS, private LBs, EC2 alias hostnames, etc.) live

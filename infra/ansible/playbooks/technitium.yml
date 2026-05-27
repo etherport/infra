@@ -34,12 +34,12 @@
       - "1.0.0.1"
       - "8.8.8.8"
     technitium_conditional_forwarders:
-      # AWS private hosted zone resolution + EC2 internal hostnames.
-      # The 52.40.219.113 / 10.10.100.5 IP is dns-aws (own EC2 nano
-      # running technitium pointed at AWS Route53 Resolver Inbound
-      # endpoint, when configured). Until then forwarding here is a
-      # no-op for non-AWS queries.
-      - { zone: "aws.etherport.net", forwarder: "10.10.100.5" }
+      # AWS EC2 internal hostnames. Forwarded to dns-aws (10.10.100.5,
+      # EC2 nano running technitium pointed at AWS Route53 Resolver
+      # Inbound endpoint). The aws.etherport.net forwarder was
+      # removed 2026-05-27 — the Route53 private zone for that name
+      # was deleted with the broader Route53 → CF migration. See
+      # docs/runbooks/aws-private-dns.md for historical context.
       - { zone: "us-west-2.compute.internal", forwarder: "10.10.100.5" }
 
   tasks:
