@@ -83,7 +83,6 @@ This infrastructure hosts public-facing campaign websites, completely separate f
 |----------|------|
 | `stopthecastle.com` | Domain |
 | `smithforsb.com` | Domain |
-| `mgoodwin.us@gmail.com` | Email (campaign contact) |
 
 ---
 

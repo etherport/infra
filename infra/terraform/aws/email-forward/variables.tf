@@ -28,9 +28,3 @@ variable "graham_forward_to" {
   default     = "grahamsm@gmail.com"
 }
 
-variable "mark_forward_to" {
-  description = "Email address to forward mark's emails to"
-  type        = string
-  default     = "mgoodwin.us@gmail.com"
-}
-

@@ -1,6 +1,6 @@
 // smithforsb.com — static site (S3 → CloudFront) + email forwarding.
 //
-// Forwarded addresses: graham@, info@, mark@smithforsb.com
+// Forwarded addresses: graham@, info@smithforsb.com
 //
 // Kept: SES setup, ACM validation, root CNAME-flat → CloudFront.
 // Removed: autodiscover (Outlook), legacy `scph1023._domainkey` (old

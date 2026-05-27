@@ -193,9 +193,6 @@ def _render_html(from_num, to_num, body, media_urls, received_at):
     <pre class="body-text">{html.escape(body or '(empty body)')}</pre>
   </div>
   {media_html}
-  <div class="footer">
-    Sent by <code>twilio-webhook</code> Lambda · replaces the legacy Twilio Studio Flow.
-  </div>
 </div></body></html>"""
 
 
@@ -230,7 +227,7 @@ def _handle_sms(params: dict) -> dict:
 
     try:
         _ses.send_email(
-            Source=sender,
+            Source=f"Etherport SMS <{sender}>",
             Destination={"ToAddresses": [recipient]},
             Message={
                 "Subject": {"Data": subject},

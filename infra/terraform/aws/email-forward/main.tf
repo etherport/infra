@@ -49,7 +49,6 @@ resource "aws_lambda_function" "email_forward" {
     variables = {
       VERIFIED_SENDER   = var.verified_sender
       GRAHAM_FORWARD_TO = var.graham_forward_to
-      MARK_FORWARD_TO   = var.mark_forward_to
     }
   }
 
@@ -99,15 +98,6 @@ resource "aws_lambda_permission" "ses_graham" {
   source_account = data.aws_caller_identity.current.account_id
 }
 
-resource "aws_lambda_permission" "ses_mark" {
-  statement_id   = "AllowSESInvokeMark"
-  action         = "lambda:InvokeFunction"
-  function_name  = aws_lambda_function.email_forward.function_name
-  principal      = "ses.amazonaws.com"
-  source_arn     = aws_ses_receipt_rule.fwd_mark.arn
-  source_account = data.aws_caller_identity.current.account_id
-}
-
 # =============================================================================
 # SES Domain Identities
 # =============================================================================
@@ -138,10 +128,6 @@ resource "aws_ses_email_identity" "g_grahamsmith" {
 
 resource "aws_ses_email_identity" "grahamsm_gmail" {
   email = "grahamsm@gmail.com"
-}
-
-resource "aws_ses_email_identity" "mgoodwin_gmail" {
-  email = "mgoodwin.us@gmail.com"
 }
 
 resource "aws_ses_email_identity" "graham_icloud" {
@@ -175,6 +161,7 @@ resource "aws_ses_receipt_rule" "fwd_graham" {
     "graham@grahamsmith.net",
     "graham@smithforsb.com",
     "info@smithforsb.com",
+    "info@stopthecastle.com",
     "me@grahamsmith.net",
     "windtryst@grahamsmith.net",
     "workroom@grahamsmith.net",
@@ -188,21 +175,3 @@ resource "aws_ses_receipt_rule" "fwd_graham" {
   }
 }
 
-resource "aws_ses_receipt_rule" "fwd_mark" {
-  name          = "fwd_mark"
-  rule_set_name = aws_ses_receipt_rule_set.inbound.rule_set_name
-  enabled       = true
-  scan_enabled  = true
-
-  recipients = [
-    "info@stopthecastle.com",
-    "mark@smithforsb.com",
-  ]
-
-  s3_action {
-    bucket_name       = data.aws_s3_bucket.email.id
-    object_key_prefix = "emails/mark/"
-    iam_role_arn      = aws_iam_role.ses_s3_mark.arn
-    position          = 1
-  }
-}

@@ -11,12 +11,10 @@ ses_client = boto3.client('ses')
 # Environment variables (set these in your Lambda configuration)
 VERIFIED_SENDER = os.environ.get('VERIFIED_SENDER', 'g@grahamsmith.net')
 GRAHAM_FORWARD_TO = os.environ.get('GRAHAM_FORWARD_TO', 'grahamsm@gmail.com')
-MARK_FORWARD_TO = os.environ.get('MARK_FORWARD_TO', 'mgoodwin.us@gmail.com')
 
 def lambda_handler(event, context):
     print("VERIFIED_SENDER:", VERIFIED_SENDER)
     print("GRAHAM_FORWARD_TO:", GRAHAM_FORWARD_TO)
-    print("MARK_FORWARD_TO:", MARK_FORWARD_TO)
     print("Received event:", event)
 
     # Extract S3 bucket name and object key from the event
@@ -33,8 +31,6 @@ def lambda_handler(event, context):
     # Determine the forwarding recipient based on the object key prefix
     if s3_object_key.startswith('emails/graham/'):
         forward_to = GRAHAM_FORWARD_TO
-    elif s3_object_key.startswith('emails/mark/'):
-        forward_to = MARK_FORWARD_TO
     else:
         print("No matching prefix found. Skipping forwarding.")
         return {

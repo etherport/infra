@@ -10,9 +10,8 @@
 # - graham.m.smith@me.com - iCloud email
 #
 # NOT managed (out of scope):
-# - stopthecastle.com - Campaign domain
-# - smithforsb.com - Campaign domain
-# - mgoodwin.us@gmail.com - Campaign contact
+# - stopthecastle.com - personal/forwarding domain (in cloudflare-personal)
+# - smithforsb.com   - personal/forwarding domain (in cloudflare-personal)
 
 #------------------------------------------------------------------------------
 # Domain Identities
