@@ -90,8 +90,13 @@ def _verify_signature(event: dict, params: dict) -> bool:
     """Compute X-Twilio-Signature ourselves + constant-time compare.
 
     Per Twilio docs: signature = base64(HMAC-SHA1(auth_token, full_url +
-    concat(sorted(k+v for k,v in params)))). If TWILIO_AUTH_TOKEN is unset,
-    skip verification (return True) — relies on URL unguessability.
+    concat(sorted(k+v for k,v in params)))). full_url MUST include the
+    query string (with leading "?") if one was present on the request,
+    or signatures mismatch for any region where Twilio's edge appends
+    routing params (observed on UK +44 DIDs vs US DIDs).
+
+    If TWILIO_AUTH_TOKEN is unset, skip verification (return True) —
+    relies on URL unguessability.
     """
     token = os.environ.get("TWILIO_AUTH_TOKEN", "")
     if not token:
@@ -103,18 +108,35 @@ def _verify_signature(event: dict, params: dict) -> bool:
         _log.warning("missing X-Twilio-Signature header")
         return False
 
-    # Reconstruct the full URL the way Twilio computed the signature with.
-    # Function URLs land at a fixed host; the path is "/".
-    req_ctx = event.get("requestContext", {})
-    domain = req_ctx.get("domainName", "")
-    path = req_ctx.get("http", {}).get("path", "/")
-    url = f"https://{domain}{path}"
+    domain = event.get("requestContext", {}).get("domainName", "")
+    # Lambda Function URL events expose the original path + query string
+    # in these top-level keys. They reflect what Twilio actually called.
+    raw_path = event.get("rawPath") or event.get("requestContext", {}).get("http", {}).get("path", "/")
+    raw_qs = event.get("rawQueryString", "") or ""
 
-    data = url + "".join(f"{k}{v}" for k, v in sorted(params.items()))
-    expected = base64.b64encode(
-        hmac.new(token.encode(), data.encode(), hashlib.sha1).digest()
-    ).decode()
-    return hmac.compare_digest(expected, sig)
+    # Try the most-likely URL form first, then fall back to alternates
+    # — Twilio's edge representation can drift across regions.
+    candidates = []
+    base = f"https://{domain}{raw_path}"
+    candidates.append(base + (f"?{raw_qs}" if raw_qs else ""))
+    if raw_qs:
+        candidates.append(base)  # without query (rare)
+    if raw_path != "/" and raw_path.endswith("/"):
+        candidates.append(f"https://{domain}{raw_path.rstrip('/')}")
+
+    suffix = "".join(f"{k}{v}" for k, v in sorted(params.items()))
+    for url in candidates:
+        expected = base64.b64encode(
+            hmac.new(token.encode(), (url + suffix).encode(), hashlib.sha1).digest()
+        ).decode()
+        if hmac.compare_digest(expected, sig):
+            return True
+
+    _log.error(
+        "signature mismatch — tried %d url candidates: %s | sig_recv=%s",
+        len(candidates), candidates, sig,
+    )
+    return False
 
 
 def lambda_handler(event, context):
@@ -146,11 +168,15 @@ def lambda_handler(event, context):
 
 def _handle_voice(params: dict) -> dict:
     forward = os.environ["FORWARD_NUMBER"]
-    # <Dial> connects the incoming caller to FORWARD_NUMBER. answerOnBridge
-    # avoids billing the incoming call until the forward connects.
+    # callerId on the outbound leg = the DID the caller dialed. Lets the
+    # user's phone show "Campaign" / "UK" / "US-personal" via the contact
+    # labels they have saved for each Twilio DID, so they know which line
+    # was called without losing time on a TTS announcement.
+    caller_id = params.get("To", forward)
     twiml = (
         '<?xml version="1.0" encoding="UTF-8"?>'
-        f"<Response><Dial answerOnBridge=\"true\">{html.escape(forward)}</Dial></Response>"
+        f"<Response><Dial answerOnBridge=\"true\" callerId=\"{html.escape(caller_id)}\">"
+        f"{html.escape(forward)}</Dial></Response>"
     )
     return _twiml(twiml)
 
