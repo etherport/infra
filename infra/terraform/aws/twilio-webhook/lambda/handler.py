@@ -136,10 +136,13 @@ def _verify_signature(event: dict, params: dict) -> bool:
         k: v for k, v in headers.items()
         if "auth" not in k.lower() and "cookie" not in k.lower()
     }
+    raw_body = event.get("_rawBody", "")
     _log.error(
         "signature mismatch — sig_recv=%s | urls_tried=%s | "
-        "raw_path=%s raw_qs=%s domain=%s | headers=%s",
-        sig, candidates, raw_path, raw_qs, domain, json.dumps(safe_headers),
+        "raw_path=%s raw_qs=%s domain=%s | "
+        "raw_body=%r | param_keys=%s | headers=%s",
+        sig, candidates, raw_path, raw_qs, domain,
+        raw_body, sorted(params.keys()), json.dumps(safe_headers),
     )
     return False
 
@@ -148,7 +151,13 @@ def lambda_handler(event, context):
     body = event.get("body", "") or ""
     if event.get("isBase64Encoded"):
         body = base64.b64decode(body).decode()
-    params = dict(urllib.parse.parse_qsl(body))
+    # keep_blank_values=True so empty-valued params Twilio may include
+    # (and signs over) aren't silently dropped on our side.
+    params = dict(urllib.parse.parse_qsl(body, keep_blank_values=True))
+    # Stash the raw body for diagnostic logging on sig mismatch — Twilio
+    # docs say signatures cover URL + sorted decoded params, but if the
+    # decoded set differs from the wire bytes, we want both sides visible.
+    event["_rawBody"] = body
 
     safe_params = {
         k: v for k, v in params.items()
