@@ -45,7 +45,7 @@ Update Route53 DDNS credentials from 1Password:
 
 ```bash
 # Navigate to secret directory
-cd platform/kubernetes/route53-ddns/base
+cd platform/kubernetes/cloudflare-ddns/base
 
 # Get credentials from 1Password
 AWS_ACCESS_KEY_ID=$(op item get ooefsxjnvx4khtbh63tn5fr3pu --fields label=username)
@@ -56,8 +56,8 @@ cat > temp-secret.yaml <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
-  name: route53-ddns-credentials
-  namespace: route53-ddns
+  name: cloudflare-ddns-credentials
+  namespace: cloudflare-ddns
 type: Opaque
 stringData:
   AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
@@ -83,8 +83,8 @@ sops -d 01-route53-secret.sops.yaml | kubectl apply -f -
 Update a secret in Kubernetes directly from 1Password (without SOPS):
 
 ```bash
-kubectl create secret generic route53-ddns-credentials \
-  --namespace=route53-ddns \
+kubectl create secret generic cloudflare-ddns-credentials \
+  --namespace=cloudflare-ddns \
   --from-literal=AWS_ACCESS_KEY_ID=$(op item get ooefsxjnvx4khtbh63tn5fr3pu --fields label=username) \
   --from-literal=AWS_SECRET_ACCESS_KEY=$(op item get ooefsxjnvx4khtbh63tn5fr3pu --fields label=password --reveal) \
   --dry-run=client -o yaml | kubectl apply -f -
@@ -120,14 +120,14 @@ AWS_ACCESS_KEY_ID=$(op item get $ITEM_ID --fields label=username)
 AWS_SECRET_ACCESS_KEY=$(op item get $ITEM_ID --fields label=password --reveal)
 
 echo "Updating SOPS encrypted secret..."
-cd platform/kubernetes/route53-ddns/base
+cd platform/kubernetes/cloudflare-ddns/base
 # ... update and encrypt secret ...
 
 echo "Deploying to Kubernetes..."
 sops -d 01-route53-secret.sops.yaml | kubectl apply -f -
 
 echo "Restarting Route53 DDNS pods..."
-kubectl delete pods -n route53-ddns -l app=route53-ddns
+kubectl delete pods -n cloudflare-ddns -l app=cloudflare-ddns
 
 echo "✅ Credentials rotated successfully"
 ```

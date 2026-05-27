@@ -39,10 +39,10 @@ Use [Semantic Versioning](https://semver.org/):
 
 ### Workflow Updates
 
-Update `.github/workflows/route53-ddns-image.yml`:
+Update `.github/workflows/cloudflare-ddns-image.yml`:
 
 ```yaml
-name: Build route53-ddns image
+name: Build cloudflare-ddns image
 
 on:
   push:
@@ -50,8 +50,8 @@ on:
     tags:
       - 'v*.*.*'  # Trigger on version tags
     paths:
-      - "platform/kubernetes/route53-ddns/image/**"
-      - ".github/workflows/route53-ddns-image.yml"
+      - "platform/kubernetes/cloudflare-ddns/image/**"
+      - ".github/workflows/cloudflare-ddns-image.yml"
   pull_request:
     branches: [ "main" ]
   workflow_dispatch: {}
@@ -71,7 +71,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/sparked-diamond/route53-ddns
+          images: ghcr.io/sparked-diamond/cloudflare-ddns
           tags: |
             # For git tags (v1.2.3)
             type=semver,pattern={{version}}
@@ -99,7 +99,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: platform/kubernetes/route53-ddns/image
+          context: platform/kubernetes/cloudflare-ddns/image
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -111,7 +111,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/orgs/sparked-diamond/packages/container/route53-ddns \
+            https://api.github.com/orgs/sparked-diamond/packages/container/cloudflare-ddns \
             -d '{"visibility":"public"}'
 ```
 
@@ -138,15 +138,15 @@ git push origin v1.0.0
 ```
 
 This triggers GitHub Actions to build and push:
-- `ghcr.io/sparked-diamond/route53-ddns:v1.0.0`
-- `ghcr.io/sparked-diamond/route53-ddns:v1.0`
-- `ghcr.io/sparked-diamond/route53-ddns:v1`
-- `ghcr.io/sparked-diamond/route53-ddns:latest`
+- `ghcr.io/sparked-diamond/cloudflare-ddns:v1.0.0`
+- `ghcr.io/sparked-diamond/cloudflare-ddns:v1.0`
+- `ghcr.io/sparked-diamond/cloudflare-ddns:v1`
+- `ghcr.io/sparked-diamond/cloudflare-ddns:latest`
 
 #### 2. Update Kubernetes to Use Version
 
 ```yaml
-# platform/kubernetes/route53-ddns/base/cronjob.yaml
+# platform/kubernetes/cloudflare-ddns/base/cronjob.yaml
 spec:
   jobTemplate:
     spec:
@@ -155,7 +155,7 @@ spec:
           containers:
             - name: ddns
               # Use specific version for production
-              image: ghcr.io/sparked-diamond/route53-ddns:v1.0.0
+              image: ghcr.io/sparked-diamond/cloudflare-ddns:v1.0.0
               # Or auto-update patches: v1.0
               # Or auto-update minor: v1
               imagePullPolicy: IfNotPresent  # Changed from Always
@@ -164,11 +164,11 @@ spec:
 #### 3. Deploy Update
 
 ```bash
-cd platform/kubernetes/route53-ddns/base
+cd platform/kubernetes/cloudflare-ddns/base
 kubectl apply -k .
 
 # Verify new version
-kubectl get cronjob route53-ddns -n route53-ddns -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].image}'
+kubectl get cronjob cloudflare-ddns -n cloudflare-ddns -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].image}'
 ```
 
 ### Rollback Process
@@ -177,17 +177,17 @@ If a release has issues:
 
 ```bash
 # Option 1: Rollback to previous version tag
-kubectl set image cronjob/route53-ddns \
-  -n route53-ddns \
-  ddns=ghcr.io/sparked-diamond/route53-ddns:v1.0.0
+kubectl set image cronjob/cloudflare-ddns \
+  -n cloudflare-ddns \
+  ddns=ghcr.io/sparked-diamond/cloudflare-ddns:v1.0.0
 
 # Option 2: Rollback using git SHA (for testing)
-kubectl set image cronjob/route53-ddns \
-  -n route53-ddns \
-  ddns=ghcr.io/sparked-diamond/route53-ddns:sha-abc123def
+kubectl set image cronjob/cloudflare-ddns \
+  -n cloudflare-ddns \
+  ddns=ghcr.io/sparked-diamond/cloudflare-ddns:sha-abc123def
 
 # Option 3: Update git and redeploy
-cd platform/kubernetes/route53-ddns/base
+cd platform/kubernetes/cloudflare-ddns/base
 # Edit cronjob.yaml to previous version
 kubectl apply -k .
 ```
@@ -274,13 +274,13 @@ Add version label to pods:
 # cronjob.yaml
 metadata:
   labels:
-    app: route53-ddns
+    app: cloudflare-ddns
     version: v1.0.0  # Update with each release
 ```
 
 Query deployed versions:
 ```bash
-kubectl get pods -A -l app=route53-ddns -o jsonpath='{range .items[*]}{.metadata.labels.version}{"\n"}{end}' | sort -u
+kubectl get pods -A -l app=cloudflare-ddns -o jsonpath='{range .items[*]}{.metadata.labels.version}{"\n"}{end}' | sort -u
 ```
 
 ## Best Practices

@@ -7,7 +7,7 @@ This repository uses GitHub Actions for CI/CD automation of container images and
 ```
 .github/workflows/
 ├── aws-s3-sync-image.yml       # Container image build for S3 backup
-├── route53-ddns-image.yml      # Container image build for DDNS updater
+├── cloudflare-ddns-image.yml      # Container image build for DDNS updater
 └── terraform-regional-vpn.yml  # Terraform deployment for travel VPN
 ```
 
@@ -148,13 +148,13 @@ Builds the `aws-s3-sync` container for Kubernetes backup jobs.
 
 **Purpose:** Sync Kubernetes backups to S3 buckets
 
-### route53-ddns-image.yml
+### cloudflare-ddns-image.yml
 
-Builds the `route53-ddns` container for dynamic DNS updates.
+Builds the `cloudflare-ddns` container for dynamic DNS updates.
 
-**Path:** `platform/kubernetes/route53-ddns/image/`
+**Path:** `platform/kubernetes/cloudflare-ddns/image/`
 
-**Image:** `ghcr.io/sparked-diamond/route53-ddns:main`
+**Image:** `ghcr.io/sparked-diamond/cloudflare-ddns:main`
 
 **Purpose:** Update Route53 DNS records when homelab IP changes
 

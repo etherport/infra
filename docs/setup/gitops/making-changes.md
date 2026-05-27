@@ -119,7 +119,7 @@ For apps using ConfigMap generators (check their `kustomization.yaml`):
 
 1. **Find the CronJob manifest**:
    ```bash
-   cd platform/kubernetes/route53-ddns/base/
+   cd platform/kubernetes/cloudflare-ddns/base/
    vim cronjob.yaml
    ```
 
@@ -133,7 +133,7 @@ For apps using ConfigMap generators (check their `kustomization.yaml`):
 3. **Commit and push**:
    ```bash
    git add cronjob.yaml
-   git commit -m "route53-ddns: update schedule to every 30 minutes"
+   git commit -m "cloudflare-ddns: update schedule to every 30 minutes"
    git push
    ```
 
@@ -144,7 +144,7 @@ For apps using ConfigMap generators (check their `kustomization.yaml`):
 
 5. **Verify the change**:
    ```bash
-   kubectl get cronjob -n route53-ddns
+   kubectl get cronjob -n cloudflare-ddns
    # Check the SCHEDULE column
    ```
 
@@ -323,22 +323,22 @@ Flux manages the desired state. If you manually scale with `kubectl scale`, Flux
 
 3. **Create a manual job from the CronJob**:
    ```bash
-   kubectl create job --from=cronjob/route53-ddns route53-test-$(date +%s) -n route53-ddns
+   kubectl create job --from=cronjob/cloudflare-ddns route53-test-$(date +%s) -n cloudflare-ddns
    ```
 
 4. **Watch the test job**:
    ```bash
-   kubectl get jobs -n route53-ddns -w
+   kubectl get jobs -n cloudflare-ddns -w
    ```
 
 5. **Check logs**:
    ```bash
-   kubectl logs -n route53-ddns job/route53-test-1234567890
+   kubectl logs -n cloudflare-ddns job/route53-test-1234567890
    ```
 
 6. **Clean up test job** (optional):
    ```bash
-   kubectl delete job route53-test-1234567890 -n route53-ddns
+   kubectl delete job route53-test-1234567890 -n cloudflare-ddns
    ```
 
 ---

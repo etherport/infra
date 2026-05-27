@@ -68,7 +68,7 @@ Images we build ourselves and push to GHCR. The CI workflow tags both
 | Image                                        | Built by workflow                       |
 |----------------------------------------------|-----------------------------------------|
 | `ghcr.io/sparked-diamond/aws-s3-sync:main`   | `.github/workflows/aws-s3-sync-image.yml` |
-| `ghcr.io/sparked-diamond/route53-ddns:main`  | `.github/workflows/route53-ddns-image.yml` |
+| `ghcr.io/sparked-diamond/cloudflare-ddns:main`  | `.github/workflows/cloudflare-ddns-image.yml` |
 | `ghcr.io/sparked-diamond/ansible-runner:main`| `.github/workflows/ansible-runner-image.yml` |
 
 **Trade-off accepted:** `:main` is moving. Restarting a pod after a

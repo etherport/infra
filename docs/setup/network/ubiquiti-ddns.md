@@ -221,6 +221,6 @@ If the Kubernetes cluster goes down (hardware failure), the router can still upd
 
 ## Related Documentation
 
-- [Route53 DDNS K8s CronJob](../../../platform/kubernetes/route53-ddns/)
+- [Route53 DDNS K8s CronJob](../../../platform/kubernetes/cloudflare-ddns/)
 - [AWS Infrastructure Overview](../../architecture/aws-infrastructure.md)
 - [Terraform AWS DDNS Lambda](../../../infra/terraform/aws/ddns-lambda/)

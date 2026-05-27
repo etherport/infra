@@ -21,7 +21,7 @@ contributor to the ~4k-email incident #37 P1).
 - A CronJob with a real underlying bug (image pull failure, missing
   secret, NFS mount failure, expired credential) producing a new
   failed Job on every schedule tick.
-- `route53-ddns` and other every-minute CronJobs amplify either of the
+- `cloudflare-ddns` and other every-minute CronJobs amplify either of the
   above into a flood.
 
 ## Fix history

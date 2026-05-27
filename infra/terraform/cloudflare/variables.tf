@@ -154,7 +154,7 @@ variable "dns_records_a" {
     }
     "wind" = {
       value   = "47.159.189.5"
-      comment = "Active WAN — k8s route53-ddns CronJob writes every minute"
+      comment = "Active WAN — k8s cloudflare-ddns CronJob writes every minute"
     }
 
     // ---- AWS VPN endpoints (static EIPs) ----

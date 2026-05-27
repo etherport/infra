@@ -155,11 +155,11 @@ The lambda in `infra/terraform/aws/ddns-lambda/` writes Route53 today. Route53 s
 
 See `infra/terraform/aws/ddns-lambda/CF-MIGRATION.md` (scaffolded — TODO sections marked).
 
-#### 11. route53-ddns K8s CronJob → CF API
+#### 11. cloudflare-ddns K8s CronJob → CF API
 
-The CronJob in `platform/kubernetes/route53-ddns/` updates `wind.etherport.net` every minute. Same story — Route53 writes silently no-op post-cutover.
+The CronJob in `platform/kubernetes/cloudflare-ddns/` updates `wind.etherport.net` every minute. Same story — Route53 writes silently no-op post-cutover.
 
-See `platform/kubernetes/route53-ddns/CF-MIGRATION.md` (scaffolded — TODO sections marked).
+See `platform/kubernetes/cloudflare-ddns/CF-MIGRATION.md` (scaffolded — TODO sections marked).
 
 #### 12. Switch advisor APPROVAL_BASE_URL to public CF-gated URL
 

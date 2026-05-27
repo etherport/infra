@@ -19,7 +19,7 @@ What landed while you were out, what's still pending, what needs your attention 
 | Commit | What |
 |---|---|
 | `5a0052e` | docs: UDM rule consolidation + modernization plan (Plan agent output → `docs/planning/udm-rule-consolidation.md`). 6 phases, sequenced by risk. Reads ~7 min. |
-| `ed8a01e` | cert-manager: scaffolded the DNS-01 migration to Cloudflare. New dir `platform/kubernetes/cert-manager-issuer/` + ClusterIssuer flips. Suspended `route53-ddns` CronJob. Deleted empty `infra/terraform/aws/route53/` module + workflow. Added `terraform-google.yml` CI workflow. README workflow table refreshed. |
+| `ed8a01e` | cert-manager: scaffolded the DNS-01 migration to Cloudflare. New dir `platform/kubernetes/cert-manager-issuer/` + ClusterIssuer flips. Suspended `cloudflare-ddns` CronJob. Deleted empty `infra/terraform/aws/route53/` module + workflow. Added `terraform-google.yml` CI workflow. README workflow table refreshed. |
 | `f376534` | gitignore: untrack accidentally-committed `handler.zip`. |
 | `b066796` | gitignore: broaden `handler.zip` pattern to catch the parent-dir layout TF actually uses. |
 
@@ -84,9 +84,9 @@ secret's namespace via kustomize.
 and follow the 5 steps — copy template → sops edit → paste CF token →
 uncomment resource line → commit.
 
-### 2. route53-ddns CronJob failing every minute since the zone deletion
+### 2. cloudflare-ddns CronJob failing every minute since the zone deletion
 
-**Suspended in source** (`platform/kubernetes/route53-ddns/base/cronjob.yaml`).
+**Suspended in source** (`platform/kubernetes/cloudflare-ddns/base/cronjob.yaml`).
 The static `wind = 47.159.189.5` value in `infra/terraform/cloudflare/variables.tf`
 is authoritative until the script is rewritten against the CF API.
 WAN failover detection is BROKEN until the migration in task #84
@@ -140,7 +140,7 @@ CronJob (rewrite against CF API). Tracked as task #84.
 | #81 | Split cloudflare TF module to dodge per-token rate limits | M |
 | #82 | Split public-web domains into separate repo | M |
 | #83 | 1Password tidy-up: consistent naming + tags | L |
-| #84 | Migrate route53-ddns + ddns-updater Lambda from Route53 to CF API | M (becomes H next WAN IP change) |
+| #84 | Migrate cloudflare-ddns + ddns-updater Lambda from Route53 to CF API | M (becomes H next WAN IP change) |
 
 ## Tasks NOT touched (intentionally)
 

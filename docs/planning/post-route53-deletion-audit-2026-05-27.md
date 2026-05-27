@@ -12,7 +12,7 @@ urgency, and proposes a fix order.
 | Component | Path | What it does | State | Urgency |
 |---|---|---|---|---|
 | ddns-updater Lambda | `infra/terraform/aws/ddns-lambda/` | UDM router pings this Lambda with new WAN IPs; Lambda writes wan1/wan2.wind.etherport.net to Route53 | Broken (NoSuchHostedZone). Dormant — no invokers in last hour. | M → H next WAN IP change |
-| route53-ddns CronJob | `platform/kubernetes/route53-ddns/` | K8s CronJob (every 1 min) detects active WAN by IP-source comparison, writes wind.etherport.net to Route53 | Broken; **suspended in source** (cronjob.yaml suspend=true). | M (now suspended) |
+| cloudflare-ddns CronJob | `platform/kubernetes/cloudflare-ddns/` | K8s CronJob (every 1 min) detects active WAN by IP-source comparison, writes wind.etherport.net to Route53 | Broken; **suspended in source** (cronjob.yaml suspend=true). | M (now suspended) |
 | regional-vpn workflow | `.github/workflows/terraform-regional-vpn.yml:191` | After TF creates a regional VPN, UPSERTs vpn-travel.etherport.net | Broken on next dispatch. Manual-only workflow. | L (manual trigger) |
 | dns-restrict-ip Lambda | `infra/terraform/aws/dns-restrict-ip/` | Reads wan1/wan2 from Route53 every 5 min, updates SG ingress to match | Broken. Defensive check prevents SG damage but logs spam every 5 min. | M (noise; SG state safe) |
 
@@ -58,7 +58,7 @@ Today, WAN1 IP is the same value the old writers last published
   any external monitoring) hit the wrong address.
 - **WAN2 IP changes:** same. WAN2 record points at the old IP.
 - **WAN failover (active → backup):** `wind.etherport.net` apex would
-  normally flip to the other WAN's IP via the route53-ddns CronJob.
+  normally flip to the other WAN's IP via the cloudflare-ddns CronJob.
   With it suspended, the apex stays pinned to WAN1's IP.
 - **AWS-side SG ingress:** `dns-restrict-ip` Lambda is supposed to
   re-allow SG entries for the current WAN IPs. It's currently failing
@@ -71,8 +71,8 @@ Today, WAN1 IP is the same value the old writers last published
 
 | Path | What | Fix |
 |---|---|---|
-| `infra/terraform/aws/iam-policies/route53-ddns-updater.json:21` | IAM policy with deleted hosted zone ARN | Drop the ARN or change to wildcard once writers migrate |
-| `platform/kubernetes/route53-ddns/README.md:55,277` | Doc examples mentioning zone ID | Update or remove after CronJob migration |
+| `infra/terraform/aws/iam-policies/cloudflare-ddns-updater.json:21` | IAM policy with deleted hosted zone ARN | Drop the ARN or change to wildcard once writers migrate |
+| `platform/kubernetes/cloudflare-ddns/README.md:55,277` | Doc examples mentioning zone ID | Update or remove after CronJob migration |
 | `docs/setup/network/ubiquiti-ddns.md:135` | aws cli example | Update after writer migration |
 | `docs/runbooks/regional-vpn-deployment.md:201` | aws cli example | Update with workflow |
 
@@ -97,7 +97,7 @@ Today, WAN1 IP is the same value the old writers last published
 
 2. **Migrate ddns-updater Lambda** to use CF API. UDM continues to
    call the same endpoint; Lambda writes to CF instead of Route53.
-3. **Migrate route53-ddns CronJob script** to use CF API. Image
+3. **Migrate cloudflare-ddns CronJob script** to use CF API. Image
    rebuild needed (drop aws-cli, use curl + CF token). Un-suspend
    after deploy.
 4. **Migrate dns-restrict-ip Lambda** to use plain DNS resolution
@@ -107,9 +107,9 @@ Today, WAN1 IP is the same value the old writers last published
 ### Phase 3 — low-urgency cleanup (when convenient)
 
 5. **Migrate regional-vpn workflow** Route53 step to CF API.
-6. **Drop the deleted zone ARN** from route53-ddns-updater IAM policy.
+6. **Drop the deleted zone ARN** from cloudflare-ddns-updater IAM policy.
 7. **Update docs** (ubiquiti-ddns.md, regional-vpn-deployment.md,
-   route53-ddns README.md) for the new CF paths.
+   cloudflare-ddns README.md) for the new CF paths.
 8. **Add CF DNS:Edit token** to 1P scoped per writer (vs reusing
    `cloudflare-tf-token`) so we can rotate independently.
 

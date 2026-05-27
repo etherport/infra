@@ -77,7 +77,7 @@ github-actions-runner.
 auto-remediation · cloudflared · blackbox-exporter ·
 cloudwatch-to-loki · policy-baseline · cnpg (Cluster CR) ·
 home-automation · plex · rclone-gdrive · kopia · wikijs · ollama ·
-tailscale (subnet router) · wireguard · route53-ddns · unifi-backup ·
+tailscale (subnet router) · wireguard · cloudflare-ddns · unifi-backup ·
 unifi-cert-sync · monitoring (alerts, dashboards, status report) ·
 backups (Velero schedules + 7 s3-sync shares + daily report).
 
@@ -200,7 +200,7 @@ Restore procedures + RTO/RPO targets:
 | `aws.etherport.net` private | Deleted 2026-05-27 | Never had real content; private zone removed with route53 module decom |
 | `wind.etherport.net` internal | Technitium (in-cluster pair + dns-fallback + dns-aws) | MetalLB VIP 10.10.201.5 |
 | 3 personal zones (grahamsmith / smithforsb / stopthecastle) | Cloudflare | Migrated 2026-05-27, DNSSEC enabled, public-web repo split tracked as task #82 |
-| DDNS writers | ddns-updater Lambda + route53-ddns CronJob | **BROKEN** — both still target the deleted Route53 zone. CronJob suspended; Lambda dormant (no invokers in last hour). Migration to CF API tracked as task #84. |
+| DDNS writers | ddns-updater Lambda + cloudflare-ddns CronJob | **BROKEN** — both still target the deleted Route53 zone. CronJob suspended; Lambda dormant (no invokers in last hour). Migration to CF API tracked as task #84. |
 
 Module docs: `infra/terraform/cloudflare/README.md`. CF Free plan + ALB
 decom + 5 Route53 zones deleted saves ~$27/mo vs pre-2026-05 baseline.

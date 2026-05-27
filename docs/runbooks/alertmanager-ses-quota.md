@@ -46,7 +46,7 @@ Confirmation that this is provider-side (not config, DNS, auth, or TLS):
   by aggregation group in the logs:
   - `AlertmanagerFailedToSendAlerts` (self-amplifying, 42 retries)
   - `InfoInhibitor` namespace=wireguard (20)
-  - `KubeJobFailed` namespace=route53-ddns (8)
+  - `KubeJobFailed` namespace=cloudflare-ddns (8)
 
 ## Fix
 
@@ -67,7 +67,7 @@ aws ses get-send-quota --region us-west-2
 1. **Request SES production access** (one-time, lifts cap to 50k/day):
    AWS Console → SES → Account dashboard → Request production access.
 2. **Quiet the noisiest alerts** to keep daily volume well below the cap. The
-   `InfoInhibitor` and `route53-ddns` `KubeJobFailed` groups dominated this incident;
+   `InfoInhibitor` and `cloudflare-ddns` `KubeJobFailed` groups dominated this incident;
    tune their `for:` durations or add inhibition rules in
    `platform/kubernetes/monitoring/03-alertmanager-config.yaml`.
 3. **Do not** rotate the SMTP credentials — 454 is not an auth failure, and rotation

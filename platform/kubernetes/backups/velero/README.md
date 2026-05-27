@@ -73,7 +73,7 @@ All schedules use file-system backup (Kopia) with 30-day retention.
 | `plex-daily` | plex | 3am | Media server config/metadata |
 | `wikijs-daily` | wikijs | 3am | Wiki.js application |
 | `kube-system-daily` | kube-system | 3am | Core Kubernetes components |
-| `infrastructure-daily` | backups, route53-ddns, monitoring, traefik, cert-manager, icloudpd, rclone, metallb-system | 4am | Infrastructure services |
+| `infrastructure-daily` | backups, cloudflare-ddns, monitoring, traefik, cert-manager, icloudpd, rclone, metallb-system | 4am | Infrastructure services |
 | `monitoring-daily` | monitoring | 4am | Prometheus, Grafana, Alertmanager |
 
 ### Schedule Files

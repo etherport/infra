@@ -177,4 +177,4 @@ If the CronJob is broken AND the cert expires:
 
 - `docs/planning/udm-config-drift-2026-05-17.md` — the audit that
   identified the in-device acme.sh setup as a fragility risk.
-- `platform/kubernetes/route53-ddns/base/` — similar CronJob pattern.
+- `platform/kubernetes/cloudflare-ddns/base/` — similar CronJob pattern.

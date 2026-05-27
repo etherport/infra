@@ -45,7 +45,7 @@
 !**/*.sops.yaml
 
 # Explicitly ignored secret files
-platform/kubernetes/route53-ddns/base/secret.yaml
+platform/kubernetes/cloudflare-ddns/base/secret.yaml
 
 # Config files that may contain credentials (prefer SOPS)
 **/alertmanager-config.yaml

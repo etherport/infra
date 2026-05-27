@@ -62,7 +62,7 @@ age-keygen -o ~/.config/sops/age/keys.txt
 Each directory with encrypted secrets needs a `.sops.yaml`:
 
 ```yaml
-# platform/kubernetes/route53-ddns/.sops.yaml
+# platform/kubernetes/cloudflare-ddns/.sops.yaml
 creation_rules:
   - path_regex: \.enc\.yaml$
     encrypted_regex: ^(data|stringData)$
@@ -99,12 +99,12 @@ export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
 
 ```bash
 # Create a new encrypted secret
-cat > route53-ddns/base/secret.enc.yaml <<'EOF'
+cat > cloudflare-ddns/base/secret.enc.yaml <<'EOF'
 apiVersion: v1
 kind: Secret
 metadata:
-  name: route53-ddns-credentials
-  namespace: route53-ddns
+  name: cloudflare-ddns-credentials
+  namespace: cloudflare-ddns
 type: Opaque
 stringData:
   AWS_ACCESS_KEY_ID: ""
@@ -112,7 +112,7 @@ stringData:
 EOF
 
 # Encrypt and edit in one step
-sops route53-ddns/base/secret.enc.yaml
+sops cloudflare-ddns/base/secret.enc.yaml
 
 # This opens your editor with the secret file
 # Fill in the values, save, and exit
@@ -123,13 +123,13 @@ sops route53-ddns/base/secret.enc.yaml
 
 ```bash
 # Export existing secret from Kubernetes
-kubectl get secret route53-ddns-credentials -n route53-ddns -o yaml > secret.yaml
+kubectl get secret cloudflare-ddns-credentials -n cloudflare-ddns -o yaml > secret.yaml
 
 # Remove managed fields
 yq eval 'del(.metadata.managedFields, .metadata.creationTimestamp, .metadata.resourceVersion, .metadata.uid)' secret.yaml > clean-secret.yaml
 
 # Encrypt it
-sops -e clean-secret.yaml > route53-ddns/base/secret.enc.yaml
+sops -e clean-secret.yaml > cloudflare-ddns/base/secret.enc.yaml
 
 # Clean up
 rm secret.yaml clean-secret.yaml
@@ -138,12 +138,12 @@ rm secret.yaml clean-secret.yaml
 ### Method 3: One-Liner from kubectl
 
 ```bash
-kubectl create secret generic route53-ddns-credentials \
-  --namespace=route53-ddns \
+kubectl create secret generic cloudflare-ddns-credentials \
+  --namespace=cloudflare-ddns \
   --from-literal=AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE \
   --from-literal=AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
   --dry-run=client -o yaml | \
-  sops -e /dev/stdin > route53-ddns/base/secret.enc.yaml
+  sops -e /dev/stdin > cloudflare-ddns/base/secret.enc.yaml
 ```
 
 ## Using Encrypted Secrets
@@ -151,7 +151,7 @@ kubectl create secret generic route53-ddns-credentials \
 ### View Encrypted File (Raw)
 
 ```bash
-cat route53-ddns/base/secret.enc.yaml
+cat cloudflare-ddns/base/secret.enc.yaml
 ```
 
 Output shows encrypted content:
@@ -159,8 +159,8 @@ Output shows encrypted content:
 apiVersion: v1
 kind: Secret
 metadata:
-    name: route53-ddns-credentials
-    namespace: route53-ddns
+    name: cloudflare-ddns-credentials
+    namespace: cloudflare-ddns
 type: Opaque
 stringData:
     AWS_ACCESS_KEY_ID: ENC[AES256_GCM,data:...,iv:...,tag:...,type:str]
@@ -179,10 +179,10 @@ sops:
 
 ```bash
 # Decrypt to stdout
-sops -d route53-ddns/base/secret.enc.yaml
+sops -d cloudflare-ddns/base/secret.enc.yaml
 
 # Decrypt to file
-sops -d route53-ddns/base/secret.enc.yaml > secret.yaml
+sops -d cloudflare-ddns/base/secret.enc.yaml > secret.yaml
 ```
 
 ### Edit Encrypted Secret
@@ -190,14 +190,14 @@ sops -d route53-ddns/base/secret.enc.yaml > secret.yaml
 ```bash
 # Opens decrypted version in editor
 # Automatically re-encrypts on save
-sops route53-ddns/base/secret.enc.yaml
+sops cloudflare-ddns/base/secret.enc.yaml
 ```
 
 ### Deploy to Kubernetes
 
 ```bash
 # Decrypt and apply
-sops -d route53-ddns/base/secret.enc.yaml | kubectl apply -f -
+sops -d cloudflare-ddns/base/secret.enc.yaml | kubectl apply -f -
 
 # Or add to kustomization.yaml with SOPS generator (requires KSOPS)
 ```
@@ -208,8 +208,8 @@ sops -d route53-ddns/base/secret.enc.yaml | kubectl apply -f -
 
 ```bash
 # Encrypted files are SAFE to commit
-git add route53-ddns/base/secret.enc.yaml
-git add route53-ddns/.sops.yaml
+git add cloudflare-ddns/base/secret.enc.yaml
+git add cloudflare-ddns/.sops.yaml
 git commit -m "Add SOPS-encrypted Route53 credentials"
 git push
 ```
@@ -257,7 +257,7 @@ creation_rules:
       age1vzaqy5qrqmwmx5vlcf6nq7gdwzq6y8w8s8vn8e4z8w7s5v6n8e4z8w7s5v
 
 # Re-encrypt existing secrets for new recipients
-sops updatekeys route53-ddns/base/secret.enc.yaml
+sops updatekeys cloudflare-ddns/base/secret.enc.yaml
 ```
 
 ### Adding New Team Member
@@ -297,9 +297,9 @@ cat ~/.config/sops/age/keys.txt | \
   --from-file=age.agekey=/dev/stdin
 
 # Configure Kustomization to decrypt SOPS secrets
-flux create kustomization route53-ddns \
+flux create kustomization cloudflare-ddns \
   --source=GitRepository/flux-system \
-  --path="./platform/kubernetes/route53-ddns/base" \
+  --path="./platform/kubernetes/cloudflare-ddns/base" \
   --prune=true \
   --interval=5m \
   --decryption-provider=sops \
@@ -354,14 +354,14 @@ export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
 
 ```bash
 # Create encrypted secret
-sops route53-ddns/base/secret.enc.yaml
+sops cloudflare-ddns/base/secret.enc.yaml
 
 # Edit content (SOPS opens your editor):
 apiVersion: v1
 kind: Secret
 metadata:
-  name: route53-ddns-credentials
-  namespace: route53-ddns
+  name: cloudflare-ddns-credentials
+  namespace: cloudflare-ddns
 type: Opaque
 stringData:
   AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
@@ -370,10 +370,10 @@ stringData:
 # Save and exit - file is encrypted automatically
 
 # Deploy
-sops -d route53-ddns/base/secret.enc.yaml | kubectl apply -f -
+sops -d cloudflare-ddns/base/secret.enc.yaml | kubectl apply -f -
 
 # Commit safely
-git add route53-ddns/base/secret.enc.yaml
+git add cloudflare-ddns/base/secret.enc.yaml
 git commit -m "Add Route53 credentials"
 ```
 

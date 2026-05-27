@@ -15,7 +15,7 @@
 
 - **aws.etherport.net** PRIVATE Route53 zone — VPC-internal, not in public NS chain, no CF equivalent. Stays on Route53.
 - **NS records on etherport.net at Route53 Registrar** — the destructive cutover step. Done manually in the Route53 Registrar console.
-- **DDNS writers** (`ddns-updater` Lambda + `route53-ddns` K8s CronJob) — they keep writing to Route53 until you migrate them to CF API per the runbook.
+- **DDNS writers** (`ddns-updater` Lambda + `cloudflare-ddns` K8s CronJob) — they keep writing to Route53 until you migrate them to CF API per the runbook.
 
 ## Prerequisites (manual setup)
 

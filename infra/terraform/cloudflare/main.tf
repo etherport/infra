@@ -13,7 +13,7 @@
 // Architecture:
 //   - aws.etherport.net (PRIVATE Route53 zone) stays on Route53 unchanged
 //     (VPC-internal resolution, not in public NS chain)
-//   - The two ddns writers (ddns-updater Lambda + route53-ddns CronJob)
+//   - The two ddns writers (ddns-updater Lambda + cloudflare-ddns CronJob)
 //     get rewritten to use CF DNS API post-cutover (see runbook)
 
 // ---------------------------------------------------------------------------
