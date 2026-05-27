@@ -220,16 +220,20 @@ variable "dns_records_cname" {
       comment = "ACME validation — apex etherport.net cert (cert-manager renewals)"
     }
 
-    // ---- ALB aliases — last remaining users of the legacy public path ----
-    // ha.wind moved to CF Tunnel 2026-05-27 (see alexa-service-token.tf).
-    // *.wind wildcard still serves: operator UIs (pdu1/2, ups1/2, prox-ipmi,
-    //  proxmox, traefik-dashboard) which intentionally stay behind the ALB +
-    // Traefik path (no public CF-Access exposure). Decom the ALB only after
-    // those move to Tailscale-only or get their own CF Access policies.
-    "*.wind" = {
-      value   = "dualstack.private-infra-alb-687735217.us-west-2.elb.amazonaws.com"
-      comment = "Wildcard for *.wind.etherport.net — legacy ALB path; serves operator UIs"
-    }
+    // Wildcard *.wind.etherport.net REMOVED 2026-05-27 — replaced by
+    // VPN-only access (Tailscale + WireGuard) for the operator UIs that
+    // were the last legitimate users of the ALB path. These hostnames
+    // (pdu1/2, ups1/2, prox-ipmi, prox, switch1, traefik-dashboard) are
+    // resolved internally via Technitium (see
+    // platform/kubernetes/technitium/zones/wind.etherport.net.yaml) to
+    // the Traefik LB IP (10.10.201.70). External DNS now returns NXDOMAIN
+    // for these hostnames — they MUST be accessed via VPN.
+    //
+    // Decom order:
+    //   1. Add missing Technitium A records (switch1, approve) — done.
+    //   2. terraform apply this CF zone change — drops the wildcard.
+    //   3. terraform destroy infra/terraform/aws/load-balancing/ —
+    //      removes the ALB ($25/mo + transfer savings).
   }
 }
 

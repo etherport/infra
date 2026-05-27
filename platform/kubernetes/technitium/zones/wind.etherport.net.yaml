@@ -218,6 +218,16 @@ records:
     value: 10.10.200.21
     comment: Proxmox IPMI/BMC (direct fallback when k8s is down)
 
+  - name: switch1
+    type: A
+    value: 10.10.201.70
+    comment: UniFi switch1 management UI (via Traefik)
+
+  - name: approve
+    type: A
+    value: 10.10.201.70
+    comment: AI advisor approval URL (Traefik fallback for the CF Tunnel path at approve.etherport.net)
+
   # =============================================================================
   # Devices - Direct Access
   # =============================================================================
