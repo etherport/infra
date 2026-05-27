@@ -128,11 +128,15 @@ resource "cloudflare_tunnel_config" "wind_cluster" {
       }
     }
     // wiki-js — first migration off the AWS ALB / Traefik public path
-    // (2026-05-26). Traefik IngressRoute at wiki.wind.etherport.net is
-    // retained as split-horizon fallback for VPN/local access; this CF
-    // path is the primary external route, gated by CF Access (Google SSO).
+    // (2026-05-26). Hostname is wiki.wind.etherport.net (matches site
+    // namespacing: wind = the active homelab site). Multi-level subdomain
+    // needs ACM ($10/mo on etherport.net zone) for free certs to cover
+    // *.wind.etherport.net. Traefik IngressRoute at the same hostname is
+    // retained as split-horizon fallback for VPN/local access; CF DNS
+    // proxied=true overrides the *.wind wildcard CNAME → ALB for this
+    // specific hostname.
     ingress_rule {
-      hostname = "wiki.etherport.net"
+      hostname = "wiki.wind.etherport.net"
       service  = "http://wiki-js.wikijs.svc.cluster.local:3000"
       origin_request {
         no_tls_verify   = false
@@ -198,21 +202,26 @@ resource "cloudflare_zero_trust_access_policy" "approve_allow" {
 // wiki-js — first ALB → CF Tunnel migration.
 //
 // Pattern (mirror of approve.* above):
-//   - CNAME wiki.etherport.net → tunnel (proxied for CF Access interception)
+//   - CNAME wiki.wind.etherport.net → tunnel (proxied for CF Access interception)
 //   - Access Application with self_hosted type + Google IdP
 //   - Access Policy allowing listed emails
 //
 // The matching ingress_rule lives in cloudflare_tunnel_config.wind_cluster
 // above. Origin is the in-cluster wiki-js Service (ClusterIP).
 //
+// Naming: wiki.wind.etherport.net (site-namespaced under "wind") not the
+// apex. Requires ACM on etherport.net zone ($10/mo) for SSL to cover
+// 2-level subdomains. ACM enabled 2026-05-27.
+//
 // Split-horizon fallback: the existing Traefik IngressRoute at
-// wiki.wind.etherport.net stays untouched. VPN/local clients resolve
-// wiki.etherport.net to the internal Traefik LB via Technitium so the
-// same URL works both on + off CF.
+// wiki.wind.etherport.net stays untouched. CF DNS proxied CNAME below
+// overrides the *.wind wildcard → ALB for this specific hostname; the
+// wildcard still serves the rest of .wind.* via the legacy path until
+// each migrates individually.
 // ---------------------------------------------------------------------------
 resource "cloudflare_record" "wiki_cname" {
   zone_id = var.cloudflare_zone_id
-  name    = "wiki"
+  name    = "wiki.wind"
   type    = "CNAME"
   value   = "${cloudflare_tunnel.wind_cluster.id}.cfargotunnel.com"
   ttl     = 1
@@ -223,7 +232,7 @@ resource "cloudflare_record" "wiki_cname" {
 resource "cloudflare_zero_trust_access_application" "wiki" {
   account_id                = var.cloudflare_account_id
   name                      = "Wiki.js"
-  domain                    = "wiki.etherport.net"
+  domain                    = "wiki.wind.etherport.net"
   type                      = "self_hosted"
   session_duration          = "24h"
   app_launcher_visible      = true
