@@ -65,5 +65,9 @@ platform/kubernetes/route53-ddns/base/secret.yaml
 **/wg-private-*.key
 .vscode/
 
-# Lambda build artifacts — TF rebuilds these from handler.py on apply
+# Lambda build artifacts — TF rebuilds these from handler.py on apply.
+# Cover both layouts: sometimes zip is written in lambda/, sometimes
+# in the parent module dir alongside main.tf.
 **/lambda/handler.zip
+**/twilio-webhook/handler.zip
+**/handler.zip
