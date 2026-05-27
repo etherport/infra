@@ -102,3 +102,42 @@ variable "sip_origination_priority" {
   type        = number
   default     = 10
 }
+
+variable "webhook_url" {
+  description = <<-EOT
+    AWS Lambda Function URL that handles inbound voice + SMS for the
+    forwarding DIDs (see forward-dids.tf). Replaces the legacy Twilio
+    Studio Flow FWba4e77be0b8a26120f1219a40fb123f0.
+
+    Sourced from `terraform output -raw function_url` in the
+    infra/terraform/aws/twilio-webhook/ module.
+  EOT
+  type        = string
+  default     = "https://l5afpm7ybw3x3o6vslb3sma3ui0ngeel.lambda-url.us-west-2.on.aws/"
+}
+
+variable "forward_dids" {
+  description = <<-EOT
+    Map of DIDs that use the simple forward-voice + SMS-to-email
+    pattern (Lambda-backed). Originally on Studio Flow; migrated
+    2026-05-27.
+  EOT
+  type = map(object({
+    phone_number  = string
+    friendly_name = string
+  }))
+  default = {
+    campaign = {
+      phone_number  = "+19094308285"
+      friendly_name = "Campaign mobile"
+    }
+    uk = {
+      phone_number  = "+447545911500"
+      friendly_name = "Graham UK Mobile"
+    }
+    us_personal = {
+      phone_number  = "+14246257334"
+      friendly_name = "Graham US personal"
+    }
+  }
+}
