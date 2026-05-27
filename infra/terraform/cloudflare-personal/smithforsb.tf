@@ -1,19 +1,32 @@
-// smithforsb.com — static site (S3 → CloudFront) + email forwarding.
+// smithforsb.com — CF edge redirect to Instagram + email forwarding.
 //
-// Forwarded addresses: graham@, info@smithforsb.com
+// Apex + www → https://www.instagram.com/graham.m.smith/ via a CF
+// Single Redirect rule at the edge. No origin needed; the AWS static
+// site stack (CloudFront + S3 + ACM) is decommissioned.
 //
-// Kept: SES setup, ACM validation, root CNAME-flat → CloudFront.
-// Removed: autodiscover (Outlook), legacy `scph1023._domainkey` (old
-// SendGrid DKIM, unused now that email-forward uses SES).
+// Forwarded addresses (kept, separate from web): graham@, info@smithforsb.com
 
 locals {
   smithforsb_records = {
-    "root-cname-cf" = {
+    # Apex must be proxied so CF terminates the request and applies
+    # the redirect rule — 192.0.2.1 is TEST-NET-1, deliberately
+    # unrouteable. If the redirect rule is ever removed, requests
+    # blackhole rather than leaking to a real host.
+    "root-a-redirect-target" = {
       name    = "@"
+      type    = "A"
+      content = "192.0.2.1"
+      comment = "Proxied placeholder — CF Single Redirect intercepts at edge"
+      proxied = true
+      ttl     = 1  # CF requires ttl=1 when proxied
+    }
+    "www-cname" = {
+      name    = "www"
       type    = "CNAME"
-      content = "d1v54h83zvkl2t.cloudfront.net"
-      comment = "Static site via CloudFront — CF apex CNAME flattening"
-      proxied = false
+      content = "smithforsb.com"
+      comment = "www → apex, proxied so the redirect rule applies"
+      proxied = true
+      ttl     = 1
     }
     "root-mx" = {
       name    = "@"
@@ -58,12 +71,6 @@ locals {
       content = "zkdlvopdqntati2n5wjr4aimmsk7vpbo.dkim.amazonses.com"
       comment = "SES DKIM"
     }
-    "acm-validation-root" = {
-      name    = "_8e796d07b00603f3bba23357a8e930d5"
-      type    = "CNAME"
-      content = "_fd9cd767c7dd5df12e0bfb218ea64249.mhbtsbpdnt.acm-validations.aws."
-      comment = "ACM validation for *.smithforsb.com cert (us-east-1, CloudFront)"
-    }
   }
 }
 
@@ -77,4 +84,30 @@ resource "cloudflare_record" "smithforsb" {
   ttl      = lookup(each.value, "ttl", 3600)
   proxied  = lookup(each.value, "proxied", false)
   comment  = each.value.comment
+}
+
+# Single Redirect rule: smithforsb.com (+ www) → IG profile, 301, drop
+# any path / query string (IG URLs don't share our path space).
+resource "cloudflare_ruleset" "smithforsb_to_instagram" {
+  zone_id     = var.smithforsb_zone_id
+  name        = "smithforsb -> Instagram"
+  description = "Redirect all traffic to https://www.instagram.com/graham.m.smith/"
+  kind        = "zone"
+  phase       = "http_request_dynamic_redirect"
+
+  rules {
+    action      = "redirect"
+    expression  = "(http.host eq \"smithforsb.com\") or (http.host eq \"www.smithforsb.com\")"
+    description = "All paths to graham.m.smith IG profile"
+    enabled     = true
+    action_parameters {
+      from_value {
+        status_code           = 301
+        preserve_query_string = false
+        target_url {
+          value = "https://www.instagram.com/graham.m.smith/"
+        }
+      }
+    }
+  }
 }
