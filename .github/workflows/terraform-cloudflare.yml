@@ -66,7 +66,9 @@ jobs:
           TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
           AWS_PROFILE: ""
-        run: terraform plan -var "aws_profile=" -no-color
+        # parallelism=2 to stay under CF API rate limits (default 10 trips
+        # the limit during refresh of ~30 records across multiple zones).
+        run: terraform plan -var "aws_profile=" -no-color -parallelism=2
 
       - name: Terraform Apply
         if: github.event.inputs.action == 'apply'
@@ -76,7 +78,7 @@ jobs:
           TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
           AWS_PROFILE: ""
-        run: terraform apply -auto-approve -var "aws_profile=" -no-color
+        run: terraform apply -auto-approve -var "aws_profile=" -no-color -parallelism=2
 
       # One-time bootstrap step: import the manually-created CF zone into
       # TF state. Skips silently if already imported (resource exists in state).
