@@ -16,25 +16,11 @@ resource "aws_iam_role" "ddns_lambda" {
   })
 }
 
-# Policy for Route53 access
-resource "aws_iam_role_policy" "route53" {
-  name = "ddns-route53-access"
-  role = aws_iam_role.ddns_lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "route53:ChangeResourceRecordSets",
-          "route53:ListResourceRecordSets"
-        ]
-        Resource = "arn:aws:route53:::hostedzone/${var.hosted_zone_id}"
-      }
-    ]
-  })
-}
+# Route53 IAM policy removed 2026-05-27 — the Lambda no longer writes
+# to Route53. CF DNS writes go over HTTPS using the cf_api_token in
+# the Secrets Manager payload, no IAM-authenticated AWS calls needed.
+# `aws_iam_role_policy.route53` is intentionally absent from this file
+# so terraform plan removes the dangling resource on next apply.
 
 # Policy for Secrets Manager access
 resource "aws_iam_role_policy" "secrets" {

@@ -79,13 +79,9 @@ resource "aws_lambda_function" "ddns" {
     }
   }
 
-  # Note: route53 IAM policy is no longer needed (CF writes go over
-  # HTTPS, not via IAM-authenticated AWS API). Leaving the dep here
-  # for now — drop in a follow-up PR after the CF migration is
-  # verified end-to-end. Keeping the policy attached is harmless;
-  # the Lambda just won't exercise it.
+  # route53 IAM policy removed 2026-05-27 alongside the CF migration —
+  # the Lambda now makes CF API calls over HTTPS, no Route53 IAM needed.
   depends_on = [
-    aws_iam_role_policy.route53,
     aws_iam_role_policy.secrets,
     aws_iam_role_policy.logs,
   ]
