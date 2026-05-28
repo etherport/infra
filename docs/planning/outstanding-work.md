@@ -1,6 +1,6 @@
 # Outstanding Work — Consolidated Priority List
 
-Latest revision: 2026-05-24. Canonical filename `outstanding-work.md`
+Latest revision: 2026-05-27. Canonical filename `outstanding-work.md`
 is stable; older dated snapshots live in `archive/`.
 
 Successor to `archive/outstanding-work-2026-05-16.md`. Resets the priority lattice
@@ -17,6 +17,30 @@ revision use the next free ID per tier. Status legend:
 | 🟡 | In progress — partially landed or actively being worked |
 | ⏳ | Pending — scheduled or queued |
 | 📋 | Drafted — code/playbook ready, awaiting human-supervised apply |
+
+---
+
+## Next-up UDM checklist (live-state snapshot 2026-05-27)
+
+Pulled via `scripts/unifi/dump-state.sh` + extended settings fetch.
+Order is the suggested execution order — quickest wins first, BGP
+deferred behind the zone migration to share blast-radius windows.
+
+| # | Item | Live state proof | Action |
+|---|---|---|---|
+| 1 | **M36 IP-conflict alert workaround** | UDM still firing IP-conflict for `.5` + `.71` (not yet excluded) | UDM UI → Insights → IP Conflict Detection → add `.5` and `.71` to exclusion list (30s) |
+| 2 | **M32 firmware channel** | `super_fwupdate.firmware_channel = "beta"` | Network App → Settings → System → Updates → flip channel to `release` (1 click) |
+| 3 | **M34 fleet auto-upgrade** | `mgmt.auto_upgrade = true` + 7 APs + 9 switches all `safe_for_autoupgrade: true` | UDM UI → System → Updates → "Auto-update devices" → off (or per-device toggles) |
+| 4 | **§7 zone migration questions** | n/a (planning) | Answer the 5 open questions in `firewall-zones-future-state.md` §7 |
+| 5 | **M50 audit gap-fill** | n/a (planning) | Walk UDM/UNAS/Protect UIs, log every UI-only setting → `udm-iac-coverage.md` |
+| 6 | **M48/M49 UNAS + Protect IaC** | n/a | Create per-device API keys → Ansible playbooks (1 day each) |
+| 7 | **M30 zone migration Phase 1** | 7 zones live (6 default + 1 custom IoT); 117 policies | Pilot `Unifi/212 → Infrastructure` zone per future-state doc |
+| 8 | **M30 remaining phases** | depends on Phase 1 result | Phases 2-5 |
+| 9 | **M18/M36 MetalLB BGP** | MetalLB on L2 mode today; no BGPPeer/BGPAdvertisement | After zone migration: UDM BGP peer + MetalLB BGP CRs |
+
+**Already done (verified live 2026-05-27):**
+- ✅ M33 rsyslog: `rsyslogd.ip=10.10.201.73 port=514 enabled=true`, Loki ingesting ~100 lines/min under `{host="udm"}`
+- ✅ All 11 syslog clients active in Loki: `udm`, `pve`, `pve-bmc`, `switch-workroom`, and 7 APs
 
 ---
 
@@ -274,6 +298,17 @@ revision use the next free ID per tier. Status legend:
 - **Option (b) done** (commit `f5693c3`): rewrote `docs/architecture/firewall-zones.md` to match the live single-custom-zone (IoT) reality. Removed 317 lines of aspirational multi-zone description; added a "Current state vs aspirational state" callout pointing at the future-state doc.
 - **Future-state doc** (new — `docs/planning/firewall-zones-future-state.md`): proposes a 4-zone end-state (Trusted/Infrastructure/IoT/Security), inter-zone allow/deny matrix, named allow rules, **5-phase migration plan** with per-phase rollback procedures, and a decision checklist. Calls out M31 (UDM backup) as a hard prerequisite (now ✅), so Phase 1 (pilot Unifi/212 → Infrastructure zone) is unblocked.
 - **Open questions for you** (§7 of future-state doc): (1) SimpliSafe WAN dependence; (2) non-K8s sync jobs Clients→Servers that would silently break; (3) Default/199 disposition; (4) WireGuard WAN1 (UDM-side VPN pool) — re-enable or delete; (5) long-term L3-switch ACL management strategy. Phase 2 risk is unbounded until §5 is resolved.
+- **Live snapshot 2026-05-27** (`/proxy/network/v2/api/site/default/firewall/zone` + `/firewall/zone-matrix`):
+  - **7 zones total:** Internal (default), External (default), Gateway (default, empty), Vpn (default), Hotspot (default), Dmz (default, empty), **IoT (CUSTOM)**.
+  - **Zone → network membership** (only what's explicitly mapped — unmapped VLANs likely default-route into Internal):
+    - Internal: `Default`, `Management/200`, `Security/205`, `Unifi/212`
+    - External: `WAN1 (Frontier)`, `WAN2 (Spectrum)`, `LTE`
+    - Vpn: `WireGuard WAN1`
+    - Hotspot: `Guest/206`
+    - IoT (custom): `IoT/204`
+    - Gateway + Dmz: empty
+    - **Not shown in any zone**: `Servers/201`, `Clients/202`, `vSAN/209`, `Ceph/210` — implies they fall to default-Internal but the dump can't prove that; worth a UI walkthrough during Phase 1 to confirm explicit mappings.
+  - **117 firewall policies** total (69 ALLOW + 48 BLOCK) distributed across the full src→dst matrix. Most-loaded edges: `External→Gateway` (13 — port-forward + WAN ingress controls), `Hotspot→Gateway` (11 — guest-network gateway services), `External→Internal` (7).
 
 ### ✅ M31. Automated UDM backup to S3 (P0 from M25 audit)
 - **Done:** 2026-05-23. New CronJob `unifi-backup` in `backups` ns, fires daily 04:00 PT. Three targets per run:
@@ -285,20 +320,23 @@ revision use the next free ID per tier. Status legend:
 - Verified end-to-end: first manual fire uploaded all 3 objects cleanly.
 
 ### ⏳ M32. UDM firmware channel back to `release` (P0 from M25 audit, trivial)
-- Live `mgmt.gateway_release_channel = beta`, almost certainly unintentional.
-- **Fix:** UDM UI → System → Updates → Firmware Channel: `beta` → `release`. One click.
+- **Live state 2026-05-27** (re-pulled via `/proxy/network/api/s/default/get/setting`):
+  - `super_fwupdate.firmware_channel = "beta"` ← still wrong; this is the Network App's channel for managed-device updates (switches, APs).
+  - `mgmt.gateway_release_channel = null` ← OK (defaults to release; the UDM-OS-side channel is fine).
+  So only the Network App side is the issue — the user's "everything looks like release" intuition is correct for UniFi OS but missed the Network App toggle.
+- **Fix path:** Network App → Settings → System → Updates → "Update Channel" (or "Use Beta Versions" / "Release Candidate" depending on 9.x build): flip `beta` → `release`. One click.
+- **Verification after flip:** re-run `scripts/unifi/dump-state.sh` + extended settings pull; expect `super_fwupdate.firmware_channel = "release"`.
 
-### 🟡 M33. UDM rsyslog destination empty — wire to Alloy syslog receiver (P0 from M25 audit)
-- **Status 2026-05-23:** Receiver side shipped (M37 — Loki + Alloy); UDM-side config still pending.
-- Alloy is deployed via `clusters/wind/helm-releases/alloy.yaml` with a syslog LoadBalancer Service at MetalLB IP **`10.10.201.73`**, listening on UDP/TCP **514** (RFC3164 + RFC5424). Logs flow into Loki.
-- **Last step:** UDM UI → Settings → System → Remote Logging → set host `10.10.201.73` port `514` (UDP or TCP). OR via UDM API:
+### ✅ M33. UDM rsyslog destination empty — wire to Alloy syslog receiver (P0 from M25 audit)
+- **Done.** Verified 2026-05-27 — live config + Loki ingest both confirm working.
+- **Live state** (`/proxy/network/api/s/default/get/setting`, `rsyslogd` key):
+  ```json
+  {"key":"rsyslogd","enabled":true,"ip":"10.10.201.73","port":"514","log_all_contents":true}
   ```
-  curl -k -b $COOKIES -H "X-CSRF-Token: $TOKEN" -X PUT \
-    https://10.10.200.1/proxy/network/api/s/default/set/setting/super_fabric_system_log \
-    -d '{"key":"super_fabric_system_log","host":"10.10.201.73","port":514,"netconsole_enabled":false}'
-  ```
-- Once configured, query in Grafana via the new Loki datasource: `{job="syslog"} |~ "(?i)error|fail"`.
-- **Effort:** Trivial (one UI click) once Flux applies M37.
+- **Loki ingest verified:** `{host="udm"}` actively flowing at ~100 lines/min over the last 10 min (WAN GeoInfo polling, earlyoom, ubios-udapi-server events).
+- Path the user actually flipped: **Network App → Settings → CyberSecure → Traffic Logging → SIEM Server → `10.10.201.73:514`**. This populates `rsyslogd.ip` + `rsyslogd.port` (despite the "SIEM" UI label, it's a general syslog forwarder).
+- The alternative `super_fabric_system_log` path that was originally proposed turned out to be the UniFi cloud aggregator (`enabled: false`) — not needed; the rsyslog path covers it.
+- Query in Grafana: **Explore → Loki → `{host="udm"}`**.
 
 ### ⏳ M36. UDM "IP conflict" alerts for MetalLB VIPs (.5 + .71)
 - **Source:** user report 2026-05-23. UDM repeatedly fires IP-conflict alerts for `10.10.201.5` (Technitium aggregator/cluster VIP) and `10.10.201.71` (technitium-0 LoadBalancer IP). Both are MetalLB-managed.
@@ -306,6 +344,7 @@ revision use the next free ID per tier. Status legend:
 - **The clean fix = MetalLB BGP mode (M18).** In BGP mode, each speaker advertises the IP as a /32 route to the UDM (as a BGP peer). There's no ARP claim, no MAC ownership, no "conflict" from the UDM's perspective — it's a learned route. The Technitium audit (M25 §2.4) noted UniFi Network ≥10 supports eBGP peering, so this is unblocked technically. Effort: M (UDM BGP config + MetalLB BGPPeer/BGPAdvertisement CRs + private ASN allocation + cutover).
 - **Short-term workaround (stop the alerts without the BGP migration):** in the UDM UI under Settings → Networks → Default (or the LAN where these VIPs live), add an "Excluded IP" list for `.5` and `.71` so the UDM stops tracking them as DHCP clients. Or under Insights → IP Conflict Detection, add a per-IP suppression rule. Either is reversible if BGP migration happens later.
 - **Effort:** S (workaround) / M (proper BGP migration). Merging with M18 since they share the resolution.
+- **Sequencing decision 2026-05-27:** do the workaround NOW to silence alert noise; defer BGP until AFTER M30 zone migration completes — both touch UDM L3 and should be batched into one blast-radius window.
 
 ### ⏳ M35. Wire dns-aws public IP as 3rd DHCP DNS resolver
 - **Source:** user ask 2026-05-23. Rationale: with `.5` (Technitium cluster VIP) primary + `.6` (dns-fallback VM) secondary, any combined outage of both the K8s cluster + the on-prem fallback + the AWS WG tunnel leaves clients with no DNS. Wiring dns-aws's public IP (currently `52.40.219.113`, the EIP of the dns-aws EC2 instance) as a 3rd DHCP DNS gives clients a path over the public internet even when the tunnel is down.
@@ -415,6 +454,10 @@ revision use the next free ID per tier. Status legend:
 
 ### ⏳ M34. Disable site-wide UniFi auto-upgrade (extends H23)
 - H23 closed because the UDM itself has `mgmt.auto_upgrade: false`, but all 9 switches + 7 APs still have `safe_for_autoupgrade: true` and the site-wide policy upgrades them nightly at 03:00. A future firmware bug would auto-deploy to the fleet before you see it.
+- **Live snapshot 2026-05-27** confirms: `mgmt.auto_upgrade = true` site-wide, and per-device `safe_for_autoupgrade`:
+  - **UDM (Windroute):** `false` ✓ (won't auto-upgrade)
+  - **All 7 APs** (access-road, basement, deck, downstairs, driveway, office, workroom): `true` ✗
+  - **All 9 switches** (access-road, chapel, driveway, living-room, office, outdoor-junction, rack-10G, rack-PoE, workroom): `true` ✗
 - **Fix:** flip `mgmt.auto_upgrade: false` site-wide (or per-device on non-UDM devices). Manual updates via Network UI on a planned cadence.
 - **Effort:** Trivial.
 
