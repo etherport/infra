@@ -11,6 +11,20 @@
 
 The 2026-05-23 audit confirmed that the firewall zone design described in older versions of `docs/architecture/firewall-zones.md` was never implemented. Only one custom zone (`IoT`) exists on the UDM; sensitive networks (Servers/201, Security/205, vSAN/209, Ceph/210, Unifi/212, Inter-VLAN/4040) all sit in the built-in `Internal` zone with `Internal → Internal: Allow All Traffic` as the default.
 
+### 1.1 UDM identity + VLAN 212 — corrections from live inspection (2026-05-28)
+
+Two assumptions in earlier revisions of this doc were wrong; they're corrected here once so subsequent sections don't propagate them.
+
+**The UDM is multi-homed; "the UDM IP" is not 10.10.200.1.** From the live `/stat/device` record for `Windroute`: `lan_ip = "10.10.199.1"`, with 11 ethernet interfaces. The UDM hosts an SVI (`.1` of each /24) on **every** VLAN — Default/199, Management/200, Servers/201, Clients/202, IoT/204, Security/205, vSAN/209, Ceph/210, Unifi/212. Its canonical identity in UniFi terms is `10.10.199.1` (the Default-VLAN interface, which is also where Talk SIP listens on UDP/6767). `10.10.200.1` is just the SVI we happen to route management UI access through — it's no more "the UDM IP" than `.201.1` or `.212.1`. **Firewall implication:** traffic destined to any UDM SVI is policed by the `Gateway` built-in zone (UniFi's INPUT-chain analogue), regardless of which SVI IP was hit. So the `Router-Gateway` IP group is of limited use as a *destination* matcher in `Internal → *` rules — UDM destinations are matched by zone, not by IP.
+
+**VLAN 212 (Unifi) does NOT contain APs or switches.** Live client/device dump shows:
+- **VLAN 200 (Management)** — 16 admin-class devices: UDM Pro Max + **all 7 APs** + **all 9 switches** + UPS1/2 + PDU1/2 (per `/stat/device` + `/stat/sta`).
+- **VLAN 212 (Unifi)** — 18 appliance-class clients: **3 UVP-TOUCH Talk phones** (.250/.100/.114) + **~13 UniFi Protect cameras** (workroom, basement, driveway-lower/mid/upper, living-room, path, chapel, access-road, deck, front-door, gate) + **UA-Gate + UA-Intercom** (UniFi Access) + **Protect controller at .10**.
+
+The 17 + 18 = 35 figure matches the UniFi Network console's unified "Devices" view (Network-app-managed + infrastructure clients). The Network app uses `/stat/device` for the former (17) and `/stat/sta` for the latter (18); the UI merges them.
+
+**Phase 1 implication:** the original rule design ("Mgmt → Unifi on adoption ports 8080/3478") is too narrow because the devices on 212 are *not* APs/switches doing inform/STUN — they're cameras streaming RTSP, phones doing SIP/RTP, Access devices doing their own protocols, and admin laptops hitting `.10:443` for the Protect UI. Restricting to adoption-ports would break most of what's on 212. Phase 1 rules are revised below to broad zone allows that preserve current connectivity; tightening becomes a follow-up pass after a flow-observation window.
+
 We had two options:
 
 - **(A)** Implement the aspirational design — create custom zones, move networks in, codify per-flow allow rules.
@@ -55,9 +69,13 @@ Rows = source zone, columns = destination zone. `A` = Allow All, `B` = Block (de
 
 These replace what the aspirational doc enumerated. Wherever possible, use Firewall Groups (`Settings > Profiles > Network Objects / Port Groups`) rather than hard-coded IPs.
 
-**Trusted → Infrastructure:**
-- `Mgmt-to-Unifi-Adoption`: Management/200 → Unifi/212 on TCP 8080, UDP 3478 (UniFi inform + STUN)
-- `Servers-to-Ceph`: Servers/201 → Ceph/210 all (allows in-cluster K8s if UDM ever sees it; today L3-switch-only, so this is belt-and-suspenders)
+> **Note:** these per-flow named rules are the **target end-state** — they'll land in tightening passes after each phase has soaked. Phase 1 itself uses 4 broad zone-allows (see §3 Phase 1) rather than these specific port-level rules, because the device inventory on VLAN 212 (Protect/Talk/Access — see §1.1) needs many more flows than just adoption ports. Same pattern likely applies to later phases.
+
+**Trusted → Infrastructure:** *(Phase 1 ships broad allows; replace with these in a tightening pass)*
+- `Trusted-to-Protect-UI`: Management/200 + Clients/202 → Protect controller (`10.10.212.10`) TCP 443 (Protect web UI + API)
+- `Trusted-to-Talk-Admin`: Management/200 → UDM Gateway HTTPS 443 (Talk admin lives on the UDM, accessed via Network app)
+- `Trusted-to-UA-Admin`: Management/200 → UA-Gate/UA-Intercom HTTPS 443 (device admin UIs)
+- `Servers-to-Ceph`: Servers/201 → Ceph/210 all (belt-and-suspenders; per §3 Phase 2 the audit's "L3-switch-routed" claim was wrong and UDM owns all VLAN gateways — this rule covers any cross-VLAN K8s→Ceph flow)
 - `Mgmt-to-Storage`: Management/200 → vSAN/209 on TCP 22, 80, 443, 8006 (Proxmox admin)
 
 **Trusted → IoT:**
@@ -87,9 +105,11 @@ These replace what the aspirational doc enumerated. Wherever possible, use Firew
 
 Per audit §2.1, only 3 IP groups + 2 port groups exist today. The migration should add the rest in one pass so per-rule definitions stay clean:
 
-IP groups: `Management-Network` (200), `Servers-Network` (201), `Client-Network` (202), `IoT-Network` (204), `Security-Network` (205), `vSAN-Network` (209), `Ceph-Network` (210), `Unifi-Network` (212), `Home-Assistant` (10.10.204.25), `Router-Gateway` (10.10.200.1), `AWS-Networks` (10.10.100.0/22, 10.255.255.0/29, 10.254.0.0/24).
+IP groups: `Management-Network` (200), `Servers-Network` (201), `Client-Network` (202), `IoT-Network` (204), `Security-Network` (205), `vSAN-Network` (209), `Ceph-Network` (210), `Unifi-Network` (212), `Home-Assistant` (HA Multus macvlan IPs across 202/204/205), `Router-Gateway` (10.10.200.1 + 10.10.199.1 — the latter is the UDM's canonical `lan_ip`; see §1.1), `AWS-Networks` (10.10.100.0/22, 10.255.255.0/29, 10.254.0.0/24).
 
 Port groups: `NTP-Port` (123), `HomeAssistant-Port` (8123), `UniFi-Adoption-Ports` (8080, 3478).
+
+> **2026-05-28 caveat on `Router-Gateway`:** in UniFi v10's zone model, traffic *destined to* any UDM SVI is policed by the built-in `Gateway` zone, not by the zone where the IP's subnet lives. So `Router-Gateway` is of limited use as a **destination** matcher in zone-based rules — `dest zone = Gateway` covers all UDM-IP destinations regardless of which SVI. The group is still useful for *source* matching (rare — UDM rarely originates flows in firewall scope) and for documentation/readability. Don't fight it; leave it created. *Status 2026-05-28: ✅ created via `udm-firewall.yml` commit `3271cea`.*
 
 ---
 
@@ -100,30 +120,44 @@ Each phase = a single PR (doc update + change-log entry) + a single maintenance 
 ### Pre-flight (before Phase 1)
 
 - [ ] **UDM backup automation landed (M31).** Do not start without it — the entire firewall config lives only on the UDM, and any mistake in a phase below needs a restore path.
-- [ ] **Out-of-band recovery confirmed.** SSH to the UDM via WAN-side WireGuard works (i.e., a flat-out broken firewall rule won't lock you out of the box). Test: from the AWS edge, `ssh -J <wg> root@10.10.200.1` succeeds.
+- [ ] **Out-of-band recovery confirmed.** SSH to the UDM via WAN-side WireGuard works (i.e., a flat-out broken firewall rule won't lock you out of the box). Test: from the AWS edge, `ssh -J <wg> SmrO5ui09e@10.10.200.1` (or `@10.10.199.1` — both UDM SVIs work) succeeds. Note: any UDM SVI is reachable for SSH — pick whichever VLAN your OOB jump host can route to.
 - [ ] **Firewall groups created (P2 #12).** Pure-additive; do this in its own micro-PR before any zone moves so subsequent phases can reference groups instead of CIDRs.
 - [ ] **Network Isolation cleared on Security/205 (or move-with-isolation decision documented).** Today it's ON; if you leave it on after Security becomes a custom zone, the Security-to-DNS allow rule will never fire (audit §1.9, Known anomaly #1).
 - [ ] **Audit `External → Gateway` boilerplate.** UniFi auto-populates ~13 predefined allows here (DHCPv6/RA/RADIUS/etc.). The migration adds nothing to that cell; just don't accidentally delete them.
 
 ### Phase 1 — Pilot: move Unifi/212 into `Infrastructure`
 
-**Why first:** Lowest blast radius. Unifi/212 only carries APs/cameras/IP phones talking to the controller (UDM) on the well-known adoption + STUN ports. If something breaks, the symptom is "AP shows as disconnected in the controller" — high-signal, low-data-loss.
+**Why first:** Bounded blast radius and clear failure signals. VLAN 212 carries the Protect/Talk/Access appliance fleet (per §1.1 correction): **3 Talk phones, ~13 Protect cameras, UA-Gate + UA-Intercom, Protect controller at .10**. APs/switches are NOT on 212 — they're on Management/200 and are completely unaffected by Phase 1. Failure modes are user-visible and quickly diagnosed: phones lose registration (no calls in/out), cameras drop from Protect UI, Access devices stop responding to swipes.
+
+**Rule design philosophy (revised 2026-05-28):** start broad — Phase 1's structural goal is zone topology, not service tightening. Enumerating every Protect-camera/Talk-phone/UniFi-Access flow up-front is expensive and error-prone given how many protocols those appliances use. Save tightening for a follow-up phase after observing flows in the new zone for ~1 week.
 
 **Steps:**
 
-1. Create custom zone `Infrastructure` with VLAN 212 as the only member.
-2. Add allow rule in `Infrastructure → Internal` (or `Infrastructure → Trusted` if Trusted exists by then): `Unifi-Network → Router-Gateway` on `UniFi-Adoption-Ports` (8080, 3478).
-3. Add allow rule in `Internal → Infrastructure`: `Management-Network → Unifi-Network` on same ports (controller-side outbound to APs).
-4. Verify each AP/camera/phone re-establishes inform within 5 min (UniFi UI → Devices → status).
-5. Verify UniFi Talk handsets still register (test inbound + outbound call).
+1. Create custom zone `Infrastructure` with **no member networks** (empty). Pre-staging the rules below before moving VLAN 212 in means rules are no-ops until step 7; if any rule is mis-configured, the implicit Internal→Internal allow is still protecting everything.
+2. **Rule 1** `Internal → Infrastructure`: source=Internal/Any, dest=Infrastructure/Any, port=Any, action=Allow. Covers admins on Mgmt + future Servers/Clients monitoring of cameras and Protect events reaching 212 devices.
+3. **Rule 2** `Infrastructure → Internal`: source=Infrastructure/Any, dest=Internal/Any, port=Any, action=Allow. Covers 212 → Servers flows like Talk phones forwarding syslog to Alloy LB at `10.10.201.73`.
+4. **Rule 3** `Infrastructure → Gateway`: source=Infrastructure/Any, dest=Gateway/Any, port=Any, action=Allow. Covers all UDM-service traffic — DHCP/DNS/NTP/SIP-on-UDP/6767/RTP-on-UDP/10000-60000/Talk/Protect API/etc. — regardless of which UDM SVI a 212 device hits. Per §1.1, Gateway is the right destination zone for UDM-IP traffic, NOT Internal.
+5. **Rule 4** `Infrastructure → External`: source=Infrastructure/Any, dest=External/Any, port=Any, action=Allow. Covers UniFi cloud, STUN, firmware update fetches by cameras + phones + Access devices.
+6. Verify rules saved + visible in the policy list. They match nothing yet (VLAN 212 still in Internal).
+7. **Moment of truth:** edit the `Infrastructure` zone → add `Unifi` (VLAN 212) to member networks → save.
+8. Watch for 5-10 minutes:
+   - UniFi → Devices: APs/switches stay `Connected` (sanity check — Phase 1 doesn't touch them, but a typo could).
+   - Protect UI loads + cameras show as `Online`.
+   - Talk phones stay `Online` in Talk dashboard.
+   - Functional test: place a call from one UVP-TOUCH; verify it rings and audio is two-way.
+   - Functional test: load a camera live feed; confirm video.
 
 **Risks:**
-- APs flap if STUN/inform path breaks → captive devices drop WiFi → user-visible.
-- IP phones could lose registration → inbound calls fail.
+- Talk phones lose SIP registration → inbound calls fail.
+- Protect cameras drop from controller → recordings stop.
+- UniFi Access devices stop responding → physical access via UA-Gate/UA-Intercom breaks.
+- Functionally equivalent rules to today's Internal→Internal allow should preclude this; risk is from rule typos, not design.
 
-**Rollback criteria:** any AP/phone stays `disconnected` for >10 min after the change.
+**Rollback criteria:** any 212 device stays `disconnected` for >5 min after the move.
 
-**Rollback procedure:** delete the new allow rules, move VLAN 212 back to Internal zone (drops the custom zone assignment), wait for inform reconnect.
+**Rollback procedure:** edit `Infrastructure` zone → remove `Unifi` from member networks → save. VLAN 212 returns to Internal, implicit Internal→Internal Allow All resumes. The 4 rules can stay (they're no-ops with nothing in Infrastructure) or be deleted in a cleanup pass.
+
+**Tightening pass (Phase 1.5, after Phase 1 soak ≥7 days):** replace the 4 broad allows with per-flow named rules based on observed traffic (UniFi Insights → Traffic + Loki query of UDM syslog for any blocked flows during Phase 1). Likely targets: Internal→Infrastructure on TCP/443 (Protect UI) + TCP/8843 (Protect direct) + camera RTSP ports + Talk SIP/RTP from UDM. Skipped at Phase 1 to keep blast radius bounded.
 
 ---
 
@@ -260,7 +294,7 @@ Per-phase rollback procedure (consolidated):
 Before opening the first PR (Phase 1), confirm:
 
 - [ ] **M31 (UDM backup to S3) is implemented and verified** — at least one successful backup landed in S3, and one test restore was performed against a sandbox UDM or VM.
-- [ ] **Out-of-band SSH path tested** — verified that I can reach `10.10.200.1` from outside the LAN (via AWS-WG path) and that a totally-broken zone rule wouldn't kill that path.
+- [ ] **Out-of-band SSH path tested** — verified that I can reach the UDM (`10.10.199.1` or any other SVI) from outside the LAN (via AWS-WG path) and that a totally-broken zone rule wouldn't kill that path.
 - [x] **L3 switch ACL state captured** — N/A. Pre-flight inspection confirmed all 9 switches are L2-only and the UDM owns every VLAN gateway; there are no L3 switch ACLs to capture. Phase 2 risk re-bounded accordingly.
 - [ ] **Firewall groups created in their own PR** (audit P2 #12) and verified rule-referencable in the UI.
 - [ ] **All four phases scheduled with maintenance windows announced** to any household users who depend on the network (kids' WiFi, IP phones, alarm system, etc.).
