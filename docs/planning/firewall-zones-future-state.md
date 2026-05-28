@@ -1,7 +1,7 @@
 # Firewall Zones — Future-State Design and Migration Plan
 
-**Date:** 2026-05-23
-**Status:** Proposed. No UDM config changes have been made.
+**Date:** 2026-05-23 (revised 2026-05-27 with §7 + §9 decisions resolved).
+**Status:** Decisions resolved; execution starts at the Pre-flight section.
 **Source material:** previous (aspirational) `docs/architecture/firewall-zones.md`, plus `docs/planning/udm-audit-2026-05-23.md` Part 1 §1.2 and P3 #20.
 **Tracker:** companion to **M30** in `docs/planning/outstanding-work.md`.
 
@@ -61,8 +61,8 @@ These replace what the aspirational doc enumerated. Wherever possible, use Firew
 - `Mgmt-to-Storage`: Management/200 → vSAN/209 on TCP 22, 80, 443, 8006 (Proxmox admin)
 
 **Trusted → IoT:**
-- `Trusted-to-HomeAssistant`: Servers/201 + Clients/202 → 10.10.204.25 TCP 8123 (HA web UI / API)
-- `Trusted-to-Hue`: Clients/202 → IoT/204 (specific bridge IP if known) TCP 80, 443, 8080 (Hue control)
+- `Trusted-to-Hue`: Clients/202 → IoT/204 (Hue bridge IPs) TCP 80, 443, 8080 (intentional — Hue app on phones can talk directly to the bridge as a fallback when HA is down or for features HA doesn't expose).
+- *Note:* Home Assistant's web UI is on **Servers/201** (K8s pod via Traefik IngressRoute). Clients access HA via the in-Trusted-zone Traefik LB IP, which doesn't cross zones — handled by the intra-Trusted Allow All default. The `10.10.204.25` macvlan IP on HA is the pod's *outbound* presence into IoT/204 (so HA can talk to Hue/Zigbee/Z-Wave directly); clients should NOT use it to reach the HA UI.
 
 **Trusted → Security:**
 - `Trusted-to-Security-Mgmt`: Management/200 → Security/205 TCP 22, 80, 443 (admin reach)
@@ -265,22 +265,54 @@ Before opening the first PR (Phase 1), confirm:
 
 ---
 
-## 7. Open questions for the user
+## 7. Decisions resolved 2026-05-27
 
-These are the things the audit couldn't resolve and that this planning doc doesn't decide unilaterally:
+These were originally open questions; the user's answers are captured inline as the decisions of record.
 
-1. **Does SimpliSafe phone home via cells, WiFi, or both?** Determines whether `Security → External: Block` in Phase 3 is safe.
-2. **Are there any backup/sync jobs from Clients/202 to Servers/201** that don't go through documented K8s services? If yes, enumerate before Phase 4.
-3. **Decision on Default/199 (Phase 5):** keep, quarantine, or delete the DHCP scope?
-4. **Does the WireGuard WAN1 VPN pool ever get re-enabled, or should it be deleted?** Affects whether the matrix needs a populated `VPN → *` row.
-5. **L3-switch ACL surface area:** are we eventually going to manage these via Ansible (per `ubiquiti-config-as-code-2026-05-16.md` Phase 3), or accept that the L3 switch is hand-managed forever? Phase 2 risk is meaningfully different depending on this choice.
+1. **SimpliSafe network dependence:** *both* wifi (primary) + cell (backup). Therefore `Security → External: Block` in Phase 3 is **risky-but-recoverable** — the alarm system has cell backup if wifi egress is cut. Phase 3 still needs a SimpliSafe-app smoke test in disarmed mode to confirm the wifi cutoff isn't silently degrading something (event lag, sensor heartbeats, etc.). Cell backup is a safety net, not a justification to skip the test.
+2. **Clients/202 → Servers/201 non-K8s flows:** *none*. Phase 4 doesn't need an enumeration sweep; whatever exists today goes via documented K8s services and stays inside the Trusted zone after the move (intra-Trusted Allow All preserves the current functional state).
+3. **Default/199 disposition (Phase 5):** **Option A — narrow DHCP scope to `.250-.254` rescue pool, keep in `Internal`, document.** Rationale: homelab without an onboarding/IT team. Quarantine zone (B) adds permanent firewall bookkeeping for ~0 days/year of new-device onboarding; full deletion (C) creates a debugging hole on rebuild if VLAN tags are forgotten. A 5-IP rescue pool is the documented safety hatch when something gets plugged in untagged.
+4. **WireGuard WAN1 VPN pool:** *re-enable as a backup VPN path*. Rationale: hardware-failure resilience — if Proxmox + the K8s-hosted WG pod are both unreachable, the UDM-native WG server is the only remaining way in. Therefore: `VPN → *` row stays populated in the matrix (per §2.2), the `Wireguard Travel` port-forward gets re-enabled (currently `enabled: false` in live state), and Phase 5 ensures `VPN → Internal: Allow All` is *not* carried into the new model (replaced by explicit `VPN → Trusted` allow).
+5. **L3-switch ACL management:** *eventually managed in code via Ansible*. Tracked as **M52** below. For Phase 2 (vSAN/Ceph zone move), this means the pre-flight L3-switch ACL capture has to actually happen (UI screenshots or `show running-config`) — otherwise Phase 2 risk is unbounded.
 
 ---
 
 ## 8. Out of scope
 
-- eBGP between UDM and L3 switch (M18) — independent.
-- L3 switch ACL codification — handled by `ubiquiti-config-as-code-2026-05-16.md` Phase 3 separately.
+- eBGP between UDM and L3 switch (M18) — independent. Will follow this migration so both UDM L3 changes batch into a single blast-radius window.
+- L3 switch ACL codification — tracked as **M52** (new — derived from §7.5). Pre-flight capture is in this doc; full Ansible playbook is its own project.
 - Identity Enterprise / 802.1X — out per audit §2.7.
 - mDNS reflector, IGMP snooping, hostname-based VPN routing — out per audit §2.5 and §2.9.
 - Per-VLAN bandwidth caps on Guest — separate (audit P3 #23).
+
+---
+
+## 9. Design clarifications resolved 2026-05-27
+
+These came in alongside §7 decisions; capturing the reasoning so future-you (or future-me) doesn't relitigate.
+
+**Q1. Why is Management/200 in `Trusted` (high), not `Infrastructure`?**
+
+The clean framing: **Trusted = "places where humans + their workstations sit." Infrastructure = "places where machines sit and need each other but not humans."** Management is humans-administering-machines, so it groups with humans.
+
+Moving Mgmt into Infrastructure would force:
+- `Infrastructure → External: Block` to be relaxed (UDM needs WAN for firmware updates / threat feeds), defeating the purpose of the Infrastructure isolation
+- Every admin path Clients → UDM UI → Switches becomes a cross-zone allow (rule sprawl, ergonomic penalty)
+- No actual security gain — Mgmt is where admins sit, so isolating it from Clients/Servers protects nothing the admin themselves wouldn't bypass
+
+The UDM *itself* lives in the built-in `Gateway` zone (DHCP/DNS/NTP services on the box). The Mgmt VLAN is just the LAN segment that admins source from; it's logically separate from the UDM's own zone identity.
+
+**Q2. Home Assistant location confirmation.**
+
+Confirmed: **HA's main UI is on Servers/201** as a K8s pod (`home-assistant.home-automation.svc` ClusterIP `10.43.22.37:8123`, exposed via Traefik IngressRoute). The `10.10.204.25` / `.202.25` / `.205.25` IPs in HA's deployment are **Multus macvlan outbound** so the pod can reach IoT, Clients, and Security devices directly. Clients access HA's UI via the in-Trusted-zone Traefik LB — which is intra-Trusted and stays implicit-allow.
+
+The user's stated intent on `Clients → IoT/204` for Hue is **correct and preserved**: phones running the Hue app should be able to hit Hue bridges directly as resilience against HA being down. Allow rule unchanged.
+
+**Q3. Guest network handling.**
+
+Already covered by the existing `Hotspot` built-in zone:
+- `Hotspot → External: Allow` (post-auth) → guests get internet
+- `Hotspot → Gateway: Allow` (DHCP/DNS only) → guests get DHCP/DNS from UDM
+- `Hotspot → all other internal zones: Block` → guests can't reach Trusted/Infrastructure/IoT/Security
+
+No matrix changes needed. Phase 5 adds one belt-and-suspenders rule `Internal → Hotspot: Block All` as a catch-all for any future untyped network.

@@ -54,12 +54,68 @@
         members:
           - "10.10.201.73"   # Alloy MetalLB LB (VLAN 201 Servers, currently zoneless)
 
+      # ----------------------------------------------------------------
+      # Zone-migration pre-flight (2026-05-27, M30 Phase 0).
+      # Per-subnet IP groups so subsequent zone-policy rules can reference
+      # them by name instead of hard-coded CIDRs. See
+      # docs/planning/firewall-zones-future-state.md §2.4.
+      # ----------------------------------------------------------------
+      - name: Management-Network
+        members: ["10.10.200.0/24"]
+      - name: Servers-Network
+        members: ["10.10.201.0/24"]
+      - name: Client-Network
+        members: ["10.10.202.0/24"]
+      - name: IoT-Network
+        members: ["10.10.204.0/24"]
+      - name: Security-Network
+        members: ["10.10.205.0/24"]
+      - name: vSAN-Network
+        members: ["10.10.209.0/24"]
+      - name: Ceph-Network
+        members: ["10.10.210.0/24"]
+      - name: Unifi-Network
+        members: ["10.10.212.0/24"]
+      - name: Home-Assistant
+        # HA's macvlan outbound IPs across the 3 IoT-adjacent VLANs.
+        # All three reach the same pod; group makes the
+        # Trusted-to-Hue / IoT-to-HA rules clean.
+        members:
+          - "10.10.202.25"
+          - "10.10.204.25"
+          - "10.10.205.25"
+      - name: Router-Gateway
+        # UDM's own LAN-facing IPs. Used by allows targeting UDM
+        # services (DNS-fwd, NTP, UI). Add 10.10.199.1 (Default VLAN
+        # interface) since Talk-SIP listens there.
+        members:
+          - "10.10.200.1"
+          - "10.10.199.1"
+      - name: AWS-Networks
+        # AWS-side VPN destinations reachable through the WG tunnel.
+        # Covers the us-west-2 VPC, the WG transit /29, and the
+        # advisor's regional VPN supernet.
+        members:
+          - "10.10.100.0/22"
+          - "10.255.255.0/29"
+          - "10.254.0.0/24"
+
     # Reuse the syslog-port-514 port group that the legacy paultyng/unifi
     # attempt left behind (id `6a138b2e92b8269077a388a3` in our test).
     # If it doesn't exist (fresh rebuild), this task creates it.
     udm_port_groups:
       - name: syslog-port-514
         members: ["514"]
+
+      # ---- Zone-migration pre-flight port groups (M30 Phase 0) ----
+      - name: NTP-Port
+        members: ["123"]
+      - name: HomeAssistant-Port
+        members: ["8123"]
+      - name: UniFi-Adoption-Ports
+        # 8080 (inform), 3478 (STUN). Used by APs/switches/phones
+        # to register with the UDM controller.
+        members: ["8080", "3478"]
 
     # ---- Firewall policies (zone-based v2 API) ----
     # Each policy must specify:
