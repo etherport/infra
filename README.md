@@ -199,7 +199,7 @@ Restore procedures + RTO/RPO targets:
 | `etherport.net` public | Cloudflare (since 2026-05-25) | DNSSEC-signed, ~30 records. Manage via `infra/terraform/cloudflare/`. Route53 zone deleted. |
 | `aws.etherport.net` private | Deleted 2026-05-27 | Never had real content; private zone removed with route53 module decom |
 | `wind.etherport.net` internal | Technitium (in-cluster pair + dns-fallback + dns-aws) | MetalLB VIP 10.10.201.5 |
-| 3 personal zones (grahamsmith / smithforsb / stopthecastle) | Cloudflare | Migrated 2026-05-27, DNSSEC enabled, public-web repo split tracked as task #82 |
+| 3 personal zones (grahamsmith / smithforsb / stopthecastle) | Cloudflare, DNSSEC enabled | Owned by [sparked-diamond/personal-web](https://github.com/sparked-diamond/personal-web) (split out 2026-05-27); SES domain identities + email forwarding recipients live there too. The forwarding Lambda itself stays in this repo. |
 | DDNS writers | ddns-updater Lambda + cloudflare-ddns CronJob | **BROKEN** — both still target the deleted Route53 zone. CronJob suspended; Lambda dormant (no invokers in last hour). Migration to CF API tracked as task #84. |
 
 Module docs: `infra/terraform/cloudflare/README.md`. CF Free plan + ALB

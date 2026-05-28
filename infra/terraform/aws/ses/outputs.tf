@@ -19,20 +19,9 @@ output "etherport_dkim_tokens" {
   value       = aws_ses_domain_dkim.etherport.dkim_tokens
 }
 
-output "grahamsmith_domain_arn" {
-  description = "ARN of grahamsmith.net SES domain identity"
-  value       = aws_ses_domain_identity.grahamsmith.arn
-}
-
-output "grahamsmith_verification_token" {
-  description = "Verification token for grahamsmith.net"
-  value       = aws_ses_domain_identity.grahamsmith.verification_token
-}
-
-output "grahamsmith_dkim_tokens" {
-  description = "DKIM tokens for grahamsmith.net"
-  value       = aws_ses_domain_dkim.grahamsmith.dkim_tokens
-}
+# grahamsmith.net domain identity outputs moved to personal-web repo
+# (terraform/ses-email-forward/outputs.tf) along with the resource on
+# 2026-05-27.
 
 #------------------------------------------------------------------------------
 # Email Identities
@@ -41,7 +30,6 @@ output "grahamsmith_dkim_tokens" {
 output "email_identities" {
   description = "Map of email identities to ARNs"
   value = {
-    g_grahamsmith  = aws_ses_email_identity.g_grahamsmith.arn
     grahamsm_gmail = aws_ses_email_identity.grahamsm_gmail.arn
     graham_icloud  = aws_ses_email_identity.graham_icloud.arn
   }

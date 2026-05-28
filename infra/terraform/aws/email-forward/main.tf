@@ -88,43 +88,21 @@ resource "aws_lambda_permission" "s3" {
   source_account = data.aws_caller_identity.current.account_id
 }
 
-# Allow SES to invoke Lambda (for receipt rules)
-resource "aws_lambda_permission" "ses_graham" {
-  statement_id   = "AllowSESInvokeGraham"
-  action         = "lambda:InvokeFunction"
-  function_name  = aws_lambda_function.email_forward.function_name
-  principal      = "ses.amazonaws.com"
-  source_arn     = aws_ses_receipt_rule.fwd_graham.arn
-  source_account = data.aws_caller_identity.current.account_id
-}
-
 # =============================================================================
-# SES Domain Identities
+# SES Domain Identities — etherport.net stays here; the 3 personal
+# domains (grahamsmith.net, smithforsb.com, stopthecastle.com) moved
+# to the personal-web repo on 2026-05-27 (terraform/ses-email-forward).
 # =============================================================================
 
 resource "aws_ses_domain_identity" "etherport" {
   domain = "etherport.net"
 }
 
-resource "aws_ses_domain_identity" "grahamsmith" {
-  domain = "grahamsmith.net"
-}
-
-resource "aws_ses_domain_identity" "stopthecastle" {
-  domain = "stopthecastle.com"
-}
-
-resource "aws_ses_domain_identity" "smithforsb" {
-  domain = "smithforsb.com"
-}
-
 # =============================================================================
-# SES Email Identities
+# SES Email Identities — homelab-owned forward TARGET addresses. The
+# verified sender g@grahamsmith.net moved to personal-web with the
+# rest of the personal-domain bits.
 # =============================================================================
-
-resource "aws_ses_email_identity" "g_grahamsmith" {
-  email = "g@grahamsmith.net"
-}
 
 resource "aws_ses_email_identity" "grahamsm_gmail" {
   email = "grahamsm@gmail.com"
@@ -135,7 +113,10 @@ resource "aws_ses_email_identity" "graham_icloud" {
 }
 
 # =============================================================================
-# SES Receipt Rule Set
+# SES Receipt Rule Set — singleton at the AWS account level; homelab
+# is the canonical owner. Individual receipt rules attached to this
+# set can live in either repo (e.g., the personal-web ses-email-forward
+# module owns `fwd_graham` for personal-domain inbound).
 # =============================================================================
 
 resource "aws_ses_receipt_rule_set" "inbound" {
@@ -144,34 +125,5 @@ resource "aws_ses_receipt_rule_set" "inbound" {
 
 resource "aws_ses_active_receipt_rule_set" "main" {
   rule_set_name = aws_ses_receipt_rule_set.inbound.rule_set_name
-}
-
-# =============================================================================
-# SES Receipt Rules
-# =============================================================================
-
-resource "aws_ses_receipt_rule" "fwd_graham" {
-  name          = "fwd_graham"
-  rule_set_name = aws_ses_receipt_rule_set.inbound.rule_set_name
-  enabled       = true
-  scan_enabled  = true
-
-  recipients = [
-    "g@grahamsmith.net",
-    "graham@grahamsmith.net",
-    "graham@smithforsb.com",
-    "info@smithforsb.com",
-    "info@stopthecastle.com",
-    "me@grahamsmith.net",
-    "windtryst@grahamsmith.net",
-    "workroom@grahamsmith.net",
-  ]
-
-  s3_action {
-    bucket_name       = data.aws_s3_bucket.email.id
-    object_key_prefix = "emails/graham/"
-    iam_role_arn      = aws_iam_role.ses_s3_graham.arn
-    position          = 1
-  }
 }
 
