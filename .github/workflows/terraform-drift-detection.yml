@@ -37,7 +37,6 @@ jobs:
           - { name: s3,                  dir: infra/terraform/aws/s3,                   region: us-west-2 }
           - { name: networking,          dir: infra/terraform/aws/networking,           region: us-west-2 }
           - { name: compute,             dir: infra/terraform/aws/compute,              region: us-west-2 }
-          - { name: load-balancing,      dir: infra/terraform/aws/load-balancing,       region: us-west-2 }
           - { name: acm,                 dir: infra/terraform/aws/acm,                  region: us-west-2 }
           - { name: ses,                 dir: infra/terraform/aws/ses,                  region: us-west-2 }
           - { name: ddns-lambda,         dir: infra/terraform/aws/ddns-lambda,          region: us-west-2 }

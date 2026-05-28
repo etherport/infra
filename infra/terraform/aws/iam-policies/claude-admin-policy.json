@@ -48,7 +48,19 @@
         "iam:GetRolePolicy",
         "iam:ListGroupsForUser",
         "iam:ListAttachedUserPolicies",
-        "iam:ListUserPolicies"
+        "iam:ListEntitiesForPolicy",
+        "iam:ListUserPolicies",
+        "iam:ListAccessKeys"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "IAMOrphanCleanup",
+      "Effect": "Allow",
+      "Action": [
+        "iam:DeleteAccessKey",
+        "iam:DetachUserPolicy",
+        "iam:DeleteUser"
       ],
       "Resource": "*"
     },

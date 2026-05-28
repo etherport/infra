@@ -7,20 +7,11 @@
 # Wildcard Certificates
 #------------------------------------------------------------------------------
 
-# *.grahamsmith.net - Personal domain wildcard
-resource "aws_acm_certificate" "grahamsmith_wildcard" {
-  domain_name       = "*.grahamsmith.net"
-  validation_method = "DNS"
-  key_algorithm     = "RSA_2048"
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  tags = {
-    Name = "grahamsmith-wildcard"
-  }
-}
+# *.grahamsmith.net cert removed 2026-05-27 — auto-deleted by AWS
+# after the grahamsmith.net Route53 zone deletion + ALB decom left
+# it both unvalidated and unused. The grahamsmith.net domain itself
+# moved to personal-web repo; no homelab consumer needed a cert for
+# it.
 
 # *.etherport.net - Primary homelab domain wildcard
 resource "aws_acm_certificate" "etherport_wildcard" {

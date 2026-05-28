@@ -1,9 +1,6 @@
 # Outputs for acm module
 
-output "grahamsmith_wildcard_arn" {
-  description = "ARN of the *.grahamsmith.net certificate"
-  value       = aws_acm_certificate.grahamsmith_wildcard.arn
-}
+# grahamsmith_wildcard cert removed 2026-05-27 — see main.tf comment.
 
 output "etherport_wildcard_arn" {
   description = "ARN of the *.etherport.net certificate"
@@ -24,7 +21,6 @@ output "ha_wind_etherport_arn" {
 output "certificates" {
   description = "Map of all certificate ARNs"
   value = {
-    grahamsmith_wildcard    = aws_acm_certificate.grahamsmith_wildcard.arn
     etherport_wildcard      = aws_acm_certificate.etherport_wildcard.arn
     wind_etherport_wildcard = aws_acm_certificate.wind_etherport_wildcard.arn
     ha_wind_etherport       = aws_acm_certificate.ha_wind_etherport.arn

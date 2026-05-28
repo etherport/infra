@@ -235,11 +235,11 @@ variable "dns_records_cname" {
     // the Traefik LB IP (10.10.201.70). External DNS now returns NXDOMAIN
     // for these hostnames — they MUST be accessed via VPN.
     //
-    // Decom order:
-    //   1. Add missing Technitium A records (switch1, approve) — done.
-    //   2. terraform apply this CF zone change — drops the wildcard.
-    //   3. terraform destroy infra/terraform/aws/load-balancing/ —
-    //      removes the ALB ($25/mo + transfer savings).
+    // Decom completed 2026-05-27:
+    //   1. Missing Technitium A records added (switch1, approve)
+    //   2. Wildcard dropped from this CF zone
+    //   3. ALB destroyed + load-balancing/ TF module deleted
+    //      ($25/mo + transfer savings landed)
   }
 }
 

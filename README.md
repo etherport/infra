@@ -257,7 +257,6 @@ Project → workflow map:
 | `infra/terraform/google` | `terraform-google.yml` |
 | `infra/terraform/aws/networking` | `terraform-networking.yml` |
 | `infra/terraform/aws/compute` | `terraform-compute.yml` |
-| `infra/terraform/aws/load-balancing` | `terraform-load-balancing.yml` |
 | `infra/terraform/aws/acm` | `terraform-acm.yml` |
 | `infra/terraform/aws/ses` | `terraform-ses.yml` |
 | `infra/terraform/aws/s3` | `terraform-s3.yml` |
