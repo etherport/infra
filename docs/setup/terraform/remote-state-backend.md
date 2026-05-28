@@ -769,14 +769,18 @@ terraform plan
 | Proxmox VMs | `proxmox/k8s-vms/terraform.tfstate` |
 | AWS Networking | `aws/networking/terraform.tfstate` |
 | AWS Compute | `aws/compute/terraform.tfstate` |
-| AWS Load Balancing | `aws/load-balancing/terraform.tfstate` |
-| AWS Route53 | `aws/route53/terraform.tfstate` |
 | AWS ACM | `aws/acm/terraform.tfstate` |
 | AWS S3 | `aws/s3/terraform.tfstate` |
 | AWS SES | `aws/ses/terraform.tfstate` |
 | Lambda Modules | `aws/<module>/terraform.tfstate` |
+| Cloudflare (etherport.net) | `cloudflare/terraform.tfstate` |
+
+> **Removed paths** (state objects still exist in S3 for audit; modules deleted):
+> - `aws/load-balancing/terraform.tfstate` — ALB decom 2026-05-27 (see `docs/runbooks/alb-decom.md`)
+> - `aws/route53/terraform.tfstate` — Route53 → CF migration 2026-05-25
+> - `cloudflare-personal/terraform.tfstate` — split out to the personal-web repo 2026-05-27
 
 ---
 
-**Last Updated**: 2026-04-07
+**Last Updated**: 2026-05-27
 **Status**: ✅ Implemented and verified (S3-native locking)

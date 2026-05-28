@@ -28,16 +28,15 @@ scripts/             Ad-hoc helpers (safety-check, service-status inventory drif
                     │
         ┌───────────┼────────────────────┐
         │           │                    │
- Cloudflare      Route53          AWS ALB / SES / Lambdas
- etherport.net   etherport.net    (us-west-2)
-  (zone live,    (authoritative              │
-   NS-cutover     until cutover)             │
-   pending)           │                      │
-        │             │                      │
-   ┌────┴─────────────┴──────────────────────┴────┐
-   │             site-to-site WireGuard           │
-   │     vpn-aws (10.10.100.10) ⇄ K8s wg pod     │
-   │     VRRP backup: vpn-local (10.10.201.15)   │
+ Cloudflare       CF Tunnel        AWS SES / Lambdas
+ etherport.net    (CF Access SSO   (us-west-2)
+  (authoritative   in front of                │
+   since 2026-05)  in-cluster svcs)           │
+        │                │                    │
+   ┌────┴────────────────┴────────────────────┴────┐
+   │             site-to-site WireGuard            │
+   │     vpn-aws (10.10.100.10) ⇄ K8s wg pod      │
+   │     VRRP backup: vpn-local (10.10.201.15)    │
    └──────────────────────────┬───────────────────┘
                               │
    ┌──────────────────────────┼────────────────────────────┐

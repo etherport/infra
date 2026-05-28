@@ -4,8 +4,16 @@
 # - velero.wind.etherport.net - Kubernetes backups (Velero specifically)
 # - archive.wind.etherport.net - NAS snapshot archives (Deep Archive)
 # - logs.archive.wind.etherport.net - Archive operation logs
-# - email-fwd.grahamsmith.net - Email forwarding storage
-# - logs.grahamsmith.net - ALB access logs and general logging
+# - email-fwd.grahamsmith.net - Email forwarding storage (kept here
+#                               because the email-forward Lambda lives
+#                               in this AWS account; bucket name predates
+#                               the personal-web repo split and is not
+#                               worth renaming)
+# - logs.grahamsmith.net - General-purpose logging bucket (was ALB
+#                          access logs pre-2026-05-27 ALB decom; now
+#                          retained for future log sinks. Name predates
+#                          the personal-web split; rename not worth the
+#                          churn)
 # - infra.wind.etherport.net - General-purpose homelab infra state +
 #                              backups (UDM/Protect controller-DB,
 #                              future Loki S3 backing, ad-hoc dumps)
@@ -245,8 +253,13 @@ resource "aws_s3_bucket_public_access_block" "email_fwd" {
 }
 
 #------------------------------------------------------------------------------
-# General Logs (ALB Access Logs)
+# General Logs (legacy ALB access logs; retained for future log sinks)
 #------------------------------------------------------------------------------
+# Originally provisioned to receive ALB access logs. ALB was
+# decommissioned 2026-05-27 (see docs/runbooks/alb-decom.md). Bucket
+# retained for future use (e.g., CloudFront logs from personal-web
+# distributions, ad-hoc dumps). prevent_destroy guards against drift
+# sweeps deleting it.
 
 resource "aws_s3_bucket" "logs" {
   bucket = "logs.grahamsmith.net"

@@ -127,8 +127,8 @@ SMTP user for Alertmanager to send email notifications via AWS SES.
 |--------|-------------|
 | terraform-networking | VPC, subnets, route tables, security groups, NACLs |
 | terraform-compute | EC2 instances, EIPs, snapshots, CloudWatch alarms, SNS topics |
-| terraform-loadbalancing | ALB, listeners, target groups, certificates |
-| terraform-dns | Route53 hosted zones and DNS records |
+| ~~terraform-loadbalancing~~ | ~~ALB, listeners, target groups, certificates~~ — REMOVED 2026-05-27 (ALB decom; see `docs/runbooks/alb-decom.md`) |
+| ~~terraform-dns~~ | ~~Route53 hosted zones and DNS records~~ — REMOVED 2026-05-25 (Route53 → Cloudflare migration; CF is no-IAM) |
 
 ### terraform-integration
 | Policy | Type | Description |

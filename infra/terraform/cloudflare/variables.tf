@@ -142,15 +142,18 @@ variable "dns_records_a" {
     comment = optional(string, "")
   }))
   default = {
-    // ---- DDNS-updated (post-cutover the K8s CronJob + ddns Lambda
-    //      need to switch to writing CF DNS; static values until then) ----
+    // ---- DDNS-updated (CF API, post-migration 2026-05-25) ----
+    // ddns-updater Lambda writes wan1/wan2; the k8s cloudflare-ddns
+    // CronJob writes `wind` to whichever WAN is currently active.
+    // Initial values here are placeholders that get overwritten on
+    // first run; lifecycle.ignore_changes keeps TF from fighting them.
     "wan1.wind" = {
       value   = "47.159.189.5"
-      comment = "WAN1 IP — ddns-updater Lambda writes (Route53 today, CF post-migration)"
+      comment = "WAN1 IP — written by ddns-updater Lambda (CF API)"
     }
     "wan2.wind" = {
       value   = "66.215.210.75"
-      comment = "WAN2 IP — ddns-updater Lambda writes (Route53 today, CF post-migration)"
+      comment = "WAN2 IP — written by ddns-updater Lambda (CF API)"
     }
     "wind" = {
       value   = "47.159.189.5"

@@ -11,9 +11,16 @@ variable "aws_region" {
 }
 
 variable "hosted_zone_id" {
-  description = "Route53 hosted zone ID containing the DNS records"
+  description = <<-EOT
+    DEPRECATED. The Lambda no longer uses Route53 — handler.py
+    resolves records via public DNS (1.1.1.1 + 8.8.8.8 fallback)
+    so it's zone-provider-agnostic. The HOSTED_ZONE_ID env var is
+    still wired through main.tf but the Lambda accepts + ignores it.
+    Empty default; drop the var entirely in a follow-up cleanup
+    after a TF apply with it removed.
+  EOT
   type        = string
-  default     = "Z03500581XDWV5SKF5PK8"
+  default     = ""
 }
 
 variable "security_group_id" {

@@ -15,24 +15,22 @@ AWS resources in us-west-2 connected to local homelab via WireGuard VPN. The inf
                                    Internet
                                       |
                     +-----------------+------------------+
-                    |                 |                  |
-                    v                 v                  v
-            +---------------+  +-------------+  +---------------+
-            | ALB (HTTPS)   |  | DNS Server  |  | VPN Server    |
-            | *.wind...     |  | Port 53     |  | Port 51820-21 |
-            +-------+-------+  +------+------+  +-------+-------+
-                    |                 |                  |
-                    |        +--------+--------+         |
-                    |        |                 |         |
-                    |        v                 v         |
-                    |   +--------+      +-----------+    |
-                    |   |dns-aws |      | vpn-aws   |<---+
-                    |   |10.10.  |      | 10.10.    |
-                    |   |100.5   |      | 100.10    |
-                    |   +--------+      +-----+-----+
-                    |                         |
-                    +--------+                | WireGuard Tunnel
-                             |                | (wg0: site-to-site)
+                    |                                    |
+                    v                                    v
+              +-------------+                  +---------------+
+              | DNS Server  |                  | VPN Server    |
+              | Port 53     |                  | Port 51820-21 |
+              +------+------+                  +-------+-------+
+                     |                                  |
+                     v                                  v
+                +--------+                       +-----------+
+                |dns-aws |                       | vpn-aws   |
+                |10.10.  |                       | 10.10.    |
+                |100.5   |                       | 100.10    |
+                +--------+                       +-----+-----+
+                                                       |
+                    +--------+                         | WireGuard Tunnel
+                             |                         | (wg0: site-to-site)
                              v                v
                     +-----------------------------------------+
                     |     Homelab (10.10.192.0/19)           |
@@ -143,90 +141,42 @@ AWS resources in us-west-2 connected to local homelab via WireGuard VPN. The inf
 
 **Outbound Rules:** Allow all (0.0.0.0/0)
 
-## Application Load Balancer (ALB)
+## Application Load Balancer — DECOMMISSIONED 2026-05-27
 
-### private-infra-alb
+The `private-infra-alb` (ARN suffix `b80aa78d7562bac7`, DNS name
+`private-infra-alb-687735217.us-west-2.elb.amazonaws.com`) was the
+external HTTPS entry point for `*.wind.etherport.net` services. It
+forwarded to Traefik over the WireGuard tunnel.
 
-| Property | Value |
-|----------|-------|
-| ARN | `arn:aws:elasticloadbalancing:us-west-2:830881980142:loadbalancer/app/private-infra-alb/b80aa78d7562bac7` |
-| DNS Name | `private-infra-alb-687735217.us-west-2.elb.amazonaws.com` |
-| Scheme | internet-facing |
-| Type | Application |
-| IP Type | dualstack (IPv4 + IPv6) |
-| Security Groups | `sg-0a4bebabcd3bd4d20` (HTTPS 443) |
-| Availability Zones | us-west-2a, us-west-2b |
+It was decommissioned 2026-05-27 as part of the CF Tunnel + CF Access
+migration:
+- 9 services (wiki, ha, plex, kopia, grafana, technitium, ollama,
+  chat, approve.etherport.net) moved to CF Tunnel — see
+  `infra/terraform/cloudflare/main.tf` for the tunnel + ingress config
+- `*.wind.etherport.net` wildcard removed from the CF zone
+- Public hostnames that need infra-UI access (pdu/ups/prox/switch/
+  traefik-dashboard) are Tailscale-only — resolved internally via
+  Technitium to the Traefik LB IP (10.10.201.70)
 
-### HTTPS Listener (Port 443)
-
-| Property | Value |
-|----------|-------|
-| SSL Policy | ELBSecurityPolicy-TLS13-1-2-Res-2021-06 |
-| Certificate | `arn:aws:acm:us-west-2:830881980142:certificate/bdc9a820-fc67-49ad-98ec-ee18652fe70a` |
-| Default Action | Fixed response 503 |
-
-### Listener Rules
-
-| Priority | Condition | Action |
-|----------|-----------|--------|
-| 100 | Host: `*.wind.etherport.net` | Forward to `traefik-wind-etherport-net` target group |
-| default | - | Fixed response 503 |
-
-### Target Group: traefik-wind-etherport-net
-
-| Property | Value |
-|----------|-------|
-| ARN | `arn:aws:elasticloadbalancing:us-west-2:830881980142:targetgroup/traefik-wind-etherport-net/4d57b4fab3697a62` |
-| Protocol | HTTPS |
-| Port | 443 |
-| Target Type | IP |
-| Health Check | HTTPS / (200, 404) |
-
-**Registered Targets:**
-
-| IP Address | Port | Status |
-|------------|------|--------|
-| 10.10.201.70 | 443 | healthy |
-
-**Note:** Target IP 10.10.201.70 is in the homelab network, reachable via the WireGuard VPN tunnel through vpn-aws.
+Saves ~$25/mo + transfer. Decom runbook: `docs/runbooks/alb-decom.md`.
+ALB-related WAF Web ACL (`CreatedByALB-private-infra-alb`) was
+auto-deleted with the ALB. The `terraform/aws/load-balancing/` module
+was deleted from the repo at the same time.
 
 ## Traffic Flow: Internet to Homelab
 
 ```
 1. Client requests https://plex.wind.etherport.net
-2. DNS resolves to ALB: private-infra-alb-687735217.us-west-2.elb.amazonaws.com
-3. ALB receives request on port 443
-4. WAF inspects request (IP reputation, common rules, bad inputs)
-5. ALB matches host header *.wind.etherport.net
-6. ALB forwards to target group (10.10.201.70:443)
-7. Traffic routed via VPC route table to vpn-aws ENI
-8. vpn-aws forwards through WireGuard tunnel (wg0)
-9. Arrives at Traefik reverse proxy in homelab
-10. Traefik routes to appropriate backend service
+2. DNS resolves to a Cloudflare anycast IP (CF zone, proxied=true)
+3. Cloudflare evaluates Access policy (Google SSO + email allowlist)
+4. CF Tunnel forwards the request to a cloudflared pod in the cluster
+5. cloudflared routes to the per-service backend per
+   infra/terraform/cloudflare/main.tf ingress rules
+6. Backend service responds (Plex, HA, etc.)
 ```
 
-## WAF Configuration
-
-### Web ACL: CreatedByALB-private-infra-alb
-
-| Property | Value |
-|----------|-------|
-| ID | `ed2149c5-f335-4c97-9b1a-58d827cb00d9` |
-| Default Action | Allow |
-| DDoS Protection | Active under DDoS (ALB Low Reputation Mode) |
-| CloudWatch log retention | 7 days |
-
-### WAF Rules (by priority)
-
-| Priority | Rule Name | Type | Action |
-|----------|-----------|------|--------|
-| 0 | AllowPlexLongURLs | Custom | Allow (bypasses common rules for Plex host header) |
-| 1 | AWS-AWSManagedRulesAmazonIpReputationList | AWS Managed | Block bad IPs |
-| 2 | AWS-AWSManagedRulesCommonRuleSet | AWS Managed | Common attack patterns |
-| 3 | AWS-AWSManagedRulesKnownBadInputsRuleSet | AWS Managed | Known bad inputs (SQLi, XSS, etc.) |
-
-**Custom Rule Details:**
-- `AllowPlexLongURLs`: Matches requests where Host header exactly equals `plex.wind.etherport.net` and allows them, bypassing size limits that affect Plex's long URLs.
+The historical ALB path (Internet → ALB → WAF → Traefik via WG
+tunnel) was retired 2026-05-27.
 
 ## Lambda Functions
 
@@ -243,12 +193,14 @@ All Lambda functions are managed via Terraform modules in `infra/terraform/aws/`
 | Timeout | 3 seconds |
 | Terraform Module | `infra/terraform/aws/dns-restrict-ip/` |
 
-**Purpose:** Updates the DNS server security group to allow access only from the current dynamic IP of the homelab, determined by resolving `wind.etherport.net`.
+**Purpose:** Maintains 2 security groups (DNS :53 + SSH :22) so they only allow current homelab WAN1/WAN2 IPs. Migrated 2026-05-27 from Route53 API to plain DNS resolution (1.1.1.1 + 8.8.8.8 public resolvers) — zone-provider-agnostic; works against CF or whatever else might serve those names.
 
 **Flow:**
 1. Triggered every 5 minutes (EventBridge)
-2. Resolves `wind.etherport.net` to get current homelab public IP
-3. Updates security group `sg-08d12e417159c18d2` to allow DNS access from that IP
+2. Resolves `wind.etherport.net` / `wan1.wind.etherport.net` /
+   `wan2.wind.etherport.net` via public DNS
+3. Updates SG ingress rules for both target SGs to match the resolved
+   IP set (defensive refusal to remove all rules if DNS returns empty)
 
 ### ddns-updater
 
@@ -261,7 +213,7 @@ All Lambda functions are managed via Terraform modules in `infra/terraform/aws/`
 | Timeout | 10 seconds |
 | Terraform Module | `infra/terraform/aws/ddns-lambda/` |
 
-**Purpose:** Updates Route53 DNS records with current public IP. Called via API Gateway from Ubiquiti UDM-Pro DDNS client.
+**Purpose:** DynDNS-compatible endpoint. UDM-Pro POSTs the current WAN1/WAN2 IP; Lambda upserts the matching record. Migrated 2026-05-27 from Route53 to the Cloudflare REST API (CF token loaded from Secrets Manager alongside the router shared-secret).
 
 ### email-forward
 
@@ -274,7 +226,7 @@ All Lambda functions are managed via Terraform modules in `infra/terraform/aws/`
 | Timeout | 30 seconds |
 | Terraform Module | `infra/terraform/aws/email-forward/` |
 
-**Purpose:** Forwards emails received by SES to personal email addresses. Supports forwarding from grahamsmith.net, etherport.net, and campaign domains.
+**Purpose:** Generic per-prefix email forwarder. SES receipt rules deposit incoming emails to S3 under domain-specific prefixes; an S3 ObjectCreated event triggers this Lambda which forwards via SES SendRawEmail to the configured target. Domain-specific receipt rules live in whichever repo owns the domain (etherport.net here, the 3 personal domains in [sparked-diamond/personal-web](https://github.com/sparked-diamond/personal-web) — `terraform/ses-email-forward/`).
 
 ## VPC Route Table
 
@@ -505,15 +457,19 @@ infra/ansible/inventory/aws/
 ### Route53 Health Checks
 
 External monitoring from AWS edge locations to detect homelab outages.
+Per-endpoint status reflects post-ALB-decom reality (2026-05-27);
+several "Disabled (ALB issue)" entries from the ALB era should be
+re-enabled now that traffic flows through CF Tunnel. Tracked
+separately as a follow-up.
 
 | Endpoint | FQDN | Health Check Path | Status |
 |----------|------|-------------------|--------|
 | Home Assistant | ha.wind.etherport.net | / | Enabled |
 | Plex | plex.wind.etherport.net | /identity | Enabled |
 | Chat (Open WebUI) | chat.wind.etherport.net | / | Enabled |
-| Grafana | grafana.wind.etherport.net | /api/health | Disabled (ALB issue) |
-| Traefik | traefik.wind.etherport.net | /ping | Disabled (ALB issue) |
-| Kopia | kopia.wind.etherport.net | / | Disabled (ALB issue) |
+| Grafana | grafana.wind.etherport.net | /api/health | Disabled (was ALB issue; re-evaluate post CF Tunnel) |
+| Traefik | traefik.wind.etherport.net | /ping | Disabled (Tailscale-only since 2026-05-27, no public path) |
+| Kopia | kopia.wind.etherport.net | / | Disabled (was ALB issue; re-evaluate post CF Tunnel) |
 
 **Configuration:**
 - Checks from 3 regions: us-west-2, us-east-1, eu-west-1
@@ -557,11 +513,14 @@ All AWS infrastructure is now managed via Terraform. See `infra/terraform/aws/MI
 |--------|------------|-------------------|
 | `networking/` | `aws/networking/terraform.tfstate` | VPC, subnets, route tables, IGW, security groups, NACLs |
 | `compute/` | `aws/compute/terraform.tfstate` | EC2 instances, EIPs, IAM roles, CloudWatch alarms, SNS |
-| `load-balancing/` | `aws/load-balancing/terraform.tfstate` | ALB, listeners, target groups, certificates |
-| `route53/` | `aws/route53/terraform.tfstate` | Hosted zones (etherport.net, grahamsmith.net) and the private hosted zone `aws.etherport.net` served to the homelab via Route53 Resolver inbound endpoint forwarders. See [`docs/runbooks/aws-private-dns.md`](../runbooks/aws-private-dns.md). |
-| `acm/` | `aws/acm/terraform.tfstate` | SSL/TLS certificates (us-west-2) |
-| `s3/` | `aws/s3/terraform.tfstate` | S3 buckets (velero, archive, logs, email-fwd, `postgres-barman.wind.etherport.net` for CNPG Barman WAL/base backups). All buckets carry bucket-policy `Deny` statements on `s3:DeleteBucket` and `s3:DeleteBucketPolicy` for non-root principals. |
-| `ses/` | `aws/ses/terraform.tfstate` | SES domain/email identities, DKIM |
+| `acm/` | `aws/acm/terraform.tfstate` | SSL/TLS certificates (us-west-2): `*.etherport.net`, `*.wind.etherport.net`, `ha.wind.etherport.net`. Most ALB-era certs were deleted with the ALB 2026-05-27. |
+| `s3/` | `aws/s3/terraform.tfstate` | S3 buckets (velero, archive, email-fwd, `postgres-barman.wind.etherport.net` for CNPG Barman WAL/base backups). All buckets carry bucket-policy `Deny` statements on `s3:DeleteBucket` and `s3:DeleteBucketPolicy` for non-root principals. |
+| `ses/` | `aws/ses/terraform.tfstate` | SES domain/email identities + DKIM for etherport.net. Personal-domain SES bits (grahamsmith.net, smithforsb.com, stopthecastle.com) moved to the personal-web repo 2026-05-27. |
+
+Deleted modules (2026-05-27):
+- `load-balancing/` — ALB + WAF decom'd; CF Tunnel + CF Access replaces it
+- `route53/` — etherport.net + `aws.etherport.net` private zone deleted; CF is authoritative now
+- `cloudflare-personal/` — migrated to [sparked-diamond/personal-web](https://github.com/sparked-diamond/personal-web) `terraform/cloudflare-dns/`
 
 ### Lambda Modules
 
@@ -600,14 +559,15 @@ Account: 830881980142
 
 The following resources exist but are managed manually or by other means:
 
-- **WAF WebACL:** `CreatedByALB-private-infra-alb` - Auto-created by ALB, managed via AWS Console
 - **Key Pairs:** `GS-EC2`, `Wordpress-key` - Created manually, private keys in 1Password
 
 ## Out of Scope (Public Web Infrastructure)
 
-The following resources are for the stopthecastle.com/smithforsb.com campaign sites and are documented separately in `docs/planning/public-web-infrastructure.md`:
-
-- `public-web-vpc` and all associated networking
-- `public-web_wordpress_stopthecastle` EC2 instance
-- CloudFront distributions
-- Campaign S3 buckets and ACM certificates (us-east-1)
+The stopthecastle.com / smithforsb.com / grahamsmith.net resources
+(CloudFront, S3, ACM us-east-1, EC2 WordPress, CF DNS, SES domain
+identities, email-forward receipt rules) live in
+[sparked-diamond/personal-web](https://github.com/sparked-diamond/personal-web).
+The email-forward Lambda code itself stays in this repo as a generic
+per-prefix forwarder; personal-web's receipt rules reference it via
+`data "aws_lambda_function"`. See the personal-web README for the
+homelab/personal-web boundary.

@@ -237,7 +237,13 @@ Plex is configured for remote access via `https://plex.wind.etherport.net`.
 - Middleware for proper headers (X-Forwarded-Proto)
 - Buffering middleware for large requests
 
-**3. WAF Configuration (CRITICAL for Transcoding)**
+**3. WAF Configuration (historical — N/A post 2026-05-27 ALB decom)**
+
+> **Note (2026-05-27):** the AWS ALB + WAF were decommissioned (see
+> `docs/runbooks/alb-decom.md`). Public Plex traffic now arrives via
+> Cloudflare Tunnel, which does not impose the 2048-byte query string
+> limit that the old WAF did. The section below is retained for
+> historical context only — none of these steps are required today.
 
 If using AWS ALB with WAF, Plex transcode URLs can exceed the default query string size limit (2048 bytes) and will return **403 Forbidden** errors when playing content.
 

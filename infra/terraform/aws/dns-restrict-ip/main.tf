@@ -32,7 +32,7 @@ data "archive_file" "lambda" {
 # Lambda function
 resource "aws_lambda_function" "dns_restrict_ip" {
   function_name    = "dns-restrict-ip"
-  description      = "Syncs security group rules with Route53 DNS records for homelab WAN IPs"
+  description      = "Syncs security group rules with WAN IPs resolved from public DNS (zone-provider-agnostic post-CF migration)"
   role             = aws_iam_role.lambda.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.13"
@@ -44,6 +44,10 @@ resource "aws_lambda_function" "dns_restrict_ip" {
 
   environment {
     variables = {
+      # HOSTED_ZONE_ID is vestigial — handler.py resolves via public
+      # DNS (1.1.1.1 + 8.8.8.8) so the Lambda doesn't need zone access.
+      # Kept in env for now to avoid forcing a Lambda recreate on the
+      # var removal; drop it (and the variable) in a follow-up apply.
       HOSTED_ZONE_ID = var.hosted_zone_id
       RECORD_NAMES   = join(",", var.record_names)
       # JSON-encoded list of {security_group_id, port, protocols}.

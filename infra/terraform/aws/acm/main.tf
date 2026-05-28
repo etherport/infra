@@ -1,7 +1,15 @@
 # ACM Certificates for homelab infrastructure (us-west-2)
 #
-# These certificates are used by the ALB for HTTPS termination.
-# DNS validation records are managed in the route53 module.
+# These certificates predate the 2026-05-27 ALB decom. They are
+# retained for now (no ongoing cost; cert-manager handles in-cluster
+# TLS via Let's Encrypt). Validation records were originally in the
+# deleted route53 module — they're now mirrored as CNAME entries in
+# infra/terraform/cloudflare/variables.tf under the
+# "ACME DNS-01 validation" group so renewals continue to work.
+#
+# Candidates for deletion once we're confident nothing references
+# them: ha_wind_etherport (Home Assistant moved to in-cluster TLS),
+# wind_etherport_wildcard (ALB consumer is gone).
 
 #------------------------------------------------------------------------------
 # Wildcard Certificates

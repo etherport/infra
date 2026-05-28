@@ -74,6 +74,15 @@ trunk (no SIP REGISTER — `register: "false"`).
 All three physical UVP phones are `sip_reg: true` (registered to local Talk),
 firmware `v1.21.17`, with `v1.24.8` available.
 
+> **Identity ownership note (2026-05-27):** the `*@grahamsmith.net` and
+> `info@smithforsb.com` addresses above receive voicemail-to-email via
+> the SES forwarder. The `grahamsmith.net` + `smithforsb.com` SES
+> identities + receipt rules moved to the `personal-web` repo on
+> 2026-05-27 (terraform/ses-email-forward) — the forwarder Lambda
+> itself still lives in homelab (`infra/terraform/aws/email-forward`).
+> Mail delivery is unchanged; just noting the IaC split so future
+> debugging looks in the right repo.
+
 ### Other Talk objects
 
 - **Parking lots**: 1 — "Windtryst", 300s park timeout, on-timeout → voicemail (Graham).

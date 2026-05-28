@@ -92,6 +92,11 @@ terraform apply /tmp/alb-destroy.tfplan
 The ACM certificates themselves live in `infra/terraform/aws/acm/`
 and are NOT destroyed — they remain available for any future use.
 
+> **Historical note (2026-05-27):** the `load-balancing/` module was
+> deleted from the repo after the destroy completed (commit `7a369f4`).
+> Rollback per the section below requires `git revert` to recreate the
+> module dir before re-applying.
+
 ### Step 3 — verify
 
 1. **Public resolution returns NXDOMAIN for operator UIs:**
@@ -111,16 +116,20 @@ and are NOT destroyed — they remain available for any future use.
 
 ## Rollback (if something goes wrong)
 
-The TF state captures everything. To reinstate:
+The module dir was deleted post-decom; reinstating it is a two-step
+revert:
 
 ```bash
+# Restore the module + TF state intent
+git revert <commit that deleted load-balancing/>   # e.g., 7a369f4
+git revert <ALB destroy commit>
 cd infra/terraform/aws/load-balancing
-git revert <destroy-commit>
+terraform init
 terraform apply  # recreates the ALB
 ```
 
-The ACM cert listener attachments would need re-binding — TF handles
-that automatically since the certs themselves were preserved.
+The `*.wind.etherport.net` ACM cert was kept (used by other
+consumers); listener attachments re-bind automatically on apply.
 
 Then revert the CF wildcard removal commit + apply.
 

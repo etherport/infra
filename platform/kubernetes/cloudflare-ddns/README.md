@@ -1,384 +1,158 @@
-# Route53 Dynamic DNS Updater
+# Cloudflare Dynamic DNS Updater
 
-Containerized dynamic DNS updater for AWS Route53. Automatically updates DNS A records with your current public IP address.
+Containerized dynamic DNS updater for Cloudflare. Keeps the configured
+A records in sync with the homelab's current active-WAN public IP via
+the Cloudflare API.
 
-**Deployment Method**: This application is managed via **Flux GitOps**. Changes are deployed automatically from git commits.
+> **Migration note (2026-05-27):** this module was renamed from
+> `route53-ddns` and rewritten to call the Cloudflare API instead of
+> Route53. The image (`ghcr.io/sparked-diamond/cloudflare-ddns:main`)
+> still bundles aws-cli for transitional reasons — image trim is a
+> follow-up. See `docs/runbooks/cloudflare-ddns-cf-migration.md` for
+> the migration record.
+
+**Deployment Method**: managed via **Flux GitOps**. Changes are
+deployed automatically from git commits.
 
 ## Features
 
-- ✅ **Multi-domain support**: Update multiple DNS records across different hosted zones
-- ✅ **IP change detection**: Only updates when public IP changes
-- ✅ **Prometheus metrics**: Exports update statistics to Pushgateway
-- ✅ **Kubernetes-native**: Runs as CronJob, configurable via ConfigMap
-- ✅ **Minimal resources**: 64MB RAM, runs every 5 minutes
-- ✅ **Secure**: Uses IAM credentials, runs as non-root user
-- ✅ **GitOps managed**: Configuration changes via git commits (see [Flux Overview](../../docs/gitops/flux-overview.md))
+- Multi-record support — sync N record names within a single CF zone
+- Active-WAN detection — picks wan1 vs wan2 by comparing egress IP
+- Prometheus metrics via Pushgateway
+- Kubernetes-native — runs as a CronJob every minute (concurrencyPolicy: Forbid)
+- Minimal footprint — 64Mi requests / 128Mi limit
+- Non-root, drops all capabilities
 
 ## Quick Start
 
-### 1. Create AWS Credentials Secret
+### 1. Create the Cloudflare API token secret
+
+The CronJob loads `CF_API_TOKEN` from a SOPS-encrypted Secret. Use the
+template as a starting point:
 
 ```bash
-kubectl create namespace cloudflare-ddns
-
-kubectl create secret generic cloudflare-ddns-credentials \
-  --namespace=cloudflare-ddns \
-  --from-literal=AWS_ACCESS_KEY_ID=<your-key-id> \
-  --from-literal=AWS_SECRET_ACCESS_KEY=<your-secret-key>
+cp base/cloudflare-credentials.sops.yaml.template \
+   base/cloudflare-credentials.sops.yaml
+# Edit, then encrypt in place
+sops --encrypt --in-place base/cloudflare-credentials.sops.yaml
 ```
 
-**Required IAM Permissions:**
+**Required Cloudflare token scopes** (create at
+[Cloudflare → My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens)):
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "route53:ListResourceRecordSets",
-        "route53:ChangeResourceRecordSets"
-      ],
-      "Resource": "arn:aws:route53:::hostedzone/*"
-    }
-  ]
-}
-```
+| Scope | Permission | Resource |
+|-------|------------|----------|
+| Zone | DNS | Edit | The etherport.net zone (or whichever zone holds the records) |
+| Zone | Zone | Read | Same zone |
 
-### 2. Configure DNS Records
+### 2. Configure DNS records
 
 Edit `base/configmap.yaml`:
 
 ```yaml
 data:
-  # Your Route53 hosted zone IDs (comma-separated)
-  hosted_zones: "Z10298356ZVPFVHAMFXP,Z03500581XDWV5SKF5PK8"
+  # Cloudflare zone ID for the target zone (see CF dashboard → zone overview → API section)
+  cf_zone_id: "c45213cbf36fc634b6b75ae9abd49c59"
 
-  # DNS record names to update (must match order of hosted_zones)
-  record_names: "wind.gmsmeg.net,wind.etherport.net"
+  # Comma-separated record names within that zone
+  record_names: "wind.etherport.net"
 
-  # DNS TTL in seconds
+  # DNS record TTL in seconds
   ttl: "300"
 
-  # Service to fetch public IP from
-  ip_service_url: "http://checkip.amazonaws.com"
+  # IP source: "auto" picks the currently-active WAN by comparing the
+  # cluster's egress IP to wan1.wind.etherport.net / wan2.wind.etherport.net.
+  ip_dns_source: "auto"
+  ip_wan1_dns: "wan1.wind.etherport.net"
+  ip_wan2_dns: "wan2.wind.etherport.net"
+
+  # Fallback (only used if ip_dns_source != "auto")
+  ip_service_url: "https://checkip.amazonaws.com"
 ```
 
-**Important**:
-- Number of `hosted_zones` must match number of `record_names`
-- Order matters: first zone ID corresponds to first record name, etc.
+### 3. Deploy
 
-### 3. Deploy to Kubernetes
-
-#### GitOps Deployment (Recommended)
-
-This application is managed by Flux. Configuration changes are made via git:
+This module is managed by Flux. Commit changes to git; Flux reconciles
+within ~10 minutes (or force with `flux reconcile`):
 
 ```bash
-# Edit configuration (e.g., add/remove DNS records)
-vim platform/kubernetes/cloudflare-ddns/base/configmap.yaml
-
-# Commit and push
 git add platform/kubernetes/cloudflare-ddns/base/configmap.yaml
 git commit -m "cloudflare-ddns: update DNS records"
 git push
-
-# Force Flux to sync immediately (or wait ~10 minutes)
-flux reconcile source git flux-system
 flux reconcile kustomization flux-system
-
-# Verify CronJob is updated
-kubectl get cronjob -n cloudflare-ddns
-kubectl describe cronjob cloudflare-ddns -n cloudflare-ddns
-
-# Test immediately (don't wait for cron schedule)
-kubectl create job --from=cronjob/cloudflare-ddns route53-test-$(date +%s) -n cloudflare-ddns
-kubectl logs -n cloudflare-ddns job/route53-test-<timestamp>
 ```
 
-See [Making Changes to GitOps Apps](../../docs/gitops/making-changes.md) for detailed workflows.
-
-#### Manual Deployment (Not Recommended)
-
-If you need to bypass GitOps (changes will be reverted by Flux):
+### 4. Monitor updates
 
 ```bash
-# Apply all resources
-kubectl apply -k platform/kubernetes/cloudflare-ddns/base
-
-# Verify deployment
-kubectl get cronjob -n cloudflare-ddns
-kubectl get pods -n cloudflare-ddns
-```
-
-### 4. Monitor Updates
-
-```bash
-# Watch CronJob schedule
+# Schedule + last runs
 kubectl get cronjob -n cloudflare-ddns cloudflare-ddns
-
-# View recent job runs
 kubectl get jobs -n cloudflare-ddns --sort-by=.metadata.creationTimestamp
 
-# Check logs from latest run
-kubectl logs -n cloudflare-ddns -l job-name=$(kubectl get jobs -n cloudflare-ddns -o name | tail -1 | cut -d'/' -f2)
+# Latest logs
+kubectl logs -n cloudflare-ddns -l app=cloudflare-ddns --tail=200
 ```
 
 ## Configuration
 
-### ConfigMap Variables
-
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `hosted_zones` | *(required)* | Comma-separated Route53 hosted zone IDs |
-| `record_names` | *(required)* | Comma-separated DNS record names |
+| `cf_zone_id` | *(required)* | Cloudflare zone ID containing the records |
+| `record_names` | *(required)* | Comma-separated A-record names within the zone |
 | `ttl` | `300` | DNS record TTL in seconds |
-| `ip_service_url` | `http://checkip.amazonaws.com` | URL to fetch public IP from |
+| `ip_dns_source` | `auto` | `auto` for active-WAN detection, or a specific DNS name |
+| `ip_wan1_dns` | `wan1.wind.etherport.net` | First WAN reference for auto-detect |
+| `ip_wan2_dns` | `wan2.wind.etherport.net` | Second WAN reference for auto-detect |
+| `ip_service_url` | `https://checkip.amazonaws.com` | Fallback IP source when not in auto mode |
 
-### CronJob Schedule
-
-Default: `*/5 * * * *` (every 5 minutes)
-
-To change:
-```bash
-kubectl edit cronjob -n cloudflare-ddns cloudflare-ddns
-# Modify spec.schedule
-```
-
-Common schedules:
-- Every minute: `* * * * *`
-- Every 5 minutes: `*/5 * * * *`
-- Every 15 minutes: `*/15 * * * *`
-- Hourly: `0 * * * *`
-
-### Resource Limits
-
-Default:
-- **Requests**: 64MB RAM, 50m CPU
-- **Limits**: 128MB RAM, 100m CPU
-
-These are very conservative - the script typically uses <10MB RAM.
-
-## How It Works
-
-```
-┌─────────────────────────────────────────────────┐
-│ 1. Kubernetes CronJob triggers (every 5 min)   │
-└────────────────┬────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────┐
-│ 2. Fetch current public IP                     │
-│    curl http://checkip.amazonaws.com            │
-└────────────────┬────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────┐
-│ 3. For each DNS record:                         │
-│    - Get existing IP from Route53               │
-│    - Compare with current IP                    │
-│    - Update if different (UPSERT)               │
-└────────────────┬────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────┐
-│ 4. Push metrics to Prometheus (optional)       │
-│    - Success/failure status                     │
-│    - Number of updates made                     │
-│    - Duration                                   │
-└─────────────────────────────────────────────────┘
-```
+CronJob schedule defaults to `* * * * *` (every minute, for fast WAN
+failover response). `concurrencyPolicy: Forbid` prevents overlapping runs.
 
 ## Prometheus Metrics
 
-If Prometheus Pushgateway is available, the following metrics are exported:
+When the Pushgateway is reachable, the script exports:
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `cloudflare_ddns_success` | Gauge | 1 if update succeeded, 0 if failed |
-| `cloudflare_ddns_updates_made` | Gauge | Number of DNS records updated |
-| `cloudflare_ddns_updates_skipped` | Gauge | Number of records skipped (no change) |
-| `cloudflare_ddns_updates_failed` | Gauge | Number of failed updates |
-| `cloudflare_ddns_duration_seconds` | Gauge | Duration of update process |
+| `cloudflare_ddns_success` | Gauge | 1 if run succeeded, 0 if failed |
+| `cloudflare_ddns_updates_made` | Gauge | Records that needed an update this run |
+| `cloudflare_ddns_updates_skipped` | Gauge | Records already correct |
+| `cloudflare_ddns_updates_failed` | Gauge | Records that failed to update |
+| `cloudflare_ddns_duration_seconds` | Gauge | Run duration |
 | `cloudflare_ddns_last_run_timestamp` | Gauge | Unix timestamp of last run |
 
-Access metrics:
+Inspect:
+
 ```bash
-curl http://pushgateway.monitoring.svc.cluster.local:9091/metrics | grep cloudflare_ddns
+curl -s http://pushgateway.monitoring.svc.cluster.local:9091/metrics \
+  | grep cloudflare_ddns
 ```
 
 ## Troubleshooting
 
-### Check Job Status
+**Auth failure from CF API**
+- Verify `CF_API_TOKEN` is present in the `cloudflare-credentials`
+  Secret (`kubectl get secret -n cloudflare-ddns cloudflare-credentials -o yaml`)
+- Token must have Zone DNS:Edit + Zone:Read on the target zone
 
-```bash
-# List recent jobs
-kubectl get jobs -n cloudflare-ddns
+**Record not updating**
+- Confirm `cf_zone_id` matches the zone that holds the record
+- Check `dig +short wind.etherport.net @1.1.1.1`
+- Inspect job logs for `Existing IP` vs `New IP`
 
-# Get logs from failed job
-kubectl logs -n cloudflare-ddns job/cloudflare-ddns-TIMESTAMP
-```
+**Job not running**
+- `kubectl get cronjob -n cloudflare-ddns` — confirm `SUSPEND=False`
+- `kubectl get jobs -n cloudflare-ddns` — check recent run status
 
-### Common Issues
+## Security
 
-**1. "Could not determine current public IP"**
-- Check internet connectivity from pod
-- Verify IP service URL is accessible
-- Try alternative: `https://api.ipify.org` or `https://ifconfig.me/ip`
-
-**2. "AccessDenied" from Route53**
-- Verify AWS credentials are correct
-- Check IAM policy has required permissions
-- Ensure hosted zone IDs are correct
-
-**3. Job not running**
-- Check CronJob: `kubectl get cronjob -n cloudflare-ddns`
-- Verify schedule is correct
-- Check for failed jobs: `kubectl get jobs -n cloudflare-ddns`
-
-**4. Updates not persisting**
-- Verify TTL is appropriate (300s = 5min)
-- Check DNS propagation: `dig +short wind.gmsmeg.net`
-- Ensure no conflicting DNS updates
-
-### Manual Test Run
-
-```bash
-# Create a one-off test job
-kubectl create job test-ddns -n cloudflare-ddns \
-  --from=cronjob/cloudflare-ddns
-
-# Watch logs
-kubectl logs -n cloudflare-ddns -f job/test-ddns
-```
-
-## Example Output
-
-```
-======================================
-Route53 Dynamic DNS Updater
-======================================
-Time:        2026-01-02T04:50:00Z
-Zones:       2
-TTL:         300s
-IP Service:  http://checkip.amazonaws.com
-======================================
-
-[1/3] Fetching current public IP...
-Current public IP: 203.0.113.42
-
-[2/3] Checking and updating DNS records...
----
-Processing: wind.gmsmeg.net (zone: Z10298356ZVPFVHAMFXP)
-Existing IP: 203.0.113.41
-Status: Updated successfully (Change ID: C1234567890ABC)
-Change: 203.0.113.41 → 203.0.113.42
----
-Processing: wind.etherport.net (zone: Z03500581XDWV5SKF5PK8)
-Existing IP: 203.0.113.42
-Status: No change needed (already 203.0.113.42)
-
-======================================
-Summary
-======================================
-Public IP:       203.0.113.42
-Records checked: 2
-Updated:         1
-Skipped:         1 (no change)
-Failed:          0
-
-Updated records:
-  - wind.gmsmeg.net → 203.0.113.42
-======================================
-
-[3/3] Pushing metrics to Prometheus...
-Metrics pushed successfully
-Route53 DDNS update complete
-```
-
-## Security Considerations
-
-- ✅ Runs as non-root user (UID 1000)
-- ✅ Read-only root filesystem
-- ✅ Drops all capabilities
-- ✅ Uses seccomp RuntimeDefault profile
-- ✅ AWS credentials stored in Kubernetes Secret
-- ✅ Minimal IAM permissions (Route53 only)
-
-## Alternatives
-
-### Why not use external-dns?
-
-[external-dns](https://github.com/kubernetes-sigs/external-dns) is great for managing DNS records for Kubernetes services/ingresses, but is overkill for simple dynamic DNS. This solution:
-
-- ✅ Simpler: Single script, no complex CRDs
-- ✅ Lightweight: 64MB vs 256MB+ for external-dns
-- ✅ Purpose-built: Just updates your home IP, nothing more
-- ✅ Lower cost: Runs every 5 min vs constant reconciliation
-
-### Why not use ddclient?
-
-[ddclient](https://ddclient.net/) supports many DDNS providers but:
-- ❌ Not designed for containers/Kubernetes
-- ❌ Complex configuration file format
-- ❌ Perl dependencies
-- ✅ This solution: Single bash script, AWS CLI only
-
-## Cost
-
-### AWS Route53 Pricing (US-West-2)
-
-- **Hosted Zone**: $0.50/month per zone
-- **Route53 API Requests**:
-  - First 1 billion queries/month: $0.40 per million
-  - `ListResourceRecordSets`: $0.40 per million
-  - `ChangeResourceRecordSets`: $0.40 per million
-
-### Monthly Cost Estimate
-
-Running every 5 minutes with 2 DNS records:
-
-```
-Runs per month: 12 runs/hour × 24 hours × 30 days = 8,640 runs
-API calls per run: 2 LIST + 0-2 CHANGE = ~2-4 calls
-Total API calls: 8,640 × 3 (avg) = 25,920 calls
-
-Cost: 25,920 / 1,000,000 × $0.40 = $0.01/month
-```
-
-**Total monthly cost: ~$0.01** (essentially free)
-
-## Development
-
-### Building Locally
-
-```bash
-cd platform/kubernetes/cloudflare-ddns/image
-docker build -t cloudflare-ddns:test .
-docker run --rm \
-  -e AWS_ACCESS_KEY_ID=xxx \
-  -e AWS_SECRET_ACCESS_KEY=xxx \
-  -e HOSTED_ZONES=Z123... \
-  -e RECORD_NAMES=test.example.com \
-  cloudflare-ddns:test
-```
-
-### Testing Script Changes
-
-```bash
-# Test script locally
-export HOSTED_ZONES="Z123..."
-export RECORD_NAMES="test.example.com"
-export TTL=300
-bash platform/kubernetes/cloudflare-ddns/image/scripts/update-cf-dns.sh
-```
-
-## License
-
-MIT
+- Runs as non-root (UID 1000)
+- Drops all Linux capabilities, seccomp RuntimeDefault
+- CF API token scoped to a single zone (DNS edit only)
+- Token stored in a SOPS-encrypted Kubernetes Secret
 
 ## References
 
-- [AWS Route53 API Documentation](https://docs.aws.amazon.com/Route53/latest/APIReference/)
-- [AWS CLI Route53 Commands](https://docs.aws.amazon.com/cli/latest/reference/route53/)
+- [Cloudflare DNS Records API](https://developers.cloudflare.com/api/operations/dns-records-for-a-zone-list-dns-records)
 - [Kubernetes CronJobs](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/)
+- Migration runbook: `docs/runbooks/cloudflare-ddns-cf-migration.md`
