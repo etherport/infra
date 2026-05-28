@@ -129,7 +129,13 @@ Each phase = a single PR (doc update + change-log entry) + a single maintenance 
 
 ### Phase 2 — Move vSAN/209 + Ceph/210 into `Infrastructure`
 
-**Why second:** vSAN and Ceph traffic is **L3-switch-routed** today, so the UDM never sees the bulk of it. Moving these networks into `Infrastructure` is mostly cosmetic from the UDM's perspective — it changes which zone-default applies to the small amount of vSAN/Ceph traffic that ever reaches the UDM (e.g., a Proxmox host syncing time via 10.10.200.1).
+**Why second — risk re-rated 2026-05-27:** Pre-flight live-state inspection corrected the audit's "vSAN/Ceph is L3-switch-routed" claim. Reality: **all 9 switches are L2-only** (`config_network.type = dhcp` on every USW), and **every VLAN gateway lives on the UDM** (10.10.209.1 / 10.10.210.1 are UDM SVIs, not switch SVIs). So:
+
+- East-west traffic *within* vSAN (Proxmox vSAN replication) or *within* Ceph (OSD heartbeats) stays L2-tagged on the switch backplane — never hits the UDM, never sees a firewall rule.
+- Cross-VLAN traffic (e.g., Mgmt → vSAN admin SSH, K8s → Ceph RBD mount) routes through the UDM SVI and is the only thing affected by zone policy changes.
+- **No L3-switch ACL state to coordinate** — there isn't any. Phase 2 risk is bounded to the small set of cross-VLAN admin/storage flows, all of which we control.
+
+Moving these networks into `Infrastructure` mostly changes which zone-default applies to the small amount of vSAN/Ceph traffic that ever crosses VLANs (e.g., a Proxmox host syncing time via 10.10.200.1, or kubelet talking to Ceph mons).
 
 **Steps:**
 
@@ -226,11 +232,11 @@ After all four phases complete:
 
 | Dependency | Why | Status |
 |------------|-----|--------|
-| **M31 (UDM backup automation)** | Hard prerequisite — without an off-box backup, no phase is safely reversible. | Open. **Block migration on this.** |
-| **M30 (doc reconcile)** | Provides the current-state baseline this migration starts from. | Done as of 2026-05-23 (architecture/firewall-zones.md rewrite). |
-| **M18 (eBGP / MetalLB BGP)** | Independent. Zone migration changes which zone owns 201, but MetalLB L2Advertisement only cares about subnet membership, not zone. | **Independent — can proceed in either order.** |
-| **Audit P2 #12 (firewall groups)** | Pre-flight item — groups must exist before phase 1 to keep rule text clean. | Pre-flight item. |
-| **L3 switch ACL audit (audit P3 #21)** | Phase 2/4 risk is harder to bound until we know what the switch is enforcing. | Should land before Phase 2. |
+| **M31 (UDM backup automation)** | Hard prerequisite — without an off-box backup, no phase is safely reversible. | ✅ Live since 2026-05-23 (5 days of daily backups in S3). |
+| **M30 (doc reconcile)** | Provides the current-state baseline this migration starts from. | ✅ Done 2026-05-23 (architecture/firewall-zones.md rewrite). |
+| **M18 (eBGP / MetalLB BGP)** | Independent. Zone migration changes which zone owns 201, but MetalLB L2Advertisement only cares about subnet membership, not zone. | Independent — sequenced after this migration to batch UDM L3 blast-radius windows. |
+| **Audit P2 #12 (firewall groups)** | Pre-flight item — groups must exist before phase 1 to keep rule text clean. | ✅ Done 2026-05-27 (commit `3271cea`) — 14 new groups landed via udm-firewall.yml. |
+| **L3 switch ACL audit (audit P3 #21)** | Phase 2/4 risk is harder to bound until we know what the switch is enforcing. | ✅ N/A — pre-flight inspection confirmed all 9 switches are L2-only (`config_network.type=dhcp`); UDM owns every VLAN gateway. No L3 ACL state to capture. |
 | **Identity Enterprise / RADIUS** | Not on path — skip per audit §2.7. | N/A |
 
 ---
@@ -255,7 +261,7 @@ Before opening the first PR (Phase 1), confirm:
 
 - [ ] **M31 (UDM backup to S3) is implemented and verified** — at least one successful backup landed in S3, and one test restore was performed against a sandbox UDM or VM.
 - [ ] **Out-of-band SSH path tested** — verified that I can reach `10.10.200.1` from outside the LAN (via AWS-WG path) and that a totally-broken zone rule wouldn't kill that path.
-- [ ] **L3 switch ACL state captured** — UI screenshot or `show running-config` from the L3 switch documenting what cross-VLAN ACLs are currently enforced. Without this, Phase 2 risk is unbounded.
+- [x] **L3 switch ACL state captured** — N/A. Pre-flight inspection confirmed all 9 switches are L2-only and the UDM owns every VLAN gateway; there are no L3 switch ACLs to capture. Phase 2 risk re-bounded accordingly.
 - [ ] **Firewall groups created in their own PR** (audit P2 #12) and verified rule-referencable in the UI.
 - [ ] **All four phases scheduled with maintenance windows announced** to any household users who depend on the network (kids' WiFi, IP phones, alarm system, etc.).
 - [ ] **Decision made on Default/199** (keep / quarantine / delete DHCP) — to be applied in Phase 5.
