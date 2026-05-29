@@ -92,36 +92,46 @@
         destination: { type: NETWORK, vlans: [209] }
 
   pre_tasks:
-    - name: Verify op CLI present
-      ansible.builtin.command: op --version
-      changed_when: false
-
-    - name: Fetch UDM username from 1Password
-      ansible.builtin.command:
-        argv: [op, item, get, "UDM (tf-admin)", --fields, username]
-      register: udm_user_op
-      changed_when: false
-      no_log: true
-
-    - name: Fetch UDM password from 1Password
-      ansible.builtin.command:
-        argv: [op, item, get, "UDM (tf-admin)", --fields, password, --reveal]
-      register: udm_pass_op
-      changed_when: false
-      no_log: true
-
-    - name: Set UDM credential facts
+    # Credentials: prefer env vars (CI — UDM_USERNAME/UDM_PASSWORD from
+    # GH secrets via ansible-unifi.yml), fall back to the 1Password CLI
+    # (laptop, op agent unlocked).
+    - name: Use env-var credentials when present (CI)
       ansible.builtin.set_fact:
-        udm_username: "{{ udm_user_op.stdout | trim }}"
-        udm_password: "{{ udm_pass_op.stdout | trim }}"
+        udm_username: "{{ lookup('env', 'UDM_USERNAME') }}"
+        udm_password: "{{ lookup('env', 'UDM_PASSWORD') }}"
       no_log: true
+      when: lookup('env', 'UDM_USERNAME') | length > 0
+
+    - name: Fetch credentials from 1Password (laptop fallback)
+      when: lookup('env', 'UDM_USERNAME') | length == 0
+      block:
+        - name: Verify op CLI present
+          ansible.builtin.command: op --version
+          changed_when: false
+        - name: Fetch UDM username from 1Password
+          ansible.builtin.command:
+            argv: [op, item, get, "UDM (tf-admin)", --fields, username]
+          register: udm_user_op
+          changed_when: false
+          no_log: true
+        - name: Fetch UDM password from 1Password
+          ansible.builtin.command:
+            argv: [op, item, get, "UDM (tf-admin)", --fields, password, --reveal]
+          register: udm_pass_op
+          changed_when: false
+          no_log: true
+        - name: Set UDM credential facts from 1Password
+          ansible.builtin.set_fact:
+            udm_username: "{{ udm_user_op.stdout | trim }}"
+            udm_password: "{{ udm_pass_op.stdout | trim }}"
+          no_log: true
 
     - name: Assert UDM credentials present
       ansible.builtin.assert:
         that:
           - udm_username | length > 0
           - udm_password | length > 0
-        fail_msg: "Failed to fetch UDM creds from 1Password (item: 'UDM (tf-admin)'). Ensure 1P agent is unlocked."
+        fail_msg: "No UDM creds — set UDM_USERNAME/UDM_PASSWORD env (CI) or unlock 1Password 'UDM (tf-admin)' (laptop)."
 
   tasks:
     # -----------------------------------------------------------------

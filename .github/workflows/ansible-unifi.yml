@@ -1,0 +1,113 @@
+name: Ansible UniFi
+
+# Manages UDM firewall (zones/groups/policies) + L3-switch ACLs via the
+# UniFi v2 API. These playbooks talk HTTPS to the UDM (10.10.200.1) — no
+# SSH key needed. Credentials come from the UDM_USERNAME / UDM_PASSWORD
+# secrets (the "UDM (tf-admin)" 1Password item); the playbooks fall back
+# to the local `op` CLI when those env vars are absent (laptop runs).
+#
+# Why dispatch-only (no push trigger): these mutate the live firewall.
+# Run 'check' first to preview, then 'apply'. Modeled on ansible-proxmox.yml.
+#
+# REQUIRED GH SECRETS (Settings → Secrets and variables → Actions):
+#   UDM_USERNAME  — tf-admin username  (from 1Password "UDM (tf-admin)")
+#   UDM_PASSWORD  — tf-admin password
+# Until those exist, runs fail the credentials assert (by design).
+
+on:
+  workflow_dispatch:
+    inputs:
+      playbook:
+        description: 'Playbook to run'
+        required: true
+        type: choice
+        options:
+          - udm-firewall
+          - usw-acls
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - check
+          - apply
+      usw_acls_apply_new:
+        description: 'usw-acls: also apply the new BLOCK rules (storage tier). Leave false for import-only.'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  WORKING_DIR: infra/ansible
+
+jobs:
+  ansible:
+    name: Ansible ${{ github.event.inputs.playbook }} (${{ github.event.inputs.action }})
+    # Lifecycle runner (gh-runner VM @ 10.10.201.30) — has L3 reach to the
+    # UDM at 10.10.200.1. homelab-runner (in-cluster) is avoided so this
+    # still works if the cluster is offline (same rationale as proxmox).
+    runs-on: [self-hosted, lifecycle]
+    container:
+      image: ghcr.io/sparked-diamond/ansible-runner:main
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build EXTRA_VARS
+        id: extra
+        run: |
+          # become=false: these are local-connection (HTTPS-to-UDM) plays.
+          EXTRA_VARS="-e ansible_become=false"
+          if [ "${{ github.event.inputs.playbook }}" = "usw-acls" ]; then
+            EXTRA_VARS="$EXTRA_VARS -e usw_acls_apply_new=${{ github.event.inputs.usw_acls_apply_new }}"
+          fi
+          echo "extra_vars=$EXTRA_VARS" >> "$GITHUB_OUTPUT"
+          echo "Resolved EXTRA_VARS: $EXTRA_VARS"
+
+      - name: Run Ansible playbook (check mode)
+        if: github.event.inputs.action == 'check'
+        env:
+          UDM_USERNAME: ${{ secrets.UDM_USERNAME }}
+          UDM_PASSWORD: ${{ secrets.UDM_PASSWORD }}
+        run: |
+          ansible-playbook \
+            -i inventory/wind/inventory.ini \
+            playbooks/${{ github.event.inputs.playbook }}.yml \
+            --check --diff \
+            ${{ steps.extra.outputs.extra_vars }} \
+            -v
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Run Ansible playbook (apply)
+        if: github.event.inputs.action == 'apply'
+        env:
+          UDM_USERNAME: ${{ secrets.UDM_USERNAME }}
+          UDM_PASSWORD: ${{ secrets.UDM_PASSWORD }}
+        run: |
+          ansible-playbook \
+            -i inventory/wind/inventory.ini \
+            playbooks/${{ github.event.inputs.playbook }}.yml \
+            --diff \
+            ${{ steps.extra.outputs.extra_vars }} \
+            -v
+        working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Ansible UniFi"
+            echo ""
+            echo "- **Playbook**: ${{ github.event.inputs.playbook }}"
+            echo "- **Action**: ${{ github.event.inputs.action }}"
+            if [ "${{ github.event.inputs.playbook }}" = "usw-acls" ]; then
+              echo "- **Apply new BLOCKs**: ${{ github.event.inputs.usw_acls_apply_new }}"
+            fi
+          } >> $GITHUB_STEP_SUMMARY
