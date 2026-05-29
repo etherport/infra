@@ -1,0 +1,178 @@
+---
+# UDM firmware-update policy via the UniFi settings API (M32 + M34).
+#
+# Sets two site-level update settings to safe values:
+#   M32: super_fwupdate.firmware_channel  beta -> release
+#   M34: mgmt.auto_upgrade                true -> false  (disable the
+#        nightly site-wide auto-upgrade of APs + switches)
+#
+# Both are done as idempotent full-object GET-modify-POST: fetch the
+# current setting, flip the one field, POST the whole object back. The
+# mgmt object carries the UDM's SSH credentials (x_ssh_*); round-tripping
+# the unchanged real values preserves them (verified non-masked on GET).
+# Only POSTs when the value is actually drifted.
+#
+# Auth + run model: identical to udm-firewall.yml / usw-acls.yml
+#   (env-var creds in CI via ansible-unifi.yml, else 1Password `op`).
+#
+# Usage:
+#   ansible-playbook -i inventory/wind/inventory.ini \
+#     playbooks/udm-firmware-policy.yml -e ansible_become=false
+#   (or dispatch ansible-unifi.yml with playbook=udm-firmware-policy)
+
+- name: UDM firmware-update policy (settings API)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+
+  vars:
+    udm_base: "https://10.10.200.1"
+    udm_site: default
+    udm_validate_certs: false
+    # Desired values.
+    desired_firmware_channel: release
+    desired_auto_upgrade: false
+
+  pre_tasks:
+    # Credentials: env vars (CI) → 1Password (laptop). Same as udm-firewall.yml.
+    - name: Use env-var credentials when present (CI)
+      ansible.builtin.set_fact:
+        udm_username: "{{ lookup('env', 'UDM_USERNAME') }}"
+        udm_password: "{{ lookup('env', 'UDM_PASSWORD') }}"
+      no_log: true
+      when: lookup('env', 'UDM_USERNAME') | length > 0
+
+    - name: Fetch credentials from 1Password (laptop fallback)
+      when: lookup('env', 'UDM_USERNAME') | length == 0
+      block:
+        - name: Verify op CLI present
+          ansible.builtin.command: op --version
+          changed_when: false
+        - name: Fetch UDM username from 1Password
+          ansible.builtin.command:
+            argv: [op, item, get, "UDM (tf-admin)", --fields, username]
+          register: udm_user_op
+          changed_when: false
+          no_log: true
+        - name: Fetch UDM password from 1Password
+          ansible.builtin.command:
+            argv: [op, item, get, "UDM (tf-admin)", --fields, password, --reveal]
+          register: udm_pass_op
+          changed_when: false
+          no_log: true
+        - name: Set UDM credential facts from 1Password
+          ansible.builtin.set_fact:
+            udm_username: "{{ udm_user_op.stdout | trim }}"
+            udm_password: "{{ udm_pass_op.stdout | trim }}"
+          no_log: true
+
+    - name: Assert UDM credentials present
+      ansible.builtin.assert:
+        that:
+          - udm_username | length > 0
+          - udm_password | length > 0
+        fail_msg: "No UDM creds — set UDM_USERNAME/UDM_PASSWORD env (CI) or unlock 1Password 'UDM (tf-admin)' (laptop)."
+
+  tasks:
+    - name: UDM login
+      check_mode: false
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/api/auth/login"
+        method: POST
+        validate_certs: "{{ udm_validate_certs }}"
+        body_format: json
+        body:
+          username: "{{ udm_username }}"
+          password: "{{ udm_password }}"
+        status_code: 200
+      register: udm_login
+      no_log: true
+
+    - name: Extract TOKEN cookie + CSRF
+      ansible.builtin.set_fact:
+        udm_token: "{{ udm_login.set_cookie | regex_search('TOKEN=([^;]+)', '\\1') | first }}"
+        udm_csrf: "{{ udm_login['x_updated_csrf_token'] | default(udm_login.x_csrf_token | default('')) }}"
+      no_log: true
+
+    - name: Build auth headers
+      ansible.builtin.set_fact:
+        udm_headers:
+          Cookie: "TOKEN={{ udm_token }}"
+          X-Csrf-Token: "{{ udm_csrf }}"
+          Content-Type: application/json
+      no_log: true
+
+    # -----------------------------------------------------------------
+    # M32 — super_fwupdate.firmware_channel -> release
+    # -----------------------------------------------------------------
+    - name: GET super_fwupdate setting
+      check_mode: false
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/proxy/network/api/s/{{ udm_site }}/get/setting/super_fwupdate"
+        method: GET
+        headers: "{{ udm_headers }}"
+        validate_certs: "{{ udm_validate_certs }}"
+        status_code: 200
+        return_content: true
+      register: udm_fwupdate_get
+
+    - name: Set super_fwupdate facts
+      ansible.builtin.set_fact:
+        fwupdate_obj: "{{ udm_fwupdate_get.json.data[0] }}"
+        fwupdate_current: "{{ udm_fwupdate_get.json.data[0].firmware_channel }}"
+
+    # set/setting MERGES (verified) and rejects read-only keys if the full
+    # object is echoed back — so send ONLY the field being changed.
+    - name: POST super_fwupdate with firmware_channel=release (if drifted)
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/proxy/network/api/s/{{ udm_site }}/set/setting/super_fwupdate"
+        method: POST
+        headers: "{{ udm_headers }}"
+        validate_certs: "{{ udm_validate_certs }}"
+        body_format: json
+        body: "{{ {'firmware_channel': desired_firmware_channel} }}"
+        status_code: [200, 201]
+      when: fwupdate_current != desired_firmware_channel
+      register: udm_fwupdate_set
+
+    # -----------------------------------------------------------------
+    # M34 — mgmt.auto_upgrade -> false. Minimal merge payload: only touches
+    #       auto_upgrade, leaves the x_ssh_* credential fields untouched
+    #       (set/setting merges — verified on super_fwupdate above).
+    # -----------------------------------------------------------------
+    - name: GET mgmt setting
+      check_mode: false
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/proxy/network/api/s/{{ udm_site }}/get/setting/mgmt"
+        method: GET
+        headers: "{{ udm_headers }}"
+        validate_certs: "{{ udm_validate_certs }}"
+        status_code: 200
+        return_content: true
+      register: udm_mgmt_get
+      no_log: true
+
+    - name: Set mgmt facts
+      ansible.builtin.set_fact:
+        mgmt_auto_upgrade_current: "{{ udm_mgmt_get.json.data[0].auto_upgrade }}"
+
+    - name: POST mgmt with auto_upgrade=false (if drifted)
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/proxy/network/api/s/{{ udm_site }}/set/setting/mgmt"
+        method: POST
+        headers: "{{ udm_headers }}"
+        validate_certs: "{{ udm_validate_certs }}"
+        body_format: json
+        body: "{{ {'auto_upgrade': desired_auto_upgrade} }}"
+        status_code: [200, 201]
+      when: mgmt_auto_upgrade_current | bool != desired_auto_upgrade
+      register: udm_mgmt_set
+
+    - name: Result summary
+      ansible.builtin.debug:
+        msg: >-
+          firmware_channel: {{ fwupdate_current }} ->
+          {{ desired_firmware_channel }}{{ ' (changed)' if (udm_fwupdate_set is defined and udm_fwupdate_set.changed | default(false)) else ' (already set)' }}
+          | mgmt.auto_upgrade: {{ mgmt_auto_upgrade_current }} ->
+          {{ desired_auto_upgrade }}{{ ' (changed)' if (udm_mgmt_set is defined and udm_mgmt_set.changed | default(false)) else ' (already set)' }}

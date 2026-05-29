@@ -24,6 +24,7 @@ on:
         options:
           - udm-firewall
           - usw-acls
+          - udm-firmware-policy
       action:
         description: 'Action to perform'
         required: true
