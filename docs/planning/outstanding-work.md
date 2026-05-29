@@ -1,6 +1,6 @@
 # Outstanding Work — Consolidated Priority List
 
-Latest revision: 2026-05-27. Canonical filename `outstanding-work.md`
+Latest revision: 2026-05-29. Canonical filename `outstanding-work.md`
 is stable; older dated snapshots live in `archive/`.
 
 Successor to `archive/outstanding-work-2026-05-16.md`. Resets the priority lattice
@@ -20,28 +20,28 @@ revision use the next free ID per tier. Status legend:
 
 ---
 
-## Next-up UDM checklist (updated 2026-05-28)
+## Next-up checklist (updated 2026-05-29)
 
-Pulled via `scripts/unifi/dump-state.sh` + extended settings fetch.
-Order is the suggested execution order — quickest wins first, BGP
-deferred behind the zone migration to share blast-radius windows.
+Active execution order. The zone migration + switch ACLs + Kopia decom +
+personal-web CI all landed this session (see "Recently completed" below).
 
-| # | Item | Live state proof | Action |
+| # | Item | State | Action |
 |---|---|---|---|
-| 1 | **M36 IP-conflict alert workaround** | UDM still firing IP-conflict for `.5` + `.71` (not yet excluded) | UDM UI → Insights → IP Conflict Detection → add `.5` and `.71` to exclusion list (30s) |
-| 2 | **M32 firmware channel** | `super_fwupdate.firmware_channel = "beta"` | Network App → Settings → System → Updates → flip channel to `release` (1 click) |
-| 3 | **M34 fleet auto-upgrade** | `mgmt.auto_upgrade = true` + 7 APs + 9 switches all `safe_for_autoupgrade: true` | UDM UI → System → Updates → "Auto-update devices" → off (or per-device toggles) |
-| 4 | **M30 Phase 3 — Security zone** | Security/205 is UDM-routed (`gateway_type=default`) → executable | Create `Security` zone, move VLAN 205, add Security→DNS allow. SimpliSafe smoke-test (wifi+cell) |
-| 5 | **M52 — L3-switch ACL IaC** | Switch Rack PoE routes 201/202/209/210, zero ACLs | Design doc → `usw-acls.yml` playbook → soak (replaces dropped Phase 2) |
-| 6 | **M50 audit gap-fill** | n/a (planning) | Walk UDM/UNAS/Protect UIs, log every UI-only setting → `udm-iac-coverage.md` |
-| 7 | **M48/M49 UNAS + Protect IaC** | n/a | Create per-device API keys → Ansible playbooks (1 day each) |
-| 8 | **M30 Phase 5 — cleanup + doc rewrite** | after Phase 3 | Re-sync architecture/firewall-zones.md to live; archive future-state doc |
-| 9 | **M18/M36 MetalLB BGP** | MetalLB on L2 mode today; no BGPPeer/BGPAdvertisement | After zone migration: UDM BGP peer + MetalLB BGP CRs |
+| 1 | **M32 firmware channel** | `super_fwupdate.firmware_channel = "beta"` | IaC via new `udm-firmware-policy.yml` → set `release` |
+| 2 | **M34 fleet auto-upgrade** | `mgmt.auto_upgrade=true` + 7 APs + 9 switches `safe_for_autoupgrade:true` | Same playbook → disable site-wide auto-upgrade |
+| 3 | **M18/M36 MetalLB BGP** ← *active target* | MetalLB L2 mode; no BGPPeer/BGPAdvertisement; UDM `.5`/`.71` IP-conflict alerts | Design → UDM eBGP peer + MetalLB BGP CRs + cutover. Properly fixes M36 (no L2 ARP ownership = no conflict) — chosen over the suppression workaround |
+| 4 | **M15-M17 Twilio Talk** | 911 addr / orphan DID / SIP UDP→TLS+sRTP | M15 (911) safety-first; M16 release DID; M17 encryption |
+| 5 | **M53 CF token scoping** | account-scoped token shared infra↔personal-web | Mint zone-scoped tokens; also unblocks M54 |
+| 6 | **M54 smithforsb redirect IaC** | CF Single Redirect is manual in dashboard | Codify in `personal-web/cloudflare-dns/smithforsb.tf` once M53 lands |
+| 7 | **M48/M49/M50 UNAS+Protect IaC** | UI-only | Per-device API keys → Ansible playbooks + coverage audit |
 
-**Already done (verified live 2026-05-27 → 28):**
-- ✅ M33 rsyslog: `rsyslogd.ip=10.10.201.73 port=514 enabled=true`, Loki ingesting ~100 lines/min under `{host="udm"}`
-- ✅ All 11 syslog clients active in Loki: `udm`, `pve`, `pve-bmc`, `switch-workroom`, and 7 APs
-- ✅ M30 pre-flight: 14 firewall groups created (`udm-firewall.yml`, commit `3271cea`); M31 backup + OOB SSH verified
+**Recently completed (this session, 2026-05-27 → 29):**
+- ✅ M30 — UDM zone migration COMPLETE (IoT + Infrastructure/212 + Security/205 custom zones; Phase 4 skipped)
+- ✅ M52 — L3-switch ACL IaC applied + verified (5 ACLs on Switch Rack PoE)
+- ✅ M33 rsyslog → Loki; M31 backup + OOB verified; 14 firewall groups (`3271cea`)
+- ✅ Kopia decommissioned (deployment + CF tunnel + monitoring + 205 GiB Ceph reclaimed)
+- ✅ personal-web repo CI (GH Actions + secrets; all 3 modules plan clean)
+- ✅ CF API token fixed (user-rotated) + etherport DS record re-imported + `ignore_changes` pinned
 - ✅ M30 Phase 1: VLAN 212 → Infrastructure zone (commit set through `05d635c`); all 18 clients healthy
 - ✅ M30 §7 questions resolved + L3-routing topology corrected (Switch Rack PoE routes 201/202/209/210)
 
@@ -313,12 +313,21 @@ deferred behind the zone migration to share blast-radius windows.
   - **Phase 4 (Trusted zone): SKIP (Option A).** Servers/201 + Clients/202 are switch-routed (can't be zoned); the only candidate left is Mgmt/200, and leaving it in Internal is functionally identical. Cosmetic-only; not worth doing.
   - **Phase 5 (cleanup + doc rewrite):** after Phase 3.
 
-### ⏳ M52. L3-switch ACL IaC (NEW — derived from M30 §7.5 + L3-routing correction)
-- **Source:** 2026-05-28. Replaces the dropped M30 Phase 2. Switch Rack PoE (US624P @ 10.10.200.232) routes Servers/201, Clients/202, vSAN/209, Ceph/210 with **zero ACLs today** — intra-fabric flows are wide open.
-- **Scope:** Ansible playbook `infra/ansible/playbooks/usw-acls.yml` (mirror `udm-firewall.yml` auth pattern). Target ACL matrix: Servers↔Clients allow; Servers→vSAN/Ceph allow (K8s PV/RBD); Clients→vSAN allow (NAS / 10G video editing); Clients→Ceph deny; vSAN↔Ceph deny.
-- **Pre-reqs:** (1) capture current port-profiles/ACLs via `/rest/portconf`; (2) design doc `docs/planning/l3-switch-acl-iac-2026-05-28.md`; (3) confirm US624P ACL feature set (per-port vs per-VLAN; stateful semantics) on current firmware; (4) test on a sacrificial flow first.
-- **Risk:** stateless ACLs need explicit reverse-direction allows; a bad rule can cut K8s↔Ceph and trip CNPG/Velero in minutes. Rollback via playbook re-run with prior spec.
-- **Effort:** M (design + playbook + soak).
+### ✅ M52. L3-switch ACL IaC (replaced dropped M30 Phase 2)
+- **Done 2026-05-29.** `infra/ansible/playbooks/usw-acls.yml` manages ACLs on Switch Rack PoE (US624P @ 10.10.200.232) via the v2 acl-rules API. Design doc: `docs/planning/l3-switch-acl-iac-2026-05-28.md`. Import-validated (zero-diff against the 2 pre-existing rules) then staged apply. **5 ACLs live:** Hue-return ALLOW; Security/205→{201,202,209,210} BLOCK (gap-closed to include Ceph); Clients→Ceph BLOCK; vSAN↔Ceph BLOCK (both dirs). Default-allow preserved for Servers↔Clients + Servers→storage + Clients→vSAN. Full cluster-health check clean post-apply (K8s↔Ceph is intra-VLAN-210 L2 → never hits an L3 ACL). Now CI-runnable via `ansible-unifi.yml` (`usw_acls_apply_new` gate).
+- **Open follow-up:** Phase 1.5 tightening pass (replace broad allows with per-port rules after a ≥7-day flow-observation soak) — optional.
+
+### ⏳ M53. Mint zone-scoped CF API tokens (de-couple infra ↔ personal-web)
+- **Source:** 2026-05-29. Both repos currently use the same account-scoped `cloudflare-tf-token` (1Password). It works across all zones, which is why personal-web TF applied locally before it had CI. Best practice: each repo gets a token scoped to ONLY its zones.
+- **Scope:** (1) new CF token scoped to grahamsmith.net/smithforsb.com/stopthecastle.com (Zone:DNS:Edit + Zone:Read + the Single-Redirect/Ruleset perm needed for M54) → 1Password → update personal-web `CLOUDFLARE_API_TOKEN` secret. (2) optionally re-scope the infra token to etherport.net only.
+- **Note:** the current account-scoped token reportedly can't manage CF Single Redirect rules — confirm whether that's a scope/permission gap; if so the new token must include the Ruleset edit permission (this is what blocks M54).
+- **Effort:** S (dashboard token mint + secret update). Needs CF dashboard.
+
+### ⏳ M54. Codify smithforsb.com redirect (CF Single Redirect) as IaC
+- **Source:** 2026-05-29. `smithforsb.com` → `instagram.com/graham.m.smith` is currently a **manual CF Single Redirect rule** in the dashboard — the one non-IaC piece of personal-web. Comment in `personal-web/terraform/cloudflare-dns/smithforsb.tf` notes it's deferred "until token scope upgraded".
+- **Blocked by:** M53 (the account-scoped token apparently lacks the Ruleset/Single-Redirect permission).
+- **Scope:** add a `cloudflare_ruleset` (http_request_dynamic_redirect) resource in `smithforsb.tf`; import the existing rule or recreate. Verify the redirect still 301s after apply.
+- **Effort:** S once M53 unblocks it.
 
 ### ✅ M31. Automated UDM backup to S3 (P0 from M25 audit)
 - **Done:** 2026-05-23. New CronJob `unifi-backup` in `backups` ns, fires daily 04:00 PT. Three targets per run:
