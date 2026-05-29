@@ -121,6 +121,7 @@ Four mini-phases, each independently verifiable + reversible. Phases A→B are t
 3. Drain/cycle the NAS workloads (plex, s3-sync, rclone) so their kubelet NFS mounts re-establish over the 209 path. Confirm via `ss`/traffic that node→sequoia uses the 209 NIC. **No 201 routing change yet, so zero risk** — this just adds a faster path.
 
 **Phase B — move Servers/201 to UDM-routed:**
+> **IaC note (verified 2026-05-29):** the static L3 routes (AWS + WG) ARE codified in `infra/terraform/unifi/routes.tf` (6/6, zero drift). BUT the per-VLAN routing *assignment* (`gateway_type` switch↔default) is NOT modeled by the paultyng `unifi_network` provider — same gap class as zones/firewall/ACLs. So this Phase-B switch→UDM change is a **UI / v2-API + documented** change, not a `terraform apply`. Capture the before/after in the doc + verify routes.tf next-hops (10.255.253.3 / 10.10.201.20) still resolve after the move.
 4. In UniFi: change VLAN 201 `gateway_type` switch → default (gateway `.1` moves from the switch SVI to the UDM SVI; same IP).
 5. Verify: intra-201 node↔node still works (L2, unaffected); node→internet + node→other-UDM-VLAN routes via UDM; **node→sequoia still fast over the 209 NIC** (the whole point of Phase A); cluster health green (CNPG, Ceph, pods).
 6. *(Bonus, optional)* move Servers/201 into a `Trusted` UDM firewall zone — now possible since it's UDM-routed.
