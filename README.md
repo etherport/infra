@@ -35,16 +35,16 @@ scripts/             Ad-hoc helpers (safety-check, service-status inventory drif
         │                │                    │
    ┌────┴────────────────┴────────────────────┴────┐
    │             site-to-site WireGuard            │
-   │     vpn-aws (10.10.100.10) ⇄ K8s wg pod      │
-   │     VRRP backup: vpn-local (10.10.201.15)    │
-   └──────────────────────────┬───────────────────┘
+   │     vpn-aws (10.10.100.10) ⇄ K8s wg pod       │
+   │     VRRP backup: vpn-local (10.10.201.15)     │
+   └──────────────────────────┬────────────────────┘
                               │
    ┌──────────────────────────┼────────────────────────────┐
    │  wind site (Proxmox `pve.wind.etherport.net`)         │
    │                                                       │
    │  K8s cluster (Kubespray, Cilium CNI, Multus VLAN NADs)│
-   │    cp1-3 .50-.52  ·  w1-4 .53-.56  ·  gpu1 .60       │
-   │    VLAN 201 primary  ·  VLAN 210 Ceph (MTU 9000)     │
+   │    cp1-3 .50-.52  ·  w1-4 .53-.56  ·  gpu1 .60        │
+   │    VLAN 201 primary  ·  VLAN 210 Ceph (MTU 9000)      │
    │    VLAN 202/204/205 secondary via Multus              │
    │                                                       │
    │  Standalone VMs (Ansible-managed)                     │
