@@ -27,15 +27,14 @@ personal-web CI all landed this session (see "Recently completed" below).
 
 | # | Item | State | Action |
 |---|---|---|---|
-| 1 | **M32 firmware channel** | `super_fwupdate.firmware_channel = "beta"` | IaC via new `udm-firmware-policy.yml` → set `release` |
-| 2 | **M34 fleet auto-upgrade** | `mgmt.auto_upgrade=true` + 7 APs + 9 switches `safe_for_autoupgrade:true` | Same playbook → disable site-wide auto-upgrade |
-| 3 | **M18/M36 MetalLB BGP** ← *active target* | MetalLB L2 mode; no BGPPeer/BGPAdvertisement; UDM `.5`/`.71` IP-conflict alerts | Design → UDM eBGP peer + MetalLB BGP CRs + cutover. Properly fixes M36 (no L2 ARP ownership = no conflict) — chosen over the suppression workaround |
-| 4 | **M15-M17 Twilio Talk** | 911 addr / orphan DID / SIP UDP→TLS+sRTP | M15 (911) safety-first; M16 release DID; M17 encryption |
-| 5 | **M53 CF token scoping** | account-scoped token shared infra↔personal-web | Mint zone-scoped tokens; also unblocks M54 |
-| 6 | **M54 smithforsb redirect IaC** | CF Single Redirect is manual in dashboard | Codify in `personal-web/cloudflare-dns/smithforsb.tf` once M53 lands |
-| 7 | **M48/M49/M50 UNAS+Protect IaC** | UI-only | Per-device API keys → Ansible playbooks + coverage audit |
+| 1 | **M18/M36 MetalLB BGP** ← *active target* | MetalLB L2 mode; no BGPPeer/BGPAdvertisement; UDM `.5`/`.71` IP-conflict alerts | Design → UDM eBGP peer + MetalLB BGP CRs + cutover. Properly fixes M36 (no L2 ARP ownership = no conflict) — chosen over the suppression workaround |
+| 2 | **M15-M17 Twilio Talk** | 911 addr / orphan DID / SIP UDP→TLS+sRTP | M15 (911) safety-first; M16 release DID; M17 encryption |
+| 3 | **M53 CF token scoping** | account-scoped token shared infra↔personal-web | Mint zone-scoped tokens; also unblocks M54 |
+| 4 | **M54 smithforsb redirect IaC** | CF Single Redirect is manual in dashboard | Codify in `personal-web/cloudflare-dns/smithforsb.tf` once M53 lands |
+| 5 | **M48/M49/M50 UNAS+Protect IaC** | UI-only | Per-device API keys → Ansible playbooks + coverage audit |
 
 **Recently completed (this session, 2026-05-27 → 29):**
+- ✅ M32 firmware channel → `release` + M34 site-wide auto-upgrade → off (IaC: `udm-firmware-policy.yml`, commit `ea08bea`)
 - ✅ M30 — UDM zone migration COMPLETE (IoT + Infrastructure/212 + Security/205 custom zones; Phase 4 skipped)
 - ✅ M52 — L3-switch ACL IaC applied + verified (5 ACLs on Switch Rack PoE)
 - ✅ M33 rsyslog → Loki; M31 backup + OOB verified; 14 firewall groups (`3271cea`)
@@ -338,7 +337,7 @@ personal-web CI all landed this session (see "Recently completed" below).
 - Reuses `unifi-cert-sync-ssh` SSH key (copied to a new SOPS-encrypted secret in `backups` ns). Status + bytes metrics pushed to pushgateway under `unifi_backup_*`.
 - Verified end-to-end: first manual fire uploaded all 3 objects cleanly.
 
-### ⏳ M32. UDM firmware channel back to `release` (P0 from M25 audit, trivial)
+### ✅ M32. UDM firmware channel → `release` (DONE 2026-05-29, udm-firmware-policy.yml)
 - **Live state 2026-05-27** (re-pulled via `/proxy/network/api/s/default/get/setting`):
   - `super_fwupdate.firmware_channel = "beta"` ← still wrong; this is the Network App's channel for managed-device updates (switches, APs).
   - `mgmt.gateway_release_channel = null` ← OK (defaults to release; the UDM-OS-side channel is fine).
@@ -471,7 +470,7 @@ personal-web CI all landed this session (see "Recently completed" below).
 - **Trigger to revisit:** Ubiquiti announces Talk API support.
 - **Effort when unblocked:** ~1 day to write the playbook.
 
-### ⏳ M34. Disable site-wide UniFi auto-upgrade (extends H23)
+### ✅ M34. Disable site-wide UniFi auto-upgrade (DONE 2026-05-29, udm-firmware-policy.yml)
 - H23 closed because the UDM itself has `mgmt.auto_upgrade: false`, but all 9 switches + 7 APs still have `safe_for_autoupgrade: true` and the site-wide policy upgrades them nightly at 03:00. A future firmware bug would auto-deploy to the fleet before you see it.
 - **Live snapshot 2026-05-27** confirms: `mgmt.auto_upgrade = true` site-wide, and per-device `safe_for_autoupgrade`:
   - **UDM (Windroute):** `false` ✓ (won't auto-upgrade)
