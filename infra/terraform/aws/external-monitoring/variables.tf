@@ -92,16 +92,6 @@ variable "endpoints" {
       request_interval  = 30
       enabled           = true
     }
-    # Kopia backup UI
-    kopia = {
-      fqdn              = "kopia.wind.etherport.net"
-      port              = 443
-      type              = "HTTPS"
-      resource_path     = "/"
-      failure_threshold = 3
-      request_interval  = 30
-      enabled           = false # Disabled - ALB/tunnel issue
-    }
     # Open WebUI (Chat) - AI chat interface
     chat = {
       fqdn              = "chat.wind.etherport.net"

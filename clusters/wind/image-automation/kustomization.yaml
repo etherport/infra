@@ -13,7 +13,6 @@ resources:
   - plex.yaml
   - home-assistant.yaml
   # Backup Tools
-  - kopia.yaml
   - rclone.yaml
   # Base/Utility Images
   - base-images.yaml

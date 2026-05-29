@@ -58,8 +58,8 @@ variable "cf_tunnel_services" {
   description = <<-EOT
     Services exposed publicly via CF Tunnel + CF Access (Google SSO).
 
-    Key: subdomain-relative-to-zone (e.g., "kopia.wind" becomes
-         kopia.wind.etherport.net). Use the .wind. namespace for
+    Key: subdomain-relative-to-zone (e.g., "grafana.wind" becomes
+         grafana.wind.etherport.net). Use the .wind. namespace for
          site-specific services. ACM on etherport.net + Total TLS
          provide free per-hostname certs for 2-level subdomains.
 
@@ -84,10 +84,6 @@ variable "cf_tunnel_services" {
     access_name         = string
   }))
   default = {
-    "kopia.wind" = {
-      cluster_service_url = "http://kopia.backups.svc.cluster.local:80"
-      access_name         = "Kopia"
-    }
     "technitium.wind" = {
       cluster_service_url = "http://technitium.dns.svc.cluster.local:5380"
       access_name         = "Technitium DNS"

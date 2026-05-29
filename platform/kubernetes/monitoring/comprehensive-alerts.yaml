@@ -136,21 +136,6 @@ spec:
   # Backup Services
   - name: backups
     rules:
-    - alert: KopiaDown
-      expr: kube_deployment_status_replicas_available{namespace="backups",deployment="kopia"} == 0
-      for: 5m
-      labels:
-        severity: warning
-        auto_remediate: "true"
-        # namespace/pod/deployment surface to webhook so AI advisor's
-        # _build_context() can pull the right Loki window + pod logs.
-        namespace: backups
-        deployment: kopia
-        component: backup
-      annotations:
-        summary: "Kopia backup service is down"
-        description: "Kopia has no available replicas"
-
     - alert: VeleroDown
       expr: kube_deployment_status_replicas_available{namespace="velero",deployment="velero"} == 0
       for: 5m

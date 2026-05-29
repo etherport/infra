@@ -363,7 +363,8 @@ data:
       - s3-sync (ns: backups, container: sync) — daily NAS shares to S3
       - unifi-backup (ns: backups, container: backup) — UDM + Protect daily
       - velero (ns: velero) — K8s resource + PV backups, 10 schedules
-      - kopia (ns: backups) — backing store for Velero
+        (uses Kopia internally as its uploader — the *-kopia-maintain
+        jobs in ns velero are Velero's, not a standalone service)
       - CNPG postgres + Barman (ns: postgres) — continuous WAL + daily
       - unifi-cert-sync (ns: unifi-cert-sync) — weekly wildcard push
       - etcd snapshots — runs on PVE control-plane nodes (NOT in K8s)

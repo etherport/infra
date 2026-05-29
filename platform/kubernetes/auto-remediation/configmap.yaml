@@ -105,12 +105,6 @@ data:
         description: "Restart Flux Source Controller"
 
       # Backup Services
-      KopiaDown:
-        action: restart_pods
-        namespace: backups
-        selector: app=kopia
-        description: "Restart Kopia backup service"
-
       VeleroDown:
         action: restart_pods
         namespace: velero

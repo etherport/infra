@@ -57,7 +57,6 @@ SERVICES = [
 
     # Backup
     ("Backup", "Velero", "deployment", "velero",  "velero"),
-    ("Backup", "Kopia",  "deployment", "backups", "kopia"),
 
     # Apps
     ("Apps", "Home Assistant", "deployment", "home-automation", "home-assistant"),

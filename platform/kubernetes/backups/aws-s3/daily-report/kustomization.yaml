@@ -3,7 +3,7 @@ kind: Kustomization
 
 namespace: backups
 
-# Defines the backups namespace (shared with shares and kopia)
+# Defines the backups namespace (shared with the s3-sync shares)
 # This component is always deployed, so it owns the namespace definition
 
 resources:

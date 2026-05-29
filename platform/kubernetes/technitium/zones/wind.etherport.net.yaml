@@ -159,11 +159,6 @@ records:
     value: 10.10.201.70
     comment: Plex media server (via Traefik)
 
-  - name: kopia
-    type: A
-    value: 10.10.201.70
-    comment: Kopia backup UI (via Traefik)
-
   - name: ollama
     type: A
     value: 10.10.201.70

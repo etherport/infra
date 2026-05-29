@@ -6,8 +6,7 @@
 # + pod logs.
 #
 # Sister to:
-# - comprehensive-alerts.yaml (KopiaDown / VeleroDown — service
-#   liveness)
+# - comprehensive-alerts.yaml (VeleroDown — service liveness)
 # - rclone-gdrive/03-prometheus-rules.yaml (rclone-specific)
 # - unifi-cert-sync/05-prometheusrule.yaml (cert-specific)
 apiVersion: monitoring.coreos.com/v1
