@@ -296,7 +296,8 @@ deferred behind the zone migration to share blast-radius windows.
   - **M18** Evaluate UniFi eBGP + MetalLB BGP mode (overlaps with audit part 2)
   - **M15-M17** Twilio Talk hygiene items (911 address, orphan DID, SIP UDP→TLS+sRTP) — out-of-band UDM Talk console
 
-### 🟡 M30. UDM zone architecture — reconcile doc with live + future-state design
+### ✅ M30. UDM zone architecture — migration COMPLETE 2026-05-29
+- **Done 2026-05-29.** Three custom UDM zones live (IoT, Infrastructure/212, Security/205) + L3-switch ACLs (M52) for the switch-routed fabric. Phase 4 (Trusted) skipped as cosmetic-only. Live state documented in `docs/architecture/firewall-zones.md`; planning companion archived at `docs/planning/archive/firewall-zones-future-state-2026-05-29-completed.md`. All verified live, zero device disruption. Remaining tidy-ups tracked separately: M52 CI-ify, Kopia Ceph-image reclaim, CF token (task #6).
 - **Status 2026-05-28:** Pre-flight ✅ + Phase 1 ✅ shipped. Phases 2 + 4 re-scoped after an L3-routing correction (see below). Phase 3 (Security zone) is next.
 - **Option (b) done** (commit `f5693c3`): rewrote `docs/architecture/firewall-zones.md` to match the live single-custom-zone (IoT) reality.
 - **Future-state doc** (`docs/planning/firewall-zones-future-state.md`): the canonical migration plan. All §7 open questions resolved 2026-05-27 (commit `3271cea`); §9 design clarifications added.

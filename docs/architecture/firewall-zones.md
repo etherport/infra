@@ -6,17 +6,19 @@ This document describes the **live** zone-based firewall configuration on the UD
 
 ---
 
-## Migration status (M30)
+## Migration status (M30) — COMPLETE 2026-05-29
 
-The multi-zone end-state design + phased migration plan lives in the companion doc `docs/planning/firewall-zones-future-state.md`. This doc tracks what's **live now**.
+The zone migration is done. Final state: **three custom UDM zones** (IoT, Infrastructure, Security) for the UDM-routed VLANs, plus **L3-switch ACLs** (M52) for the switch-routed fabric. Phase history (planning detail archived at `docs/planning/archive/firewall-zones-future-state-2026-05-29-completed.md`):
 
-- **Phase 1 ✅ (2026-05-28):** Custom `Infrastructure` zone created; **VLAN 212 (Unifi)** moved into it. Two custom zones now exist (`IoT` + `Infrastructure`).
-- **Phase 2 — DROPPED / replaced by M52:** vSAN/209 + Ceph/210 are L3-switch-routed and can't be placed in a UDM zone. Their east-west security moves to L3-switch ACLs (Ansible playbook, tracker **M52**).
-- **Phase 3 — NEXT:** custom `Security` zone for VLAN 205 (UDM-routed → executable).
-- **Phase 4 — SKIP:** Servers/201 + Clients/202 are switch-routed (can't be zoned); Mgmt/200 staying in Internal is functionally equivalent to a cosmetic `Trusted` zone.
-- **Phase 5:** cleanup + full rewrite of this doc to the final live state.
+- **Phase 1 ✅:** Custom `Infrastructure` zone — VLAN 212 (Unifi / Protect+Talk+Access fleet) moved in.
+- **Phase 2 → M52 ✅:** vSAN/209 + Ceph/210 are L3-switch-routed (can't be UDM-zoned). East-west security is enforced by **switch ACLs** on Switch Rack PoE — applied + verified (see "L3-switch ACLs" section below).
+- **Phase 3 ✅:** Custom `Security` zone — VLAN 205 (SimpliSafe) moved in; legacy network-isolation toggle retired so the zone model is the single source of truth.
+- **Phase 4 — SKIPPED (deliberate):** Servers/201 + Clients/202 are switch-routed (can't be UDM-zoned); the only UDM-routed candidate was Mgmt/200, and leaving it in Internal is functionally identical to a cosmetic `Trusted` zone. No security gain.
+- **Phase 5 ✅:** this doc reconciled to the live state; planning companion archived.
 
-**Historical note:** earlier revisions of this doc described a 6-custom-zone design that was never implemented — only `IoT` existed pre-migration. That aspirational design now lives (corrected + phased) in the future-state companion. Tracker: **M30** in `docs/planning/outstanding-work.md`.
+**Why the hybrid split:** the UDM is CPU-bound (~3.5-5 Gbps); Switch Rack PoE has a ~50 Gbps line-rate fabric. Storage (vSAN/Ceph at 10G + jumbo) and workstation→NAS flows MUST stay switch-routed for performance, so their security lives in switch ACLs, not UDM zones. Textbook firewall-north-south / L3-switch-east-west architecture.
+
+**Historical note:** earlier revisions described a 6-custom-zone design that was never implemented — only `IoT` existed pre-migration. Tracker: **M30** in `docs/planning/outstanding-work.md`.
 
 ---
 
@@ -44,7 +46,7 @@ The homelab network uses a **dual-router architecture** with routing responsibil
  ┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐
  │ Untagged ││ VLAN 200 ││ VLAN 204 ││ VLAN 205 ││ VLAN 206 ││ VLAN 212 ││ VLAN 4040│
  │ Default  ││Management││   IoT    ││ Security ││  Guest   ││  Unifi   ││ Transit  │
- │ Internal ││ Internal ││ IoT (★)  ││ Internal ││ Hotspot  ││Infra (★) ││ Internal │
+ │ Internal ││ Internal ││ IoT (★)  ││ Sec (★)  ││ Hotspot  ││Infra (★) ││ Internal │
  │10.10.199 ││10.10.200 ││10.10.204 ││10.10.205 ││10.10.206 ││10.10.212 ││10.255.253│
  └──────────┘└──────────┘└──────────┘└──────────┘└──────────┘└──────────┘└────┬─────┘
                                                                               │
@@ -71,10 +73,11 @@ The homelab network uses a **dual-router architecture** with routing responsibil
           │10.10.201 │   │10.10.202 │   │10.10.209 │  │10.10.210 │
           └──────────┘   └──────────┘   └──────────┘  └──────────┘
 
-  (★) IoT and Infrastructure are the two custom zones on the controller
-      (Infrastructure added 2026-05-28, holds Unifi/212). Everything else
-      labelled "Internal" sits in the built-in Internal zone and is
-      reachable from every other Internal-zone network by default.
+  (★) IoT, Infrastructure (Unifi/212) and Security (205) are the three
+      custom zones on the controller (M30 migration, 2026-05-28/29).
+      "Internal" now holds only Default + Management/200. The switch-
+      routed VLANs (201/202/209/210/4040) are in no UDM zone — their
+      east-west security is enforced by L3-switch ACLs (see below).
 ```
 
 ### Firewall Implications of Dual-Router Architecture
@@ -95,10 +98,24 @@ The UDM firewall only sees traffic that traverses the UDM. Traffic between L3-sw
 
 | Traffic Flow | Where to Configure |
 |--------------|-------------------|
-| Between L3-switch VLANs (201, 202, 209, 210) | L3 switch ACLs (status: see §"Unverified items") |
+| Between L3-switch VLANs (201, 202, 209, 210) | **L3 switch ACLs** (deployed via `infra/ansible/playbooks/usw-acls.yml`, M52 — see below) |
 | Between UDM-routed VLANs (200, 204, 205, 206, 212, 4040) and itself | UDM Zone-Based Firewall |
 | Between L3-switch and UDM-routed VLANs | UDM Zone-Based Firewall (traffic transits VLAN 4040) |
 | To/from Internet | UDM Zone-Based Firewall |
+
+### L3-switch ACLs (M52 — deployed 2026-05-29)
+
+The switch-routed fabric (Servers/201, Clients/202, vSAN/209, Ceph/210) is policed by IP ACLs on **Switch Rack PoE** (US624P @ `10.10.200.232`), managed declaratively by `infra/ansible/playbooks/usw-acls.yml` (`/proxy/network/v2/api/site/default/acl-rules`). Switch default is allow-all, so these are explicit BLOCK overrides + one preserved ALLOW:
+
+| # | Action | Flow | Purpose |
+|---|--------|------|---------|
+| 0 | ALLOW | Hue bridges (`204.51/52`) → Clients/202 | Return path for Clients→Hue control |
+| 1 | BLOCK | Security/205 → 201, 202, 209, 210 | Switch-side complement to the Security UDM zone (covers switch-routed dests the zone can't) |
+| 2 | BLOCK | Ceph/210 → vSAN/209 | Separate storage backends, no cross-talk |
+| 3 | BLOCK | Clients/202 → Ceph/210 | No client workflow needs raw Ceph |
+| 4 | BLOCK | vSAN/209 → Ceph/210 | Separate storage backends |
+
+**Deliberately NOT blocked** (allow-all default preserves them): Servers↔Clients, Servers→vSAN/Ceph (K8s RBD + CNPG), Clients→vSAN (10G NAS/video editing). K8s↔Ceph runs **intra-VLAN-210 (L2)** and never hits an ACL. Design + rollout detail: `docs/planning/l3-switch-acl-iac-2026-05-28.md`.
 
 ---
 
@@ -151,9 +168,10 @@ UniFi Network creates a fixed set of built-in zones; you can add custom zones on
 
 | Zone | Type | Member networks | Notes |
 |------|------|-----------------|-------|
-| **Internal** | built-in | Default, Management/200, Servers/201, Clients/202, Security/205, vSAN/209, Ceph/210, InterVLAN/4040 | Default = `Allow All Traffic` within the zone. **This is the wide-open default that makes most "documented" intra-LAN policies redundant today.** (Note: 201/202/209/210 are switch-routed, so their intra-fabric traffic never reaches this zone — see Dual-Router section.) |
-| **IoT** | custom | IoT/204 | Default = block-by-default to other zones; one explicit allow for DNS (see below). |
-| **Infrastructure** | custom | Unifi/212 | Added 2026-05-28 (M30 Phase 1). Holds the Protect/Talk/Access appliance fleet. Rules: Internal↔Infrastructure Allow All (user-created, broad — tightening deferred to a Phase 1.5 pass); Infrastructure→Gateway + Infrastructure→External auto-created by UDM. |
+| **Internal** | built-in | Default, Management/200 | Default = `Allow All Traffic` within the zone. **Switch-routed VLANs (Servers/201, Clients/202, vSAN/209, Ceph/210, InterVLAN/4040) are NOT members of any UDM zone** — they're routed by the L3 switch and their inter-VLAN security is enforced by switch ACLs (see below). Only their north-south traffic transits to the UDM (via VLAN 4040). |
+| **IoT** | custom | IoT/204 | Default block to other zones; one explicit allow for DNS. |
+| **Infrastructure** | custom | Unifi/212 | M30 Phase 1. Protect/Talk/Access appliance fleet. Rules: Internal↔Infrastructure Allow All (broad — tightening deferred to a Phase 1.5 pass); Infrastructure→Gateway + →External auto-created by UDM. |
+| **Security** | custom | Security/205 | M30 Phase 3 (2026-05-29). SimpliSafe (wifi-primary + cell-backup). Default block to all other zones; →External + →Gateway allowed (internet monitoring + DHCP/DNS). No internal-DNS rule (resolves via gateway/public). Legacy `network_isolation_enabled` retired — zone model is sole enforcement. |
 | **External** | built-in | WAN1, WAN2, LTE | Internet. Inbound blocked by default with named exceptions (Twilio + WireGuard). |
 | **Gateway** | built-in | UDM itself | DHCP/DNS/management surface of the UDM. Allow-most by default. |
 | **VPN** | built-in | WireGuard WAN1 (UDM remote-user-vpn) | Currently no clients connected. VPN → Internal = Allow All (broad — if/when this pool is ever populated, VPN clients have full LAN reach). |
@@ -278,7 +296,7 @@ The controller's REST API does not expose these. Treat as unverified until check
 | Item | Why unverifiable | Disposition |
 |------|------------------|-------------|
 | L3 switch interface-to-VLAN bindings (which VLAN it routes vs. UDM) | Switch-local L3 config not in REST surface | Confirmed indirectly via `routing.json` next-hops — Servers/Clients/vSAN/Ceph route off the L3 switch. |
-| L3 switch ACLs (`Deny-Clients-to-vSAN`, `Allow-Servers-to-vSAN`, etc.) — described in old doc | UniFi switch ACL surface not in REST on Network 9.4.x | **Treat as not deployed** unless someone confirms via UI screenshot. Audit P3 #21. |
+| L3 switch ACLs | ~~not in REST on 9.4.x~~ — **resolved**: they live at `v2/api/site/default/acl-rules` | **Now deployed + managed via IaC** (M52, `usw-acls.yml`). See "L3-switch ACLs" section above for the live rule set. Audit P3 #21 closed. |
 | Switch port profiles (`Cameras / Phones / Clients / APs / UniFi Devices`) | — | All 5 confirmed present in `port-profiles.json`. |
 
 ---
@@ -364,7 +382,7 @@ ping 10.10.202.5       # Client
 | Server-side service can't reach Hue/IoT device | Internal → IoT is Block by default | Add an explicit allow in the `Internal → IoT` cell (none exists today). |
 | Security/205 device can't resolve | Network Isolation = ON + DHCP DNS empty | See Known anomalies #1. Either disable isolation + set DNS, or move .205 into a future custom zone with a DNS allow rule. |
 | Can't reach UDM management | Gateway zone access blocked | Don't add deny rules to `Internal → Gateway`. |
-| Traffic between Servers/Clients/vSAN/Ceph isn't filtered | Those VLANs route off the L3 switch — UDM never sees the traffic | Use L3 switch ACLs (status: unverified). |
+| Traffic between Servers/Clients/vSAN/Ceph isn't filtered | Those VLANs route off the L3 switch — UDM never sees the traffic | Use L3 switch ACLs — now deployed via `usw-acls.yml` (M52). |
 | Guest reaches internal device | Internal → Hotspot is currently Allow All | See Known anomalies #2. |
 
 ### Verify zone assignment

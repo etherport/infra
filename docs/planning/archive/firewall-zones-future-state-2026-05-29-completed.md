@@ -1,3 +1,5 @@
+> **✅ COMPLETED + ARCHIVED 2026-05-29.** All phases executed (1 Infrastructure, 3 Security, 2→M52 switch ACLs, 4 skipped, 5 doc reconcile). Live state is documented in `docs/architecture/firewall-zones.md`. This planning doc is retained for history.
+
 # Firewall Zones — Future-State Design and Migration Plan
 
 **Date:** 2026-05-23 (revised 2026-05-27 with §7 + §9 decisions resolved).
