@@ -15,4 +15,14 @@ resource "aws_route53domains_delegation_signer_record" "etherport" {
     flags      = cloudflare_zone_dnssec.etherport.flags
     public_key = cloudflare_zone_dnssec.etherport.public_key
   }
+
+  # On import the AWS API doesn't return signing_attributes in a form that
+  # round-trips against the CF-sourced values, so TF wants to destroy+
+  # recreate the DS record on every plan — which would briefly break the
+  # DNSSEC chain of trust at the registrar. The DS is already live + correct
+  # at Route53 Domains (algo 13, keyTag 2371); ignore attribute drift so the
+  # imported resource stays put. Re-import if the CF KSK is ever rotated.
+  lifecycle {
+    ignore_changes = [signing_attributes]
+  }
 }
