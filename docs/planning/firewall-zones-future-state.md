@@ -241,28 +241,35 @@ Each phase = a single PR (doc update + change-log entry) + a single maintenance 
 
 ---
 
-### Phase 3 — Create `Security` zone and move VLAN 205
+### Phase 3 — Create `Security` zone and move VLAN 205 (REVISED 2026-05-28)
 
-**Why third:** Security/205 currently has Network Isolation = ON + empty DHCP DNS, so it's already a half-isolated network — any breakage is bounded.
+**Live state inspection (2026-05-28) overturned two assumptions** the original plan was built on:
 
-**Steps:**
+| Original assumption | Reality (from `/rest/networkconf`) |
+|---|---|
+| "Set DHCP DNS to .5/.6" (implies SimpliSafe needs internal DNS) | `dhcpd_dns_enabled: False`, DNS fields empty — and SimpliSafe **works today** without internal DNS. It resolves via the UDM gateway (`10.10.205.1`, a Security→Gateway flow) or hardcoded public DNS (Security→External). Neither needs an internal DNS allow. **Don't touch DHCP DNS.** |
+| "Security → External = Block (SimpliSafe phones home via cell)" | User confirmed SimpliSafe is **wifi-primary + cell-backup**. Blocking External would force it onto cell permanently (degraded, possible carrier cost). **Security → External must stay ALLOW.** |
 
-1. Resolve the "Network Isolation ON / DNS blank" anomaly first:
-   - Set Security/205 DHCP DNS to `.5/.6`.
-   - Turn Network Isolation OFF on Security/205 (so the new zone policies apply).
-2. Create custom zone `Security` with VLAN 205 as the only member.
-3. Add `Security-to-DNS` allow: `Security-Network → DNS-Servers` on `DNS-Ports`.
-4. Default `Security → External` = Block (SimpliSafe phones home via its own gateway, not via these IPs — verify in advance).
-5. Add `Trusted-to-Security-Mgmt` allow if admin reach is needed.
-6. Verify SimpliSafe base station/sensors stay armed and the SimpliSafe app still receives events.
+**What's actually on 205:** 3 SimpliSafe devices only (base station `10.10.205.135` + 2 others, all `18:93:7f`/SimpliSafe OUI). `network_isolation_enabled: True` already blanket-blocks 205 from all other LANs — so 205 is *already* effectively a deny-all-internal + allow-internet zone. The migration's job is to express that in the **zone model** (clean, single source of truth) instead of the legacy per-network isolation toggle.
+
+**Why a custom zone is functionally equivalent to today + cleaner:** a new custom zone defaults to `→ External: Allow`, `→ Gateway: Allow`, `→ everything-else: Block` (confirmed with Infrastructure in Phase 1). That's exactly SimpliSafe's needs (internet for monitoring + UDM for DHCP/DNS, nothing internal). Moving 205 into a `Security` zone reproduces the current isolation in the modern model — then we retire the legacy toggle so there's one mechanism to reason about.
+
+**Steps (sequenced to avoid any exposure window):**
+
+1. Create custom zone `Security` with **no members** (empty).
+2. Move VLAN 205 into `Security`. Now 205 is **double-protected** (legacy network-isolation AND zone-default-block both active) — there is never a moment of exposure.
+3. Verify SimpliSafe stays online: base station `.135` + 2 devices keep fresh `last_seen`; **user confirms the SimpliSafe app shows the system online + responsive** (arm/disarm test from the app).
+4. **Only after step 3 passes:** turn OFF `network_isolation_enabled` on Security/205 (Settings → Networks → Security → Advanced → Network Isolation). The zone-default-block now solely enforces isolation. Re-verify SimpliSafe still online + app responsive.
+5. Do **NOT** add a Security→DNS allow (not needed — DNS works via Gateway/External). Do **NOT** change DHCP DNS. Do **NOT** block Security→External.
+6. *(Optional, deferred)* If admin reach into 205 is ever needed (e.g., to hit a SimpliSafe device web UI from a laptop), add a narrow `Internal → Security` allow then. Not needed today.
 
 **Risks:**
-- SimpliSafe might rely on cloud egress through 205 directly — if `Security → External: Block` cuts that, the alarm goes dark. **Test in disarmed-system mode first.**
-- Disabling Network Isolation on 205 mid-phase opens it to all of `Internal` for the few seconds before the zone move lands. Schedule the two steps back-to-back.
+- HA has a Multus macvlan presence on 205 (`10.10.205.25`) but SimpliSafe integration is cloud-API based (Servers/201 → External), not local — so the zone move doesn't affect HA↔SimpliSafe. Intra-VLAN HA↔device traffic (if any) is L2 and unaffected.
+- If SimpliSafe turns out to need some internal flow we haven't observed, the symptom is the app showing the system offline — recoverable via rollback.
 
-**Rollback criteria:** SimpliSafe app loses connection to base station for >5 min, OR any sensor reports `offline`.
+**Rollback criteria:** SimpliSafe app shows system offline / unreachable for >5 min, OR base station `last_seen` goes stale.
 
-**Rollback procedure:** move VLAN 205 back to Internal zone, re-enable Network Isolation, clear DHCP DNS — back to the live anomaly state.
+**Rollback procedure:** move VLAN 205 back to Internal zone; if step 4 was done, re-enable `network_isolation_enabled`. Returns to current working state.
 
 ---
 
