@@ -37,28 +37,56 @@ MetalLB **L2 mode** elects ONE speaker pod per VIP to answer ARP. When that spea
 
 ---
 
-## 3. The gating question — does the US624P support BGP peering?
+## 3. RESOLVED 2026-05-29 — UniFi switches don't do BGP; BGP is gateway-only
 
-This determines the entire approach. The BGP peer must be the router **in the data path** for the LB subnet = the US624P (it routes VLAN 201).
+Confirmed via API + UI:
+- `stat/routing/bgp` exists on the **UDM** (returns empty = BGP-capable, unconfigured). BGP on UniFi is a **gateway feature**, configured via an FRR config on the UDM (Network 8+).
+- The US624P does **static routes only** (`/rest/routing` = all `static-route`; no dynamic protocol). No UniFi switch — including Pro Max — is a BGP speaker.
+- UI confirmation: the BGP config (which runs on the UDM) shows **no switch-routed networks** as eligible interfaces, because the UDM doesn't route them.
 
-- **If US624P supports BGP** (UniFi exposes it under the switch's routing config on Network 10): MetalLB speakers peer with the switch. Clean, in-path, done. ← preferred
-- **If it does NOT** (BGP may be gateway-only on UniFi, or limited to Enterprise/Aggregation switch models): fallbacks, in rough order of preference:
-  1. **Peer with the UDM + move the LB pool to a UDM-routed VLAN** (e.g., a dedicated `lb`/Management-adjacent VLAN). Then the UDM is in-path and learns the routes. Cost: re-IP the 5 VIPs + update Technitium/Traefik/clients referencing them.
-  2. **Peer with the UDM but keep pool on 201** — only works if the switch has a static route to the UDM for the LB /32s or the UDM redistributes into the switch; messy, likely not viable.
-  3. **Stay L2 + apply the M36 suppression workaround** (UDM Insights → IP Conflict Detection → exclude `.5`/`.71`). The fallback if BGP isn't cleanly available.
+**Therefore the original plan (peer MetalLB ↔ switch) is impossible.** For UDM-peered BGP to work, the LB pool's VLAN must be **UDM-routed**. That forces a routing-topology decision (§4).
 
-**ACTION (first step, before any design commitment):** verify US624P BGP support — UniFi UI → the switch → Settings/Routing for a BGP section, or Network → Settings → Routing → BGP and whether the switch can be selected as a BGP router. Confirm on Network 10.4.57.
+The three viable paths:
+1. **Move Servers/201 to UDM-routed** (recommended — see §4). LB pool stays at `.201.x` (no VIP re-IP); UDM becomes the 201 gateway + BGP peer. Throughput-sensitive server↔storage flows handled by direct storage-VLAN interfaces (§4.1).
+2. **Dedicated UDM-routed `lb` VLAN**, move only the 5 VIPs there. Servers/201 stays switch-routed. More surgical, but re-IPs the VIPs — DNS `.5` is referenced in DHCP/split-horizon/clients → real churn.
+3. **Stay L2 + M36 suppression workaround** (UDM Insights → IP Conflict Detection → exclude `.5`/`.71`). No BGP; just silences the cosmetic alerts. The do-nothing-structural fallback.
 
 ---
 
-## 4. Target design (assuming US624P supports BGP)
+## 4. Recommended design — move Servers/201 to UDM-routed + direct storage interfaces
 
-- **ASNs:** private 16-bit — e.g., MetalLB `64512`, US624P `64513` (eBGP). Confirm no clash with the AWS-side WG/BGP if any (regional VPN uses static routes today, so likely free).
-- **MetalLB CRs:** replace `L2Advertisement` with:
-  - `BGPPeer` → peer-address = the US624P's VLAN 201 SVI (`10.10.201.1`), myASN 64512, peerASN 64513
-  - `BGPAdvertisement` → pool `primary` (optionally aggregation-length /32)
-- **US624P:** add BGP config — local ASN 64513, neighbor = each K8s node's 201 IP (or a peer-group), accept the /32s.
-- **Keep the pool addresses identical** (.5, .70-90) — no VIP changes, so nothing downstream (Technitium split-horizon, Traefik DNS, clients) needs updating. This is the big advantage of peering with the in-path switch.
+This is the production-standard hybrid (and answers the "should Servers be UDM-routed?" question). Rationale:
+
+**Route the low-bandwidth / policy-sensitive VLAN through the gateway; keep high-throughput east-west on the switch fabric; multi-home the throughput-sensitive hosts directly onto the storage VLAN.** This is exactly how the cluster already does Ceph (K8s nodes have a dedicated `enp6s22` on VLAN 210) — we extend the same pattern.
+
+**Routing changes:**
+- **Servers/201 → UDM-routed** (`gateway_type` switch → default; the `.1` gateway moves from the switch SVI to the UDM SVI — same IP, K8s nodes need no reconfig). Unlocks: (a) UDM BGP-peering for the MetalLB pool → fixes M36; (b) Servers/201 can finally join a UDM firewall zone (it's currently zoneless); (c) consolidates LB-VIP + server north-south routing under UDM policy.
+- **Clients/202, vSAN/209, Ceph/210 stay switch-routed** — preserves line-rate client↔NAS (the video-editing flow) + storage east-west.
+
+**Throughput validation** (why this is safe):
+
+| Flow | Path after change | Verdict |
+|---|---|---|
+| Server ↔ Client (201↔202) | via UDM | low-bw (kubectl, web UI, SSH) — fine |
+| Server → Internet (201→WAN) | via UDM | unchanged (UDM is WAN gw anyway) |
+| **Server → storage (201→209/210)** | **direct Multus iface on storage VLAN, L2** | **line-rate, bypasses UDM** ← key |
+| Client ↔ NAS (202↔209) | switch (both switch-routed) | line-rate, unchanged |
+| K8s ↔ Ceph (210) | intra-VLAN-210 L2 | unchanged |
+| Any → LB VIP (`.201.x`) | via UDM | VIPs are all low-bw (DNS/web/syslog) — fine |
+
+### 4.1 Direct storage interfaces (the s3-sync case)
+Throughput-sensitive server services get a **Multus macvlan interface on VLAN 209** (NAS) — same pattern as the Ceph workloads on 210 — so they read/write storage at L2 without routing through the UDM:
+- **s3-sync** (`backups` ns): reads NAS over a `.209.x` iface, uploads to AWS S3 over WAN (the S3 leg is internet-bound anyway, so UDM routing there is irrelevant). The high-throughput NAS-read leg stays on the switch fabric.
+- Any future NAS-heavy workload: add a 209 NAD the same way.
+- This keeps Servers/201's *primary* interface low-bandwidth (so UDM routing it is fine) while the storage-hungry pods get a fast side-channel.
+
+### 4.2 BGP config (after 201 is UDM-routed)
+- **ASNs:** private — MetalLB `64512`, UDM `64513` (eBGP). Confirm no clash with AWS/WG (regional VPN uses static routes today → free).
+- **UDM:** Settings → Routing → BGP → upload an FRR config: local ASN 64513, neighbors = each K8s node's 201 IP (cp1-3 `.50-.52`, w1-4 `.53-.56`, gpu1 `.60`), accept the pool /32s.
+- **MetalLB CRs:** replace `L2Advertisement` with `BGPPeer` (peer = UDM `10.10.201.1`, myASN 64512, peerASN 64513) + `BGPAdvertisement` (pool `primary`).
+- **Pool stays `.201.x`** (no VIP re-IP). Note: pool is *inside* the node subnet — BGP /32s are more-specific than the connected /24, so they win; works but slightly unusual (a dedicated LB CIDR would be textbook — deferred to avoid DNS-`.5` churn).
+
+> **Sequencing note:** the "move Servers/201 to UDM-routed" step is itself a careful change (it's the K8s nodes' primary VLAN). It should be its own mini-phase with verification (nodes still reach each other intra-201 = unaffected since that's L2; cross-VLAN + internet via UDM verified) BEFORE layering BGP on top. Consider doing it during the same window as adding the 209 storage interfaces so server↔storage never degrades.
 
 ---
 
