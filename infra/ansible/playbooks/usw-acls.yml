@@ -1,0 +1,342 @@
+---
+# L3-switch ACLs on Switch Rack PoE (US624P) via the UniFi v2 acl-rules API.
+#
+# Why this playbook exists (M52):
+#   Four VLANs are routed by the L3 switch, not the UDM — Servers/201,
+#   Clients/202, vSAN/209, Ceph/210 (gateway_type=switch). Their
+#   inter-VLAN (east-west) traffic never crosses the UDM, so the UDM
+#   zone-based firewall can't police it. The only enforcement point is
+#   switch ACLs. This playbook brings them under IaC.
+#
+#   Design + rationale: docs/planning/l3-switch-acl-iac-2026-05-28.md
+#   Captured baseline:  docs/architecture/l3-switch-acl-state-2026-05-28.json
+#
+# Model: mirrors udm-firewall.yml exactly (same 1Password auth, same
+#   login→TOKEN+CSRF flow, same name-based reconcile, same runtime
+#   VLAN→network_id resolution so rules survive a controller rebuild).
+#
+# Endpoint: /proxy/network/v2/api/site/<site>/acl-rules  (GET/POST/PUT)
+#
+# Switch default inter-VLAN behavior is ALLOW-ALL (verified: Servers/
+#   Clients/storage all reach each other today with zero allow rules),
+#   so these ACLs are explicit BLOCK overrides + one preserved ALLOW.
+#
+# SAFETY — staged rollout via `usw_acls_apply_new` flag:
+#   - DEFAULT (flag false): playbook reconciles ONLY the 2 pre-existing
+#     rules, declared to match live state exactly. A run should report
+#     ZERO changes — this proves the reconcile/import logic is correct
+#     and non-destructive before any new rule is introduced.
+#   - Set -e usw_acls_apply_new=true to additionally apply the Ceph
+#     gap-closer + the 3 new storage BLOCK rules. Do this only after
+#     the zero-diff import passes AND the Ceph-MTU/path question
+#     (design §2 caveat) is resolved.
+#
+# Usage:
+#   # Phase A — prove idempotent import (expect 0 changes):
+#   ansible-playbook -i inventory/wind/inventory.ini playbooks/usw-acls.yml \
+#     -e ansible_become=false
+#   # Phase B — apply new blocks (only after Phase A + Ceph check):
+#   ansible-playbook -i inventory/wind/inventory.ini playbooks/usw-acls.yml \
+#     -e ansible_become=false -e usw_acls_apply_new=true
+
+- name: L3-switch ACLs (UniFi v2 acl-rules API)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+
+  vars:
+    udm_base: "https://10.10.200.1"
+    udm_site: default
+    udm_validate_certs: false
+
+    # Gate for the new (risky) BLOCK rules. Default false = import-only.
+    usw_acls_apply_new: false
+
+    # ---- Pre-existing rules (declared to match live state for a
+    #      zero-diff import). DO NOT change these in the import phase. ----
+    usw_acls_existing:
+      - name: "Allow Client (202) to Hue"
+        action: ALLOW
+        source: { type: IP_OR_SUBNET, ips: ["10.10.204.51", "10.10.204.52"] }
+        destination: { type: NETWORK, vlans: [202] }
+      - name: "Isolate 205 Security (L3)"
+        action: BLOCK
+        source: { type: NETWORK, vlans: [205] }
+        # NOTE: live rule covers 201/202/209 only. The Ceph/210 gap is
+        # closed in usw_acls_new below (so the import phase stays
+        # zero-diff). Once apply_new runs, this rule is superseded by
+        # the extended version there — they share the same name, so the
+        # reconcile updates in place.
+        destination: { type: NETWORK, vlans: [201, 202, 209] }
+
+    # ---- New rules (only applied when usw_acls_apply_new=true) ----
+    usw_acls_new:
+      # Extend the Security isolation to include Ceph/210 (close the gap).
+      - name: "Isolate 205 Security (L3)"
+        action: BLOCK
+        source: { type: NETWORK, vlans: [205] }
+        destination: { type: NETWORK, vlans: [201, 202, 209, 210] }
+      # Storage-tier separation.
+      - name: "Block Clients to Ceph (L3)"
+        action: BLOCK
+        source: { type: NETWORK, vlans: [202] }
+        destination: { type: NETWORK, vlans: [210] }
+      - name: "Block vSAN to Ceph (L3)"
+        action: BLOCK
+        source: { type: NETWORK, vlans: [209] }
+        destination: { type: NETWORK, vlans: [210] }
+      - name: "Block Ceph to vSAN (L3)"
+        action: BLOCK
+        source: { type: NETWORK, vlans: [210] }
+        destination: { type: NETWORK, vlans: [209] }
+
+  pre_tasks:
+    - name: Verify op CLI present
+      ansible.builtin.command: op --version
+      changed_when: false
+
+    - name: Fetch UDM username from 1Password
+      ansible.builtin.command:
+        argv: [op, item, get, "UDM (tf-admin)", --fields, username]
+      register: udm_user_op
+      changed_when: false
+      no_log: true
+
+    - name: Fetch UDM password from 1Password
+      ansible.builtin.command:
+        argv: [op, item, get, "UDM (tf-admin)", --fields, password, --reveal]
+      register: udm_pass_op
+      changed_when: false
+      no_log: true
+
+    - name: Set UDM credential facts
+      ansible.builtin.set_fact:
+        udm_username: "{{ udm_user_op.stdout | trim }}"
+        udm_password: "{{ udm_pass_op.stdout | trim }}"
+      no_log: true
+
+    - name: Assert UDM credentials present
+      ansible.builtin.assert:
+        that:
+          - udm_username | length > 0
+          - udm_password | length > 0
+        fail_msg: "Failed to fetch UDM creds from 1Password (item: 'UDM (tf-admin)'). Ensure 1P agent is unlocked."
+
+  tasks:
+    # -----------------------------------------------------------------
+    # 1. Login → capture TOKEN + CSRF
+    # -----------------------------------------------------------------
+    - name: UDM login
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/api/auth/login"
+        method: POST
+        validate_certs: "{{ udm_validate_certs }}"
+        body_format: json
+        body:
+          username: "{{ udm_username }}"
+          password: "{{ udm_password }}"
+        status_code: 200
+        return_content: false
+      register: udm_login
+      no_log: true
+
+    - name: Extract TOKEN cookie + CSRF from login headers
+      ansible.builtin.set_fact:
+        udm_token: "{{ udm_login.set_cookie | regex_search('TOKEN=([^;]+)', '\\1') | first }}"
+        udm_csrf: "{{ udm_login['x_updated_csrf_token'] | default(udm_login.x_csrf_token | default('')) }}"
+      no_log: true
+
+    - name: Sanity-check session captured
+      ansible.builtin.assert:
+        that:
+          - udm_token | length > 0
+          - udm_csrf | length > 0
+        fail_msg: "Failed to capture UDM session (TOKEN+CSRF) from login response."
+
+    - name: Build common auth headers
+      ansible.builtin.set_fact:
+        udm_headers:
+          Cookie: "TOKEN={{ udm_token }}"
+          X-Csrf-Token: "{{ udm_csrf }}"
+          Content-Type: application/json
+      no_log: true
+
+    # -----------------------------------------------------------------
+    # 2. Resolve VLAN → network_id (so rules are rebuild-safe)
+    # -----------------------------------------------------------------
+    - name: GET networks
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/proxy/network/api/s/{{ udm_site }}/rest/networkconf"
+        method: GET
+        headers: "{{ udm_headers }}"
+        validate_certs: "{{ udm_validate_certs }}"
+        status_code: 200
+        return_content: true
+      register: usw_networks
+
+    - name: Build VLAN → network_id map
+      ansible.builtin.set_fact:
+        usw_netid_by_vlan: >-
+          {{ dict(usw_networks.json.data
+                  | selectattr('vlan', 'defined')
+                  | selectattr('vlan', 'ne', None)
+                  | map(attribute='vlan') | map('string') | list
+                  | zip(usw_networks.json.data
+                        | selectattr('vlan', 'defined')
+                        | selectattr('vlan', 'ne', None)
+                        | map(attribute='_id') | list)) }}
+
+    - name: Show VLAN → id map
+      ansible.builtin.debug:
+        var: usw_netid_by_vlan
+
+    # -----------------------------------------------------------------
+    # 3. Choose the active rule set (import-only vs +new)
+    # -----------------------------------------------------------------
+    - name: Select active ACL set
+      ansible.builtin.set_fact:
+        # When apply_new=true, usw_acls_new entries override existing ones
+        # by name (the extended Isolate-205 replaces the import version).
+        usw_acls_active: >-
+          {{ (usw_acls_new + usw_acls_existing) if usw_acls_apply_new
+             else usw_acls_existing }}
+
+    # De-dup by name, keeping first occurrence (new overrides existing).
+    - name: De-dup active set by name
+      ansible.builtin.set_fact:
+        usw_acls_final: >-
+          {{ usw_acls_active
+             | groupby('name')
+             | map(attribute='1')
+             | map('first')
+             | list }}
+
+    # -----------------------------------------------------------------
+    # 4. GET existing ACLs + build name → rule map
+    # -----------------------------------------------------------------
+    - name: GET existing ACL rules
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/proxy/network/v2/api/site/{{ udm_site }}/acl-rules"
+        method: GET
+        headers: "{{ udm_headers }}"
+        validate_certs: "{{ udm_validate_certs }}"
+        status_code: 200
+        return_content: true
+      register: usw_existing_acls
+
+    - name: Build name → existing-rule map
+      ansible.builtin.set_fact:
+        usw_acl_by_name: >-
+          {{ dict(usw_existing_acls.json | map(attribute='name') | list
+                  | zip(usw_existing_acls.json)) }}
+        usw_max_index: >-
+          {{ (usw_existing_acls.json | map(attribute='acl_index') | list | max)
+             if (usw_existing_acls.json | length > 0) else -1 }}
+
+    # -----------------------------------------------------------------
+    # 5. Render desired ACL bodies (resolve vlans → network_ids)
+    # -----------------------------------------------------------------
+    - name: Render desired ACL bodies
+      ansible.builtin.set_fact:
+        usw_rendered: >-
+          {{ usw_rendered | default([]) + [{
+            "name": acl.name,
+            "action": acl.action,
+            "enabled": true,
+            "ip_acl_protocol": "ALL",
+            "type": "IPV4",
+            "specific_enforcers": [],
+            "traffic_source": {
+              "type": acl.source.type,
+              "ips_or_subnets": (acl.source.ips | default([])) if acl.source.type == "IP_OR_SUBNET" else [],
+              "network_ids": (acl.source.vlans | default([]) | map('string') | map('extract', usw_netid_by_vlan) | list) if acl.source.type == "NETWORK" else [],
+              "ports": [],
+              "specific_mac_addresses": []
+            },
+            "traffic_destination": {
+              "type": acl.destination.type,
+              "ips_or_subnets": (acl.destination.ips | default([])) if acl.destination.type == "IP_OR_SUBNET" else [],
+              "network_ids": (acl.destination.vlans | default([]) | map('string') | map('extract', usw_netid_by_vlan) | list) if acl.destination.type == "NETWORK" else [],
+              "ports": [],
+              "specific_mac_addresses": []
+            }
+          }] }}
+      loop: "{{ usw_acls_final }}"
+      loop_control:
+        loop_var: acl
+
+    # -----------------------------------------------------------------
+    # 6. Diff helper — does a desired rule match the live one?
+    #    (compare action + source + destination, ignoring _id/index/uuid)
+    # -----------------------------------------------------------------
+    - name: Classify each desired rule (create / update / nochange)
+      ansible.builtin.set_fact:
+        usw_plan: >-
+          {{ usw_plan | default([]) + [{
+            "body": item,
+            "exists": (item.name in usw_acl_by_name),
+            "drifted": (item.name in usw_acl_by_name) and (
+              (usw_acl_by_name[item.name].action != item.action) or
+              (usw_acl_by_name[item.name].traffic_source.type != item.traffic_source.type) or
+              ((usw_acl_by_name[item.name].traffic_source.network_ids | sort) != (item.traffic_source.network_ids | sort)) or
+              ((usw_acl_by_name[item.name].traffic_source.ips_or_subnets | sort) != (item.traffic_source.ips_or_subnets | sort)) or
+              (usw_acl_by_name[item.name].traffic_destination.type != item.traffic_destination.type) or
+              ((usw_acl_by_name[item.name].traffic_destination.network_ids | sort) != (item.traffic_destination.network_ids | sort)) or
+              ((usw_acl_by_name[item.name].traffic_destination.ips_or_subnets | sort) != (item.traffic_destination.ips_or_subnets | sort))
+            )
+          }] }}
+      loop: "{{ usw_rendered }}"
+
+    - name: Show plan summary
+      ansible.builtin.debug:
+        msg: >-
+          create={{ usw_plan | rejectattr('exists') | list | length }}
+          update={{ usw_plan | selectattr('exists') | selectattr('drifted') | list | length }}
+          nochange={{ usw_plan | selectattr('exists') | rejectattr('drifted') | list | length }}
+
+    # -----------------------------------------------------------------
+    # 7. Create missing rules
+    # -----------------------------------------------------------------
+    - name: Create missing ACL rules
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/proxy/network/v2/api/site/{{ udm_site }}/acl-rules"
+        method: POST
+        headers: "{{ udm_headers }}"
+        validate_certs: "{{ udm_validate_certs }}"
+        body_format: json
+        body: "{{ item.body | combine({'acl_index': (usw_max_index | int) + 1 + idx}) }}"
+        status_code: [200, 201]
+      loop: "{{ usw_plan | rejectattr('exists') | list }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item.body.name }}"
+      register: usw_create
+
+    # -----------------------------------------------------------------
+    # 8. Update drifted rules (PUT with preserved _id + acl_index)
+    # -----------------------------------------------------------------
+    - name: Update drifted ACL rules
+      ansible.builtin.uri:
+        url: "{{ udm_base }}/proxy/network/v2/api/site/{{ udm_site }}/acl-rules/{{ usw_acl_by_name[item.body.name]._id }}"
+        method: PUT
+        headers: "{{ udm_headers }}"
+        validate_certs: "{{ udm_validate_certs }}"
+        body_format: json
+        body: >-
+          {{ item.body | combine({
+               '_id': usw_acl_by_name[item.body.name]._id,
+               'acl_index': usw_acl_by_name[item.body.name].acl_index
+             }) }}
+        status_code: 200
+      loop: "{{ usw_plan | selectattr('exists') | selectattr('drifted') | list }}"
+      loop_control:
+        label: "{{ item.body.name }}"
+      register: usw_update
+
+    - name: Result summary
+      ansible.builtin.debug:
+        msg: >-
+          Created {{ usw_create.results | default([]) | rejectattr('skipped', 'defined') | list | length }},
+          updated {{ usw_update.results | default([]) | rejectattr('skipped', 'defined') | list | length }}.
+          {{ 'IMPORT-ONLY mode (set usw_acls_apply_new=true to apply new blocks).' if not usw_acls_apply_new else 'APPLY-NEW mode.' }}
