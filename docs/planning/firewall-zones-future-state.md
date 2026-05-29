@@ -241,7 +241,11 @@ Each phase = a single PR (doc update + change-log entry) + a single maintenance 
 
 ---
 
-### Phase 3 — Create `Security` zone and move VLAN 205 (REVISED 2026-05-28)
+### Phase 3 — Create `Security` zone and move VLAN 205 ✅ DONE 2026-05-28
+
+> **Completed 2026-05-28.** Security custom zone created; VLAN 205 moved in; legacy `network_isolation_enabled` retired (zone model is now sole enforcement). Verified: 0 legacy `Isolated Networks` rules remain, 7 zone-default blocks active, `→External`+`→Gateway` allows intact, 3/3 SimpliSafe devices healthy, SimpliSafe app confirmed online. Net behavior change: zero — isolation moved from legacy toggle to zone model + gained automatic IoT separation. DHCP DNS untouched; External never blocked (wifi-primary preserved).
+
+
 
 **Live state inspection (2026-05-28) overturned two assumptions** the original plan was built on:
 
