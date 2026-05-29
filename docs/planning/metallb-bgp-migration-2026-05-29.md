@@ -90,10 +90,14 @@ This is the production-standard hybrid (and answers the "should Servers be UDM-r
 
 All three mount at node level → all are degraded if node→209 routes through the UDM after the 201 move. → **all workers that can run these need a 209 node interface.**
 
-**Implementation (mirrors the Ceph 210 NIC addition, 2026-05-18):**
-- Add a VLAN 209 vNIC/sub-interface to each K8s worker VM (Proxmox) + netplan/cloud-init, per-MAC fixed IPs in `10.10.209.5x`. The switch trunk already carries 209.
-- With a connected route to `10.10.209.0/24` on the node, kubelet NFS mounts to `sequoia` (209.10) egress the 209 NIC at L2 on the switch fabric — bypassing the UDM entirely, even after 201 becomes UDM-routed.
-- Same Ansible/Kubespray surface as the Ceph NIC work (`k8s-node-fixes.yml`).
+**Implementation — pure SDN (cleaner than the Ceph NIC, which had to use a raw bridge):**
+
+The `vsan` SDN VNet (tag 209) **already exists + is applied + healthy** on the PVE host (`infra/terraform/proxmox/sdn/vnets.tf`; verified `vsan` bridge UP, enslaving `vmbr0.209` as its uplink, no host IP → no conflict). So adding the 209 node interface is the clean SDN path:
+- Attach a new vNIC to each K8s worker VM with `bridge=vsan` (the existing SDN VNet) — exactly like net0-3 use `servers`/`clients`/`iot`/`security`. No new VNet, no raw `vmbr0+tag`, no host-conflict risk.
+- netplan/cloud-init: per-MAC fixed IPs in `10.10.209.5x`, MTU 9000.
+- With a connected route to `10.10.209.0/24` on the node, kubelet NFS mounts to `sequoia` (209.10) egress the 209 NIC at L2 — bypassing the UDM even after 201 becomes UDM-routed.
+
+> **Do NOT convert the Ceph 210 NIC to SDN.** It's deliberately the raw `vmbr0+tag=210` pattern because the PVE host carries its Ceph mon IP (`10.10.210.41`) directly on `vmbr0.210` — defining an SDN VNet for 210 would generate a conflicting `interfaces.d/sdn` stanza and `ifreload` would tear down the host (2026-05-18 incident, iKVM recovery). The net0-3 (SDN) vs net4 (raw 210) inconsistency is **intentional + correct**, documented in `vnets.tf`. VLAN 209 has no host IP, so it gets the proper SDN treatment.
 
 This keeps Servers/201's *primary* interface low-bandwidth (UDM routing it = fine) while NAS-heavy node mounts get the fast switch-fabric side-channel.
 
@@ -112,7 +116,7 @@ This keeps Servers/201's *primary* interface low-bandwidth (UDM routing it = fin
 Four mini-phases, each independently verifiable + reversible. Phases A→B are the prerequisite re-architecture; C→D are the BGP cutover.
 
 **Phase A — add node 209 interfaces (no routing change yet):**
-1. Add a VLAN 209 vNIC to each K8s worker VM (Proxmox) + netplan + per-MAC IPs `10.10.209.5x`. Mirror the Ceph 210 NIC work (`k8s-node-fixes.yml`).
+1. Add a vNIC `bridge=vsan` (existing SDN VNet, tag 209) to each K8s worker VM via `infra/terraform/proxmox/k8s-vms` + netplan per-MAC IPs `10.10.209.5x`, MTU 9000. (Pure SDN — NOT the raw vmbr0+tag the Ceph NIC uses; see §4.1.)
 2. Verify each node has a connected route to `10.10.209.0/24` and can reach `sequoia` (209.10) over the 209 NIC.
 3. Drain/cycle the NAS workloads (plex, s3-sync, rclone) so their kubelet NFS mounts re-establish over the 209 path. Confirm via `ss`/traffic that node→sequoia uses the 209 NIC. **No 201 routing change yet, so zero risk** — this just adds a faster path.
 
