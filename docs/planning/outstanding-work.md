@@ -20,7 +20,7 @@ revision use the next free ID per tier. Status legend:
 
 ---
 
-## Next-up UDM checklist (live-state snapshot 2026-05-27)
+## Next-up UDM checklist (updated 2026-05-28)
 
 Pulled via `scripts/unifi/dump-state.sh` + extended settings fetch.
 Order is the suggested execution order — quickest wins first, BGP
@@ -31,16 +31,19 @@ deferred behind the zone migration to share blast-radius windows.
 | 1 | **M36 IP-conflict alert workaround** | UDM still firing IP-conflict for `.5` + `.71` (not yet excluded) | UDM UI → Insights → IP Conflict Detection → add `.5` and `.71` to exclusion list (30s) |
 | 2 | **M32 firmware channel** | `super_fwupdate.firmware_channel = "beta"` | Network App → Settings → System → Updates → flip channel to `release` (1 click) |
 | 3 | **M34 fleet auto-upgrade** | `mgmt.auto_upgrade = true` + 7 APs + 9 switches all `safe_for_autoupgrade: true` | UDM UI → System → Updates → "Auto-update devices" → off (or per-device toggles) |
-| 4 | **§7 zone migration questions** | n/a (planning) | Answer the 5 open questions in `firewall-zones-future-state.md` §7 |
-| 5 | **M50 audit gap-fill** | n/a (planning) | Walk UDM/UNAS/Protect UIs, log every UI-only setting → `udm-iac-coverage.md` |
-| 6 | **M48/M49 UNAS + Protect IaC** | n/a | Create per-device API keys → Ansible playbooks (1 day each) |
-| 7 | **M30 zone migration Phase 1** | 7 zones live (6 default + 1 custom IoT); 117 policies | Pilot `Unifi/212 → Infrastructure` zone per future-state doc |
-| 8 | **M30 remaining phases** | depends on Phase 1 result | Phases 2-5 |
+| 4 | **M30 Phase 3 — Security zone** | Security/205 is UDM-routed (`gateway_type=default`) → executable | Create `Security` zone, move VLAN 205, add Security→DNS allow. SimpliSafe smoke-test (wifi+cell) |
+| 5 | **M52 — L3-switch ACL IaC** | Switch Rack PoE routes 201/202/209/210, zero ACLs | Design doc → `usw-acls.yml` playbook → soak (replaces dropped Phase 2) |
+| 6 | **M50 audit gap-fill** | n/a (planning) | Walk UDM/UNAS/Protect UIs, log every UI-only setting → `udm-iac-coverage.md` |
+| 7 | **M48/M49 UNAS + Protect IaC** | n/a | Create per-device API keys → Ansible playbooks (1 day each) |
+| 8 | **M30 Phase 5 — cleanup + doc rewrite** | after Phase 3 | Re-sync architecture/firewall-zones.md to live; archive future-state doc |
 | 9 | **M18/M36 MetalLB BGP** | MetalLB on L2 mode today; no BGPPeer/BGPAdvertisement | After zone migration: UDM BGP peer + MetalLB BGP CRs |
 
-**Already done (verified live 2026-05-27):**
+**Already done (verified live 2026-05-27 → 28):**
 - ✅ M33 rsyslog: `rsyslogd.ip=10.10.201.73 port=514 enabled=true`, Loki ingesting ~100 lines/min under `{host="udm"}`
 - ✅ All 11 syslog clients active in Loki: `udm`, `pve`, `pve-bmc`, `switch-workroom`, and 7 APs
+- ✅ M30 pre-flight: 14 firewall groups created (`udm-firewall.yml`, commit `3271cea`); M31 backup + OOB SSH verified
+- ✅ M30 Phase 1: VLAN 212 → Infrastructure zone (commit set through `05d635c`); all 18 clients healthy
+- ✅ M30 §7 questions resolved + L3-routing topology corrected (Switch Rack PoE routes 201/202/209/210)
 
 ---
 
@@ -294,21 +297,27 @@ deferred behind the zone migration to share blast-radius windows.
   - **M15-M17** Twilio Talk hygiene items (911 address, orphan DID, SIP UDP→TLS+sRTP) — out-of-band UDM Talk console
 
 ### 🟡 M30. UDM zone architecture — reconcile doc with live + future-state design
-- **Status 2026-05-23:** option (b) shipped. Option (a) tracked as the migration plan in the new future-state doc, awaiting user kickoff.
-- **Option (b) done** (commit `f5693c3`): rewrote `docs/architecture/firewall-zones.md` to match the live single-custom-zone (IoT) reality. Removed 317 lines of aspirational multi-zone description; added a "Current state vs aspirational state" callout pointing at the future-state doc.
-- **Future-state doc** (new — `docs/planning/firewall-zones-future-state.md`): proposes a 4-zone end-state (Trusted/Infrastructure/IoT/Security), inter-zone allow/deny matrix, named allow rules, **5-phase migration plan** with per-phase rollback procedures, and a decision checklist. Calls out M31 (UDM backup) as a hard prerequisite (now ✅), so Phase 1 (pilot Unifi/212 → Infrastructure zone) is unblocked.
-- **Open questions for you** (§7 of future-state doc): (1) SimpliSafe WAN dependence; (2) non-K8s sync jobs Clients→Servers that would silently break; (3) Default/199 disposition; (4) WireGuard WAN1 (UDM-side VPN pool) — re-enable or delete; (5) long-term L3-switch ACL management strategy. Phase 2 risk is unbounded until §5 is resolved.
-- **Live snapshot 2026-05-27** (`/proxy/network/v2/api/site/default/firewall/zone` + `/firewall/zone-matrix`):
-  - **7 zones total:** Internal (default), External (default), Gateway (default, empty), Vpn (default), Hotspot (default), Dmz (default, empty), **IoT (CUSTOM)**.
-  - **Zone → network membership** (only what's explicitly mapped — unmapped VLANs likely default-route into Internal):
-    - Internal: `Default`, `Management/200`, `Security/205`, `Unifi/212`
-    - External: `WAN1 (Frontier)`, `WAN2 (Spectrum)`, `LTE`
-    - Vpn: `WireGuard WAN1`
-    - Hotspot: `Guest/206`
-    - IoT (custom): `IoT/204`
-    - Gateway + Dmz: empty
-    - **Not shown in any zone**: `Servers/201`, `Clients/202`, `vSAN/209`, `Ceph/210` — implies they fall to default-Internal but the dump can't prove that; worth a UI walkthrough during Phase 1 to confirm explicit mappings.
-  - **117 firewall policies** total (69 ALLOW + 48 BLOCK) distributed across the full src→dst matrix. Most-loaded edges: `External→Gateway` (13 — port-forward + WAN ingress controls), `Hotspot→Gateway` (11 — guest-network gateway services), `External→Internal` (7).
+- **Status 2026-05-28:** Pre-flight ✅ + Phase 1 ✅ shipped. Phases 2 + 4 re-scoped after an L3-routing correction (see below). Phase 3 (Security zone) is next.
+- **Option (b) done** (commit `f5693c3`): rewrote `docs/architecture/firewall-zones.md` to match the live single-custom-zone (IoT) reality.
+- **Future-state doc** (`docs/planning/firewall-zones-future-state.md`): the canonical migration plan. All §7 open questions resolved 2026-05-27 (commit `3271cea`); §9 design clarifications added.
+- **Pre-flight ✅ (2026-05-27 → 28):**
+  - M31 UDM backup verified (5 days of daily `.unf` + config tarballs in S3).
+  - 14 firewall groups (11 IP + 3 port) created via `udm-firewall.yml` (commit `3271cea`); live count 8→22.
+  - OOB SSH path: user-verified.
+- **Phase 1 ✅ (2026-05-28):** VLAN 212 (Unifi) moved into new custom `Infrastructure` zone. 4 broad zone-allow rules (Internal↔Infrastructure user-created; Infrastructure→Gateway + Infrastructure→External auto-created by UDM). Verified healthy across 3 probes (T+0/+5/+30 min): all 18 clients present (3 Talk phones + 13 Protect cameras + UA-Gate + UA-Intercom + Protect ctrl), 4/4 critical online, zero 212 FW drops in UDM Loki. Internal zone went 4→3 networks.
+- **L3-routing correction (2026-05-28, commit `05d635c`):** an earlier claim that "all switches are L2-only" was WRONG. **Switch Rack PoE (US624P @ 10.10.200.232)** is the L3 router for **Servers/201, Clients/202, vSAN/209, Ceph/210** (`gateway_type=switch`). UDM routes Default/199, Mgmt/200, IoT/204, Security/205, Guest/206, Unifi/212 (`gateway_type=default`). This is a textbook hybrid (firewall=north-south+zones; L3 switch=east-west line-rate for storage+compute). UDM is CPU-bound ~3.5-5 Gbps; US624P fabric is ~50 Gbps — storage MUST stay switch-routed.
+- **Phase re-scope:**
+  - **Phase 2 (vSAN/Ceph → Infrastructure): DROPPED.** Switch-routed networks can't go in a UDM zone (picker hides them; rules wouldn't fire). Replaced by **M52** (see below) — Ansible playbook for L3-switch ACLs as the primary east-west enforcement.
+  - **Phase 3 (Security zone for VLAN 205): NEXT.** Security/205 is UDM-routed → executable as planned.
+  - **Phase 4 (Trusted zone): SKIP (Option A).** Servers/201 + Clients/202 are switch-routed (can't be zoned); the only candidate left is Mgmt/200, and leaving it in Internal is functionally identical. Cosmetic-only; not worth doing.
+  - **Phase 5 (cleanup + doc rewrite):** after Phase 3.
+
+### ⏳ M52. L3-switch ACL IaC (NEW — derived from M30 §7.5 + L3-routing correction)
+- **Source:** 2026-05-28. Replaces the dropped M30 Phase 2. Switch Rack PoE (US624P @ 10.10.200.232) routes Servers/201, Clients/202, vSAN/209, Ceph/210 with **zero ACLs today** — intra-fabric flows are wide open.
+- **Scope:** Ansible playbook `infra/ansible/playbooks/usw-acls.yml` (mirror `udm-firewall.yml` auth pattern). Target ACL matrix: Servers↔Clients allow; Servers→vSAN/Ceph allow (K8s PV/RBD); Clients→vSAN allow (NAS / 10G video editing); Clients→Ceph deny; vSAN↔Ceph deny.
+- **Pre-reqs:** (1) capture current port-profiles/ACLs via `/rest/portconf`; (2) design doc `docs/planning/l3-switch-acl-iac-2026-05-28.md`; (3) confirm US624P ACL feature set (per-port vs per-VLAN; stateful semantics) on current firmware; (4) test on a sacrificial flow first.
+- **Risk:** stateless ACLs need explicit reverse-direction allows; a bad rule can cut K8s↔Ceph and trip CNPG/Velero in minutes. Rollback via playbook re-run with prior spec.
+- **Effort:** M (design + playbook + soak).
 
 ### ✅ M31. Automated UDM backup to S3 (P0 from M25 audit)
 - **Done:** 2026-05-23. New CronJob `unifi-backup` in `backups` ns, fires daily 04:00 PT. Three targets per run:

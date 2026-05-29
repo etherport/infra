@@ -1,24 +1,22 @@
 # Firewall Zones and Policy
 
-This document describes the **live** zone-based firewall configuration on the UDM Pro ("Windroute") as of 2026-05-23, sourced from the read-only audit at `docs/planning/udm-audit-2026-05-23.md` (Part 1).
+This document describes the **live** zone-based firewall configuration on the UDM Pro ("Windroute"), baseline sourced from the read-only audit at `docs/planning/udm-audit-2026-05-23.md` (Part 1), updated 2026-05-28 to reflect the M30 zone-migration **Phase 1** (VLAN 212 → Infrastructure).
 
 > **Controller version:** UniFi Network 9.4.x on UniFi OS 5.1.12. The v10 Zone-Based Firewall migration (`ZONE_BASED_FIREWALL`) completed 2024-12-22; the legacy `rest/firewallrule` endpoint is empty.
 
 ---
 
-## Current state vs. aspirational state
+## Migration status (M30)
 
-**Previous versions of this doc described a 6-custom-zone design** (Trusted, Infrastructure, IoT, Security, Guest, Legacy) with a detailed inter-zone allow/deny matrix and ~10 user-authored firewall rules. The 2026-05-23 audit confirmed that **only one custom zone has ever been created**: `IoT`. Every other "documented" zone never existed on the UDM.
+The multi-zone end-state design + phased migration plan lives in the companion doc `docs/planning/firewall-zones-future-state.md`. This doc tracks what's **live now**.
 
-What this actually means on the wire:
+- **Phase 1 ✅ (2026-05-28):** Custom `Infrastructure` zone created; **VLAN 212 (Unifi)** moved into it. Two custom zones now exist (`IoT` + `Infrastructure`).
+- **Phase 2 — DROPPED / replaced by M52:** vSAN/209 + Ceph/210 are L3-switch-routed and can't be placed in a UDM zone. Their east-west security moves to L3-switch ACLs (Ansible playbook, tracker **M52**).
+- **Phase 3 — NEXT:** custom `Security` zone for VLAN 205 (UDM-routed → executable).
+- **Phase 4 — SKIP:** Servers/201 + Clients/202 are switch-routed (can't be zoned); Mgmt/200 staying in Internal is functionally equivalent to a cosmetic `Trusted` zone.
+- **Phase 5:** cleanup + full rewrite of this doc to the final live state.
 
-- VLANs 200 (Management), 201 (Servers), 202 (Clients), 205 (Security), 209 (vSAN), 210 (Ceph), 212 (Unifi), and 4040 (Inter-VLAN) all live in the built-in `Internal` zone.
-- The default `Internal → Internal: Allow All Traffic` predefined policy makes every "Infrastructure-zone rule" and every "Security-zone rule" in the old doc a **no-op** — the traffic was already allowed by the zone default.
-- The only firewall enforcement that does meaningful work today is the `IoT` custom zone (which is correctly isolated) plus four user-authored allow rules (IoT-to-DNS, Allow-Wireguard, Twilio-SIP, Twilio-Media).
-
-The previous multi-zone design has been **moved to a forward-looking companion doc** at `docs/planning/firewall-zones-future-state.md`. That doc proposes a phased migration if/when the user decides to tighten the zoning. Until that migration runs, **this doc is the source of truth** and the old aspirational tables are gone.
-
-Tracker: **M30** in `docs/planning/outstanding-work.md`.
+**Historical note:** earlier revisions of this doc described a 6-custom-zone design that was never implemented — only `IoT` existed pre-migration. That aspirational design now lives (corrected + phased) in the future-state companion. Tracker: **M30** in `docs/planning/outstanding-work.md`.
 
 ---
 
@@ -46,7 +44,7 @@ The homelab network uses a **dual-router architecture** with routing responsibil
  ┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐
  │ Untagged ││ VLAN 200 ││ VLAN 204 ││ VLAN 205 ││ VLAN 206 ││ VLAN 212 ││ VLAN 4040│
  │ Default  ││Management││   IoT    ││ Security ││  Guest   ││  Unifi   ││ Transit  │
- │ Internal ││ Internal ││ IoT (★)  ││ Internal ││ Hotspot  ││ Internal ││ Internal │
+ │ Internal ││ Internal ││ IoT (★)  ││ Internal ││ Hotspot  ││Infra (★) ││ Internal │
  │10.10.199 ││10.10.200 ││10.10.204 ││10.10.205 ││10.10.206 ││10.10.212 ││10.255.253│
  └──────────┘└──────────┘└──────────┘└──────────┘└──────────┘└──────────┘└────┬─────┘
                                                                               │
@@ -73,7 +71,8 @@ The homelab network uses a **dual-router architecture** with routing responsibil
           │10.10.201 │   │10.10.202 │   │10.10.209 │  │10.10.210 │
           └──────────┘   └──────────┘   └──────────┘  └──────────┘
 
-  (★) IoT is the only custom zone on the controller. Everything else
+  (★) IoT and Infrastructure are the two custom zones on the controller
+      (Infrastructure added 2026-05-28, holds Unifi/212). Everything else
       labelled "Internal" sits in the built-in Internal zone and is
       reachable from every other Internal-zone network by default.
 ```
@@ -114,7 +113,7 @@ The UDM firewall only sees traffic that traverses the UDM. Traffic between L3-sw
 | 204 | IoT | 10.10.204.0/24 | **IoT (custom)** | Smart home devices |
 | 205 | Security | 10.10.205.0/24 | Internal | SimpliSafe gear (cameras retired) — Network Isolation = ON (see §"Known anomalies") |
 | 206 | Guest | 10.10.206.0/24 | Hotspot (built-in) | Guest WiFi |
-| 212 | Unifi | 10.10.212.0/24 | Internal | UniFi APs/cameras/IP phones |
+| 212 | Unifi | 10.10.212.0/24 | **Infrastructure (custom)** | UniFi Protect cameras (~13), Talk phones (3 UVP-TOUCH), UniFi Access (UA-Gate, UA-Intercom), Protect controller `.10`. **Note: APs/switches are NOT here — they're on Management/200.** Moved to Infrastructure 2026-05-28 (M30 Phase 1). |
 | 4040 | Inter-VLAN | 10.255.253.0/24 | Internal | Transit between UDM and L3 switch |
 
 ### Networks Routed by L3 Switch
@@ -152,8 +151,9 @@ UniFi Network creates a fixed set of built-in zones; you can add custom zones on
 
 | Zone | Type | Member networks | Notes |
 |------|------|-----------------|-------|
-| **Internal** | built-in | Default, Management/200, Servers/201, Clients/202, Security/205, vSAN/209, Ceph/210, Unifi/212, InterVLAN/4040 | Default = `Allow All Traffic` within the zone. **This is the wide-open default that makes most "documented" intra-LAN policies redundant today.** |
-| **IoT** | custom | IoT/204 | The only custom zone. Default = block-by-default to other zones; one explicit allow for DNS (see below). |
+| **Internal** | built-in | Default, Management/200, Servers/201, Clients/202, Security/205, vSAN/209, Ceph/210, InterVLAN/4040 | Default = `Allow All Traffic` within the zone. **This is the wide-open default that makes most "documented" intra-LAN policies redundant today.** (Note: 201/202/209/210 are switch-routed, so their intra-fabric traffic never reaches this zone — see Dual-Router section.) |
+| **IoT** | custom | IoT/204 | Default = block-by-default to other zones; one explicit allow for DNS (see below). |
+| **Infrastructure** | custom | Unifi/212 | Added 2026-05-28 (M30 Phase 1). Holds the Protect/Talk/Access appliance fleet. Rules: Internal↔Infrastructure Allow All (user-created, broad — tightening deferred to a Phase 1.5 pass); Infrastructure→Gateway + Infrastructure→External auto-created by UDM. |
 | **External** | built-in | WAN1, WAN2, LTE | Internet. Inbound blocked by default with named exceptions (Twilio + WireGuard). |
 | **Gateway** | built-in | UDM itself | DHCP/DNS/management surface of the UDM. Allow-most by default. |
 | **VPN** | built-in | WireGuard WAN1 (UDM remote-user-vpn) | Currently no clients connected. VPN → Internal = Allow All (broad — if/when this pool is ever populated, VPN clients have full LAN reach). |
