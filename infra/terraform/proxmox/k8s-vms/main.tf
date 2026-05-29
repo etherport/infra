@@ -22,9 +22,9 @@ locals {
   # vmbr0+vlan_id=210 — see comment block above network_device blocks.
   # local.vlan_tag was removed in PR 6 of the SDN migration (2026-05-22);
   # NICs 1-4 now use SDN VNets directly (bridge="servers"/"clients"/etc.).
-  bridge_name  = "vmbr0"
-  gateway_201  = "10.10.201.1"
-  cpu_type     = "host"
+  bridge_name = "vmbr0"
+  gateway_201 = "10.10.201.1"
+  cpu_type    = "host"
 
   # Control plane nodes - 3 for HA (etcd quorum requires odd number)
   # 8 GB each (was 4 GB until 2026-05-24). The original 4 GB assumed
