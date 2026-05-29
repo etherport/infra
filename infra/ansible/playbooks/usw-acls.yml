@@ -138,6 +138,7 @@
     # 1. Login → capture TOKEN + CSRF
     # -----------------------------------------------------------------
     - name: UDM login
+      check_mode: false # read-only auth; must run under --check for a real dry-run
       ansible.builtin.uri:
         url: "{{ udm_base }}/api/auth/login"
         method: POST
@@ -176,6 +177,7 @@
     # 2. Resolve VLAN → network_id (so rules are rebuild-safe)
     # -----------------------------------------------------------------
     - name: GET networks
+      check_mode: false # read-only; run under --check
       ansible.builtin.uri:
         url: "{{ udm_base }}/proxy/network/api/s/{{ udm_site }}/rest/networkconf"
         method: GET
@@ -226,6 +228,7 @@
     # 4. GET existing ACLs + build name → rule map
     # -----------------------------------------------------------------
     - name: GET existing ACL rules
+      check_mode: false # read-only; run under --check
       ansible.builtin.uri:
         url: "{{ udm_base }}/proxy/network/v2/api/site/{{ udm_site }}/acl-rules"
         method: GET

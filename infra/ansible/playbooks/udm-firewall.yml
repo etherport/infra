@@ -200,6 +200,7 @@
     # 1. Login → capture TOKEN + CSRF
     # -----------------------------------------------------------------
     - name: UDM login
+      check_mode: false # read-only auth; must run under --check for a real dry-run
       ansible.builtin.uri:
         url: "{{ udm_base }}/api/auth/login"
         method: POST
@@ -238,6 +239,7 @@
     # 2. Discover zones (resolve zone names → ids)
     # -----------------------------------------------------------------
     - name: GET zones
+      check_mode: false # read-only; run under --check
       ansible.builtin.uri:
         url: "{{ udm_base }}/proxy/network/v2/api/site/{{ udm_site }}/firewall/zone"
         method: GET
@@ -259,6 +261,7 @@
     # 3. Reconcile address-group + port-group objects
     # -----------------------------------------------------------------
     - name: GET existing firewall groups (objects)
+      check_mode: false # read-only; run under --check
       ansible.builtin.uri:
         url: "{{ udm_base }}/proxy/network/api/s/{{ udm_site }}/rest/firewallgroup"
         method: GET
@@ -349,6 +352,7 @@
 
     # Refresh group map after creates (so policy resolution sees them)
     - name: GET firewall groups (refresh after creates)
+      check_mode: false # read-only; run under --check
       ansible.builtin.uri:
         url: "{{ udm_base }}/proxy/network/api/s/{{ udm_site }}/rest/firewallgroup"
         method: GET
@@ -366,6 +370,7 @@
     # 4. Reconcile firewall policies (v2 zone-based)
     # -----------------------------------------------------------------
     - name: GET existing firewall policies (v2)
+      check_mode: false # read-only; run under --check
       ansible.builtin.uri:
         url: "{{ udm_base }}/proxy/network/v2/api/site/{{ udm_site }}/firewall-policies"
         method: GET
