@@ -74,11 +74,28 @@ This is the production-standard hybrid (and answers the "should Servers be UDM-r
 | K8s ↔ Ceph (210) | intra-VLAN-210 L2 | unchanged |
 | Any → LB VIP (`.201.x`) | via UDM | VIPs are all low-bw (DNS/web/syslog) — fine |
 
-### 4.1 Direct storage interfaces (the s3-sync case)
-Throughput-sensitive server services get a **Multus macvlan interface on VLAN 209** (NAS) — same pattern as the Ceph workloads on 210 — so they read/write storage at L2 without routing through the UDM:
-- **s3-sync** (`backups` ns): reads NAS over a `.209.x` iface, uploads to AWS S3 over WAN (the S3 leg is internet-bound anyway, so UDM routing there is irrelevant). The high-throughput NAS-read leg stays on the switch fabric.
-- Any future NAS-heavy workload: add a 209 NAD the same way.
-- This keeps Servers/201's *primary* interface low-bandwidth (so UDM routing it is fine) while the storage-hungry pods get a fast side-channel.
+### 4.1 Direct storage interface — NODE-level on VLAN 209 (corrected)
+
+**DECISION (committed 2026-05-29):** proceed with the move-Servers/201-to-UDM-routed design.
+
+**Mechanics correction:** the NAS workloads use **in-tree `nfs:` volumes** (`server: sequoia.wind.etherport.net` → `10.10.209.10`). In-tree NFS volumes are mounted by the **kubelet on the node**, so the NFS traffic originates from the **node's** network stack — NOT a pod Multus interface. Therefore the fast-path fix is a **node-level 209 interface**, exactly like the existing Ceph NIC (`enp6s22` on VLAN 210, MTU 9000, per-MAC IPs .50-.60). Pod-level Multus would NOT help in-tree NFS.
+
+**NAS-touching workloads enumerated (all NFS → `sequoia` / 209.10):**
+
+| Workload | NFS path | Throughput profile |
+|---|---|---|
+| **plex** (`plex` ns) | `/var/nfs/shared/Media/{Movies,TV Shows}` | **High, sustained** — playback + transcode source reads |
+| **s3-sync** ×7 shares (`backups` ns) | `/var/nfs/shared/{archive,backups,content,graham,mark,media,scans}` | **High, bursty** — full NAS reads during sync windows |
+| **rclone-gdrive** (`rclone-gdrive` ns) | `/var/nfs/shared/Backups` | Moderate — periodic |
+
+All three mount at node level → all are degraded if node→209 routes through the UDM after the 201 move. → **all workers that can run these need a 209 node interface.**
+
+**Implementation (mirrors the Ceph 210 NIC addition, 2026-05-18):**
+- Add a VLAN 209 vNIC/sub-interface to each K8s worker VM (Proxmox) + netplan/cloud-init, per-MAC fixed IPs in `10.10.209.5x`. The switch trunk already carries 209.
+- With a connected route to `10.10.209.0/24` on the node, kubelet NFS mounts to `sequoia` (209.10) egress the 209 NIC at L2 on the switch fabric — bypassing the UDM entirely, even after 201 becomes UDM-routed.
+- Same Ansible/Kubespray surface as the Ceph NIC work (`k8s-node-fixes.yml`).
+
+This keeps Servers/201's *primary* interface low-bandwidth (UDM routing it = fine) while NAS-heavy node mounts get the fast switch-fabric side-channel.
 
 ### 4.2 BGP config (after 201 is UDM-routed)
 - **ASNs:** private — MetalLB `64512`, UDM `64513` (eBGP). Confirm no clash with AWS/WG (regional VPN uses static routes today → free).
@@ -90,34 +107,37 @@ Throughput-sensitive server services get a **Multus macvlan interface on VLAN 20
 
 ---
 
-## 5. Migration plan (staged, reversible)
+## 5. Migration plan (staged, reversible) — peer with the UDM
 
-Pre-flight:
-- [ ] **Confirm US624P BGP support** (§3) — hard gate.
-- [ ] UDM/switch config backup current (M31 covers the controller DB).
-- [ ] Pick + record ASNs; confirm no conflict with AWS/WG routing.
-- [ ] Identify the K8s node 201 IPs that will be BGP speakers (cp1-3 .50-.52, w1-4 .53-.56, gpu1 .60).
+Four mini-phases, each independently verifiable + reversible. Phases A→B are the prerequisite re-architecture; C→D are the BGP cutover.
 
-Phase 1 — **parallel BGP session, L2 still primary:**
-1. Configure BGP on the US624P (neighbors = node IPs, ASN).
-2. Add `BGPPeer` + `BGPAdvertisement` CRs **alongside** the existing `L2Advertisement` (MetalLB can run both; routes get advertised while ARP still answers).
-3. Verify the switch learns the /32s (`show ip bgp` equiv in UniFi) and that they resolve to node next-hops.
+**Phase A — add node 209 interfaces (no routing change yet):**
+1. Add a VLAN 209 vNIC to each K8s worker VM (Proxmox) + netplan + per-MAC IPs `10.10.209.5x`. Mirror the Ceph 210 NIC work (`k8s-node-fixes.yml`).
+2. Verify each node has a connected route to `10.10.209.0/24` and can reach `sequoia` (209.10) over the 209 NIC.
+3. Drain/cycle the NAS workloads (plex, s3-sync, rclone) so their kubelet NFS mounts re-establish over the 209 path. Confirm via `ss`/traffic that node→sequoia uses the 209 NIC. **No 201 routing change yet, so zero risk** — this just adds a faster path.
 
-Phase 2 — **cut over:**
-4. Remove the `L2Advertisement` CR.
-5. Verify each VIP still reachable from another VLAN (DNS query to `.5`, Traefik `.70`, syslog `.73`).
-6. Watch for the IP-conflict alerts to STOP (they should cease once ARP ownership is gone).
+**Phase B — move Servers/201 to UDM-routed:**
+4. In UniFi: change VLAN 201 `gateway_type` switch → default (gateway `.1` moves from the switch SVI to the UDM SVI; same IP).
+5. Verify: intra-201 node↔node still works (L2, unaffected); node→internet + node→other-UDM-VLAN routes via UDM; **node→sequoia still fast over the 209 NIC** (the whole point of Phase A); cluster health green (CNPG, Ceph, pods).
+6. *(Bonus, optional)* move Servers/201 into a `Trusted` UDM firewall zone — now possible since it's UDM-routed.
+   **Rollback:** revert `gateway_type` to switch.
 
-Phase 3 — **clean up:**
-7. Remove the M36 suppression workaround if it was ever applied.
-8. Update `metallb/README.md` + `firewall-zones.md` to document BGP mode.
+**Phase C — BGP, parallel with L2 still primary:**
+7. UDM: Settings → Routing → BGP → FRR config (ASN 64513, neighbors = node 201 IPs, accept pool /32s).
+8. Add `BGPPeer` + `BGPAdvertisement` CRs **alongside** the existing `L2Advertisement` (MetalLB runs both — routes advertise while ARP still answers).
+9. Verify the UDM learns the /32s (`stat/routing/bgp` populates) with node next-hops.
 
-**Rollback:** re-add the `L2Advertisement` CR (instant revert to L2); remove BGP CRs + switch BGP config. VIPs never change IP, so rollback is non-disruptive.
+**Phase D — cut over + clean up:**
+10. Remove `L2Advertisement`. Verify each VIP reachable cross-VLAN (DNS to `.5`, Traefik `.70`, syslog `.73`).
+11. Confirm the IP-conflict alerts STOP (M36 resolved — no more ARP ownership).
+12. Update `metallb/README.md` + `firewall-zones.md` to document BGP mode + the 201-UDM-routed topology.
+    **Rollback:** re-add `L2Advertisement` (instant L2 revert); VIPs never change IP → non-disruptive.
 
 **Risks:**
-- DNS VIP `.5` is the cluster's primary resolver — a botched cutover briefly breaks DNS for everything pointing at `.5`. Mitigate: `.6` (dns-fallback VM) + the AWS path remain; keep the maintenance window short; cut over during low-use.
-- ECMP: if multiple speakers advertise the same /32, the switch load-balances — fine for the stateless DNS/syslog VIPs, verify Traefik (stateful-ish) behaves (MetalLB BGP typically advertises from the node running the service via `externalTrafficPolicy: Local` to avoid this).
-- Confirm `externalTrafficPolicy` per service (Local vs Cluster) — affects which nodes advertise + source-IP preservation.
+- **DNS VIP `.5`** is the cluster's primary resolver — botched Phase D briefly breaks DNS for anything pointing at `.5`. Mitigate: `.6` (dns-fallback VM) + AWS path remain; short window; low-use timing.
+- **Phase B is the riskiest** (it re-homes the K8s nodes' primary-VLAN gateway). Phase A must be verified first so NAS throughput never gaps. Intra-201 (control plane) is L2 → unaffected by the gateway move.
+- `externalTrafficPolicy` per LB service (Local vs Cluster) — Local keeps advertisement on the serving node + preserves client IP; set before Phase C for Traefik + Technitium.
+- ASN coexistence with any AWS/WG BGP (regional VPN is static today → likely free; confirm).
 
 ---
 
