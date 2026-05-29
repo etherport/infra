@@ -11,11 +11,11 @@
 
 The 2026-05-23 audit confirmed that the firewall zone design described in older versions of `docs/architecture/firewall-zones.md` was never implemented. Only one custom zone (`IoT`) exists on the UDM; sensitive networks (Servers/201, Security/205, vSAN/209, Ceph/210, Unifi/212, Inter-VLAN/4040) all sit in the built-in `Internal` zone with `Internal → Internal: Allow All Traffic` as the default.
 
-### 1.1 UDM identity + VLAN 212 — corrections from live inspection (2026-05-28)
+### 1.1 Corrections from live inspection (2026-05-28)
 
-Two assumptions in earlier revisions of this doc were wrong; they're corrected here once so subsequent sections don't propagate them.
+Three assumptions in earlier revisions of this doc were wrong; they're corrected here once so subsequent sections don't propagate them.
 
-**The UDM is multi-homed; "the UDM IP" is not 10.10.200.1.** From the live `/stat/device` record for `Windroute`: `lan_ip = "10.10.199.1"`, with 11 ethernet interfaces. The UDM hosts an SVI (`.1` of each /24) on **every** VLAN — Default/199, Management/200, Servers/201, Clients/202, IoT/204, Security/205, vSAN/209, Ceph/210, Unifi/212. Its canonical identity in UniFi terms is `10.10.199.1` (the Default-VLAN interface, which is also where Talk SIP listens on UDP/6767). `10.10.200.1` is just the SVI we happen to route management UI access through — it's no more "the UDM IP" than `.201.1` or `.212.1`. **Firewall implication:** traffic destined to any UDM SVI is policed by the `Gateway` built-in zone (UniFi's INPUT-chain analogue), regardless of which SVI IP was hit. So the `Router-Gateway` IP group is of limited use as a *destination* matcher in `Internal → *` rules — UDM destinations are matched by zone, not by IP.
+**The UDM is multi-homed; "the UDM IP" is not 10.10.200.1.** From the live `/stat/device` record for `Windroute`: `lan_ip = "10.10.199.1"`, with 11 ethernet interfaces. The UDM hosts an SVI (`.1` of each UDM-routed /24). Its canonical identity in UniFi terms is `10.10.199.1` (the Default-VLAN interface, which is also where Talk SIP listens on UDP/6767). `10.10.200.1` is just the SVI we happen to route management UI access through. **Firewall implication:** traffic destined to any UDM SVI is policed by the `Gateway` built-in zone (UniFi's INPUT-chain analogue), regardless of which SVI IP was hit. So the `Router-Gateway` IP group is of limited use as a *destination* matcher in `Internal → *` rules — UDM destinations are matched by zone, not by IP.
 
 **VLAN 212 (Unifi) does NOT contain APs or switches.** Live client/device dump shows:
 - **VLAN 200 (Management)** — 16 admin-class devices: UDM Pro Max + **all 7 APs** + **all 9 switches** + UPS1/2 + PDU1/2 (per `/stat/device` + `/stat/sta`).
@@ -23,7 +23,24 @@ Two assumptions in earlier revisions of this doc were wrong; they're corrected h
 
 The 17 + 18 = 35 figure matches the UniFi Network console's unified "Devices" view (Network-app-managed + infrastructure clients). The Network app uses `/stat/device` for the former (17) and `/stat/sta` for the latter (18); the UI merges them.
 
-**Phase 1 implication:** the original rule design ("Mgmt → Unifi on adoption ports 8080/3478") is too narrow because the devices on 212 are *not* APs/switches doing inform/STUN — they're cameras streaming RTSP, phones doing SIP/RTP, Access devices doing their own protocols, and admin laptops hitting `.10:443` for the Protect UI. Restricting to adoption-ports would break most of what's on 212. Phase 1 rules are revised below to broad zone allows that preserve current connectivity; tightening becomes a follow-up pass after a flow-observation window.
+**L3 routing is split between UDM and Switch Rack PoE — the audit was right, an earlier revision of this doc was wrong.** A revision dated 2026-05-27 claimed "all 9 switches are L2-only because `config_network.type=dhcp`" and used that to dismiss the audit's L3-switch concern. The `config_network.type` flag is just about how the switch's *own management* IP is assigned (DHCP vs static), not whether the switch performs L3 routing. The actual L3 topology, from `/rest/networkconf`:
+
+| VLAN | Routed by | `gateway_type` | Notes |
+|---|---|---|---|
+| Default/199, Management/200, IoT/204, Security/205, Guest/206, Unifi/212 | **UDM** | `default` | Visible in UDM zone-picker; UDM zone firewall applies |
+| Servers/201, Clients/202, vSAN/209, Ceph/210 | **Switch Rack PoE** (US624P @ `10.10.200.232`, MAC `d8:b3:70:75:eb:df`) | `switch` | Hidden from UDM zone-picker because UDM doesn't route them |
+
+Corroborating evidence: `/rest/routing` has `(L3)` static-route variants (`AWS Environment (L3)`, `WG Tunnel (AWS) (L3)`, `WG Client Tunnel (L3)`) — UniFi auto-pushes these to whichever switch is configured as an L3 router. The `(L3)` versions wouldn't exist if no switch were L3.
+
+**Architectural implication — the network is a textbook hybrid.** Switch-routed VLANs form the "compute+storage fabric"; UDM-routed VLANs are the "policy zones". This is the standard enterprise DC pattern (firewall handles north-south + security zones; L3 switch handles east-west at line rate for storage + compute). It is the right shape for this workload because:
+
+- The **Switch Rack PoE has ~50 Gbps non-blocking fabric** with ASIC-based line-rate L3 forwarding. The UDM Pro Max is CPU-bound at ~3.5 Gbps with IDS/IPS, ~5 Gbps without.
+- **Storage flows** (vSAN replication, Ceph backfill on jumbo-MTU) regularly burst to 8+ Gbps. Routing them through UDM would collapse throughput.
+- **Workstation → NAS** flows (Clients/202 video editor pulling from vSAN/NAS) also need 10G line-rate. Clients/202 staying switch-routed preserves that.
+
+**Phase-plan implication — Phases 2 and 4 need re-scoping.** vSAN/Ceph + Servers/Clients all stay switch-routed (performance reasons). Their inter-VLAN security is governed by switch ACLs (the M52 workstream — now elevated from "placeholder until needed" to "primary east-west enforcement mechanism"), not by UDM zone policies. UDM zone policies still apply for any traffic from these VLANs that *leaves the switch fabric* (north-south, or crossing to UDM-routed VLANs). See §3 Phase 2 + Phase 4 for the revised approach.
+
+**Phase 1 implication:** the original rule design ("Mgmt → Unifi on adoption ports 8080/3478") was too narrow because the devices on 212 are *not* APs/switches doing inform/STUN — they're cameras streaming RTSP, phones doing SIP/RTP, Access devices doing their own protocols, and admin laptops hitting `.10:443` for the Protect UI. Phase 1 rules below use 4 broad zone allows preserving current connectivity. Tightening is a follow-up pass after a flow-observation window. *(VLAN 212 is UDM-routed (`gateway_type: default`), so Phase 1 itself is unaffected by the L3-split correction.)*
 
 We had two options:
 
@@ -75,8 +92,8 @@ These replace what the aspirational doc enumerated. Wherever possible, use Firew
 - `Trusted-to-Protect-UI`: Management/200 + Clients/202 → Protect controller (`10.10.212.10`) TCP 443 (Protect web UI + API)
 - `Trusted-to-Talk-Admin`: Management/200 → UDM Gateway HTTPS 443 (Talk admin lives on the UDM, accessed via Network app)
 - `Trusted-to-UA-Admin`: Management/200 → UA-Gate/UA-Intercom HTTPS 443 (device admin UIs)
-- `Servers-to-Ceph`: Servers/201 → Ceph/210 all (belt-and-suspenders; per §3 Phase 2 the audit's "L3-switch-routed" claim was wrong and UDM owns all VLAN gateways — this rule covers any cross-VLAN K8s→Ceph flow)
-- `Mgmt-to-Storage`: Management/200 → vSAN/209 on TCP 22, 80, 443, 8006 (Proxmox admin)
+- `Servers-to-Ceph`: Servers/201 → Ceph/210 all — **N/A for UDM zone policy**: both VLANs are switch-routed (per §1.1), so this flow stays on the switch fabric and is governed by M52 switch ACLs, not UDM rules. Documented here only for the M52 design pass.
+- `Mgmt-to-Storage`: Management/200 → vSAN/209 on TCP 22, 80, 443, 8006 (Proxmox admin) — **crosses UDM** (Mgmt is UDM-routed, vSAN is switch-routed); UDM zone policy applies.
 
 **Trusted → IoT:**
 - `Trusted-to-Hue`: Clients/202 → IoT/204 (Hue bridge IPs) TCP 80, 443, 8080 (intentional — Hue app on phones can talk directly to the bridge as a fallback when HA is down or for features HA doesn't expose).
@@ -161,15 +178,51 @@ Each phase = a single PR (doc update + change-log entry) + a single maintenance 
 
 ---
 
-### Phase 2 — Move vSAN/209 + Ceph/210 into `Infrastructure`
+### Phase 2 — vSAN/209 + Ceph/210 stay switch-routed; UDM-zone move is DROPPED. Replace with M52 design.
 
-**Why second — risk re-rated 2026-05-27:** Pre-flight live-state inspection corrected the audit's "vSAN/Ceph is L3-switch-routed" claim. Reality: **all 9 switches are L2-only** (`config_network.type = dhcp` on every USW), and **every VLAN gateway lives on the UDM** (10.10.209.1 / 10.10.210.1 are UDM SVIs, not switch SVIs). So:
+**Status: REWRITTEN 2026-05-28** after live-state inspection corrected the L3-routing picture (see §1.1). The original "move vSAN/Ceph into Infrastructure zone" plan can't be executed via the UDM UI — these VLANs have `gateway_type: switch` (routed by Switch Rack PoE), and the UDM zone picker correctly hides them because UDM zone policy doesn't fire for switch-routed traffic.
 
-- East-west traffic *within* vSAN (Proxmox vSAN replication) or *within* Ceph (OSD heartbeats) stays L2-tagged on the switch backplane — never hits the UDM, never sees a firewall rule.
-- Cross-VLAN traffic (e.g., Mgmt → vSAN admin SSH, K8s → Ceph RBD mount) routes through the UDM SVI and is the only thing affected by zone policy changes.
-- **No L3-switch ACL state to coordinate** — there isn't any. Phase 2 risk is bounded to the small set of cross-VLAN admin/storage flows, all of which we control.
+**Why we keep them switch-routed instead of flipping to UDM-routed:**
 
-Moving these networks into `Infrastructure` mostly changes which zone-default applies to the small amount of vSAN/Ceph traffic that ever crosses VLANs (e.g., a Proxmox host syncing time via 10.10.200.1, or kubelet talking to Ceph mons).
+- vSAN replication regularly hits 8+ Gbps at MTU 9000.
+- Ceph backfill on 10G is similar.
+- UDM Pro Max forwards at ~3.5 Gbps with IDS/IPS, ~5 Gbps without — would halve effective storage throughput.
+- The L3 switch ASIC forwards at line rate (≈50 Gbps non-blocking fabric).
+
+**What replaces this phase:** the M52 workstream — an Ansible playbook managing L3 switch ACLs on Switch Rack PoE (US624P @ 10.10.200.232). The ACLs become the primary security enforcement for all switch-routed inter-VLAN traffic.
+
+**M52 ACL scope (target end-state):**
+
+| Source → Dest | Decision | Rationale |
+|---|---|---|
+| Servers/201 ↔ Clients/202 | Allow (most) | Same trust tier; admin SSH, K8s service access, ArgoCD UI, etc. |
+| Servers/201 → vSAN/209 | Allow | K8s PV mounts; Proxmox node ↔ NAS shares |
+| Servers/201 → Ceph/210 | Allow | K8s Ceph RBD mounts; CNPG PVCs; etc. |
+| Clients/202 → vSAN/209 | Allow | Video-editing workstation pulling from NAS; SMB/NFS shares |
+| Clients/202 → Ceph/210 | Deny (default) | No legitimate client workflow needs raw Ceph |
+| vSAN/209 ↔ Ceph/210 | Deny | Distinct storage backends; no cross-talk |
+| Any switch-routed → External (via UDM) | Allow | Standard north-south egress through firewall |
+
+**Phase 2 deliverables (replacing the old "move to Infrastructure zone" steps):**
+
+1. **Switch ACL audit** — pull current port profiles + any in-place ACLs on Switch Rack PoE via UI screenshots or `/proxy/network/api/s/default/rest/portconf` + `/rest/firewallrule` at the switch level. Capture into `docs/architecture/l3-switch-state-2026-05-28.md`.
+2. **M52 design doc** — `docs/planning/l3-switch-acl-iac-2026-05-28.md`. Defines: the ACL matrix above, the API endpoints used to apply ACLs to a UniFi USW (per-port vs per-VLAN), test methodology, rollback procedure.
+3. **M52 playbook** — `infra/ansible/playbooks/usw-acls.yml`. Follows the same auth pattern as `udm-firewall.yml` (1Password tf-admin item → API token → /proxy/network/...). Reconciles a declarative ACL list.
+4. **M52 apply + soak** — apply the ACL set, soak for ≥7 days, monitor for breakage (K8s PV mount errors, NAS access failures from Clients laptops, Proxmox health drift).
+
+**Risks:**
+- Switch ACLs are stateless — return traffic needs explicit allows in the reverse direction unless using "established" tracking (USW ACL features vary by model).
+- Misconfigured ACL can cut K8s ↔ Ceph and trigger CNPG / Velero failures within minutes.
+- Rollback: revert ACL list via playbook re-run with previous spec, or UI-delete if total revert needed.
+
+**Pre-flight before applying M52:**
+- M31 backup ✓ (already covered).
+- Switch ACL feature-set confirmed for US624P firmware version (some USW models only have per-port ACLs; some support per-VLAN; some support "stateful" semantics via paired rules).
+- Test ACL on a sacrificial VLAN flow first (e.g., a low-impact deny rule that we can verify takes effect and revert).
+
+**Original Phase 2 (kept for history; do not execute):**
+
+> ~~Add VLAN 209 and VLAN 210 to existing `Infrastructure` zone. Add `Mgmt-to-Storage` allow in `Internal → Infrastructure`. Verify Proxmox cluster + Ceph health stays green for 24 h.~~ Cannot be done via UI; UDM zone picker hides switch-routed networks. Even if forced via API, UDM zone policy wouldn't fire for intra-switch traffic, so the rules would be no-ops.
 
 **Steps:**
 
@@ -213,33 +266,21 @@ Moving these networks into `Infrastructure` mostly changes which zone-default ap
 
 ---
 
-### Phase 4 — Create `Trusted` zone and move VLANs 200/201/202
+### Phase 4 — REVISED: Trusted = Mgmt/200 only (or skip entirely)
 
-**Why fourth — and highest risk:** This is the big one. Servers/201 hosts DNS (Technitium VIP `.5`), K8s control plane, MetalLB pool, gh-runner, and most workloads. Clients/202 is every laptop in the house. Management/200 hosts the UDM itself.
+**Status: REWRITTEN 2026-05-28** following the L3-routing correction in §1.1. Servers/201 + Clients/202 both have `gateway_type: switch` (routed by Switch Rack PoE) so they CANNOT be assigned to a UDM custom zone via the UI for the same reason vSAN/Ceph can't (Phase 2). Their inter-VLAN security is governed by M52 switch ACLs, not UDM zone policy.
 
-**Critical pre-checks:**
+**That leaves Management/200** as the only "humans-administering-machines" VLAN that's UDM-routed. The question becomes: is the symbolic value of a custom `Trusted` zone containing only VLAN 200 worth the work?
 
-- [ ] Out-of-band path verified (Phase 0 pre-flight).
-- [ ] All flows currently relying on `Internal → Internal: Allow All` enumerated. Candidates to check:
-  - Clients/202 → Servers/201 on every K8s service port (kubectl, ArgoCD, Grafana, Prometheus, Loki, Hubble, etc.)
-  - Clients/202 → Management/200 on TCP 22, 80, 443 (UDM UI, switch UI, AP UI)
-  - Management/200 → Servers/201 (admin paths, e.g., SSH to k8s nodes)
-  - Servers/201 → Servers/201 (intra-zone; if Trusted is a single zone these stay implicit allow)
-- [ ] Decide intra-Trusted policy: probably `Trusted → Trusted: Allow All` (functional equivalent of today's Internal-to-Internal for these three VLANs).
+**Option A — Skip Phase 4 entirely.** Leave Management/200 in the built-in `Internal` zone. Internal already has the right policy posture for an admin VLAN: Allow to External (admin web access), Allow to Gateway (UDM services), and the cross-zone allows we'll add in Phase 3 etc. Renaming Internal to Trusted is purely cosmetic — same policies apply. **Recommended.**
 
-**Steps:**
+**Option B — Create `Trusted` zone with VLAN 200 only.** Move Mgmt out of Internal. Forces every cross-zone allow to be re-expressed against Trusted instead of Internal. No security gain; just label hygiene. Could be done in a separate cleanup PR if you find the "Internal" name annoying once Servers/Clients are no longer in it.
 
-1. Create custom zone `Trusted` with VLANs 200, 201, 202.
-2. Confirm zone default `Trusted → Trusted: Allow All` (UniFi default for intra-zone).
-3. Configure outbound: `Trusted → External: Allow All` (no change from today).
-4. Configure inter-zone allows as enumerated in §2.3.
-5. Smoke-test from a Clients/202 laptop: kubectl reaches the cluster, ArgoCD UI loads, SSH to k8s nodes works, UniFi controller UI loads.
-6. Smoke-test from a Servers/201 host: outbound internet works, NTP works, cluster-internal flows work.
+**Recommendation:** go with **Option A**. Mark Phase 4 as `SKIPPED — not necessary` in Phase 5 cleanup and proceed straight from Phase 3 (Security zone) to Phase 5 (cleanup).
 
-**Risks:**
-- This is the phase that can lock you out of UDM management if a `Trusted → Gateway` rule is mis-configured.
-- MetalLB ARP advertisement is L2 on VLAN 201; zone move shouldn't affect it but worth watching `kubectl get svc -n metallb-system` for any flapping.
-- Any forgotten cross-VLAN allow (e.g., a backup job from a Clients/202 machine to a Servers/201 NFS export) silently breaks.
+**Original Phase 4 (kept for history; do not execute):**
+
+> ~~Create custom zone `Trusted` with VLANs 200, 201, 202. Confirm zone default `Trusted → Trusted: Allow All`. Configure outbound, inter-zone allows, smoke-test kubectl + ArgoCD + UDM UI from a Clients laptop.~~ Not executable — Servers/201 and Clients/202 are switch-routed and won't appear in the UDM zone picker. Their security is M52's responsibility.
 
 **Rollback criteria:** UDM UI unreachable from Clients, K8s API unreachable, MetalLB VIP unreachable, OR any in-house user reports loss of internet.
 
@@ -270,7 +311,7 @@ After all four phases complete:
 | **M30 (doc reconcile)** | Provides the current-state baseline this migration starts from. | ✅ Done 2026-05-23 (architecture/firewall-zones.md rewrite). |
 | **M18 (eBGP / MetalLB BGP)** | Independent. Zone migration changes which zone owns 201, but MetalLB L2Advertisement only cares about subnet membership, not zone. | Independent — sequenced after this migration to batch UDM L3 blast-radius windows. |
 | **Audit P2 #12 (firewall groups)** | Pre-flight item — groups must exist before phase 1 to keep rule text clean. | ✅ Done 2026-05-27 (commit `3271cea`) — 14 new groups landed via udm-firewall.yml. |
-| **L3 switch ACL audit (audit P3 #21)** | Phase 2/4 risk is harder to bound until we know what the switch is enforcing. | ✅ N/A — pre-flight inspection confirmed all 9 switches are L2-only (`config_network.type=dhcp`); UDM owns every VLAN gateway. No L3 ACL state to capture. |
+| **L3 switch ACL audit (audit P3 #21)** | Phase 2/4 risk is harder to bound until we know what the switch is enforcing. | **In progress (M52 workstream).** Live state (2026-05-28): Switch Rack PoE (US624P @ `10.10.200.232`) routes Servers/201, Clients/202, vSAN/209, Ceph/210 — confirmed via `gateway_type=switch` on those networks + `gateway_device` MAC matching the US624P. Currently zero ACLs in place (intra-fabric flows wide open). M52 is now the primary east-west enforcement mechanism (see Phase 2 rewrite). |
 | **Identity Enterprise / RADIUS** | Not on path — skip per audit §2.7. | N/A |
 
 ---
@@ -295,7 +336,7 @@ Before opening the first PR (Phase 1), confirm:
 
 - [ ] **M31 (UDM backup to S3) is implemented and verified** — at least one successful backup landed in S3, and one test restore was performed against a sandbox UDM or VM.
 - [ ] **Out-of-band SSH path tested** — verified that I can reach the UDM (`10.10.199.1` or any other SVI) from outside the LAN (via AWS-WG path) and that a totally-broken zone rule wouldn't kill that path.
-- [x] **L3 switch ACL state captured** — N/A. Pre-flight inspection confirmed all 9 switches are L2-only and the UDM owns every VLAN gateway; there are no L3 switch ACLs to capture. Phase 2 risk re-bounded accordingly.
+- [x] **L3 switch state captured** — 2026-05-28: Switch Rack PoE (US624P @ `10.10.200.232`) identified as L3 router for Servers/201, Clients/202, vSAN/209, Ceph/210. No ACLs currently configured (intra-fabric flows wide open by default). Original Phase 2 ("move vSAN+Ceph to UDM zone") is dropped; replaced with M52 (Ansible playbook for switch ACLs) as the primary east-west enforcement mechanism. See Phase 2 rewrite for the new workstream.
 - [ ] **Firewall groups created in their own PR** (audit P2 #12) and verified rule-referencable in the UI.
 - [ ] **All four phases scheduled with maintenance windows announced** to any household users who depend on the network (kids' WiFi, IP phones, alarm system, etc.).
 - [ ] **Decision made on Default/199** (keep / quarantine / delete DHCP) — to be applied in Phase 5.
