@@ -267,19 +267,6 @@ resource "proxmox_virtual_environment_vm" "workers" {
     mtu     = 9000
   }
 
-  # NAS/storage VLAN 209 (net5 → enp6s23). Direct L2 path to the UNAS
-  # (sequoia 10.10.209.10) so kubelet NFS mounts (Plex, s3-sync, rclone)
-  # stay on the switch fabric instead of routing through the UDM after
-  # Servers/201 → UDM-routed (M18 BGP migration, Phase B). Uses the `vsan`
-  # SDN VNet (tag 209) — conflict-free (no PVE-host IP on 209, unlike 210).
-  # Append-only (inserting earlier renumbers the Ceph net4). DHCP + netplan
-  # bring-up via k8s-node-fixes.yml. See docs/runbooks/bgp-phase-a-209-node-interface.md.
-  network_device {
-    bridge = "vsan"
-    model  = "virtio"
-    mtu    = 9000
-  }
-
   initialization {
     datastore_id = local.storage_name
     user_account {
@@ -401,15 +388,6 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
     model   = "virtio"
     vlan_id = 210
     mtu     = 9000
-  }
-
-  # NAS/storage VLAN 209 (net5 → enp6s23) — see workers resource + the
-  # Phase A runbook. gpu1 runs NAS workloads (Plex GPU transcode), so it
-  # needs the direct 209 path too.
-  network_device {
-    bridge = "vsan"
-    model  = "virtio"
-    mtu    = 9000
   }
 
   hostpci {

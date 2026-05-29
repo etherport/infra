@@ -1,5 +1,20 @@
 # BGP migration — Phase A: add the VLAN 209 (vsan) node interface
 
+> ## ⚠️ FAILED ATTEMPT 2026-05-29 — read before retrying
+> First attempt (TF apply of the net5 NIC to w1) **hung the node + deadlocked the PVE lock**. Root cause + the corrected procedure:
+> 1. **`networkd-wait-online` hang.** w1 rebooted (the bpg apply reboots via graceful `qmshutdown` to apply a NIC change) with the new `enp6s23` present but **no netplan stanza** — so `networkd-wait-online` blocked `network-online.target` on the unconfigured interface and did **not** time out. kubelet/sshd/guest-agent never started → node `NotReady` indefinitely (primary 201 IP was still pingable — it's a boot-service hang, not a network break).
+> 2. **Lock deadlock.** Because the guest was hung, it couldn't ACPI-shutdown, so the bpg `qmshutdown` task wedged holding `/var/lock/qemu-server/lock-110.conf`. Cancelling the GH run did NOT release it (the PVE-side task survives the TF client). Recovery required: `kill <qmshutdown task PID>` on PVE → `qm unlock` → `qm set 110 --delete net5` → `qm start`. w1 then booted clean (5 NICs) + recovered.
+>
+> **MANDATORY corrected order (do NOT reboot a node with the NIC added until netplan knows about it):**
+> - **Step 1 (netplan) MUST run BEFORE Step 1-old (TF NIC add).** Write the `enp6s23` `optional: true` stanza to ALL target nodes first (netplan accepts config for an absent interface). Only then add the NIC. With the stanza present, the reboot won't hang on wait-online.
+> - **Drain properly:** `kubectl drain --ignore-daemonsets --delete-emptydir-data` BEFORE the reboot (the failed attempt rebooted without draining).
+> - **Per node, verify Ready + sshd before the next.** If a node hangs >3 min, it's the wait-online trap — recover via the PVE kill/unlock/delete-net5 sequence above; don't wait indefinitely.
+> - Consider whether the disruption/risk is worth it vs. the M36 suppression workaround — this is more involved than "additive + safe" implied.
+>
+> The TF + netplan changes were **reverted** after the incident (repo back to 5-NIC known-good). The exact diffs remain below for a corrected retry.
+
+
+
 **Part of:** `docs/planning/metallb-bgp-migration-2026-05-29.md` (M18/M36).
 **Goal:** give the NAS-workload nodes a direct L2 interface on VLAN 209 (the `vsan` SDN VNet) so kubelet NFS mounts to `sequoia` (10.10.209.10) stay on the switch fabric — *before* Servers/201 moves to UDM-routed in Phase B. This phase is **purely additive** (no routing change) so it cannot disrupt anything; it just adds a faster path.
 

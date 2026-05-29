@@ -101,22 +101,6 @@
                   use-dns: no
                 dhcp6: no
                 mtu: 9000
-              enp6s23:
-                # NAS/storage NIC (VLAN 209, net5 — added for the M18 BGP
-                # migration Phase A, see docs/runbooks/bgp-phase-a-209-node-interface.md).
-                # Direct L2 path to the UNAS (sequoia 10.10.209.10) so kubelet
-                # NFS mounts (Plex, s3-sync, rclone) stay on the switch fabric
-                # after Servers/201 → UDM-routed (Phase B). Same dhcp4-overrides
-                # rationale as enp6s22: L2-only, never default routing / DNS.
-                # 209 has a DHCP pool (.100-.254); reservation to .209.5x is a
-                # follow-up for IP stability (functional with dynamic too).
-                optional: true
-                dhcp4: yes
-                dhcp4-overrides:
-                  use-routes: no
-                  use-dns: no
-                dhcp6: no
-                mtu: 9000
       register: vlan_netplan
 
     - name: Apply netplan if VLAN config changed
