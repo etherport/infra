@@ -120,7 +120,7 @@ Four mini-phases, each independently verifiable + reversible. Phases A→B are t
 2. ✅ Verified: every node has a connected route to `10.10.209.0/24`; `ip route get 10.10.209.10` egresses `enp6s23`.
 3. NAS workloads re-pathed over 209 on reschedule. **CORRECTION — this was NOT "zero risk":** the directly-connected 209 route changed the NFS *source IP*, and the UNAS exports a per-host allow-list of the **201** IPs → mounts hit `access denied by server` until the five 209 IPs were added to all 9 UNAS NFS shares (UI; not IaC; re-apply on rebuild). Lesson: a new network path is *not* free when a downstream server authorizes by source IP. See the runbook banner.
 
-**Phase B — move Servers/201 to UDM-routed:**
+**Phase B — move Servers/201 to UDM-routed:** *(prep runbook: `docs/runbooks/bgp-phase-b-201-udm-routed.md` — do with Graham present)*
 > **IaC note (verified 2026-05-29):** the static L3 routes (AWS + WG) ARE codified in `infra/terraform/unifi/routes.tf` (6/6, zero drift). BUT the per-VLAN routing *assignment* (`gateway_type` switch↔default) is NOT modeled by the paultyng `unifi_network` provider — same gap class as zones/firewall/ACLs. So this Phase-B switch→UDM change is a **UI / v2-API + documented** change, not a `terraform apply`. Capture the before/after in the doc + verify routes.tf next-hops (10.255.253.3 / 10.10.201.20) still resolve after the move.
 4. In UniFi: change VLAN 201 `gateway_type` switch → default (gateway `.1` moves from the switch SVI to the UDM SVI; same IP).
 5. Verify: intra-201 node↔node still works (L2, unaffected); node→internet + node→other-UDM-VLAN routes via UDM; **node→sequoia still fast over the 209 NIC** (the whole point of Phase A); cluster health green (CNPG, Ceph, pods).
