@@ -26,6 +26,21 @@ initContainers:
 snapshotsEnabled: true
 deployNodeAgent: true
 
+# node-agent runs the Kopia filesystem backups and must be present on the SAME
+# node as every pod whose volumes are fs-backed-up. The control planes carry
+# node-role.kubernetes.io/control-plane:NoSchedule, so without this toleration
+# node-agent only lands on the 5 worker/gpu nodes. cilium (CNI) runs on all 8
+# nodes incl. cp1-3, and kube-system-daily sets defaultVolumesToFsBackup: true,
+# so velero tries to fs-backup cilium's `tmp` volume on the control planes,
+# finds no node-agent there, and the backup is PartiallyFailed every run
+# ("daemonset pod not found in running state in node k8s-cpX" ×3). Tolerating
+# the control-plane taint puts node-agent on all 8 nodes → backup completes.
+nodeAgent:
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
 metrics:
   enabled: true
   serviceMonitor:
