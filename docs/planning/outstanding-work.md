@@ -27,13 +27,15 @@ personal-web CI all landed this session (see "Recently completed" below).
 
 | # | Item | State | Action |
 |---|---|---|---|
-| 1 | **M18/M36 MetalLB BGP** ← *active target* | MetalLB L2 mode; no BGPPeer/BGPAdvertisement; UDM `.5`/`.71` IP-conflict alerts | Design → UDM eBGP peer + MetalLB BGP CRs + cutover. Properly fixes M36 (no L2 ARP ownership = no conflict) — chosen over the suppression workaround |
+| 1 | **M18/M36 MetalLB BGP** ← *active target* | MetalLB L2 mode; no BGPPeer/BGPAdvertisement; UDM `.5`/`.71` IP-conflict alerts. **Phase A ✅** (node 209 NICs in) | **Phase A DONE 2026-05-29** (209 NIC on w1-4+gpu1 → NAS NFS on switch fabric; UNAS export ACL extended to the 209 IPs — see runbook). Remaining: Phase B (201→UDM-routed) → C (BGP parallel) → D (cutover). Properly fixes M36 (no L2 ARP ownership = no conflict) — chosen over the suppression workaround |
 | 2 | **M15-M17 Twilio Talk** | 911 addr / orphan DID / SIP UDP→TLS+sRTP | M15 (911) safety-first; M16 release DID; M17 encryption |
 | 3 | **M53 CF token scoping** | account-scoped token shared infra↔personal-web | Mint zone-scoped tokens; also unblocks M54 |
 | 4 | **M54 smithforsb redirect IaC** | CF Single Redirect is manual in dashboard | Codify in `personal-web/cloudflare-dns/smithforsb.tf` once M53 lands |
 | 5 | **M48/M49/M50 UNAS+Protect IaC** | UI-only | Per-device API keys → Ansible playbooks + coverage audit |
 
 **Recently completed (this session, 2026-05-27 → 29):**
+- ✅ BGP **Phase A** — 209 (vsan) NIC added to w1-4 + gpu1 (DHCP .100-.104); kubelet NFS to the UNAS now egresses `enp6s23` at L2. Caught + fixed the source-IP gap: UNAS NFS export ACL extended to the 209 IPs on all 9 shares (UI, not IaC — re-apply on rebuild). Runbook updated with the "additive path ≠ no behaviour change" lesson.
+- ✅ Velero `kube-system-daily` PartiallyFailed (recurring ≥4d) root-caused — node-agent lacked control-plane tolerations so it skipped cilium's `tmp` fs-backup on cp1-3. Fix: `nodeAgent.tolerations` in velero values (Flux). No data loss (resource backup was 371/371; only an ephemeral emptyDir was un-backed-up).
 - ✅ M32 firmware channel → `release` + M34 site-wide auto-upgrade → off (IaC: `udm-firmware-policy.yml`, commit `ea08bea`)
 - ✅ M30 — UDM zone migration COMPLETE (IoT + Infrastructure/212 + Security/205 custom zones; Phase 4 skipped)
 - ✅ M52 — L3-switch ACL IaC applied + verified (5 ACLs on Switch Rack PoE)

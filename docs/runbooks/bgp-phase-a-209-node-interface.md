@@ -1,6 +1,19 @@
 # BGP migration — Phase A: add the VLAN 209 (vsan) node interface
 
-> ## ⚠️ FAILED ATTEMPT 2026-05-29 — read before retrying
+> ## ✅ COMPLETE 2026-05-29 (second pass) — outcome + the one thing the original plan missed
+> All 5 nodes (w1–w4 + gpu1) carry the 209 NIC and route to the NAS over it.
+> **Actual per-node 209 IPs (DHCP, NOT the `.5x` originally suggested below): w1=10.10.209.100, w2=.101, w3=.102, w4=.103, gpu1=.104.** `ip route get 10.10.209.10` egresses `enp6s23` on every node. Cluster stayed 8/8 Ready, CNPG 3/3 throughout (clean failovers across the rolling drains). A final `terraform plan` shows only the pre-existing benign `watchdog action none→reset` cosmetic drift — zero `network_device` drift.
+>
+> ### ⚠️ THE MISS: NFS export ACLs key on SOURCE IP — this phase was NOT "purely additive"
+> The original plan (and the §below) called adding the 209 path "purely additive — it cannot disrupt anything." **That was wrong.** The UNAS (`sequoia`, 10.10.209.10) exports each NFS share to an **explicit per-host allow-list of the nodes' 201 IPs** (`10.10.201.50–.60`). Once a node has a directly-connected 209 interface, its route to `10.10.209.10` prefers 209, so NFS mounts now arrive from the node's **209** source IP — which was **not** on any allow-list → `mount.nfs: access denied by server`. Plex (the only live in-tree `nfs:` consumer) rescheduled onto rebooted gpu1 and could not mount until this was fixed.
+>
+> **Fix (applied 2026-05-29):** added the five node 209 IPs (`10.10.209.100–.104`) to **all 9** UNAS NFS shares (Media, Mark, Backups, Scans, Graham, Temp, Content, Archive, Proxmox), *alongside* the existing 201 entries (additive — 201 access preserved). This is **UNAS-UI state, NOT in Terraform/Ansible** — there is no IaC path to UNAS share config today. **On any cluster/NAS rebuild this ACL MUST be re-applied** (both the 201 and 209 IPs). If you ever codify it, the only route is scripting the UniFi/UNAS API.
+>
+> **Lesson:** "additive network path" ≠ "no behavioural change" when a downstream server authorizes by source IP (NFS exports, firewall rules, DB `pg_hba`, API allow-lists all do this). Always ask "does anything downstream key on the source address?" before assuming a new path is free.
+>
+> ---
+
+> ## ⚠️ FAILED FIRST ATTEMPT 2026-05-29 — read before retrying
 > First attempt (TF apply of the net5 NIC to w1) **hung the node + deadlocked the PVE lock**. Root cause + the corrected procedure:
 > 1. **`networkd-wait-online` hang.** w1 rebooted (the bpg apply reboots via graceful `qmshutdown` to apply a NIC change) with the new `enp6s23` present but **no netplan stanza** — so `networkd-wait-online` blocked `network-online.target` on the unconfigured interface and did **not** time out. kubelet/sshd/guest-agent never started → node `NotReady` indefinitely (primary 201 IP was still pingable — it's a boot-service hang, not a network break).
 > 2. **Lock deadlock.** Because the guest was hung, it couldn't ACPI-shutdown, so the bpg `qmshutdown` task wedged holding `/var/lock/qemu-server/lock-110.conf`. Cancelling the GH run did NOT release it (the PVE-side task survives the TF client). Recovery required: `kill <qmshutdown task PID>` on PVE → `qm unlock` → `qm set 110 --delete net5` → `qm start`. w1 then booted clean (5 NICs) + recovered.
@@ -16,7 +29,7 @@
 
 
 **Part of:** `docs/planning/metallb-bgp-migration-2026-05-29.md` (M18/M36).
-**Goal:** give the NAS-workload nodes a direct L2 interface on VLAN 209 (the `vsan` SDN VNet) so kubelet NFS mounts to `sequoia` (10.10.209.10) stay on the switch fabric — *before* Servers/201 moves to UDM-routed in Phase B. This phase is **purely additive** (no routing change) so it cannot disrupt anything; it just adds a faster path.
+**Goal:** give the NAS-workload nodes a direct L2 interface on VLAN 209 (the `vsan` SDN VNet) so kubelet NFS mounts to `sequoia` (10.10.209.10) stay on the switch fabric — *before* Servers/201 moves to UDM-routed in Phase B. ~~This phase is purely additive (no routing change) so it cannot disrupt anything.~~ **CORRECTION (see top banner): it is NOT free — the directly-connected 209 route changes the NFS *source IP*, which breaks mounts until the UNAS export ACL is told to permit the 209 IPs.** It also requires a reboot per node to enumerate the NIC.
 
 **Scope:** workers `w1-w4` + `gpu1` (untracked/untainted — they run the NAS workloads: Plex, s3-sync ×7, rclone). **NOT control planes** (tainted NoSchedule → no NAS workloads → don't need it).
 
