@@ -58,6 +58,18 @@ spec:
           - name: plugins
             mountPath: /target
     deployNodeAgent: true
+    # node-agent runs the Kopia fs-backups and must be on the SAME node as every
+    # pod whose volumes are backed up. Without a control-plane toleration it only
+    # lands on the 5 worker/gpu nodes, so kube-system-daily was PartiallyFailed
+    # every run: cilium runs on all 8 nodes incl. cp1-3, defaultVolumesToFsBackup
+    # is true, and there was no node-agent on the control planes to back up
+    # cilium's `tmp` volume ("daemonset pod not found in running state in node
+    # k8s-cpX" x3). Tolerate the taint -> node-agent on all 8 -> backup clean.
+    nodeAgent:
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
     snapshotsEnabled: true
     metrics:
       enabled: true
