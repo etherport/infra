@@ -1,6 +1,6 @@
 # BGP migration — Phase B: move Servers/201 to UDM-routed
 
-> **STATUS: PREP / NOT YET EXECUTED (drafted 2026-05-30).** Design + checklist only — no changes made. Execute *with* Graham present (it re-homes the K8s nodes' primary-VLAN gateway). Phase A (node 209 NICs) is ✅ complete, which is the prerequisite.
+> **STATUS: ✅ DONE 2026-05-30.** Servers/201 flipped `gateway_type: switch → default` (UDM-routed) and placed in the **Internal** zone (a dedicated `Trusted` zone deferred — see M56). Verified green: nodes 8/8 Ready, CNPG 3/3 (no failover), 0 non-running pods; node default route `via 10.10.201.1 dev eth0` (UDM SVI), internet egress 0% loss; **NAS still `10.10.209.10 dev enp6s23` (209 NIC — Phase-A payoff intact)**; cross-VLAN out (201→IoT 204.1) + in (Mgmt/Infra devices → syslog VIP `.73`) both flowing; DNS `.5` resolves; the remote WG session (`.20`) survived the re-home. **Next: Phase C (BGP parallel).** Original prep notes retained below.
 
 **Part of:** `docs/planning/metallb-bgp-migration-2026-05-29.md` §4–5 (M18/M36).
 **Goal:** flip **Servers/201** from switch-routed (Switch Rack PoE, US624P @ `10.10.200.232`) to **UDM-routed** — `gateway_type: switch → default`. The `.1` gateway moves from the switch SVI to the UDM SVI (**same IP `10.10.201.1`**, so the K8s nodes need no reconfig). This unlocks Phase C/D (UDM↔MetalLB BGP → fixes the M36 IP-conflict alerts) and lets Servers/201 finally join a UDM firewall zone.

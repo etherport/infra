@@ -27,7 +27,7 @@ personal-web CI all landed this session (see "Recently completed" below).
 
 | # | Item | State | Action |
 |---|---|---|---|
-| 1 | **M18/M36 MetalLB BGP** ← *active target* | MetalLB L2 mode; no BGPPeer/BGPAdvertisement; UDM `.5`/`.71` IP-conflict alerts. **Phase A ✅** (node 209 NICs in) | **Phase A DONE 2026-05-29** (209 NIC on w1-4+gpu1 → NAS NFS on switch fabric; UNAS export ACL extended to the 209 IPs — see runbook). Remaining: Phase B (201→UDM-routed) → C (BGP parallel) → D (cutover). Properly fixes M36 (no L2 ARP ownership = no conflict) — chosen over the suppression workaround |
+| 1 | **M18/M36 MetalLB BGP** ← *active target* | MetalLB L2 mode; no BGPPeer/BGPAdvertisement; UDM `.5`/`.71` IP-conflict alerts. **Phase A+B ✅** | **Phase A DONE 2026-05-29** (209 NIC on w1-4+gpu1; UNAS export ACL extended). **Phase B DONE 2026-05-30** (Servers/201 → UDM-routed, Internal zone; verified — NAS stays on 209 NIC, DNS/ingress/egress/cross-VLAN all green; see runbook). Remaining: **Phase C (BGP parallel)** → D (cutover). Trusted-zone for 201 deferred → M56. Properly fixes M36 (no L2 ARP ownership = no conflict) |
 | 2 | **M15-M17 Twilio Talk** | 911 addr / orphan DID / SIP UDP→TLS+sRTP | M15 (911) safety-first; M16 release DID; M17 encryption |
 | 3 | **M53 CF token scoping** | account-scoped token shared infra↔personal-web | Mint zone-scoped tokens; also unblocks M54 |
 | 4 | **M54 smithforsb redirect IaC** | CF Single Redirect is manual in dashboard | Codify in `personal-web/cloudflare-dns/smithforsb.tf` once M53 lands |
