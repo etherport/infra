@@ -345,6 +345,16 @@ personal-web CI all landed this session (see "Recently completed" below).
 - **Scope:** deploy unpoller (unifi-poller) as a Deployment scraping the UDM controller API → Prometheus `ServiceMonitor` (must carry label `release: monitoring`, per the probeSelector lesson) → Grafana dashboards. Needs a read-only UniFi local account + creds (SOPS secret). Keep the UI/API access internal (Tailscale-only constraint).
 - **Effort:** M (exporter + creds + ServiceMonitor + dashboards).
 
+### ⏳ M56. Migrate Servers/201 to a dedicated `Trusted` UDM zone (from Internal)
+- **Source:** 2026-05-30, during BGP Phase B. 201 was placed in **Internal** for the gateway flip (minimal blast radius). A dedicated `Trusted` zone is the better end-state now that 201 is UDM-routed — intentional least-privilege vs Internal's allow-all.
+- **Why deferred (not atomic with Phase B):** a fresh custom zone **default-denies inter-zone**, and 201 hosts homelab-wide deps — DNS VIP `10.10.201.5` (every VLAN resolves here), the WG remote-access endpoint `.20` (External→201 port-fwd), Traefik ingress `.70`. A single missing rule = LAN-wide DNS outage / remote lockout. Also every existing `X↔Servers` policy (currently keyed to Internal) must be re-pointed to Trusted — needs a live UDM zone-matrix audit.
+- **Pre-staged allow matrix** (apply atomically with the zone; console/iKVM ready):
+  - `Trusted→External` (egress); **`External→Trusted` udp/9820-9821→.20 (WG — lockout risk)**
+  - `Internal↔Trusted` (DNS .5, Traefik .70, syslog .73, clients↔services)
+  - `IoT/204→Trusted` (DNS .5 + existing Servers↔IoT); `Infra/212→Trusted` (DNS .5, syslog .73); `Security/205→Trusted` (DNS .5)
+  - `Trusted→IoT/204` (→Home Assistant); `Trusted→Internal/Infra` (Prometheus scrape 200/212, storage)
+- **Effort:** M. UI / v2-API (not TF — paultyng gap). Do in a window; verify DNS from every VLAN + WG reconnect after.
+
 ### ✅ M31. Automated UDM backup to S3 (P0 from M25 audit)
 - **Done:** 2026-05-23. New CronJob `unifi-backup` in `backups` ns, fires daily 04:00 PT. Three targets per run:
   - **`udm-controller-db`** — newest `.unf` from `/data/unifi/data/backup/autobackup/` (UDM writes one daily at 07:00 UTC, ~8.5MB).
