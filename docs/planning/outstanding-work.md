@@ -340,6 +340,11 @@ personal-web CI all landed this session (see "Recently completed" below).
 - **Scope:** add a `cloudflare_ruleset` (http_request_dynamic_redirect) resource in `smithforsb.tf`; import the existing rule or recreate. Verify the redirect still 301s after apply.
 - **Effort:** S once M53 unblocks it.
 
+### ⏳ M55. Add UniFi telemetry exporter (unifi-poller) for UDM/network metrics
+- **Source:** 2026-05-30. UDM observability is logs-complete but metrics-thin. Syslog → Alloy → Loki works (UDM-Pro-Max actively shipping, verified). But Prometheus has NO full UniFi telemetry — only `probe_success` (blackbox reachability, fixed 2026-05-30) + `unifi_backup_*`. Missing: client counts, throughput, WAN, port/PoE, AP/client RSSI, per-device health.
+- **Scope:** deploy unpoller (unifi-poller) as a Deployment scraping the UDM controller API → Prometheus `ServiceMonitor` (must carry label `release: monitoring`, per the probeSelector lesson) → Grafana dashboards. Needs a read-only UniFi local account + creds (SOPS secret). Keep the UI/API access internal (Tailscale-only constraint).
+- **Effort:** M (exporter + creds + ServiceMonitor + dashboards).
+
 ### ✅ M31. Automated UDM backup to S3 (P0 from M25 audit)
 - **Done:** 2026-05-23. New CronJob `unifi-backup` in `backups` ns, fires daily 04:00 PT. Three targets per run:
   - **`udm-controller-db`** — newest `.unf` from `/data/unifi/data/backup/autobackup/` (UDM writes one daily at 07:00 UTC, ~8.5MB).
