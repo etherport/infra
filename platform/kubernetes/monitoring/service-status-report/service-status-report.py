@@ -542,8 +542,13 @@ if counts["down"] > 0:
     subject = f"{base_subject} — {counts['down']} down"
 elif counts["degraded"] > 0:
     subject = f"{base_subject} — {counts['degraded']} degraded"
-elif counts["unknown"] > 0 and counts["unknown"] == total:
+elif counts["unknown"] == total:
     subject = f"{base_subject} — all unknown"
+elif counts["unknown"] > 0:
+    # Partial unknowns must surface in the subject too — previously this fell
+    # through to "all healthy", hiding e.g. un-scraped appliance probes.
+    # Mirrors the HTML pill (overall_text) logic above.
+    subject = f"{base_subject} — {counts['unknown']} unknown"
 else:
     subject = f"{base_subject} — all healthy"
 

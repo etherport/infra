@@ -13,6 +13,11 @@ metadata:
   namespace: blackbox-exporter
   labels:
     appliance: udm
+    # Prometheus probeSelector requires this label, else the operator
+    # ignores the Probe and no probe_success is scraped (appliance shows
+    # "unknown" in the service-status digest). See monitoring Prometheus
+    # spec.probeSelector.matchLabels.
+    release: monitoring
 spec:
   jobName: blackbox-appliance
   interval: 30s
@@ -33,6 +38,7 @@ metadata:
   namespace: blackbox-exporter
   labels:
     appliance: protect
+    release: monitoring
 spec:
   jobName: blackbox-appliance
   interval: 30s
@@ -53,6 +59,7 @@ metadata:
   namespace: blackbox-exporter
   labels:
     appliance: unas
+    release: monitoring
 spec:
   jobName: blackbox-appliance
   interval: 30s
