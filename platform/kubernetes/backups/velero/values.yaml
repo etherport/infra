@@ -1,3 +1,11 @@
+# ⚠️ REFERENCE / MANUAL-INSTALL ONLY — NOT what Flux reconciles.
+# The live cluster's velero config is the INLINE `values:` block in the
+# HelmRelease at `clusters/wind/helm-releases/velero.yaml`. Flux does NOT read
+# this file. It exists only for the documented manual bootstrap path
+# (`helm install velero ... --values values.yaml`, see README) and HAS drifted
+# from the HelmRelease before (e.g. plugin image version). If you change velero
+# behaviour, edit the HelmRelease — and mirror it here only to keep the
+# bootstrap path sane. (Added after a fix was nearly shipped to this dead file.)
 configuration:
   backupStorageLocation:
     - bucket: velero.wind.etherport.net

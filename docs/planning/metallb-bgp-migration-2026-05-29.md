@@ -115,10 +115,10 @@ This keeps Servers/201's *primary* interface low-bandwidth (UDM routing it = fin
 
 Four mini-phases, each independently verifiable + reversible. Phases A→B are the prerequisite re-architecture; C→D are the BGP cutover.
 
-**Phase A — add node 209 interfaces (no routing change yet):**
-1. Add a vNIC `bridge=vsan` (existing SDN VNet, tag 209) to each K8s worker VM via `infra/terraform/proxmox/k8s-vms` + netplan per-MAC IPs `10.10.209.5x`, MTU 9000. (Pure SDN — NOT the raw vmbr0+tag the Ceph NIC uses; see §4.1.)
-2. Verify each node has a connected route to `10.10.209.0/24` and can reach `sequoia` (209.10) over the 209 NIC.
-3. Drain/cycle the NAS workloads (plex, s3-sync, rclone) so their kubelet NFS mounts re-establish over the 209 path. Confirm via `ss`/traffic that node→sequoia uses the 209 NIC. **No 201 routing change yet, so zero risk** — this just adds a faster path.
+**Phase A — add node 209 interfaces (no routing change yet): ✅ DONE 2026-05-29** (runbook: `docs/runbooks/bgp-phase-a-209-node-interface.md`)
+1. Added a vNIC `bridge=vsan` (SDN VNet, tag 209, MTU 9000) to w1–w4 + gpu1 via `infra/terraform/proxmox/k8s-vms`; netplan brings up `enp6s23`. IPs came via **DHCP as `10.10.209.100–.104`** (not the `.5x` originally planned). (Pure SDN — NOT the raw vmbr0+tag the Ceph NIC uses; see §4.1.)
+2. ✅ Verified: every node has a connected route to `10.10.209.0/24`; `ip route get 10.10.209.10` egresses `enp6s23`.
+3. NAS workloads re-pathed over 209 on reschedule. **CORRECTION — this was NOT "zero risk":** the directly-connected 209 route changed the NFS *source IP*, and the UNAS exports a per-host allow-list of the **201** IPs → mounts hit `access denied by server` until the five 209 IPs were added to all 9 UNAS NFS shares (UI; not IaC; re-apply on rebuild). Lesson: a new network path is *not* free when a downstream server authorizes by source IP. See the runbook banner.
 
 **Phase B — move Servers/201 to UDM-routed:**
 > **IaC note (verified 2026-05-29):** the static L3 routes (AWS + WG) ARE codified in `infra/terraform/unifi/routes.tf` (6/6, zero drift). BUT the per-VLAN routing *assignment* (`gateway_type` switch↔default) is NOT modeled by the paultyng `unifi_network` provider — same gap class as zones/firewall/ACLs. So this Phase-B switch→UDM change is a **UI / v2-API + documented** change, not a `terraform apply`. Capture the before/after in the doc + verify routes.tf next-hops (10.255.253.3 / 10.10.201.20) still resolve after the move.

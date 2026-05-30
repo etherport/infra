@@ -181,7 +181,8 @@ Restore procedures + RTO/RPO targets:
 | Layer | Detail |
 |---|---|
 | Node VLAN | 201 (10.10.201.0/24) — kubelet, API, pod underlay |
-| Storage VLAN | 210 (10.10.210.0/24) — Ceph mon at 10.10.210.41, MTU 9000, K8s nodes via `enp6s22` |
+| Storage VLAN (Ceph) | 210 (10.10.210.0/24) — Ceph mon at 10.10.210.41, MTU 9000, K8s nodes via `enp6s22` |
+| Storage VLAN (NAS NFS) | 209 (10.10.209.0/24) — kubelet NFS to the UNAS (`sequoia` 10.10.209.10), MTU 9000, on NAS-workload nodes w1–w4 + gpu1 via `enp6s23` (DHCP .100–.104). Added 2026-05-29 (BGP Phase A) to keep NFS on the switch fabric ahead of 201→UDM-routed. **UNAS NFS export ACL must list these 209 IPs** (UI-managed, not IaC). |
 | Multus parents | 202 (client), 204 (IoT), 205 (security) — `enp6s19/20/21` per K8s node, NADs in `platform/kubernetes/multus/` |
 | Proxmox SDN | Per-VLAN bridges: `servers`(201), `clients`(202), `iot`(204), `security`(205), `vsan`(209), `guest`(206), `unifi`(212). Standalone VMs migrated 2026-05-18. K8s VM migration in `infra/terraform/proxmox/sdn/` |
 | LoadBalancer | MetalLB L2, VIP pool 10.10.201.70-90 |
