@@ -101,6 +101,20 @@
                   use-dns: no
                 dhcp6: no
                 mtu: 9000
+              enp6s23:
+                # NAS/storage NIC (VLAN 209, net5 — M18 BGP Phase A).
+                # MUST be declared (optional) BEFORE the NIC is added to the
+                # VM, else networkd-wait-online hangs boot on the unconfigured
+                # interface (2026-05-29 incident — node hung + PVE lock wedge).
+                # Same dhcp4-overrides rationale as enp6s22: L2-only to the
+                # UNAS (sequoia 10.10.209.10), never default routing / DNS.
+                optional: true
+                dhcp4: yes
+                dhcp4-overrides:
+                  use-routes: no
+                  use-dns: no
+                dhcp6: no
+                mtu: 9000
       register: vlan_netplan
 
     - name: Apply netplan if VLAN config changed
