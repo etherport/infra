@@ -100,6 +100,19 @@
           - "10.255.255.0/29"
           - "10.254.0.0/24"
 
+      # ----------------------------------------------------------------
+      # Trusted/Management zone split (M56, 2026-05-31). Groups for the
+      # cross-zone allows that other zones need into Trusted.
+      # ----------------------------------------------------------------
+      - name: DNS-Servers
+        # The two on-net resolvers, both in Servers/201 → Trusted.
+        members:
+          - "10.10.201.5"    # K8s Technitium primary VIP (MetalLB)
+          - "10.10.201.6"    # dns-fallback standalone VM (Technitium secondary)
+      - name: WireGuard-VIP
+        members:
+          - "10.10.201.20"   # Keepalived WG endpoint VIP (Servers/201 → Trusted)
+
     # Reuse the syslog-port-514 port group that the legacy paultyng/unifi
     # attempt left behind (id `6a138b2e92b8269077a388a3` in our test).
     # If it doesn't exist (fresh rebuild), this task creates it.
@@ -116,6 +129,10 @@
         # 8080 (inform), 3478 (STUN). Used by APs/switches/phones
         # to register with the UDM controller.
         members: ["8080", "3478"]
+
+      - name: WireGuard-Ports
+        # Keepalived/WG listen ports behind the External→Trusted port-fwd.
+        members: ["9820", "9821"]
 
     # ---- Firewall policies (zone-based v2 API) ----
     # Each policy must specify:
@@ -149,6 +166,82 @@
           zone_name: Internal
           ip_group_name: syslog-receiver-alloy
           port_group_name: syslog-port-514
+
+      # ===================================================================
+      # M56 — Trusted / Management zone split (2026-05-31).
+      # Target: Trusted = {Servers/201, LoadBalancers/215}; Management = {200};
+      # Internal keeps Default/199. These policies are created while 200/201/215
+      # are STILL in Internal — they're inert until the networks are moved into
+      # the new zones (UI), so applying this is safe/additive.
+      #
+      # Design: Trusted is the trusted workload tier (broad egress, mirrors
+      # Internal's current posture so the move is behaviour-neutral for
+      # workloads). Management is CONTAINED — it may only reach Trusted for DNS
+      # + syslog and the gateway/Internet; it is default-denied to IoT / Guest /
+      # Security / etc. The cluster manages the infra, so Trusted→Management is
+      # open (poller, gh-runner, backup, cert-sync) while Management→Trusted is
+      # tight. Stateful returns are auto-created by UniFi (create_allow_respond).
+      # ===================================================================
+
+      # ---- Trusted egress ----
+      - { name: "Trusted → External (all)",       action: ALLOW, protocol: all, index: 12000, enabled: true, logging: false, source: { zone_name: Trusted }, destination: { zone_name: External } }
+      - { name: "Trusted → Gateway (all)",        action: ALLOW, protocol: all, index: 12010, enabled: true, logging: false, source: { zone_name: Trusted }, destination: { zone_name: Gateway } }
+      - { name: "Trusted → Vpn (all)",            action: ALLOW, protocol: all, index: 12020, enabled: true, logging: false, source: { zone_name: Trusted }, destination: { zone_name: Vpn } }
+      - { name: "Trusted → Internal (all)",       action: ALLOW, protocol: all, index: 12030, enabled: true, logging: false, source: { zone_name: Trusted }, destination: { zone_name: Internal } }
+      - { name: "Trusted → Infrastructure (all)", action: ALLOW, protocol: all, index: 12040, enabled: true, logging: false, source: { zone_name: Trusted }, destination: { zone_name: Infrastructure } }
+      - { name: "Trusted → Management (all)",      action: ALLOW, protocol: all, index: 12050, enabled: true, logging: false, source: { zone_name: Trusted }, destination: { zone_name: Management } }
+
+      # ---- Trusted ingress ----
+      - { name: "Internal → Trusted (all)",       action: ALLOW, protocol: all, index: 12070, enabled: true, logging: false, source: { zone_name: Internal },       destination: { zone_name: Trusted } }
+      - { name: "Gateway → Trusted (all)",        action: ALLOW, protocol: all, index: 12080, enabled: true, logging: false, source: { zone_name: Gateway },        destination: { zone_name: Trusted } }
+      - { name: "Vpn → Trusted (all)",            action: ALLOW, protocol: all, index: 12090, enabled: true, logging: false, source: { zone_name: Vpn },            destination: { zone_name: Trusted } }
+      - { name: "Infrastructure → Trusted (all)", action: ALLOW, protocol: all, index: 12100, enabled: true, logging: false, source: { zone_name: Infrastructure }, destination: { zone_name: Trusted } }
+      - name: "IoT → Trusted (DNS)"
+        action: ALLOW
+        protocol: tcp_udp
+        index: 12110
+        enabled: true
+        logging: false
+        source: { zone_name: IoT }
+        destination: { zone_name: Trusted, ip_group_name: DNS-Servers }
+      - name: "Hotspot → Trusted (DNS)"
+        action: ALLOW
+        protocol: tcp_udp
+        index: 12120
+        enabled: true
+        logging: false
+        source: { zone_name: Hotspot }
+        destination: { zone_name: Trusted, ip_group_name: DNS-Servers }
+      - name: "External → Trusted (WireGuard)"
+        action: ALLOW
+        protocol: udp
+        index: 12130
+        enabled: true
+        logging: false
+        source: { zone_name: External }
+        destination: { zone_name: Trusted, ip_group_name: WireGuard-VIP, port_group_name: WireGuard-Ports }
+
+      # ---- Management (contained) ----
+      - { name: "Management → External (all)", action: ALLOW, protocol: all, index: 12200, enabled: true, logging: false, source: { zone_name: Management }, destination: { zone_name: External } }
+      - { name: "Management → Gateway (all)",  action: ALLOW, protocol: all, index: 12210, enabled: true, logging: false, source: { zone_name: Management }, destination: { zone_name: Gateway } }
+      - { name: "Vpn → Management (all)",       action: ALLOW, protocol: all, index: 12240, enabled: true, logging: false, source: { zone_name: Vpn },        destination: { zone_name: Management } }
+      - { name: "Gateway → Management (all)",   action: ALLOW, protocol: all, index: 12250, enabled: true, logging: false, source: { zone_name: Gateway },    destination: { zone_name: Management } }
+      - name: "Management → Trusted (DNS)"
+        action: ALLOW
+        protocol: tcp_udp
+        index: 12220
+        enabled: true
+        logging: false
+        source: { zone_name: Management }
+        destination: { zone_name: Trusted, ip_group_name: DNS-Servers }
+      - name: "Management → Trusted (syslog → Alloy)"
+        action: ALLOW
+        protocol: udp
+        index: 12230
+        enabled: true
+        logging: false
+        source: { zone_name: Management }
+        destination: { zone_name: Trusted, ip_group_name: syslog-receiver-alloy, port_group_name: syslog-port-514 }
 
   pre_tasks:
     # Credentials: prefer env vars (CI — UDM_USERNAME/UDM_PASSWORD from
