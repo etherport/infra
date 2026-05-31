@@ -184,8 +184,9 @@
       # ===================================================================
 
       # ---- Trusted egress ----
-      - { name: "Trusted → External (all)",       action: ALLOW, protocol: all, index: 12000, enabled: true, logging: false, source: { zone_name: Trusted }, destination: { zone_name: External } }
-      - { name: "Trusted → Gateway (all)",        action: ALLOW, protocol: all, index: 12010, enabled: true, logging: false, source: { zone_name: Trusted }, destination: { zone_name: Gateway } }
+      # External/Gateway dests reject create_allow_respond (egress uses stateful conntrack).
+      - { name: "Trusted → External (all)",       action: ALLOW, protocol: all, index: 12000, enabled: true, logging: false, create_allow_respond: false, source: { zone_name: Trusted }, destination: { zone_name: External } }
+      - { name: "Trusted → Gateway (all)",        action: ALLOW, protocol: all, index: 12010, enabled: true, logging: false, create_allow_respond: false, source: { zone_name: Trusted }, destination: { zone_name: Gateway } }
       - { name: "Trusted → Vpn (all)",            action: ALLOW, protocol: all, index: 12020, enabled: true, logging: false, source: { zone_name: Trusted }, destination: { zone_name: Vpn } }
       - { name: "Trusted → Internal (all)",       action: ALLOW, protocol: all, index: 12030, enabled: true, logging: false, source: { zone_name: Trusted }, destination: { zone_name: Internal } }
       - { name: "Trusted → Infrastructure (all)", action: ALLOW, protocol: all, index: 12040, enabled: true, logging: false, source: { zone_name: Trusted }, destination: { zone_name: Infrastructure } }
@@ -222,8 +223,8 @@
         destination: { zone_name: Trusted, ip_group_name: WireGuard-VIP, port_group_name: WireGuard-Ports }
 
       # ---- Management (contained) ----
-      - { name: "Management → External (all)", action: ALLOW, protocol: all, index: 12200, enabled: true, logging: false, source: { zone_name: Management }, destination: { zone_name: External } }
-      - { name: "Management → Gateway (all)",  action: ALLOW, protocol: all, index: 12210, enabled: true, logging: false, source: { zone_name: Management }, destination: { zone_name: Gateway } }
+      - { name: "Management → External (all)", action: ALLOW, protocol: all, index: 12200, enabled: true, logging: false, create_allow_respond: false, source: { zone_name: Management }, destination: { zone_name: External } }
+      - { name: "Management → Gateway (all)",  action: ALLOW, protocol: all, index: 12210, enabled: true, logging: false, create_allow_respond: false, source: { zone_name: Management }, destination: { zone_name: Gateway } }
       - { name: "Vpn → Management (all)",       action: ALLOW, protocol: all, index: 12240, enabled: true, logging: false, source: { zone_name: Vpn },        destination: { zone_name: Management } }
       - { name: "Gateway → Management (all)",   action: ALLOW, protocol: all, index: 12250, enabled: true, logging: false, source: { zone_name: Gateway },    destination: { zone_name: Management } }
       - name: "Management → Trusted (DNS)"
@@ -500,7 +501,7 @@
               "index": pol.index,
               "connection_state_type": "ALL",
               "connection_states": [],
-              "create_allow_respond": true,
+              "create_allow_respond": pol.create_allow_respond | default(true),
               "icmp_typename": "ANY",
               "icmp_v6_typename": "ANY",
               "ip_version": "BOTH",
