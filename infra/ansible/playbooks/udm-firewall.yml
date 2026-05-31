@@ -183,6 +183,16 @@
       # tight. Stateful returns are auto-created by UniFi (create_allow_respond).
       # ===================================================================
 
+      # ---- Trusted intra-zone (REQUIRED) ----
+      # Custom zones default intra-zone to BLOCK (unlike the built-in Internal,
+      # which has a predefined Allow-All). Trusted spans TWO networks (201+215)
+      # AND the cluster reaches the AWS subnets via a UDM static route whose
+      # next-hop (10.10.201.20) is back inside 201 — the UDM evaluates that
+      # hairpin as Trusted→Trusted. Without this allow, 201↔215 routing and the
+      # cluster→AWS (WG VIP) path are dropped. (Root cause of the 2026-05-31
+      # dns-aws/vpn-aws TargetDown right after the zone move.)
+      - { name: "Trusted → Trusted (intra-zone)", action: ALLOW, protocol: all, index: 11990, enabled: true, logging: false, source: { zone_name: Trusted }, destination: { zone_name: Trusted } }
+
       # ---- Trusted egress ----
       # External/Gateway dests reject create_allow_respond (egress uses stateful conntrack).
       - { name: "Trusted → External (all)",       action: ALLOW, protocol: all, index: 12000, enabled: true, logging: false, create_allow_respond: false, source: { zone_name: Trusted }, destination: { zone_name: External } }
