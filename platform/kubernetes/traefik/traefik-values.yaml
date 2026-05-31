@@ -16,14 +16,10 @@ ports:
 service:
   enabled: true
   type: LoadBalancer
-  # LB-VLAN migration (M59): dual-homed 201.70 + 215.70 during the DNS cutover;
-  # drop 201.70 after the wind.etherport.net A-records (TTL 3600) age out.
-  # NOTE: reference-only — operative values are inline in
-  # clusters/wind/helm-releases/traefik.yaml.
-  annotations:
-    metallb.universe.tf/loadBalancerIPs: 10.10.201.70,10.10.215.70
+  annotations: {}
   labels: {}
-  spec: {}
+  spec:
+    loadBalancerIP: 10.10.201.70
 
 ingressClass:
   enabled: true
