@@ -70,10 +70,15 @@ metadata:
   namespace: metallb-system
 spec:
   addresses:
+    # Dedicated VLAN with NO hosts — the whole /24 is available for VIPs, so the
+    # pool is wide (the old .70-.90 squeeze was a VLAN-201 artifact: that subnet
+    # shared node IPs/.50-56, DNS/.5-6, WG/.20, DHCP/.100-254). Reserve only
+    # .1 (UDM SVI) + low/high headroom. Existing services keep their last octet
+    # on migration (.201.70→.215.70, .73→.73, …) for muscle memory.
+    - 10.10.215.10-10.10.215.250
     # NOTE: DNS deliberately NOT here. 10.10.201.5 (dns/technitium) is a
     # network-wide contract (dhcp_dns on every VLAN + VM cloud-init) and stays
     # on 201 permanently — decision 2026-05-31. Only non-DNS VIPs migrate here.
-    - 10.10.215.70-10.10.215.90   # service VIPs (traefik, alloy-syslog, technitium-N …)
   autoAssign: false               # opt-in only: metallb.universe.tf/address-pool: lb-vlan
   avoidBuggyIPs: false
 

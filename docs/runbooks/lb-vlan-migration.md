@@ -24,7 +24,7 @@ range. **No node re-IP, no new NICs, no L2 on 215.**
 | Artifact | What it does |
 |---|---|
 | `infra/terraform/unifi/networks.tf` → `unifi_network.loadbalancers` | Creates VLAN 215 `LoadBalancers` (10.10.215.0/24, DHCP off). `terraform apply` via the `terraform-unifi` workflow. |
-| `platform/kubernetes/metallb/metallb-wind.yaml` → pool `lb-vlan` + `lb-vlan-bgp` | Opt-in pool `.70-.90` (DNS `.5` deliberately excluded — stays on 201), `autoAssign: false`, advertised BGP-only. Allocates/advertises **nothing** until a service opts in. |
+| `platform/kubernetes/metallb/metallb-wind.yaml` → pool `lb-vlan` + `lb-vlan-bgp` | Opt-in pool `10.10.215.10-.250` (whole /24 is free — no hosts; DNS `.5` excluded, stays on 201), `autoAssign: false`, advertised BGP-only. Allocates/advertises **nothing** until a service opts in. |
 
 After the TF apply + Flux reconcile, **nothing has moved** — every existing VIP
 is still on 201. The cutover below is per-service and reversible.
