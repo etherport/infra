@@ -122,7 +122,8 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 ### ⏳ M55. Add UniFi telemetry exporter (unifi-poller) for UDM/network metrics
 - **Source:** 2026-05-30. UDM observability is logs-complete but metrics-thin. Syslog → Alloy → Loki works (UDM-Pro-Max actively shipping, verified). But Prometheus has NO full UniFi telemetry — only `probe_success` (blackbox reachability, fixed 2026-05-30) + `unifi_backup_*`. Missing: client counts, throughput, WAN, port/PoE, AP/client RSSI, per-device health.
 - **Scope:** deploy unpoller (unifi-poller) as a Deployment scraping the UDM controller API → Prometheus `ServiceMonitor` (must carry label `release: monitoring`, per the probeSelector lesson) → Grafana dashboards. Needs a read-only UniFi local account + creds (SOPS secret). Keep the UI/API access internal (Tailscale-only constraint).
-- **Effort:** M (exporter + creds + ServiceMonitor + dashboards).
+- ✅ **IaC staged 2026-05-31** (`376af86`): full `platform/kubernetes/unifi-poller/` (Deployment v2.15.3 + Service + ServiceMonitor `release: monitoring`), inert/unwired so no CrashLoop noise. **GATED on operator:** create UniFi View-Only local account → encrypt `01-secret.sops.yaml` → uncomment the dir in `clusters/wind/kustomization.yaml` + the secret in its kustomization. 3-step runbook + dashboard IDs in `platform/kubernetes/unifi-poller/README.md`.
+- **Effort:** S remaining (account + secret + uncomment + import dashboards).
 
 ### ⏳ M56. Migrate Servers/201 to a dedicated `Trusted` UDM zone (from Internal)
 - **Source:** 2026-05-30, during BGP Phase B. 201 was placed in **Internal** for the gateway flip (minimal blast radius). A dedicated `Trusted` zone is the better end-state now that 201 is UDM-routed — intentional least-privilege vs Internal's allow-all.
