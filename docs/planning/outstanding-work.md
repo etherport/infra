@@ -27,7 +27,7 @@ personal-web CI all landed this session (see "Recently completed" below).
 
 | # | Item | State | Action |
 |---|---|---|---|
-| 1 | **M18/M36 MetalLB BGP** ← *active target* | MetalLB L2 mode; no BGPPeer/BGPAdvertisement; UDM `.5`/`.71` IP-conflict alerts. **Phase A+B ✅** | **Phase A DONE 2026-05-29** (209 NIC on w1-4+gpu1; UNAS export ACL extended). **Phase B DONE 2026-05-30** (Servers/201 → UDM-routed, Internal zone; verified — NAS stays on 209 NIC, DNS/ingress/egress/cross-VLAN all green; see runbook). Remaining: **Phase C (BGP parallel)** → D (cutover). Trusted-zone for 201 deferred → M56. Properly fixes M36 (no L2 ARP ownership = no conflict) |
+| 1 | **M18/M36 MetalLB BGP** ← *active target* | L2+BGP both live (parallel); UDM `.5`/`.71` IP-conflict alerts persist until L2 removed. **Phase A+B+C ✅** | **A** (209 NICs) + **B** (201→UDM-routed) done 2026-05-29/30. **Phase C DONE 2026-05-31** (`68ff6a8` + UDM UI FRR): 8/8 speakers Established to UDM (ASN 64513↔64512), all 5 VIP /32s installed via BGP/ECMP, parallel with L2 — verified in UDM UI; runbook `docs/runbooks/bgp-phase-c-udm-metallb.md`. UDM BGP not API-codifiable (no endpoint) — durable via git-stored FRR config + controller backup. **Remaining: Phase D** — remove L2Advertisement → M36 resolved. Trusted-zone for 201 deferred → M56. |
 | 2 | **M15-M17 Twilio Talk** | 911 addr / orphan DID / SIP UDP→TLS+sRTP | M15 (911) safety-first; M16 release DID; M17 encryption |
 | 3 | **M53 CF token scoping** | account-scoped token shared infra↔personal-web | Mint zone-scoped tokens; also unblocks M54 |
 | 4 | **M54 smithforsb redirect IaC** | CF Single Redirect is manual in dashboard | Codify in `personal-web/cloudflare-dns/smithforsb.tf` once M53 lands |
