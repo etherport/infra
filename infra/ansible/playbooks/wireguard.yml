@@ -457,6 +457,9 @@
           case $STATE in
               MASTER)
                   logger -t wg-failover "Becoming MASTER - starting WireGuard interfaces"
+                  # Clear any lingering 'failed' state from a prior interrupted
+                  # start so this start is clean (see BACKUP/FAULT note below).
+                  systemctl reset-failed wg-quick@wg0 wg-quick@wg1 2>/dev/null || true
                   systemctl start wg-quick@wg0
                   systemctl start wg-quick@wg1
                   sleep 2
@@ -467,6 +470,13 @@
                   logger -t wg-failover "Becoming BACKUP/FAULT - stopping WireGuard interfaces"
                   systemctl stop wg-quick@wg1 2>/dev/null || true
                   systemctl stop wg-quick@wg0 2>/dev/null || true
+                  # A near-simultaneous MASTER->BACKUP/FAULT flap can have this stop
+                  # SIGTERM an in-flight wg-quick start, leaving the unit 'failed' —
+                  # which lingers (and trips the systemd-failed alert) because a
+                  # BACKUP never re-starts it. For a BACKUP the desired state is
+                  # simply inactive, so clear the failed flag. (Root cause of the
+                  # 2026-05-31 wg-quick@wg0 stuck-failed alert.)
+                  systemctl reset-failed wg-quick@wg0 wg-quick@wg1 2>/dev/null || true
                   ;;
           esac
       when: inventory_hostname == 'vpn-local'
