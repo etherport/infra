@@ -454,3 +454,53 @@ import {
   to = unifi_network.inter_vlan_routing
   id = "67683e2bd9b8db69dd02b5b2"
 }
+
+
+# =============================================================================
+# LoadBalancers — dedicated VLAN for MetalLB service VIPs (#9 / tracker M59).
+#
+# Rationale: now that MetalLB advertises VIPs to the UDM over eBGP (no L2/ARP),
+# the VIP pool no longer needs to live in the Servers/201 host subnet. Carving
+# the VIPs onto their own VLAN cleanly segments service front-ends from the
+# K8s host network and lets them sit in their own firewall zone.
+#
+# Routed-only, no hosts, DHCP OFF: the K8s nodes stay on VLAN 201 and advertise
+# 10.10.215.x/32 VIPs via BGP with their 201 IPs as next-hop. The UDM installs
+# those /32s (more-specific than this connected /24), so VIP traffic routes to
+# the nodes; the .1 SVI exists only to (a) define the subnet for zone matching
+# and (b) anchor the range. No DHCP — VIPs are assigned by MetalLB, not leases.
+#
+# NEW resource (no import block) — `terraform apply` creates it on the UDM.
+# Zone assignment is deferred: this network lands in the default `Internal`
+# zone on creation; moving it to a dedicated/least-privilege zone is sequenced
+# with the M56 zone work (codified via the v2-API udm-firewall.yml pattern,
+# since the paultyng provider does not model zone membership).
+# =============================================================================
+resource "unifi_network" "loadbalancers" {
+  name    = "LoadBalancers"
+  purpose = "corporate"
+  vlan_id = 215
+  subnet  = "10.10.215.0/24"
+
+  dhcp_enabled = false
+  # Provider default is 86400; with DHCP disabled the UDM stores 0. Match live.
+  dhcp_lease  = 0
+  domain_name = "wind.etherport.net"
+
+  # Explicit defaults — a UI drift then shows up as a plan diff.
+  network_group                = "LAN"
+  igmp_snooping                = false
+  multicast_dns                = false
+  intra_network_access_enabled = true
+  internet_access_enabled      = true
+
+  lifecycle {
+    ignore_changes = [
+      dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
+      dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
+      ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
+      ipv6_ra_preferred_lifetime, ipv6_ra_priority, ipv6_ra_valid_lifetime,
+      ipv6_static_subnet, wan_dhcp_v6_pd_size,
+    ]
+  }
+}

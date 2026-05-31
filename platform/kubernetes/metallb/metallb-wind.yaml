@@ -50,3 +50,38 @@ spec:
   ipAddressPools:
     - primary
   aggregationLength: 32   # advertise each VIP as a /32
+
+# =============================================================================
+# LoadBalancers VLAN pool (#9 / tracker M59) — VIPs on the dedicated
+# 10.10.215.0/24 `LoadBalancers` VLAN (infra/terraform/unifi: unifi_network
+# .loadbalancers). autoAssign:false ⇒ OPT-IN per service: every existing VIP
+# stays on `primary` (201) until it is migrated deliberately, because each
+# carries downstream references (DNS A-records, UDM/switch syslog targets,
+# DHCP dhcp_dns) that must be cut over with the IP. Advertised BGP-only, the
+# same as `primary`. Until a service opts in, MetalLB allocates nothing from
+# this pool, so nothing is advertised — this block is safe/additive.
+#   Staged migration runbook: docs/runbooks/lb-vlan-migration.md
+# =============================================================================
+---
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: lb-vlan
+  namespace: metallb-system
+spec:
+  addresses:
+    - 10.10.215.5/32              # reserved for the Technitium DNS VIP (migrated LAST)
+    - 10.10.215.70-10.10.215.90   # service VIPs (traefik, alloy-syslog, technitium-N …)
+  autoAssign: false               # opt-in only: metallb.universe.tf/address-pool: lb-vlan
+  avoidBuggyIPs: false
+
+---
+apiVersion: metallb.io/v1beta1
+kind: BGPAdvertisement
+metadata:
+  name: lb-vlan-bgp
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - lb-vlan
+  aggregationLength: 32   # advertise each VIP as a /32 (same as primary-bgp)
