@@ -204,7 +204,9 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Effort when unblocked:** ~1 day to write the playbook.
 
 ### ⏳ M59. Dedicated UDM-routed LB VLAN for MetalLB VIPs (segmentation)
-- **Source:** 2026-05-31 networking review (#9). Now that MetalLB is BGP-only, move the VIP pool off Servers/201 onto a dedicated `lb` VLAN — cleaner segmentation + removes the intra-201 ARP nuance. **In progress:** VLAN + BGP-advertisement IaC being created; the VIP migration (esp. re-IP of DNS `.5`, referenced widely) is the careful staged step, not a blind cutover.
+- **Source:** 2026-05-31 networking review (#9). Now that MetalLB is BGP-only, move the VIP pool off Servers/201 onto a dedicated VLAN — cleaner segmentation, no intra-201 ARP nuance.
+- ✅ **Foundation landed 2026-05-31** (`8d18aad`): `unifi_network.loadbalancers` VLAN 215 / 10.10.215.0/24 created on the UDM (TF applied via CI); MetalLB `lb-vlan` opt-in pool (`autoAssign:false`, 10.10.215.5 + .70-.90) + `lb-vlan-bgp` advertisement deployed. Inert until a service opts in — no VIP has moved.
+- ⏳ **Remaining — staged per-service cutover** (`docs/runbooks/lb-vlan-migration.md`), ordered by blast radius: traefik `.70` → technitium-0/1 `.71/.72` → alloy-syslog `.73` (≈16 syslog devices) → **DNS `.5` LAST, gated on operator** (in `dhcp_dns` on every VLAN + 24h leases). Each cutover re-points live traffic + downstream refs (DNS zone records, syslog targets), so best done watched, not blind-while-away.
 
 ## LOW
 
