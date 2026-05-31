@@ -24,7 +24,7 @@ range. **No node re-IP, no new NICs, no L2 on 215.**
 | Artifact | What it does |
 |---|---|
 | `infra/terraform/unifi/networks.tf` → `unifi_network.loadbalancers` | Creates VLAN 215 `LoadBalancers` (10.10.215.0/24, DHCP off). `terraform apply` via the `terraform-unifi` workflow. |
-| `platform/kubernetes/metallb/metallb-wind.yaml` → pool `lb-vlan` + `lb-vlan-bgp` | Opt-in pool `10.10.215.5` + `.70-.90`, `autoAssign: false`, advertised BGP-only. Allocates/advertises **nothing** until a service opts in. |
+| `platform/kubernetes/metallb/metallb-wind.yaml` → pool `lb-vlan` + `lb-vlan-bgp` | Opt-in pool `.70-.90` (DNS `.5` deliberately excluded — stays on 201), `autoAssign: false`, advertised BGP-only. Allocates/advertises **nothing** until a service opts in. |
 
 After the TF apply + Flux reconcile, **nothing has moved** — every existing VIP
 is still on 201. The cutover below is per-service and reversible.
@@ -80,23 +80,25 @@ reconfiguring **every syslog source**.
   the old `.73` answering until all sources are moved (or dual-advertise briefly).
 - **Verify:** Loki shows fresh lines per `host` label from each source after cutover.
 
-### 4. `dns/technitium` (primary DNS VIP) — `.5 → 10.10.215.5` (HIGHEST — gate on operator)
-**Recommendation: do NOT move this autonomously. Either leave `.5` on 201
-permanently, or migrate only with the operator watching.** Rationale:
-- `10.10.201.5` is in `dhcp_dns` on **every** VLAN (`networks.tf`, 7 networks) and
-  in `proxmox/standalone-vms/main.tf`. Every DHCP client caches it for the lease
-  (`dhcp_lease = 86400` → up to 24h). A re-IP means clients keep querying the old
-  `.5` until lease renewal, so the old `.5` must keep answering across that window.
-- Safe path if pursued: (a) bring up `.215.5` alongside (pool allows both), point
-  Technitium to serve on both, (b) update `dhcp_dns` + VM DNS to `.215.5`, (c) wait
-  ≥ one full lease cycle (24h) with **both** live, (d) only then withdraw `.5`.
-- The `.6` secondary (10.10.201.6) provides resilience during any DNS change — do
-  not move `.5` and `.6` in the same window.
-- `lb-vlan` reserves `10.10.215.5` so this stays an option without re-planning.
+### 4. `dns/technitium` (primary DNS VIP) — **STAYS on `10.10.201.5` permanently**
+**Decision 2026-05-31: DNS does NOT migrate.** `10.10.201.5` is a network-wide
+contract — it's in `dhcp_dns` on every VLAN (`networks.tf`, 7 networks), in
+`proxmox/standalone-vms/main.tf` VM cloud-init, and cached in every client's DHCP
+lease (`dhcp_lease = 86400`). Re-IPing it buys negligible segmentation (DNS
+legitimately lives near the hosts) for real LAN-wide-outage risk. So:
+- `dns/technitium` keeps `loadBalancerIP: 10.10.201.5` from the `primary` pool —
+  advertised BGP-only, unchanged. **Leave `platform/kubernetes/technitium/03-service.yaml` as-is.**
+- The `.6` secondary (`dns-fallback` standalone VM, vmid 1001) and AWS resolver are
+  likewise untouched.
+- `lb-vlan` intentionally does **not** include `10.10.215.5` (see the pool comment).
+- A forwarder/proxy on `.5` was considered and rejected: extra hop + SPOF in the
+  DNS path, and `.5` stays reachable regardless, so DNS would not be truly
+  segmented anyway.
 
 ## Post-migration cleanup (after all desired services moved)
-- Shrink/retire the `primary` pool range (`platform/kubernetes/metallb/metallb-wind.yaml`)
-  to only what remains on 201 (likely just the DNS VIPs, if those stay).
+- Shrink the `primary` pool range to just the permanent DNS VIP
+  (`platform/kubernetes/metallb/metallb-wind.yaml` → `10.10.201.5/32`); the
+  `.70-.90` range moves to `lb-vlan` once those services migrate.
 - Update `README.md` (LoadBalancer/Ingress rows), `addons.yml` pool comment, and
   `platform/kubernetes/technitium/README.md` IP tables.
 - Assign VLAN 215 to its firewall zone (pairs with **M56**, via the v2-API

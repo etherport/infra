@@ -70,7 +70,9 @@ metadata:
   namespace: metallb-system
 spec:
   addresses:
-    - 10.10.215.5/32              # reserved for the Technitium DNS VIP (migrated LAST)
+    # NOTE: DNS deliberately NOT here. 10.10.201.5 (dns/technitium) is a
+    # network-wide contract (dhcp_dns on every VLAN + VM cloud-init) and stays
+    # on 201 permanently — decision 2026-05-31. Only non-DNS VIPs migrate here.
     - 10.10.215.70-10.10.215.90   # service VIPs (traefik, alloy-syslog, technitium-N …)
   autoAssign: false               # opt-in only: metallb.universe.tf/address-pool: lb-vlan
   avoidBuggyIPs: false

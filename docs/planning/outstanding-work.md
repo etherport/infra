@@ -207,7 +207,8 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 ### ⏳ M59. Dedicated UDM-routed LB VLAN for MetalLB VIPs (segmentation)
 - **Source:** 2026-05-31 networking review (#9). Now that MetalLB is BGP-only, move the VIP pool off Servers/201 onto a dedicated VLAN — cleaner segmentation, no intra-201 ARP nuance.
 - ✅ **Foundation landed 2026-05-31** (`8d18aad`): `unifi_network.loadbalancers` VLAN 215 / 10.10.215.0/24 created on the UDM (TF applied via CI); MetalLB `lb-vlan` opt-in pool (`autoAssign:false`, 10.10.215.5 + .70-.90) + `lb-vlan-bgp` advertisement deployed. Inert until a service opts in — no VIP has moved.
-- ⏳ **Remaining — staged per-service cutover** (`docs/runbooks/lb-vlan-migration.md`), ordered by blast radius: traefik `.70` → technitium-0/1 `.71/.72` → alloy-syslog `.73` (≈16 syslog devices) → **DNS `.5` LAST, gated on operator** (in `dhcp_dns` on every VLAN + 24h leases). Each cutover re-points live traffic + downstream refs (DNS zone records, syslog targets), so best done watched, not blind-while-away.
+- ✅ **DNS decision 2026-05-31:** `10.10.201.5` (dns/technitium) **stays on 201 permanently** — it's a network-wide contract (`dhcp_dns` on every VLAN + VM cloud-init); re-IP risk ≫ segmentation benefit. `lb-vlan` excludes `.5`; no forwarder (rejected: extra hop/SPOF, .5 stays anyway).
+- ⏳ **Remaining — staged per-service cutover** (`docs/runbooks/lb-vlan-migration.md`), ordered by blast radius: traefik `.70` → technitium-0/1 `.71/.72` → alloy-syslog `.73` (≈16 syslog devices). Each re-points live traffic + downstream refs (DNS zone records, syslog targets), so best done watched, not blind-while-away.
 
 ## LOW
 
