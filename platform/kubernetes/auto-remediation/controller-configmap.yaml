@@ -231,7 +231,7 @@ data:
     ADVISOR_SSH_HOSTS = {
         'dns-aws':      '10.10.100.5',
         'dns-fallback': '10.10.201.6',
-        'vpn-local':    '10.10.201.5',
+        'vpn-local':    '10.10.201.15',
         'vpn-aws':      '10.10.100.10',
     }
     ADVISOR_SSH_USER = 'advisor-remediation'
