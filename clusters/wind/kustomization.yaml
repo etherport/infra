@@ -61,10 +61,9 @@ resources:
   - ../../platform/kubernetes/monitoring
   # unifi-poller (unpoller) — UDM/network telemetry → Prometheus (M55 / task #15).
   # STAGED but DISABLED until the operator creates a UniFi View-Only local
-  # account + encrypts the creds Secret. Uncomment the line below AND the
-  # `01-secret.sops.yaml` resource in that dir's kustomization.yaml after the
-  # finish steps in platform/kubernetes/unifi-poller/README.md.
-  # - ../../platform/kubernetes/unifi-poller
+  # account + encrypts the creds Secret. See
+  # platform/kubernetes/unifi-poller/README.md.
+  - ../../platform/kubernetes/unifi-poller
   # Utilities
   - ../../platform/kubernetes/cloudflare-ddns/base
   # Backups - S3 sync shares (all managed by Flux)

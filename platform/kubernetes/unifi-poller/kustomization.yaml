@@ -11,7 +11,7 @@ namespace: unifi-poller
 # Until then nothing here is applied, so there is no CrashLoop / TargetDown noise.
 resources:
   - 00-namespace.yaml
-  # - 01-secret.sops.yaml   # uncomment after creating + encrypting the secret
+  - 01-secret.sops.yaml
   - 02-deployment.yaml
   - 03-service.yaml
   - 04-servicemonitor.yaml
