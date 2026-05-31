@@ -126,8 +126,14 @@ def check_service(kind, namespace, target):
             f'kube_cronjob_status_last_successful_time{{namespace="{namespace}",cronjob="{target}"}}'))
         last_sched = first_value(prom_query(
             f'kube_cronjob_status_last_schedule_time{{namespace="{namespace}",cronjob="{target}"}}'))
-        now = first_value(prom_query('time()'))
-        if last_succ is None or now is None:
+        # Use the local clock for "now" — Prometheus `time()` returns a SCALAR
+        # result ([ts, "val"]), but first_value() only parses vector results
+        # (result[0]["value"][1]), so it always returned None here → EVERY
+        # cronjob was falsely reported "unknown" regardless of health. The pod
+        # clock is NTP-synced and last_successful_time is a unix epoch, so this
+        # comparison is correct.
+        now = datetime.now(timezone.utc).timestamp()
+        if last_succ is None:
             return ("unknown", None, None)
         # Treat anything within last 24h as healthy (covers daily crons).
         # For sub-daily crons this is generous but not misleading — we'd
