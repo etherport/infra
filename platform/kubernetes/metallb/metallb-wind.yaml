@@ -24,3 +24,35 @@ spec:
   # which causes L2 announcements to fail. If this happens, add:
   # interfaces:
   #   - eth0
+
+# =============================================================================
+# BGP (M18/M36 migration, Phase C — runs ALONGSIDE the L2Advertisement above).
+# Each speaker peers eBGP to the UDM (the VLAN-201 gateway since Phase B) and
+# advertises the pool VIPs as /32s. The UDM prefers the more-specific /32 when
+# the session is up and falls back to L2/ARP if it drops, so this is safe to run
+# in parallel. Phase D removes the L2Advertisement, which is what finally stops
+# the ARP/MAC ownership churn behind the M36 .5/.71 IP-conflict alerts.
+# UDM side (not modelled by the paultyng provider — applied via the UDM BGP UI):
+#   router bgp 64512 / remote-as 64513 / listen range 10.10.201.0/24.
+# =============================================================================
+---
+apiVersion: metallb.io/v1beta2
+kind: BGPPeer
+metadata:
+  name: udm
+  namespace: metallb-system
+spec:
+  myASN: 64513          # MetalLB (cluster) ASN
+  peerASN: 64512        # UDM ASN
+  peerAddress: 10.10.201.1   # UDM VLAN-201 SVI (gateway since Phase B)
+
+---
+apiVersion: metallb.io/v1beta1
+kind: BGPAdvertisement
+metadata:
+  name: primary-bgp
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - primary
+  aggregationLength: 32   # advertise each VIP as a /32
