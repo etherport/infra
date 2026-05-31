@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: unifi-poller
+# GATED on operator: this whole dir is intentionally NOT yet referenced from
+# clusters/wind/kustomization.yaml — see the commented line there. unifi-poller
+# needs a UniFi View-Only local account that must be created in the UI first.
+# Activation (see README.md):
+#   1. create the account → encrypt 01-secret.sops.yaml (from .example)
+#   2. uncomment the `01-secret.sops.yaml` resource below
+#   3. uncomment the dir line in clusters/wind/kustomization.yaml
+# Until then nothing here is applied, so there is no CrashLoop / TargetDown noise.
+resources:
+  - 00-namespace.yaml
+  # - 01-secret.sops.yaml   # uncomment after creating + encrypting the secret
+  - 02-deployment.yaml
+  - 03-service.yaml
+  - 04-servicemonitor.yaml

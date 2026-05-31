@@ -1,0 +1,83 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unifi-poller
+  namespace: unifi-poller
+  labels:
+    app: unifi-poller
+spec:
+  replicas: 1 # stateless scraper; Prometheus retains the series
+  selector:
+    matchLabels:
+      app: unifi-poller
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: unifi-poller
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: unifi-poller
+          image: ghcr.io/unpoller/unpoller:v2.15.3 # {"$imagepolicy": "flux-system:unifi-poller"}
+          ports:
+            - name: metrics
+              containerPort: 9130
+              protocol: TCP
+          env:
+            # --- UniFi controller (UDM Pro Max) ---
+            - name: UP_UNIFI_DEFAULT_URL
+              value: "https://10.10.200.1" # UDM mgmt SVI (VLAN 200)
+            - name: UP_UNIFI_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: unifi-poller-creds
+                  key: username
+            - name: UP_UNIFI_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: unifi-poller-creds
+                  key: password
+            - name: UP_UNIFI_DEFAULT_VERIFY_SSL
+              value: "false" # UDM serves its internal self-signed cert on the API
+            - name: UP_UNIFI_DEFAULT_SAVE_SITES
+              value: "true"
+            - name: UP_UNIFI_DEFAULT_SAVE_DPI
+              value: "true" # per-client DPI app/category bytes (DPI is enabled on the UDM)
+            # --- outputs: Prometheus on, InfluxDB off ---
+            - name: UP_PROMETHEUS_DISABLE
+              value: "false"
+            - name: UP_PROMETHEUS_HTTP_LISTEN
+              value: "0.0.0.0:9130"
+            - name: UP_INFLUXDB_DISABLE
+              value: "true"
+            - name: UP_POLLER_DEBUG
+              value: "false"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          livenessProbe:
+            httpGet:
+              path: /
+              port: metrics
+            initialDelaySeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /
+              port: metrics
+            initialDelaySeconds: 10
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 192Mi

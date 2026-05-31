@@ -1,0 +1,24 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: unifi-poller
+  namespace: unifi-poller
+  labels:
+    app: unifi-poller
+    # REQUIRED: kube-prometheus-stack's serviceMonitorSelector matches
+    # `release: monitoring` — without this label Prometheus ignores the SM.
+    # (Same lesson as the blackbox-exporter Probe CRs, 2026-05-30.)
+    release: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: unifi-poller
+  namespaceSelector:
+    matchNames:
+      - unifi-poller
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 60s
+      scrapeTimeout: 30s
