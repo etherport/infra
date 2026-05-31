@@ -21,7 +21,7 @@ Phase-enablement runbooks live one level up in `docs/runbooks/`:
   M45 Phase B (AWS CloudWatch log context for AWS-side alerts)
 
 Design spec:
-[`docs/planning/ai-alert-remediation-2026-05-23.md`](../../planning/ai-alert-remediation-2026-05-23.md).
+[`docs/planning/archive/ai-alert-remediation-2026-05-23.md`](../../planning/archive/ai-alert-remediation-2026-05-23.md).
 
 The legacy `SETUP.md` / `COVERAGE.md` in this directory pre-date the
 M41/M45 expansion and are kept only as thin pointers to the

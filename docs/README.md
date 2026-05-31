@@ -44,7 +44,7 @@ docs/
 | [dns-resolution-issues.md](runbooks/dns-resolution-issues.md) | DNS troubleshooting |
 | [vlan-interfaces-netplan.md](runbooks/vlan-interfaces-netplan.md) | VLAN interface configuration |
 | [cert-manager-wildcard.md](runbooks/cert-manager-wildcard.md) | Wildcard cert issuance + Traefik TLSStore |
-| [ceph-vlan-migration.md](runbooks/ceph-vlan-migration.md) | Ceph mon/OSD migration to VLAN 210 (2026-05-18, done) |
+| [ceph-vlan-migration.md](runbooks/archive/ceph-vlan-migration.md) | Ceph mon/OSD migration to VLAN 210 (2026-05-18, done) |
 | [regional-vpn-deployment.md](runbooks/regional-vpn-deployment.md) | Multi-region AWS spoke VPN deployment |
 | [grafana-admin-password.md](runbooks/grafana-admin-password.md) | Rotate/recover Grafana admin password |
 | [syslog-onboard-device.md](runbooks/syslog-onboard-device.md) | Add a new syslog-emitting device to Alloy |
@@ -54,11 +54,11 @@ docs/
 | [dependency-update-cadence.md](runbooks/dependency-update-cadence.md) | Renovate/Helm-release update cadence |
 | [auto-remediation/](runbooks/auto-remediation/) | Automated issue resolution system (legacy rule-based) |
 | **AI advisor (M41 / M45)** | |
-| [ai-advisor-phase1-enable.md](runbooks/ai-advisor-phase1-enable.md) | Enable advisory-only diagnosis email path |
-| [ai-advisor-phase2-enable.md](runbooks/ai-advisor-phase2-enable.md) | Enable approve-via-email (HMAC-signed buttons) |
-| [ai-advisor-phase3-enable.md](runbooks/ai-advisor-phase3-enable.md) | Enable opt-in autonomous execute (`ai_remediation: auto`) |
-| [ai-advisor-phase-b-cloudwatch.md](runbooks/ai-advisor-phase-b-cloudwatch.md) | M45 Phase B — IAM + creds so advisor reads AWS CW Logs |
-| [cloudwatch-to-loki-enable.md](runbooks/cloudwatch-to-loki-enable.md) | M45 Phase C — CW Logs → in-cluster Loki forwarder |
+| [ai-advisor-phase1-enable.md](runbooks/archive/ai-advisor-phase1-enable.md) | Enable advisory-only diagnosis email path |
+| [ai-advisor-phase2-enable.md](runbooks/archive/ai-advisor-phase2-enable.md) | Enable approve-via-email (HMAC-signed buttons) |
+| [ai-advisor-phase3-enable.md](runbooks/archive/ai-advisor-phase3-enable.md) | Enable opt-in autonomous execute (`ai_remediation: auto`) |
+| [ai-advisor-phase-b-cloudwatch.md](runbooks/archive/ai-advisor-phase-b-cloudwatch.md) | M45 Phase B — IAM + creds so advisor reads AWS CW Logs |
+| [cloudwatch-to-loki-enable.md](runbooks/archive/cloudwatch-to-loki-enable.md) | M45 Phase C — CW Logs → in-cluster Loki forwarder |
 | **Cloudflare cutover** | |
 | [cloudflare-access-enable.md](runbooks/cloudflare-access-enable.md) | Full-zone migration (Route53 → CF) + CF Access for approve.wind |
 
@@ -133,13 +133,13 @@ captured yet.
 | Document | Description |
 |----------|-------------|
 | [outstanding-work.md](planning/outstanding-work.md) | **Source of truth** for prioritized open work (C/H/M/L tiers) + completed index |
-| [ai-alert-remediation-2026-05-23.md](planning/ai-alert-remediation-2026-05-23.md) | AI advisor system design spec (M41) |
-| [ai-advisor-phases-2-3-scope.md](planning/ai-advisor-phases-2-3-scope.md) | M41 Phase 2/3 implementation scope |
+| [ai-alert-remediation-2026-05-23.md](planning/archive/ai-alert-remediation-2026-05-23.md) | AI advisor system design spec (M41) |
+| [ai-advisor-phases-2-3-scope.md](planning/archive/ai-advisor-phases-2-3-scope.md) | M41 Phase 2/3 implementation scope |
 | [firewall-zones-future-state.md](planning/firewall-zones-future-state.md) | Proposed 4-zone UDM design (M30) |
-| [hardcoded-ephemeral-ip-audit-2026-05-23.md](planning/hardcoded-ephemeral-ip-audit-2026-05-23.md) | EIP / ephemeral-IP audit |
+| [hardcoded-ephemeral-ip-audit-2026-05-23.md](planning/archive/hardcoded-ephemeral-ip-audit-2026-05-23.md) | EIP / ephemeral-IP audit |
 | [udm-audit-2026-05-23.md](planning/udm-audit-2026-05-23.md) | UDM / UniFi config audit (M25) |
-| [udm-config-drift-2026-05-17.md](planning/udm-config-drift-2026-05-17.md) | UDM config drift snapshot |
-| [ubiquiti-config-as-code-2026-05-16.md](planning/ubiquiti-config-as-code-2026-05-16.md) | UniFi config-as-code design (terraform-unifi) |
+| [udm-config-drift-2026-05-17.md](planning/archive/udm-config-drift-2026-05-17.md) | UDM config drift snapshot |
+| [ubiquiti-config-as-code-2026-05-16.md](planning/archive/ubiquiti-config-as-code-2026-05-16.md) | UniFi config-as-code design (terraform-unifi) |
 | [public-web-infrastructure.md](planning/public-web-infrastructure.md) | Status of public-facing web hosting |
 | [VERSIONING-STRATEGY.md](planning/VERSIONING-STRATEGY.md) | Container image versioning approach |
 | [sops-vs-ansible-vault.md](planning/sops-vs-ansible-vault.md) | SOPS vs Ansible-Vault comparison |

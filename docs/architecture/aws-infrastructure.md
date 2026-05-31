@@ -158,7 +158,7 @@ migration:
   traefik-dashboard) are Tailscale-only — resolved internally via
   Technitium to the Traefik LB IP (10.10.201.70)
 
-Saves ~$25/mo + transfer. Decom runbook: `docs/runbooks/alb-decom.md`.
+Saves ~$25/mo + transfer. Decom runbook: `docs/runbooks/archive/alb-decom.md`.
 ALB-related WAF Web ACL (`CreatedByALB-private-infra-alb`) was
 auto-deleted with the ALB. The `terraform/aws/load-balancing/` module
 was deleted from the repo at the same time.

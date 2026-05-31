@@ -138,10 +138,10 @@ Reuses the `ai-advisor-readonly` IAM user. Heuristic-triggered
 (`labels.job==external-nodes`, `instance starts with 10.10.100.`,
 `alertname contains "lambda"`).
 
-Runbooks per phase: `docs/runbooks/ai-advisor-phase{1,2,3}-enable.md`
-+ `ai-advisor-phase-b-cloudwatch.md`. Coverage map:
+Per-phase enable runbooks (historical): `docs/runbooks/archive/ai-advisor-phase{1,2,3}-enable.md`
++ `archive/ai-advisor-phase-b-cloudwatch.md`. Coverage map:
 `platform/kubernetes/auto-remediation/COVERAGE.md`. Spec:
-`docs/planning/ai-alert-remediation-2026-05-23.md`.
+`docs/planning/archive/ai-alert-remediation-2026-05-23.md`.
 
 ## Monitoring + observability
 

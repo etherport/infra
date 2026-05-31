@@ -776,7 +776,7 @@ terraform plan
 | Cloudflare (etherport.net) | `cloudflare/terraform.tfstate` |
 
 > **Removed paths** (state objects still exist in S3 for audit; modules deleted):
-> - `aws/load-balancing/terraform.tfstate` — ALB decom 2026-05-27 (see `docs/runbooks/alb-decom.md`)
+> - `aws/load-balancing/terraform.tfstate` — ALB decom 2026-05-27 (see `docs/runbooks/archive/alb-decom.md`)
 > - `aws/route53/terraform.tfstate` — Route53 → CF migration 2026-05-25
 > - `cloudflare-personal/terraform.tfstate` — split out to the personal-web repo 2026-05-27
 

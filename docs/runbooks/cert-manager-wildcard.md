@@ -130,7 +130,7 @@ kubectl -n unifi-cert-sync create job manual-sync-$(date +%s) \
 
 The DNS-01 solver moved from Route53 to Cloudflare on 2026-05-27 (the
 etherport.net Route53 zone was deleted as part of the CF migration).
-See `docs/runbooks/cert-manager-dns01-cf-migration.md` for the
+See `docs/runbooks/archive/cert-manager-dns01-cf-migration.md` for the
 historical cutover.
 
 The issuer now uses a CF API token stored in
@@ -274,7 +274,7 @@ The next reconcile in ~30s should re-sync.
 
 - [`platform/kubernetes/traefik/README.md`](../../platform/kubernetes/traefik/README.md)
 - [`docs/architecture/overview.md`](../architecture/overview.md) — ingress / TLS row
-- [`docs/runbooks/aws-private-dns.md`](aws-private-dns.md) — Route53 plumbing
+- [`docs/runbooks/archive/aws-private-dns.md`](aws-private-dns.md) — Route53 plumbing
 - [`platform/kubernetes/unifi-cert-sync/README.md`](../../platform/kubernetes/unifi-cert-sync/README.md) — UniFi push job
 
 ## Last reviewed

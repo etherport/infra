@@ -115,7 +115,7 @@ The switch-routed fabric (Servers/201, Clients/202, vSAN/209, Ceph/210) is polic
 | 3 | BLOCK | Clients/202 → Ceph/210 | No client workflow needs raw Ceph |
 | 4 | BLOCK | vSAN/209 → Ceph/210 | Separate storage backends |
 
-**Deliberately NOT blocked** (allow-all default preserves them): Servers↔Clients, Servers→vSAN/Ceph (K8s RBD + CNPG), Clients→vSAN (10G NAS/video editing). K8s↔Ceph runs **intra-VLAN-210 (L2)** and never hits an ACL. Design + rollout detail: `docs/planning/l3-switch-acl-iac-2026-05-28.md`.
+**Deliberately NOT blocked** (allow-all default preserves them): Servers↔Clients, Servers→vSAN/Ceph (K8s RBD + CNPG), Clients→vSAN (10G NAS/video editing). K8s↔Ceph runs **intra-VLAN-210 (L2)** and never hits an ACL. Design + rollout detail: `docs/planning/archive/l3-switch-acl-iac-2026-05-28.md`.
 
 ---
 

@@ -35,7 +35,7 @@ High-level infrastructure design for the homelab environment.
 
 | Type | Description |
 |------|-------------|
-| Default | Ceph-backed PVCs for persistent apps (Traefik, Grafana, etc.). Ceph mon at `10.10.210.41:6789` (and `:3300` msgr2) on VLAN 210 (dedicated storage network); see [`docs/runbooks/ceph-vlan-migration.md`](../runbooks/ceph-vlan-migration.md). |
+| Default | Ceph-backed PVCs for persistent apps (Traefik, Grafana, etc.). Ceph mon at `10.10.210.41:6789` (and `:3300` msgr2) on VLAN 210 (dedicated storage network); see [`docs/runbooks/archive/ceph-vlan-migration.md`](../runbooks/archive/ceph-vlan-migration.md). |
 | Legacy | NFS tests retained only under `platform/kubernetes/tests/` |
 
 ## Appliances (non-K8s)
