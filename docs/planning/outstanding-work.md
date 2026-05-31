@@ -125,15 +125,12 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - ✅ **IaC staged 2026-05-31** (`376af86`): full `platform/kubernetes/unifi-poller/` (Deployment v2.15.3 + Service + ServiceMonitor `release: monitoring`), inert/unwired so no CrashLoop noise. **GATED on operator:** create UniFi View-Only local account → encrypt `01-secret.sops.yaml` → uncomment the dir in `clusters/wind/kustomization.yaml` + the secret in its kustomization. 3-step runbook + dashboard IDs in `platform/kubernetes/unifi-poller/README.md`.
 - **Effort:** S remaining (account + secret + uncomment + import dashboards).
 
-### ⏳ M56. Migrate Servers/201 to a dedicated `Trusted` UDM zone (from Internal)
-- **Source:** 2026-05-30, during BGP Phase B. 201 was placed in **Internal** for the gateway flip (minimal blast radius). A dedicated `Trusted` zone is the better end-state now that 201 is UDM-routed — intentional least-privilege vs Internal's allow-all.
-- **Why deferred (not atomic with Phase B):** a fresh custom zone **default-denies inter-zone**, and 201 hosts homelab-wide deps — DNS VIP `10.10.201.5` (every VLAN resolves here), the WG remote-access endpoint `.20` (External→201 port-fwd), Traefik ingress `.70`. A single missing rule = LAN-wide DNS outage / remote lockout. Also every existing `X↔Servers` policy (currently keyed to Internal) must be re-pointed to Trusted — needs a live UDM zone-matrix audit.
-- **Pre-staged allow matrix** (apply atomically with the zone; console/iKVM ready):
-  - `Trusted→External` (egress); **`External→Trusted` udp/9820-9821→.20 (WG — lockout risk)**
-  - `Internal↔Trusted` (DNS .5, Traefik .70, syslog .73, clients↔services)
-  - `IoT/204→Trusted` (DNS .5 + existing Servers↔IoT); `Infra/212→Trusted` (DNS .5, syslog .73); `Security/205→Trusted` (DNS .5)
-  - `Trusted→IoT/204` (→Home Assistant); `Trusted→Internal/Infra` (Prometheus scrape 200/212, storage)
-- **Effort:** M. UI / v2-API (not TF — paultyng gap). Do in a window; verify DNS from every VLAN + WG reconnect after.
+### ✅ M56. Servers/201 → Trusted zone + Management split — COMPLETE 2026-05-31
+- **Done:** two-zone split instead of one — **`Trusted` = {Servers/201, LoadBalancers/215}`**, **`Management` = {200}** (contained), `Internal` keeps Default/199. Production-aligned management-plane isolation. 20 v2 firewall-policies codified in `infra/ansible/playbooks/udm-firewall.yml` (applied via `ansible-unifi.yml` CI). Design + posture in `docs/architecture/firewall-zones.md`.
+- **DNS `.5` stays on 201** (network-wide contract; see M59) — not re-IP'd.
+- **Gotcha hit + fixed:** custom zones default **intra-zone to BLOCK** (built-in Internal doesn't) → the cluster→AWS hairpin (static route next-hop `.20`, back inside 201) was evaluated `Trusted→Trusted` and dropped → dns-aws/vpn-aws TargetDown. Fixed with an explicit `Trusted→Trusted (all)` allow. See [[reference_udm_custom_zone_intra_block]].
+- **Verified:** cross-zone probes (Protect/Infra, UDM/Mgmt, UNAS), unifi-poller, AWS nodes recovered + alerts cleared, UNAS (zoneless 209) resolves via `.5` (east-west switch-routed, bypasses UDM zones). Remote WG intact.
+- **Follow-up (optional, P2):** tighten `Management→Trusted` from the current behaviour-neutral set toward strict DNS+syslog-only after a traffic-log observation window.
 
 ### ⏳ M58. Periodic: recheck for a UDM BGP config API → promote UDM BGP to IaC
 - **Source:** 2026-05-31 (BGP Phase C/D). The MetalLB↔UDM BGP works, but the **UDM side is UI-only** — UniFi Network 10.4.57 exposes no usable API endpoint for the BGP/FRR config (`rest/routing/bgp` + `stat/routing/bgp` empty, `get/setting` + device object + v2 routing paths don't carry it). So it can't be a `udm-bgp.yml` Ansible push; durability today = git-stored FRR config (`docs/runbooks/bgp-phase-c-udm-metallb.md`) + the daily controller backup.
