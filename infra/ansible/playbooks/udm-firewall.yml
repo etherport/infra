@@ -174,10 +174,10 @@
 
       # ===================================================================
       # M56 — Trusted / Management zone split (2026-05-31).
-      # Target: Trusted = {Servers/201, LoadBalancers/215}; Management = {200};
-      # Internal keeps Default/199. These policies are created while 200/201/215
-      # are STILL in Internal — they're inert until the networks are moved into
-      # the new zones (UI), so applying this is safe/additive.
+      # Target: Trusted = {Servers/201}; Management = {200}; Internal keeps
+      # Default/199. These policies are created while 200/201 are STILL in
+      # Internal — inert until the networks are moved into the new zones (UI),
+      # so applying this is safe/additive.
       #
       # Design: Trusted is the trusted workload tier (broad egress, mirrors
       # Internal's current posture so the move is behaviour-neutral for
@@ -190,11 +190,10 @@
 
       # ---- Trusted intra-zone (REQUIRED) ----
       # Custom zones default intra-zone to BLOCK (unlike the built-in Internal,
-      # which has a predefined Allow-All). Trusted spans TWO networks (201+215)
-      # AND the cluster reaches the AWS subnets via a UDM static route whose
-      # next-hop (10.10.201.20) is back inside 201 — the UDM evaluates that
-      # hairpin as Trusted→Trusted. Without this allow, 201↔215 routing and the
-      # cluster→AWS (WG VIP) path are dropped. (Root cause of the 2026-05-31
+      # which has a predefined Allow-All). The cluster reaches the AWS subnets
+      # via a UDM static route whose next-hop (10.10.201.20) is back inside 201
+      # — the UDM evaluates that hairpin as Trusted→Trusted. Without this allow,
+      # the cluster→AWS (WG VIP) path is dropped. (Root cause of the 2026-05-31
       # dns-aws/vpn-aws TargetDown right after the zone move.)
       - { name: "Trusted → Trusted (intra-zone)", action: ALLOW, protocol: all, index: 11990, enabled: true, logging: false, source: { zone_name: Trusted }, destination: { zone_name: Trusted } }
 

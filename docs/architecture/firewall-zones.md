@@ -13,7 +13,7 @@ The zone migration is done. Final state: **three custom UDM zones** (IoT, Infras
 - **Phase 1 ✅:** Custom `Infrastructure` zone — VLAN 212 (Unifi / Protect+Talk+Access fleet) moved in.
 - **Phase 2 → M52 ✅:** vSAN/209 + Ceph/210 are L3-switch-routed (can't be UDM-zoned). East-west security is enforced by **switch ACLs** on Switch Rack PoE — applied + verified (see "L3-switch ACLs" section below).
 - **Phase 3 ✅:** Custom `Security` zone — VLAN 205 (SimpliSafe) moved in; legacy network-isolation toggle retired so the zone model is the single source of truth.
-- **Phase 4 — SUPERSEDED by M56 (2026-05-31).** This was skipped on the premise that Servers/201 was switch-routed and couldn't be UDM-zoned. The **MetalLB BGP migration (M18/M36)** then made 201 (and the new LoadBalancers/215 VLAN) **UDM-routed for north-south**, so they *can* now be zoned — and the networking review judged the segmentation worth it. See "M56 — Trusted / Management zones" below.
+- **Phase 4 — SUPERSEDED by M56 (2026-05-31).** This was skipped on the premise that Servers/201 was switch-routed and couldn't be UDM-zoned. The **MetalLB BGP migration (M18/M36)** then made 201 **UDM-routed for north-south**, so it *can* now be zoned — and the networking review judged the segmentation worth it. See "M56 — Trusted / Management zones" below.
 - **Phase 5 ✅:** this doc reconciled to the live state; planning companion archived.
 
 **Why the hybrid split:** the UDM is CPU-bound (~3.5-5 Gbps); Switch Rack PoE has a ~50 Gbps line-rate fabric. Storage (vSAN/Ceph at 10G + jumbo) and workstation→NAS flows MUST stay switch-routed for performance, so their security lives in switch ACLs, not UDM zones. Textbook firewall-north-south / L3-switch-east-west architecture.
@@ -22,17 +22,17 @@ The zone migration is done. Final state: **three custom UDM zones** (IoT, Infras
 
 ## M56 — Trusted / Management zones (2026-05-31)
 
-Enabled by the BGP migration making Servers/201 + LoadBalancers/215 UDM-routed. Two new custom zones split the former "everything trusted lives in `Internal`" lump:
+Enabled by the BGP migration making Servers/201 UDM-routed. Two new custom zones split the former "everything trusted lives in `Internal`" lump:
 
 | Zone | Networks | Posture |
 |---|---|---|
-| **Trusted** | Servers/201, LoadBalancers/215 | Trusted workload tier. Broad egress (External, Gateway, Vpn, Internal, Infrastructure, Management) + ingress for the service paths it fronts. Behaviour-neutral vs the old `Internal` so the move didn't change workload connectivity. |
+| **Trusted** | Servers/201 | Trusted workload tier. Broad egress (External, Gateway, Vpn, Internal, Infrastructure, Management) + ingress for the service paths it fronts. Behaviour-neutral vs the old `Internal` so the move didn't change workload connectivity. |
 | **Management** | Management/200 | **Contained** management plane. May reach only External, Gateway, and `Trusted` (DNS to `.5/.6` + syslog to Alloy `.73`). Ingress from `Trusted` (the cluster administers the UDM/devices — poller, gh-runner, backup, cert-sync), `Vpn` (remote admin), `Gateway`. Default-denied to IoT / Guest / Security. |
 | **Internal** | Default/199 | Now just the Default network; stays permissive. The Twilio media/SIP port-forwards land on `10.10.199.1` here and are unaffected. |
 
 Rules are codified in `infra/ansible/playbooks/udm-firewall.yml` (`udm_firewall_policies`, v2 API) — 19 zone policies + supporting address/port groups. **Why separate Management:** production practice isolates the device/admin plane so a compromised workload (or device) can't pivot freely; the cost is a few explicit `Trusted↔Management` allows for the cluster's infra tooling.
 
-**Gotcha — custom zones default intra-zone to BLOCK.** The built-in `Internal` zone has a predefined `Internal→Internal Allow All`; **custom zones do not** — a fresh custom zone's `Zone→same-Zone` policy is `Block All`. This bites two ways for `Trusted` (which spans 201+215): (1) routed `201↔215` traffic, and (2) **hairpin routes** — the cluster reaches the AWS subnets (`10.10.100.0/22` etc.) via a UDM static route whose next-hop `10.10.201.20` is *back inside* 201, so the UDM evaluates that flow as `Trusted→Trusted` and drops it. Symptom when missing: `dns-aws`/`vpn-aws` `TargetDown` right after the zone move while everything else looks fine. Fix = the explicit `Trusted → Trusted (intra-zone)` allow in `udm-firewall.yml`.
+**Gotcha — custom zones default intra-zone to BLOCK.** The built-in `Internal` zone has a predefined `Internal→Internal Allow All`; **custom zones do not** — a fresh custom zone's `Zone→same-Zone` policy is `Block All`. This bites `Trusted` via **hairpin routes**: the cluster reaches the AWS subnets (`10.10.100.0/22` etc.) over a UDM static route whose next-hop `10.10.201.20` is *back inside* 201, so the UDM evaluates that flow as `Trusted→Trusted` and drops it. Symptom when missing: `dns-aws`/`vpn-aws` `TargetDown` right after the zone move while everything else looks fine. Fix = the explicit `Trusted → Trusted (intra-zone)` allow in `udm-firewall.yml`.
 
 **VPN — important clarification.** The `Vpn` zone contains **only the UDM's built-in backup WireGuard tunnel** (`WireGuard WAN1`). The **primary** k8s + `vpn-local` WireGuard runs on **Servers/201** behind the Keepalived VIP `10.10.201.20` (now in `Trusted`): its inbound is the `External → Trusted (WireGuard) udp/9820-9821 → .20` policy, and connected-client traffic is intra-`Trusted`. So the primary VPN does **not** depend on the `Vpn` zone; the `Vpn→Trusted/Management` allows exist to keep the *backup* UDM tunnel reaching servers/mgmt.
 

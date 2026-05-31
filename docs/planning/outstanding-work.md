@@ -126,7 +126,7 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Effort:** S remaining (account + secret + uncomment + import dashboards).
 
 ### ✅ M56. Servers/201 → Trusted zone + Management split — COMPLETE 2026-05-31
-- **Done:** two-zone split instead of one — **`Trusted` = {Servers/201, LoadBalancers/215}`**, **`Management` = {200}** (contained), `Internal` keeps Default/199. Production-aligned management-plane isolation. 20 v2 firewall-policies codified in `infra/ansible/playbooks/udm-firewall.yml` (applied via `ansible-unifi.yml` CI). Design + posture in `docs/architecture/firewall-zones.md`.
+- **Done:** two-zone split instead of one — **`Trusted` = {Servers/201}`**, **`Management` = {200}** (contained), `Internal` keeps Default/199. Production-aligned management-plane isolation. 20 v2 firewall-policies codified in `infra/ansible/playbooks/udm-firewall.yml` (applied via `ansible-unifi.yml` CI). Design + posture in `docs/architecture/firewall-zones.md`.
 - **DNS `.5` stays on 201** (network-wide contract; see M59) — not re-IP'd.
 - **Gotcha hit + fixed:** custom zones default **intra-zone to BLOCK** (built-in Internal doesn't) → the cluster→AWS hairpin (static route next-hop `.20`, back inside 201) was evaluated `Trusted→Trusted` and dropped → dns-aws/vpn-aws TargetDown. Fixed with an explicit `Trusted→Trusted (all)` allow. See [[reference_udm_custom_zone_intra_block]].
 - **Verified:** cross-zone probes (Protect/Infra, UDM/Mgmt, UNAS), unifi-poller, AWS nodes recovered + alerts cleared, UNAS (zoneless 209) resolves via `.5` (east-west switch-routed, bypasses UDM zones). Remote WG intact.
@@ -201,11 +201,10 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Trigger to revisit:** Ubiquiti announces Talk API support.
 - **Effort when unblocked:** ~1 day to write the playbook.
 
-### ⏳ M59. Dedicated UDM-routed LB VLAN for MetalLB VIPs (segmentation)
-- **Source:** 2026-05-31 networking review (#9). Now that MetalLB is BGP-only, move the VIP pool off Servers/201 onto a dedicated VLAN — cleaner segmentation, no intra-201 ARP nuance.
-- ✅ **Foundation landed 2026-05-31** (`8d18aad`): `unifi_network.loadbalancers` VLAN 215 / 10.10.215.0/24 created on the UDM (TF applied via CI); MetalLB `lb-vlan` opt-in pool (`autoAssign:false`, wide `10.10.215.10-.250` — whole /24 free, DNS `.5` excluded) + `lb-vlan-bgp` advertisement deployed. Inert until a service opts in — no VIP has moved.
-- ✅ **DNS decision 2026-05-31:** `10.10.201.5` (dns/technitium) **stays on 201 permanently** — it's a network-wide contract (`dhcp_dns` on every VLAN + VM cloud-init); re-IP risk ≫ segmentation benefit. `lb-vlan` excludes `.5`; no forwarder (rejected: extra hop/SPOF, .5 stays anyway).
-- ⏳ **Remaining — staged per-service cutover** (`docs/runbooks/lb-vlan-migration.md`), ordered by blast radius: traefik `.70` → technitium-0/1 `.71/.72` → alloy-syslog `.73` (≈16 syslog devices). Each re-points live traffic + downstream refs (DNS zone records, syslog targets), so best done watched, not blind-while-away.
+### ⛔ M59. Dedicated LB VLAN for MetalLB VIPs — PARKED + backed out 2026-05-31
+- **Decision:** not worth it. The foundation (VLAN 215 + `lb-vlan` pool + `lb-vlan-bgp` advertisement) was built, but because Servers/201 + LB would share the **same `Trusted` zone**, moving VIPs onto a 215 subnet buys **no segmentation** — only cosmetic addressing. And a zero-downtime cutover isn't cleanly possible: MetalLB rejects two IPv4s on one service (`same address family`), so the dual-home attempt failed and briefly scared the live ingress/BGP. Spending live-traffic risk on address hygiene is a bad trade.
+- **Backed out fully:** removed the TF network (`unifi_network.loadbalancers` → VLAN 215 destroyed), the MetalLB `lb-vlan` pool + advertisement, and the migration runbook. All VIPs stay on 201 (BGP-advertised, working). The `.5` DNS pin decision still stands (it's a network-wide contract; stays on 201 regardless).
+- **If revisited:** only worth it if LB VIPs get their **own** zone (DMZ-style for service front-ends) — then re-create 215 as its own zone, not bundled with `Trusted`.
 
 ## LOW
 
