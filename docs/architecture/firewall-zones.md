@@ -32,6 +32,8 @@ Enabled by the BGP migration making Servers/201 + LoadBalancers/215 UDM-routed. 
 
 Rules are codified in `infra/ansible/playbooks/udm-firewall.yml` (`udm_firewall_policies`, v2 API) — 19 zone policies + supporting address/port groups. **Why separate Management:** production practice isolates the device/admin plane so a compromised workload (or device) can't pivot freely; the cost is a few explicit `Trusted↔Management` allows for the cluster's infra tooling.
 
+**Gotcha — custom zones default intra-zone to BLOCK.** The built-in `Internal` zone has a predefined `Internal→Internal Allow All`; **custom zones do not** — a fresh custom zone's `Zone→same-Zone` policy is `Block All`. This bites two ways for `Trusted` (which spans 201+215): (1) routed `201↔215` traffic, and (2) **hairpin routes** — the cluster reaches the AWS subnets (`10.10.100.0/22` etc.) via a UDM static route whose next-hop `10.10.201.20` is *back inside* 201, so the UDM evaluates that flow as `Trusted→Trusted` and drops it. Symptom when missing: `dns-aws`/`vpn-aws` `TargetDown` right after the zone move while everything else looks fine. Fix = the explicit `Trusted → Trusted (intra-zone)` allow in `udm-firewall.yml`.
+
 **VPN — important clarification.** The `Vpn` zone contains **only the UDM's built-in backup WireGuard tunnel** (`WireGuard WAN1`). The **primary** k8s + `vpn-local` WireGuard runs on **Servers/201** behind the Keepalived VIP `10.10.201.20` (now in `Trusted`): its inbound is the `External → Trusted (WireGuard) udp/9820-9821 → .20` policy, and connected-client traffic is intra-`Trusted`. So the primary VPN does **not** depend on the `Vpn` zone; the `Vpn→Trusted/Management` allows exist to keep the *backup* UDM tunnel reaching servers/mgmt.
 
 ---
