@@ -5,13 +5,12 @@ Tracker **M55** / task #15. Closes the UDM metrics gap: today Prometheus has onl
 UDM controller API and exposes client counts, throughput, WAN, per-port/PoE,
 AP/client RSSI, DPI, and per-device health as `unifi_*` series.
 
-## Status: STAGED, gated on operator (UniFi account creation)
+## Status: LIVE (activated 2026-05-31)
 
-All manifests are written and validated, but the directory is **not yet wired
-into Flux** (see the commented line in `clusters/wind/kustomization.yaml`) and
-the credentials Secret is a `.example` template. This is deliberate: unpoller
-needs a UniFi local account that must be created in the UI, and leaving it
-inactive avoids CrashLoop / `TargetDown` advisor noise until then.
+Deployed + wired into Flux; Prometheus target `serviceMonitor/unifi-poller/…`
+is `up` and `unpoller_*` series are ingesting. Creds live in 1Password
+`UDM (unifi-poller)` (View-Only local admin) and in the SOPS secret
+`01-secret.sops.yaml`. Metrics namespace is **`unpoller_`** (see below).
 
 ## Activation (3 steps, ~5 min)
 
@@ -39,10 +38,11 @@ inactive avoids CrashLoop / `TargetDown` advisor noise until then.
    #   up{job="unifi-poller"} == 1   and   unifi_* series populated
    ```
 
-## Grafana dashboards (import after metrics flow)
+## Grafana dashboards
 
-Official unpoller dashboards (Grafana.com IDs) — datasource = the Prometheus
-in `monitoring`:
+Metrics namespace is **`unpoller_`** (v2 default) — when importing, pick the
+**Prometheus** variants of the unpoller dashboards (the older Influx-era ones
+query `unifi_*` and won't match). Datasource = the Prometheus in `monitoring`:
 
 | ID | Dashboard |
 |----|-----------|
