@@ -355,6 +355,12 @@ personal-web CI all landed this session (see "Recently completed" below).
   - `Trusted→IoT/204` (→Home Assistant); `Trusted→Internal/Infra` (Prometheus scrape 200/212, storage)
 - **Effort:** M. UI / v2-API (not TF — paultyng gap). Do in a window; verify DNS from every VLAN + WG reconnect after.
 
+### ⏳ M57. ansible-runner image can't run SOPS playbooks in CI
+- **Source:** 2026-05-31, hit while trying to run `wireguard.yml` against vpn-local via `ansible-vm-fleet`. The job failed at the first SOPS task: `[Errno 2] No such file or directory: 'sops'`. The `infra/ci/ansible-runner` image (`Dockerfile`) installs ansible but **not the `sops` binary**, and `ansible-vm-fleet.yml` provides **no `SOPS_AGE_KEY`** env. So any SOPS-decrypting playbook (wireguard, and others) **cannot run via CI** — they only work from a workstation with sops + the age key.
+- **Impact:** blocks deploying the `wg-failover` self-heal fix (commit `e2540d4`) and any future SOPS-based playbook via the gh-runner. Until fixed, run those playbooks from a workstation.
+- **Scope:** (1) add the `sops` binary to `infra/ci/ansible-runner/Dockerfile` (download the release binary) + rebuild via `ansible-runner-image.yml`; (2) add a `SOPS_AGE_KEY` repo secret + export it in `ansible-vm-fleet.yml` (and any other ansible workflow that runs SOPS playbooks); (3) optionally the `community.sops` collection if a lookup is used.
+- **Effort:** M (image rebuild + secret).
+
 ### ✅ M31. Automated UDM backup to S3 (P0 from M25 audit)
 - **Done:** 2026-05-23. New CronJob `unifi-backup` in `backups` ns, fires daily 04:00 PT. Three targets per run:
   - **`udm-controller-db`** — newest `.unf` from `/data/unifi/data/backup/autobackup/` (UDM writes one daily at 07:00 UTC, ~8.5MB).
