@@ -122,7 +122,11 @@ spec:
     service:
       enabled: true
       type: LoadBalancer
-      spec:
-        loadBalancerIP: 10.10.201.70
+      # LB-VLAN migration (M59): dual-homed on 201.70 (primary pool, legacy) +
+      # 215.70 (lb-vlan pool, new) during the DNS cutover window. Both advertised
+      # BGP-only. Once the wind.etherport.net A-records (TTL 3600) have aged out
+      # onto 215.70, drop 201.70 here (set to just 10.10.215.70) to free it.
+      spec: {}
       labels: {}
-      annotations: {}
+      annotations:
+        metallb.universe.tf/loadBalancerIPs: 10.10.201.70,10.10.215.70
