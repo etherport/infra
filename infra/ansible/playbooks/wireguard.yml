@@ -130,6 +130,7 @@
         name: vpn_aws_keys
       delegate_to: localhost
       become: false
+      no_log: true  # don't echo decrypted WG keys into CI logs
       when: inventory_hostname == 'vpn-aws'
 
     - name: Load vpn-local keys from SOPS
@@ -138,6 +139,7 @@
         name: vpn_local_keys
       delegate_to: localhost
       become: false
+      no_log: true  # don't echo decrypted WG keys into CI logs
       when: inventory_hostname == 'vpn-local'
 
     # =========================================================================
