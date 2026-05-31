@@ -11,19 +11,13 @@ spec:
   autoAssign: true
   avoidBuggyIPs: false
 
----
-apiVersion: metallb.io/v1beta1
-kind: L2Advertisement
-metadata:
-  name: primary
-  namespace: metallb-system
-spec:
-  ipAddressPools:
-    - primary
-  # Note: With Cilium CNI, MetalLB may create ARP responders on lxc interfaces
-  # which causes L2 announcements to fail. If this happens, add:
-  # interfaces:
-  #   - eth0
+# L2Advertisement REMOVED 2026-05-31 — BGP migration Phase D (cutover). The
+# `primary` pool is now advertised BGP-only (BGPPeer + BGPAdvertisement below),
+# which ends the L2 ARP / MAC-ownership churn behind the M36 .5/.71 IP-conflict
+# alerts. Cross-VLAN VIP traffic was already flowing over BGP (more-specific /32
+# preferred over the connected /24), so this just drops the redundant ARP path.
+# Rollback: git-revert this change to restore the L2Advertisement — VIPs keep
+# their IPs, so re-adding L2 is non-disruptive.
 
 # =============================================================================
 # BGP (M18/M36 migration, Phase C — runs ALONGSIDE the L2Advertisement above).
