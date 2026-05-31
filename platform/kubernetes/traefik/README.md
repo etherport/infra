@@ -29,8 +29,6 @@ This directory contains IngressRoute configurations for services that need custo
 | `route53-credentials.sops.yaml` | SOPS-encrypted AWS creds used by cert-manager DNS-01 |
 | `kustomization.yaml` | Kustomize configuration for Flux |
 | `traefik-values.yaml` | Helm values for Traefik (HelmRelease defined in `clusters/wind/helm-releases/traefik.yaml`) |
-| `pvc-traefik-ceph.yaml` | **Legacy.** Was the ACME PVC; no longer referenced by the kustomization. Safe to remove once confirmed unbound. |
-| `traefik-acme-fix.yaml` | **Legacy.** Workaround for embedded-ACME issues; cert-manager replaces it. |
 
 ## Managed IngressRoutes
 

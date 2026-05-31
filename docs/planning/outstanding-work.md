@@ -234,9 +234,6 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Source:** M40 deliberately deferred. BMC sits on VLAN 200 (10.10.200.21); Alloy/Loki on VLAN 201 (10.10.201.73). For BMC PET traps to reach Alloy, the BMC needs to learn the gateway MAC for 10.10.200.1 — `ipmitool lan print 1` shows `Default Gateway MAC: 00:00:00:00:00:00` currently. Either populate the gateway MAC statically (one-shot ARP lookup + `ipmitool lan set 1 defgw mac <mac>`) or have the BMC do it via gratuitous ARP. Then enable PEF policy 1 with action="send to LAN destination 1" pointed at 10.10.201.73. Today we rely on BMC remote-syslog → Alloy which covers the same alerts.
 - **Effort:** S.
 
-### ⏳ L8. Delete stale `platform/kubernetes/monitoring/values.yaml`
-- **Source:** consistency review 2026-05-24. The file is the legacy chart-values that was replaced by inline values inside `clusters/wind/helm-releases/monitoring.yaml`. It's not referenced from any `kustomization.yaml`, so Flux doesn't apply it. Source of confusion (e.g. the original H5 entry pointed at the wrong file). Safe to delete; commits since the migration use the HelmRelease inline values exclusively.
-- **Effort:** Trivial.
 
 ### ⏳ L15. Ship etcd snapshot timer logs to Loki
 - **Source:** M46 backup audit 2026-05-24. The Ansible-managed etcd snapshot systemd timer on each PVE control-plane node writes only to journald — never reaches Loki. Snapshots themselves are captured by Velero's `kube-system-daily` FS backup, but timer-side failures (disk full, snapshotter crash) are invisible.
@@ -256,9 +253,6 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Source:** code shipped 2026-05-24 (`AI_PHASE3_ENABLED` env, default OFF). Per the phased rollout plan in `docs/runbooks/archive/ai-advisor-phase3-enable.md`: week 1 add `ai_remediation: "auto"` label to `NodeLocalDNSHighErrorRate` only; week 2 add `CoreDNSDown`; week 3 add `TechnitiumDNSDown` + `HomeAssistantDown`; expand 1/week as comfort builds. Never include CNPG / Ceph / kube-system alerts.
 - **Effort:** Trivial per alert (one label addition). Spread across weeks for safety.
 
-### ⏳ L9. Delete legacy traefik files
-- **Source:** consistency review 2026-05-24. `platform/kubernetes/traefik/{pvc-traefik-ceph.yaml,traefik-acme-fix.yaml}` are explicitly labeled "Legacy. Safe to remove." in the traefik README but still on disk. Drop them.
-- **Effort:** Trivial.
 
 ### ⏳ L7. Clean up debug Jobs in `backups` namespace
 - **Source:** observed during M40 tidy 2026-05-23. Six failed pods from

@@ -18,9 +18,9 @@
   - `route53-credentials.sops.yaml` — SOPS-encrypted AWS creds for cert-manager DNS-01
   - `ingressroute-*.yaml` — IngressRoute resources for individual hosts
 
-The legacy `pvc-traefik-ceph.yaml` and `traefik-acme-fix.yaml` files
-still exist on disk but are NOT in the kustomization any more — they
-were for the embedded-ACME days. Safe to delete once confirmed unbound.
+TLS is handled by cert-manager (DNS-01) + a default TLSStore serving the
+`*.wind.etherport.net` wildcard; the old embedded-ACME workaround files have
+been removed.
 
 ## Install / Upgrade
 
