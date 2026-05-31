@@ -134,6 +134,11 @@
         # Keepalived/WG listen ports behind the External→Trusted port-fwd.
         members: ["9820", "9821"]
 
+      - name: DNS-Ports
+        # Strict DNS (udp+tcp 53). Used to keep Management→Trusted to DNS only,
+        # not any-port-to-the-resolvers.
+        members: ["53"]
+
     # ---- Firewall policies (zone-based v2 API) ----
     # Each policy must specify:
     #   name, action (ALLOW|BLOCK), protocol (udp|tcp|tcp_udp|all|...),
@@ -244,7 +249,7 @@
         enabled: true
         logging: false
         source: { zone_name: Management }
-        destination: { zone_name: Trusted, ip_group_name: DNS-Servers }
+        destination: { zone_name: Trusted, ip_group_name: DNS-Servers, port_group_name: DNS-Ports }
       - name: "Management → Trusted (syslog → Alloy)"
         action: ALLOW
         protocol: udp
