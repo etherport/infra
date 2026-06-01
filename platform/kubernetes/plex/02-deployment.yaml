@@ -16,6 +16,18 @@ spec:
     metadata:
       labels:
         app: plex
+      annotations:
+        # Velero: back up ONLY the config volume (Ceph RBD — Plex DB/metadata),
+        # never the media library. Plex mounts movies/tv over NFS and uses an
+        # in-memory transcode scratch dir. Velero runs opt-out
+        # (defaultVolumesToFsBackup: true on every schedule), so without this it
+        # sweeps the entire ~5.7 TB media tree into the kopia repo in S3 — pure
+        # duplication, since /var/nfs/shared/Media is already synced to S3 by the
+        # backups/s3-sync-media CronJob. An exclude (not an opt-in include) is
+        # used deliberately: it is honored by EVERY schedule that backs up this
+        # pod (both plex-daily and critical-apps-daily), regardless of their
+        # defaultVolumesToFsBackup setting. See docs/runbooks (velero media spike).
+        backup.velero.io/backup-volumes-excludes: movies,tv,transcode
     spec:
       # Run on a node with an NVIDIA GPU. Matches the label automatically
       # set by gpu-operator's node-feature-discovery — no manual `gpu=true`
