@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - 00-namespace.yaml
   - 01-cluster.yaml
+  - 02-tailscale-svc.yaml   # tailnet-only exposure of the primary (Tailscale operator)

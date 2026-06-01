@@ -1,0 +1,27 @@
+---
+# Tailnet-only exposure of the Cue Postgres primary, via the Tailscale K8s
+# operator. This is a DEDICATED Service (NOT CNPG's cue-db-rw, which CNPG owns
+# and reconciles) that selects the current primary — the same selector cue-db-rw
+# uses, so it follows failover. `loadBalancerClass: tailscale` makes the operator
+# publish it as a tailnet node (raw TCP, no public IP / no public LB). Reachable
+# at cue-db.<tailnet>.ts.net:5432. Access is governed by the tailnet ACL
+# (infra/tailscale/policy.hujson) — currently allow-all, so all tailnet members
+# (incl. both dev devices) can reach it; tighten there if/when desired.
+apiVersion: v1
+kind: Service
+metadata:
+  name: cue-db-ts
+  namespace: cue
+  annotations:
+    tailscale.com/hostname: "cue-db"   # stable MagicDNS name
+spec:
+  type: LoadBalancer
+  loadBalancerClass: tailscale
+  selector:
+    cnpg.io/cluster: cue-db
+    cnpg.io/instanceRole: primary
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
