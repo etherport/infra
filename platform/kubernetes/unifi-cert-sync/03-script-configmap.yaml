@@ -7,12 +7,15 @@ data:
   # Device target list — name|ssh-user@host|crt-path|key-path|restart-cmd
   # One per line. Lines starting with `#` are ignored.
   #
-  # All three UniFi devices run UniFi OS, so the cert path + restart
-  # command are identical. If a future device differs, just add a row.
+  # The UniFi-OS devices share the same cert path + restart command.
+  # Proxmox VE differs (its own paths + pveproxy restart) — just add a row.
   targets: |
     udm|root@10.10.200.1|/data/unifi-core/config/unifi-core.crt|/data/unifi-core/config/unifi-core.key|systemctl restart unifi-core
     protect|root@10.10.212.10|/data/unifi-core/config/unifi-core.crt|/data/unifi-core/config/unifi-core.key|systemctl restart unifi-core
     sequoia|root@sequoia.wind.etherport.net|/data/unifi-core/config/unifi-core.crt|/data/unifi-core/config/unifi-core.key|systemctl restart unifi-core
+    # Proxmox VE — replaces its broken native Route53 ACME with the
+    # cert-manager CF-issued wildcard (pve.wind.etherport.net ⊂ *.wind.etherport.net).
+    pve|root@10.10.200.41|/etc/pve/local/pveproxy-ssl.pem|/etc/pve/local/pveproxy-ssl.key|systemctl restart pveproxy
 
   sync.sh: |
     #!/usr/bin/env bash

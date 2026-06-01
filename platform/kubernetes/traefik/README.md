@@ -12,7 +12,7 @@ This directory contains IngressRoute configurations for services that need custo
   `clusters/wind/helm-releases/traefik.yaml` (values in `traefik-values.yaml`);
   HA with `replicas: 2`, no ACME PVC.
 - **TLS / Certificates**: cert-manager wildcard `*.wind.etherport.net`
-  (DNS-01 via Route53) + Traefik default `TLSStore`. All IngressRoutes
+  (DNS-01 via **Cloudflare** — migrated off Route53 2026-05-27) + Traefik default `TLSStore`. All IngressRoutes
   automatically pick up the wildcard — no per-route `certResolver` needed.
 - **IngressRoute Configuration**: Managed via Flux GitOps (this directory)
 - **Namespace**: `traefik`
@@ -23,10 +23,9 @@ This directory contains IngressRoute configurations for services that need custo
 |------|---------|
 | `ingressroute-infrastructure.yaml` | IngressRoutes for UPS and PDU web UIs with self-signed cert bypass |
 | `ingressroute-proxmox.yaml` | IngressRoute for Proxmox VE web UI (HTTPS passthrough) |
-| `clusterissuer-letsencrypt.yaml` | cert-manager ClusterIssuer (DNS-01 via Route53) |
-| `certificate-wildcard.yaml` | Wildcard certificate `*.wind.etherport.net` |
+| `clusterissuer-letsencrypt{,-classic}.yaml` | cert-manager ClusterIssuers (DNS-01 via **Cloudflare**); token in `cert-manager/cloudflare-credentials` |
+| `certificate-wildcard{,-rsa}.yaml` | Wildcard certificate `*.wind.etherport.net` (ECDSA + RSA) |
 | `tlsstore-default.yaml` | Traefik default TLSStore that serves the wildcard for every IngressRoute |
-| `route53-credentials.sops.yaml` | SOPS-encrypted AWS creds used by cert-manager DNS-01 |
 | `kustomization.yaml` | Kustomize configuration for Flux |
 | `traefik-values.yaml` | Helm values for Traefik (HelmRelease defined in `clusters/wind/helm-releases/traefik.yaml`) |
 
