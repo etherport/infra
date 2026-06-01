@@ -34,7 +34,18 @@ The app should read these from the `cue-db-app` Secret (keys: `username`,
 `password`, `uri`, `host`, `port`, `dbname`) rather than hardcoding. CNPG also
 publishes a ready `uri` key.
 
-**Local dev (you + collaborator):** in-cluster only — reach it via port-forward:
+**Tailnet (devs, preferred):** the primary is exposed tailnet-only via the
+Tailscale operator (`02-tailscale-svc.yaml`, `loadBalancerClass: tailscale`) at
+**`cue-db.tail48f596.ts.net:5432`** — no public IP. Access is governed by the
+tailnet ACL (`infra/tailscale/policy.hujson`, currently allow-all). From any
+tailnet device:
+```
+PW=$(kubectl get secret cue-db-app -n cue -o jsonpath='{.data.password}' | base64 -d)
+export DATABASE_URL="postgres://cue:${PW}@cue-db.tail48f596.ts.net:5432/cue?sslmode=require"
+pnpm db:migrate   # / db:studio / run the app
+```
+
+**Local dev (alternative, no tailnet):** port-forward:
 ```
 kubectl port-forward -n cue svc/cue-db-rw 5432:5432
 # in another shell — fetch the password into DATABASE_URL:
