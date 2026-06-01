@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cue-api
+  namespace: cue
+  labels:
+    app: cue-api
+spec:
+  replicas: 1 # single-owner dev instance
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: cue-api
+  template:
+    metadata:
+      labels:
+        app: cue-api
+      annotations:
+        # No persistent volumes — nothing for Velero to FS-backup here
+        # (state lives in cue-db). Keeps it off the kopia repo regardless.
+        backup.velero.io/backup-volumes-excludes: ""
+    spec:
+      terminationGracePeriodSeconds: 15 # app does graceful SIGTERM <=10s
+      imagePullSecrets:
+        - name: ghcr-cue # read-only ghcr pull cred (private package)
+      # ---- DB migrations run to completion before the app container starts.
+      # Same image, idempotent (`node dist/db/migrate.js`), safe every deploy.
+      initContainers:
+        - name: migrate
+          image: ghcr.io/sparked-diamond/cue:latest # {"$imagepolicy": "flux-system:cue-api"}
+          imagePullPolicy: Always
+          command: ['node', 'dist/db/migrate.js']
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: cue-db-app # CNPG-generated; in-cluster rw URI
+                  key: uri
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      containers:
+        - name: cue-api
+          image: ghcr.io/sparked-diamond/cue:latest # {"$imagepolicy": "flux-system:cue-api"}
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            # In-cluster Postgres (CNPG cue-db). `uri` key = the rw service URL.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: cue-db-app
+                  key: uri
+            # Enable the interaction-style learn loop in dev (per deploy spec).
+            - name: CUE_INTERACTION_LEARNING
+              value: 'true'
+          # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
+          # optional: true so the pod is healthy before the secret is populated
+          # (all of these are optional at boot — see src/config/env.ts; the
+          # Telegram route 503s and the AI gateway asserts only when used).
+          envFrom:
+            - secretRef:
+                name: cue-app
+                optional: true
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 3
+            failureThreshold: 20 # allow ~60s for first boot + migrations
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ['ALL']

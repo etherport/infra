@@ -163,6 +163,26 @@ resource "cloudflare_tunnel_config" "wind_cluster" {
         connect_timeout = "10s"
       }
     }
+    // Cue API (cue.etherport.net) — single-owner dev app handling personal
+    // health data + spending on an LLM key. Deliberately NOT in the
+    // cf_tunnel_services map: that wires a CF Access (SSO) app, which would
+    // block the Telegram webhook (Telegram can't do SSO). Instead, restrict
+    // PUBLIC reachability at the tunnel to exactly the two endpoints that must
+    // be internet-facing — the Telegram webhook (app additionally verifies the
+    // TELEGRAM_WEBHOOK_SECRET header) and the health check. Every other path
+    // (/coach, /meals, /onboarding, /progress, /digestion, ...) fails to match
+    // this rule's `path` and falls through to the 404 catch-all below, so it is
+    // unreachable from the public internet. The owner hits those over Tailscale
+    // (the Service is ClusterIP / reachable in-cluster + on the tailnet).
+    ingress_rule {
+      hostname = "cue.etherport.net"
+      path     = "^/health$|^/telegram/webhook/?$"
+      service  = "http://cue-api.cue.svc.cluster.local:3000"
+      origin_request {
+        no_tls_verify   = false
+        connect_timeout = "10s"
+      }
+    }
     // All other CF-Tunnel-exposed services come from the
     // cf_tunnel_services map (variables.tf). Add new services there;
     // this dynamic block generates the matching ingress rule.
@@ -199,6 +219,22 @@ resource "cloudflare_record" "approve_cname" {
   ttl     = 1    # 1 = auto when proxied
   proxied = true # required for CF Access to intercept
   comment = "CF tunnel for AI advisor approval URL (CF Access in front)"
+}
+
+// Cue API — apex-level "cue.etherport.net" so Universal SSL (root + *.etherport.net)
+// covers TLS (a valid public cert is required for the Telegram webhook). Proxied
+// so the edge terminates TLS and the path-restricted tunnel ingress rule applies.
+// NO CF Access app here (unlike approve.*): the Telegram webhook must be reachable
+// without SSO — it is protected by the path restriction + the app's webhook-secret
+// header check, and everything else 404s at the tunnel.
+resource "cloudflare_record" "cue_cname" {
+  zone_id = var.cloudflare_zone_id
+  name    = "cue"
+  type    = "CNAME"
+  value   = "${cloudflare_tunnel.wind_cluster.id}.cfargotunnel.com"
+  ttl     = 1
+  proxied = true
+  comment = "CF tunnel for Cue API (public paths: /telegram/webhook + /health only)"
 }
 
 // ---------------------------------------------------------------------------

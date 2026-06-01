@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cue-api
+  namespace: cue
+  labels:
+    app: cue-api
+spec:
+  # ClusterIP only — reached publicly via the cloudflared tunnel
+  # (path-restricted to /health + /telegram/webhook) and otherwise over the
+  # tailnet / in-cluster. No LoadBalancer, no Ingress, no cert-manager.
+  type: ClusterIP
+  selector:
+    app: cue-api
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      protocol: TCP
