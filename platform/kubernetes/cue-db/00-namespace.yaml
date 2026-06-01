@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cue
+  labels:
+    app.kubernetes.io/name: cue
+    app.kubernetes.io/managed-by: cnpg
+    # Namespace is intended to also host the Cue app Deployment later
+    # (reads the cue-db-app Secret); the DB lives here for now.
