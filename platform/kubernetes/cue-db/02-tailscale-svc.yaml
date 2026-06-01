@@ -14,6 +14,10 @@ metadata:
   namespace: cue
   annotations:
     tailscale.com/hostname: "cue-db"   # stable MagicDNS name
+    # The operator's default proxy tag (tag:k8s) isn't in the tailnet tagOwners /
+    # OAuth scope, so it 400s. Reuse tag:cluster-ingress (permitted + already used
+    # by the operator's Ingress proxies — see auto-remediation/approval-ingress).
+    tailscale.com/tags: "tag:cluster-ingress"
 spec:
   type: LoadBalancer
   loadBalancerClass: tailscale
