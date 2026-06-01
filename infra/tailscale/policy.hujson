@@ -34,6 +34,10 @@
   //                          subnets, they terminate a service.
   "tagOwners": {
     "tag:k8s-operator":    ["tag:k8s-operator", "autogroup:admin"],
+    // Default tag the K8s operator applies to the proxy devices it creates for
+    // exposed Services (e.g. cue-db Postgres). Must be owned by tag:k8s-operator
+    // so the operator can apply it — without this it 400s "tag not permitted".
+    "tag:k8s":             ["tag:k8s-operator", "autogroup:admin"],
     "tag:subnet-router":   ["tag:k8s-operator", "autogroup:admin"],
     "tag:homelab":         ["autogroup:admin"],
     "tag:cluster-ingress": ["autogroup:owner"],
