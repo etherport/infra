@@ -171,29 +171,16 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Effort:** ~half day. Mirror the auth-modernization pattern used elsewhere.
 - **Source:** memory `reference_udm_zone_policy_api.md` for current state.
 
-### ⏳ M48. UNAS Pro — bring under IaC via new per-device API key
-- **Source:** 2026-05-26 user spotted the new "Create API Key" option in the UNAS app. Today UNAS config is fully UI-managed.
-- **Scope:**
-  - User creates API key in UNAS app → Settings → API. Stored in 1P as `unifi-unas-api`.
-  - Add `unas_api_key` to SOPS secrets.
-  - Net-new Ansible playbook `infra/ansible/playbooks/udm-unas.yml`. Start with a low-risk resource (e.g., admin user list or share permission audit), expand as patterns settle.
-  - Use case: durability for whatever's currently UI-only (share configs, retention, accounts, SMB/NFS exports).
-- **Effort:** ~1 day for first playbook; subsequent resources faster.
-- **Note:** UNAS is a recent Ubiquiti product; API docs evolving. Pin Network App version in safety-check if endpoints stabilize per major release.
+### ✅ M48. UNAS — config-as-code state backup (2026-05-31)
+- **Done (state-backup path):** UNAS config is UI-managed (internal Postgres, no clean write-API), so instead of write-IaC we keep a **human-readable snapshot in git**: `infra/unifi-devices/unas/` — `config-snapshot.md` (device, network, 9 shares, 5 users, authoritative NFS export ACLs) + `snapshot.sh` (regenerates read-only over SSH via the `unifi-cert-sync@homelab` key, now provisioned on the UNAS) + README with rebuild notes. Closes the gap where the UNAS was backed up nowhere.
+- **Open option (parked):** true write-IaC via the UNAS **API-key** Integration API was NOT tested — would need an API key minted in the UNAS app + endpoint discovery. Revisit only if the config-as-code snapshot proves insufficient.
 
-### ⏳ M49. UniFi Protect — bring under IaC via new per-device API key
-- **Source:** 2026-05-26 (same trigger as M48). New per-device API key feature.
-- **Scope:** mirror M48 but for Protect. 1P item `unifi-protect-api`. Playbook `udm-protect.yml`. Resources to manage as IaC: camera config (resolution, bitrate, motion zones), retention policies, user permissions, NVR-level alert rules. Start with a single resource type.
-- **Effort:** ~1 day initial.
+### ✅ M49. UniFi Protect — config backed up to S3 (verified 2026-05-31)
+- **Done:** Protect's `core-config` already rides the daily `unifi-backup` CronJob → S3 (`protect/core-config`, last run Complete). Verified healthy. No new work.
+- **Open option (parked):** write-IaC (camera/retention config) via the Protect API-key Integration API — same untested path as M48; deprioritized.
 
-### ⏳ M50. Audit + gap-fill UDM/UNAS/Protect IaC coverage
-- **Source:** 2026-05-26 outflow of #63 work. After M47-M49 land, walk through every UI page on UDM Network app, UNAS, and Protect; enumerate every setting NOT yet IaC-managed.
-- **Scope:**
-  - Output: a `docs/runbooks/udm-iac-coverage.md` table — UI page × management state × (durable / UI-only / needs-IaC).
-  - Triage to critical-for-rebuild vs. nice-to-have.
-  - Land the critical gaps as additional playbook resources.
-- **Effort:** 1-3 days depending on triage scope.
-- **Dependency:** M47 done first.
+### ✅ M50. UDM/UNAS/Protect IaC coverage — assessed 2026-05-31
+- **Outcome:** UDM is the one with a real config API (zones/policies codified via `udm-firewall.yml`; firmware/routes/etc. via TF). UNAS + Protect are UI/DB-managed appliances → covered by **backups** (UNAS git snapshot + Protect/UDM S3), not write-IaC. Write-IaC for the appliances is parked pending the API-key Integration API maturing. A full UI-page-by-page coverage table (`udm-iac-coverage.md`) remains a nice-to-have if deeper auditing is ever wanted.
 
 ### ⏳ M51. UniFi Talk IaC — DEFERRED pending public API
 - **Source:** 2026-05-26 research during Twilio Talk #22 work. Investigated whether UniFi Talk 3rd-party SIP provider config can be managed as IaC; conclusion = no public API exists today, and reverse-engineering the `/proxy/talk/...` endpoints is feasible (1-2 days) but undocumented (Ubiquiti can change them silently on any upgrade).
