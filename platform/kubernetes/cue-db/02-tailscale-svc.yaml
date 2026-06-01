@@ -14,10 +14,11 @@ metadata:
   namespace: cue
   annotations:
     tailscale.com/hostname: "cue-db"   # stable MagicDNS name
-    # tag:k8s is the operator's default proxy tag; it's owned by tag:k8s-operator
-    # in the tailnet policy (infra/tailscale/policy.hujson) so the operator can
-    # apply it. Access governed by the tailnet ACL (currently allow-all).
-    tailscale.com/tags: "tag:k8s"
+    # Use tag:k8s-operator — the one tag the operator's OAuth client is provably
+    # scoped to grant (it self-registers with it). tag:k8s / tag:cluster-ingress
+    # 400'd ("not permitted") = the OAuth client (admin-console setting) isn't
+    # scoped to them. Access governed by the tailnet ACL (currently allow-all).
+    tailscale.com/tags: "tag:k8s-operator"
 spec:
   type: LoadBalancer
   loadBalancerClass: tailscale
