@@ -21,6 +21,14 @@ spec:
         metadata:
           labels:
             app: gdrive-sync
+          annotations:
+            # Defensive: never let Velero FS-backup the Backups NFS share into
+            # the kopia repo in S3 (the rclone namespace is in infrastructure-daily,
+            # which runs opt-out defaultVolumesToFsBackup: true). Today this pod is
+            # Completed by backup time so it isn't swept, but a long-running or
+            # rescheduled sync could be — and that share is large + already synced
+            # to GDrive by this very job. Same pattern as plex (movies/tv).
+            backup.velero.io/backup-volumes-excludes: backup-nfs,rclone-config-writable
         spec:
           restartPolicy: Never
           containers:
