@@ -21,6 +21,16 @@ metadata:
 data:
   loki-datasource.yaml: |
     apiVersion: 1
+    # Clear any pre-existing "Loki" datasource first. A prior version of this
+    # file had no `uid`, so Grafana created Loki with an auto-UID
+    # (P8E80F9AEF21F6940) + marked it read-only; the name collision then blocked
+    # the uid:loki entry below from ever binding, so dashboards hard-coding
+    # "uid":"loki" (ai-advisor) went silent. deleteDatasources removes the old
+    # one each provisioning pass; the datasources block immediately recreates it
+    # with the stable uid. Idempotent + harmless on a fresh Grafana.
+    deleteDatasources:
+      - name: Loki
+        orgId: 1
     datasources:
       - name: Loki
         # Explicit UID so dashboards can reference it stably as
