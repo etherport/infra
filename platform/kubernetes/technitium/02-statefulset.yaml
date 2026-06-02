@@ -6,7 +6,12 @@ metadata:
 spec:
   serviceName: technitium-headless
   replicas: 2
-  podManagementPolicy: Parallel
+  # OrderedReady (not Parallel): image bumps / rolling updates then update ONE
+  # replica at a time, keeping the other serving DNS — avoids the brief full-DNS
+  # outage that Parallel caused on the 2026-06-02 technitium 15.2.0 bump. This
+  # field is immutable, so changing it required an STS recreate with
+  # `--cascade=orphan` (pods kept running, then re-adopted) — zero downtime.
+  podManagementPolicy: OrderedReady
   selector:
     matchLabels:
       app: technitium
