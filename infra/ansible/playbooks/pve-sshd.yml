@@ -41,6 +41,12 @@
         ssh-ed25519
         AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR
         automation@homelab
+      # unifi-cert-sync job (k8s unifi-cert-sync ns) — pushes the cert-manager
+      # CF wildcard to PVE's pveproxy, replacing the broken native Route53 ACME.
+      - >-
+        ssh-ed25519
+        AAAAC3NzaC1lZDI1NTE5AAAAICaABoTxNhGnkW/FqpF9ztYGAv3efgAMZnUWoH66Ythz
+        unifi-cert-sync@homelab
 
     # Personal interactive login (graham) — kept for convenience but
     # NOT used by automation. Empty list would lock graham out, so
