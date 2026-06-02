@@ -17,5 +17,6 @@ resources:
   - alertmanager-secret.sops.yaml
   - nvidia-gpu-dashboard.yaml
   - loki-datasource.yaml
+  - hubble-servicemonitor.yaml
   - dashboards
   - service-status-report

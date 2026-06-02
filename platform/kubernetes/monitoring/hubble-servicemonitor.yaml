@@ -1,0 +1,28 @@
+# Scrape Cilium Hubble flow metrics into Prometheus.
+#
+# kubespray enables the Hubble metrics endpoint on the cilium agents
+# (:9965, exposed via the `hubble-metrics` Service in kube-system) but does
+# NOT manage the monitoring stack, so nothing scrapes it. This ServiceMonitor
+# wires it into kube-prometheus-stack (the `release: monitoring` label is what
+# the operator's serviceMonitorSelector matches). Gives us hubble_flows_*,
+# hubble_drop_*, hubble_tcp_*, hubble_dns_* etc. — the flow-visibility data
+# for the NetworkPolicy Phase-2 observation window.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: hubble
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - kube-system
+  selector:
+    matchLabels:
+      k8s-app: hubble
+  endpoints:
+    - port: hubble-metrics
+      path: /metrics
+      interval: 30s
+      honorLabels: true
