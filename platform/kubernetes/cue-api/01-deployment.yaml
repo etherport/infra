@@ -94,6 +94,18 @@ spec:
               value: 'true'
             - name: CUE_DIGESTION_FROM_CHAT
               value: 'true'
+            # 2026-06-02 (dogfooding round 2): location-aware delivery lookup, meal-log
+            # double-count dedup, and concise meal-log replies. Built + adversarially
+            # reviewed (impl review: 4 confirmed of 14; the two MAJOR dedup atomicity/
+            # flag-flip bugs FIXED in commit 117af56 before enabling). DEDUP+BRIEF enabled
+            # together (the brief single total is only truthful once dedup prevents
+            # double-counts). 250 tests green. User-authorized enable.
+            - name: CUE_MEAL_LOCATION
+              value: 'true'
+            - name: CUE_MEAL_DEDUP
+              value: 'true'
+            - name: CUE_MEAL_BRIEF
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
