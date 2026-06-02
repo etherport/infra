@@ -3,4 +3,6 @@ kind: Kustomization
 resources:
   - 00-namespace.yaml
   - 01-cluster.yaml
-  - 02-tailscale-svc.yaml   # tailnet-only exposure of the primary (Tailscale operator)
+  - 02-tailscale-svc.yaml
+  - 03-barman-credentials.sops.yaml # S3 creds for Barman backup
+  - 04-scheduled-backup.yaml # daily base backup → S3   # tailnet-only exposure of the primary (Tailscale operator)

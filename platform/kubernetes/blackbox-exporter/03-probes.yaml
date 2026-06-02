@@ -72,3 +72,29 @@ spec:
         - https://10.10.209.10
       labels:
         appliance: unas
+---
+# Cue API — public health endpoint through the Cloudflare tunnel. Probes the
+# full external path (DNS → CF edge → tunnel → cue-api Service), so it catches
+# tunnel/DNS/cert failures the in-cluster deployment check would miss. /health
+# is one of only two publicly-routed paths. http_2xx_insecure expects 2xx;
+# /health returns 200.
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: cue-api
+  namespace: blackbox-exporter
+  labels:
+    appliance: cue-api
+    release: monitoring
+spec:
+  jobName: blackbox-appliance
+  interval: 30s
+  module: http_2xx_insecure
+  prober:
+    url: blackbox-exporter.blackbox-exporter.svc.cluster.local:9115
+  targets:
+    staticConfig:
+      static:
+        - https://cue.etherport.net/health
+      labels:
+        appliance: cue-api

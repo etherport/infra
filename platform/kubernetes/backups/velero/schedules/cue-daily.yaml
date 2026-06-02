@@ -1,0 +1,17 @@
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: cue-daily
+  namespace: velero
+spec:
+  schedule: "0 3 * * *"
+  template:
+    includedNamespaces:
+      - cue
+    # cue-api is stateless (state lives in cue-db) and the cue-db PVC is backed
+    # up by CNPG Barman (continuous WAL + daily base backup to S3) — NOT here.
+    # So skip volume FS-backup; Velero captures only the namespace's K8s
+    # resources (Deployment, Service, Secrets incl. the CNPG-generated
+    # cue-db-app password, the CNPG Cluster CR) for fast namespace DR.
+    defaultVolumesToFsBackup: false
+    ttl: 720h0m0s

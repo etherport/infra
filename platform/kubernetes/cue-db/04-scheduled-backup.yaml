@@ -1,0 +1,18 @@
+---
+# Daily Barman base backup for cue-db. WAL archiving is continuous (every
+# segment ships to S3 as written); this CR triggers a periodic base backup so
+# PITR doesn't have to replay the full WAL history. retentionPolicy: "30d" on
+# the Cluster spec prunes backups + WALs older than 30 days.
+#
+# NOTE: CNPG ScheduledBackup uses a 6-field cron (seconds first), unlike Velero.
+# 01:00 UTC — offset from postgres-cluster-daily (05:00) to stagger S3 load.
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: cue-db-daily
+  namespace: cue
+spec:
+  schedule: "0 0 1 * * *"
+  backupOwnerReference: self
+  cluster:
+    name: cue-db

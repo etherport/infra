@@ -56,3 +56,28 @@ spec:
 
   monitoring:
     enablePodMonitor: true
+
+  # Continuous WAL archiving + scheduled full backups to S3 via Barman, same as
+  # the shared postgres-cluster. Reuses the existing postgres-barman bucket —
+  # CNPG isolates each cluster under its own serverName (= cluster name), so
+  # cue-db writes to s3://postgres-barman.wind.etherport.net/cue-db/ with no
+  # collision. Creds in the barman-s3-credentials secret (03, this dir).
+  # Daily base backup is triggered by the ScheduledBackup CR (04). Restore via
+  # bootstrap.recovery against an externalCluster — see cnpg/README.md.
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://postgres-barman.wind.etherport.net
+      s3Credentials:
+        accessKeyId:
+          name: barman-s3-credentials
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: barman-s3-credentials
+          key: SECRET_ACCESS_KEY
+      wal:
+        compression: gzip
+        encryption: AES256
+      data:
+        compression: gzip
+        encryption: AES256
+    retentionPolicy: "30d"

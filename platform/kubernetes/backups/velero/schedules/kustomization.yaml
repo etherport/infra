@@ -5,6 +5,7 @@ namespace: velero
 
 resources:
   - critical-apps-daily.yaml
+  - cue-daily.yaml
   - infrastructure-daily.yaml
   - kube-system-daily.yaml
   - monitoring-daily.yaml

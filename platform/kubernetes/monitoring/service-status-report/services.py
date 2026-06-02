@@ -62,6 +62,7 @@ SERVICES = [
     ("Apps", "Home Assistant", "deployment", "home-automation", "home-assistant"),
     ("Apps", "Plex",           "deployment", "plex",            "plex"),
     ("Apps", "Ollama",         "deployment", "ollama",          "ollama"),
+    ("Apps", "Cue API",        "deployment", "cue",             "cue-api"),
 
     # External edge (probed via external-nodes scrape job)
     ("External edge", "dns-fallback", "external", "external-nodes", "dns-fallback"),
@@ -75,4 +76,5 @@ SERVICES = [
     ("Appliances", "UDM",      "probe", "blackbox-exporter", "udm"),
     ("Appliances", "Protect",  "probe", "blackbox-exporter", "protect"),
     ("Appliances", "UNAS",     "probe", "blackbox-exporter", "unas"),
+    ("Appliances", "Cue API (public)", "probe", "blackbox-exporter", "cue-api"),
 ]
