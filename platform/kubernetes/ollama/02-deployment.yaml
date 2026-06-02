@@ -26,9 +26,11 @@ spec:
           env:
             - name: OLLAMA_HOST
               value: "0.0.0.0"
-            # Keep models loaded longer for better responsiveness
+            # Unload idle models after 5m so the P40 drops from its ~50W
+            # active-idle (P0, CUDA context held) to ~10W deep idle (P8).
+            # Trade-off: first request after idle reloads the model (~10-20s).
             - name: OLLAMA_KEEP_ALIVE
-              value: "24h"
+              value: "5m"
             # Default context cap. The Tesla P40 has 24GB VRAM; a model's
             # weights + KV-cache must fit or ollama spills layers to CPU and
             # inference crawls. qwen2.5:32b weights are ~19GB, so a 32K context
