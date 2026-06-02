@@ -5,3 +5,4 @@ resources:
   - kubernetes-overview.yaml
   - service-status.yaml
   - ai-advisor.yaml
+  - blackbox-appliances.yaml
