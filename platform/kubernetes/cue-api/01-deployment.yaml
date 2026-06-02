@@ -64,6 +64,17 @@ spec:
             # Enable the interaction-style learn loop in dev (per deploy spec).
             - name: CUE_INTERACTION_LEARNING
               value: 'true'
+            # 2026-06-02: enable the daily-state + surfaces features (built + adversarially
+            # reviewed + eval-validated, no regression). today-state extraction (chat →
+            # daily_state), inbound-photo classification (workout photos log cardio), and
+            # the proactive condition check-in push (in-process scheduler; safe at-most-once
+            # via the proactive_pings ledger; tz-aware window; /quiet to opt out).
+            - name: CUE_TODAY_STATE_EXTRACTION
+              value: 'true'
+            - name: CUE_PHOTO_CLASSIFY
+              value: 'true'
+            - name: CUE_PROACTIVE_CHECKINS
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
