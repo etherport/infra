@@ -4,7 +4,9 @@ metadata:
   name: unifi-cert-sync-script
   namespace: unifi-cert-sync
 data:
-  # Device target list — name|ssh-user@host|crt-path|key-path|restart-cmd
+  # Device target list — name|ssh-user@host|crt-path|key-path|restart-cmd[|verify-port]
+  # verify-port is the HTTPS port the post-push handshake check connects to
+  # (default 443). PVE's pveproxy listens on 8006, so its line sets it.
   # One per line. Lines starting with `#` are ignored.
   #
   # The UniFi-OS devices share the same cert path + restart command.
@@ -15,7 +17,7 @@ data:
     sequoia|root@sequoia.wind.etherport.net|/data/unifi-core/config/unifi-core.crt|/data/unifi-core/config/unifi-core.key|systemctl restart unifi-core
     # Proxmox VE — replaces its broken native Route53 ACME with the
     # cert-manager CF-issued wildcard (pve.wind.etherport.net ⊂ *.wind.etherport.net).
-    pve|root@10.10.200.41|/etc/pve/local/pveproxy-ssl.pem|/etc/pve/local/pveproxy-ssl.key|systemctl restart pveproxy
+    pve|root@10.10.200.41|/etc/pve/local/pveproxy-ssl.pem|/etc/pve/local/pveproxy-ssl.key|systemctl restart pveproxy|8006
 
   sync.sh: |
     #!/usr/bin/env bash
@@ -71,7 +73,7 @@ data:
     # Step 3: For each device — compare, push if needed, verify
     # =========================================================================
     # Use FD 3 to avoid SSH stealing stdin from the while-read loop
-    while IFS='|' read -r name target crt_path key_path restart_cmd <&3; do
+    while IFS='|' read -r name target crt_path key_path restart_cmd verify_port <&3; do
       # Skip comments + blanks
       [[ -z "$name" || "$name" =~ ^[[:space:]]*# ]] && continue
       log ""
@@ -128,7 +130,7 @@ data:
       # Verify: HTTPS handshake from inside the cluster, check the cert SHA matches
       sleep 5
       host="${target#*@}"
-      REMOTE_CERT_SHA=$(echo | openssl s_client -connect "${host}:443" -servername "wind.etherport.net" 2>/dev/null \
+      REMOTE_CERT_SHA=$(echo | openssl s_client -connect "${host}:${verify_port:-443}" -servername "wind.etherport.net" 2>/dev/null \
         | openssl x509 -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr 'A-Z' 'a-z')
       LOCAL_CERT_LEAF_SHA=$(openssl x509 -in /tmp/tls.crt -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr 'A-Z' 'a-z')
       if [[ "$REMOTE_CERT_SHA" == "$LOCAL_CERT_LEAF_SHA" ]]; then
