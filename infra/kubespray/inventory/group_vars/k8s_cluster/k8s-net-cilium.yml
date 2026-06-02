@@ -147,6 +147,11 @@ cilium_l2announcements: false
 # cilium_enable_host_firewall: false
 # cilium_policy_audit_mode: false
 
+# Pin Cilium to the currently-running version so a `--tags=cilium` reconfigure
+# (rolling out Hubble) only changes config, never the version — and a future
+# kubespray default bump can't silently upgrade the CNI on the next run.
+cilium_version: "1.18.6"
+
 # Hubble: enabled so we have flow-level observability before rolling
 # out enforced NetworkPolicies in Phase 2. The UI + auto-generated TLS
 # certs come along. Metrics export tied into Prometheus for the
