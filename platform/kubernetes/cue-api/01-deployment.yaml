@@ -85,6 +85,15 @@ spec:
               value: 'true'
             - name: CUE_MEAL_COACH
               value: 'true'
+            # 2026-06-02 (later): enable meal-assist §3a published-macro tightening (a clean
+            # named-chain meal-log pulls the chain's official macros to tighten the estimate;
+            # found:false → estimate unchanged), and capturing a GI symptom mentioned in chat
+            # into the day's digestion_status (escalation-only, positive-only). Both built +
+            # adversarially reviewed; ship dormant-by-default, enabled here.
+            - name: CUE_MEAL_MACRO_LOOKUP
+              value: 'true'
+            - name: CUE_DIGESTION_FROM_CHAT
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
