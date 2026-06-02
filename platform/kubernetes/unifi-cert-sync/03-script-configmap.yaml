@@ -106,12 +106,16 @@ data:
         continue
       fi
 
-      # Atomic rename + restart
+      # Atomic rename + restart. chmod is best-effort: PVE's pmxcfs (/etc/pve)
+      # rejects chmod ("Operation not permitted") and pins perms at 0640
+      # (root:www-data — already correct for pveproxy); normal-fs devices
+      # (UniFi-OS) still get 600/644 applied. Without `|| true` the failed
+      # chmod on PVE breaks the && chain before the restart.
       if ! ssh "${SSH_OPTS[@]}" "$target" "
         mv ${crt_path}.new ${crt_path} &&
         mv ${key_path}.new ${key_path} &&
-        chmod 600 ${key_path} &&
-        chmod 644 ${crt_path} &&
+        { chmod 600 ${key_path} 2>/dev/null || true; } &&
+        { chmod 644 ${crt_path} 2>/dev/null || true; } &&
         ${restart_cmd}
       "; then
         log "  ✗ install / restart failed"
