@@ -5,6 +5,4 @@ resources:
   - 01-deployment.yaml
   - 02-service.yaml
   - 03-secret-app.sops.yaml # ANTHROPIC_API_KEY + TELEGRAM_* (SOPS-encrypted)
-  # - 04-secret-ghcr.sops.yaml  # ghcr read-only pull cred — uncomment once the
-  #   read:packages PAT is provided (created via `kubectl create secret
-  #   docker-registry ... --dry-run -o yaml` then sops-encrypted).
+  - 04-secret-ghcr.sops.yaml # ghcr read-only pull cred (SOPS-encrypted)
