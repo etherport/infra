@@ -29,6 +29,15 @@ spec:
             # Keep models loaded longer for better responsiveness
             - name: OLLAMA_KEEP_ALIVE
               value: "24h"
+            # Default context cap. The Tesla P40 has 24GB VRAM; a model's
+            # weights + KV-cache must fit or ollama spills layers to CPU and
+            # inference crawls. qwen2.5:32b weights are ~19GB, so a 32K context
+            # (~12GB KV) pushed it to 31GB → 24% CPU offload → near-unusable.
+            # 8192 keeps the KV-cache small so models stay fully GPU-resident.
+            # (open-webui can still raise num_ctx per-chat, but this is the
+            # sane default for direct API + when the client doesn't specify.)
+            - name: OLLAMA_CONTEXT_LENGTH
+              value: "8192"
           resources:
             # The namespace-default LimitRange (policy-baseline) caps
             # memory at 4Gi for pods that don't set their own limit.
