@@ -75,6 +75,16 @@ spec:
               value: 'true'
             - name: CUE_PROACTIVE_CHECKINS
               value: 'true'
+            # 2026-06-02: enable meal-assist Phase-1 (built + adversarially reviewed,
+            # 17 findings fixed, 222 tests green). CUE_MEAL_ROUTER = the where-router
+            # (delivery/out/cook) + pending_flow continuation (fixes lost-context); the
+            # always-on deep-link CTA is host-anchored. CUE_MEAL_COACH = text/photo
+            # meal-log → coach take + ONE clarifying-answer loop (roll:false re-estimate,
+            # no double-count). Migration 0009 adds the pending_flows table.
+            - name: CUE_MEAL_ROUTER
+              value: 'true'
+            - name: CUE_MEAL_COACH
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
