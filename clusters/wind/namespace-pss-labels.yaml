@@ -5,17 +5,20 @@
 # `createNamespace: true`, or per-app `00-namespace.yaml`); we just stamp the
 # PSS labels onto them at kustomize-build time.
 #
-# audit + warn only — these do not block pod creation. Audit-log events
-# fire on pods that violate the baseline PSS profile; kubectl apply
-# warnings surface the same to developers.
-#
 # Tier labels:
 #   tier=data    → tenant application namespaces
 #   tier=system  → cluster infrastructure (privileged workloads expected)
 #
-# When graduating to enforce mode in Phase 2, only tier=data namespaces
-# get `pod-security.kubernetes.io/enforce: baseline` initially. tier=system
-# stays unrestricted because they legitimately need privileged access.
+# Phase 2 (2026-06-02): tier=data namespaces with ZERO baseline violations
+# (verified by scanning live pods) graduate to `enforce: baseline` — new
+# violating pods are rejected at admission; existing pods are unaffected.
+# audit+warn are kept alongside enforce so violations are still logged/surfaced.
+# Three tier=data namespaces stay audit/warn-only because they run legitimately
+# elevated pods that baseline would block:
+#   - home-automation: Home Assistant runs privileged (USB/hardware access)
+#   - monitoring:      node-exporter (hostNetwork/PID), alloy (hostPath), grafana
+#   - tailscale:       operator/proxy pods need NET_ADMIN
+# tier=system (plex, wireguard) stays unrestricted by design.
 ---
 apiVersion: v1
 kind: Namespace
@@ -23,6 +26,7 @@ metadata:
   name: home-automation
   labels:
     tier: data
+    # audit/warn only — HA pod is privileged (hardware access). See header.
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
 ---
@@ -32,6 +36,7 @@ metadata:
   name: monitoring
   labels:
     tier: data
+    # audit/warn only — node-exporter/alloy/grafana need host access. See header.
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
 ---
@@ -43,6 +48,7 @@ metadata:
     tier: data
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
 kind: Namespace
@@ -52,6 +58,7 @@ metadata:
     tier: data
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
 kind: Namespace
@@ -61,6 +68,7 @@ metadata:
     tier: data
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
 kind: Namespace
@@ -70,6 +78,7 @@ metadata:
     tier: data
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
 kind: Namespace
@@ -79,6 +88,7 @@ metadata:
     tier: data
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
 kind: Namespace
@@ -88,6 +98,7 @@ metadata:
     tier: data
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
 kind: Namespace
@@ -95,6 +106,7 @@ metadata:
   name: tailscale
   labels:
     tier: data
+    # audit/warn only — operator/proxy pods need NET_ADMIN. See header.
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
 ---
