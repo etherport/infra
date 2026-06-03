@@ -3,11 +3,12 @@
 Brings the Twilio Programmable Voice + SIP trunk setup under IaC, and
 turns the 3 pending Talk tasks into TF apply'd changes:
 
-| Task | Resolution path |
-|---|---|
-| #20 fix 911 emergency address | New `twilio_api_accounts_addresses` resource + bound to primary DID via `emergency_address_sid` |
-| #21 route or release orphan DID | `orphan_did_action` variable: `release`, `route_voicemail`, or `route_forward` |
-| #22 migrate SIP trunk UDP→TLS+sRTP | `twilio_trunking_trunks_v1.secure = true` + `sips:` scheme in origination URL |
+| Task | Resolution path | Status |
+|---|---|---|
+| #20 fix 911 emergency address | New `twilio_api_accounts_addresses` resource + bound to primary DID via `emergency_address_sid` | ✅ applied |
+| #21 route or release orphan DID | `orphan_did_action` variable: `release`, `route_voicemail`, or `route_forward` | ✅ released |
+| #22 migrate SIP trunk UDP→TLS+sRTP | `twilio_trunking_trunks_v1.secure = true` + `sips:` scheme in origination URL | ⏳ **deferred** — the SIP endpoint is the UDM / UniFi Talk, which doesn't support SIP-TLS. `secure=false` matches reality; flip only once a TLS-capable SIP endpoint exists. |
+| #23 uniform inbound SMS routing | `messaging-service.tf`: one Messaging Service (inbound webhook = the shared Lambda `var.webhook_url`, `use_inbound_webhook_on_number=false`) with all DIDs added as senders. Needed because a direct `sms_url` change on the primary DID is blocked by Twilio's E911 lock (ApiError 21631) — joining a Messaging Service routes SMS without touching the number's emergency-locked config. | ✅ applied |
 
 ## Prerequisites (one-time, ~5 min)
 
