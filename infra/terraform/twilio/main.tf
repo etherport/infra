@@ -22,14 +22,14 @@
 // to find the caller.
 // ---------------------------------------------------------------------------
 resource "twilio_api_accounts_addresses" "primary" {
-  friendly_name    = var.emergency_address.friendly_name
-  customer_name    = var.emergency_address.customer_name
-  street           = var.emergency_address.street
-  street_secondary = var.emergency_address.street_secondary
-  city             = var.emergency_address.city
-  region           = var.emergency_address.region
-  postal_code      = var.emergency_address.postal_code
-  iso_country      = var.emergency_address.iso_country
+  friendly_name     = var.emergency_address.friendly_name
+  customer_name     = var.emergency_address.customer_name
+  street            = var.emergency_address.street
+  street_secondary  = var.emergency_address.street_secondary
+  city              = var.emergency_address.city
+  region            = var.emergency_address.region
+  postal_code       = var.emergency_address.postal_code
+  iso_country       = var.emergency_address.iso_country
   emergency_enabled = true
 }
 
@@ -39,18 +39,22 @@ resource "twilio_api_accounts_addresses" "primary" {
 //   (find the SID in console → Phone Numbers → Active Numbers → click number → "Number SID")
 // ---------------------------------------------------------------------------
 resource "twilio_api_accounts_incoming_phone_numbers" "primary" {
-  phone_number          = var.primary_did
+  phone_number = var.primary_did
   // address_sid (regulatory billing address) deliberately unmanaged —
   // US DIDs don't need it; only emergency_address_sid matters for E911.
   emergency_status      = "Active"
   emergency_address_sid = twilio_api_accounts_addresses.primary.sid
 
-  // After import, these fields will be set to current values — drop
-  // any here that you don't want TF to manage / will manually tune
-  // in console. Common ones intentionally NOT in TF for now:
-  //   voice_url, voice_method, voice_fallback_url, sms_url, status_callback
-  //   (these usually point at Studio flows or Twilio Functions, which
-  //   are operator-tuned. Add to TF only if you want declarative control.)
+  // SMS → the shared AWS Lambda webhook (var.webhook_url), the SAME handler the
+  // forward DIDs use — replacing the per-number Studio Flow that was attached in
+  // the console. Makes inbound SMS to the primary/SIP DID consistent with every
+  // other number. (A Studio Flow on a number just sets the messaging webhook URL,
+  // so setting sms_url here overrides it.)
+  sms_url    = var.webhook_url
+  sms_method = "POST"
+
+  // voice_url/voice_method/status_callback intentionally NOT managed — the
+  // primary DID's voice is routed via the SIP trunk (operator-tuned in console).
 
   lifecycle {
     ignore_changes = [
@@ -80,8 +84,8 @@ resource "twilio_api_accounts_incoming_phone_numbers" "orphan" {
 
   voice_url = (
     var.orphan_did_action == "route_voicemail"
-      ? "https://handler.twilio.com/twiml/EH00000000000000000000000000000000" // PLACEHOLDER — replace with real Studio flow or TwiML Bin URL
-      : "https://handler.twilio.com/twiml/EH11111111111111111111111111111111" // PLACEHOLDER — replace with forward-to-primary TwiML
+    ? "https://handler.twilio.com/twiml/EH00000000000000000000000000000000" // PLACEHOLDER — replace with real Studio flow or TwiML Bin URL
+    : "https://handler.twilio.com/twiml/EH11111111111111111111111111111111" // PLACEHOLDER — replace with forward-to-primary TwiML
   )
   voice_method = "POST"
 
@@ -105,11 +109,11 @@ resource "twilio_trunking_trunks_v1" "talk" {
 }
 
 resource "twilio_trunking_trunks_origination_urls_v1" "talk_primary" {
-  trunk_sid    = twilio_trunking_trunks_v1.talk.sid
+  trunk_sid = twilio_trunking_trunks_v1.talk.sid
   // friendly_name kept null in Twilio for legacy reasons; ignore_changes
   // accommodates that without forcing a diff on every plan.
   friendly_name = var.sip_origination_friendly_name
-  sip_url       = var.sip_origination_url   // sips:sip.wind.etherport.net:5061;transport=tls
+  sip_url       = var.sip_origination_url // sips:sip.wind.etherport.net:5061;transport=tls
   weight        = var.sip_origination_weight
   priority      = var.sip_origination_priority
   enabled       = true
