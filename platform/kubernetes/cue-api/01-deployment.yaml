@@ -106,6 +106,13 @@ spec:
               value: 'true'
             - name: CUE_MEAL_BRIEF
               value: 'true'
+            # 2026-06-02 (coach quality): surface the digestion/quiet-gut avoid-list ONLY when
+            # the turn is about food/gut, and collapse durable GI-trigger facts to a conditional
+            # reference — kills the "no orzo every time" boilerplate. A/B-validated (avoid-
+            # relevance subscore up; no correctness regression). The honest-specifics /
+            # no-state-recital / variation prompt changes ride the COACH_PROMPT_VERSION bump.
+            - name: CUE_AVOID_RELEVANCE
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
