@@ -6,9 +6,7 @@
 # safe — generously above current usage, they never interfere with normal
 # operation but cap a runaway (a misconfigured controller spawning thousands of
 # pods/PVCs/services). Applied to the same tenant namespaces as the LimitRanges.
-#
-# Current usage is well under these (largest is monitoring at ~25 pods / ~15 svc
-# / ~10 PVC), so these are pure backstops.
+# (No YAML anchors — kustomize does not support cross-document anchors.)
 ---
 apiVersion: v1
 kind: ResourceQuota
@@ -16,7 +14,7 @@ metadata:
   name: object-count-guardrail
   namespace: backups
 spec:
-  hard: &counts
+  hard:
     count/pods: "100"
     count/services: "40"
     count/persistentvolumeclaims: "30"
@@ -29,7 +27,12 @@ metadata:
   name: object-count-guardrail
   namespace: dns
 spec:
-  hard: *counts
+  hard:
+    count/pods: "100"
+    count/services: "40"
+    count/persistentvolumeclaims: "30"
+    count/replicationcontrollers: "20"
+    count/jobs.batch: "100"
 ---
 apiVersion: v1
 kind: ResourceQuota
@@ -37,7 +40,12 @@ metadata:
   name: object-count-guardrail
   namespace: home-automation
 spec:
-  hard: *counts
+  hard:
+    count/pods: "100"
+    count/services: "40"
+    count/persistentvolumeclaims: "30"
+    count/replicationcontrollers: "20"
+    count/jobs.batch: "100"
 ---
 apiVersion: v1
 kind: ResourceQuota
@@ -45,7 +53,12 @@ metadata:
   name: object-count-guardrail
   namespace: monitoring
 spec:
-  hard: *counts
+  hard:
+    count/pods: "100"
+    count/services: "40"
+    count/persistentvolumeclaims: "30"
+    count/replicationcontrollers: "20"
+    count/jobs.batch: "100"
 ---
 apiVersion: v1
 kind: ResourceQuota
@@ -53,7 +66,12 @@ metadata:
   name: object-count-guardrail
   namespace: ollama
 spec:
-  hard: *counts
+  hard:
+    count/pods: "100"
+    count/services: "40"
+    count/persistentvolumeclaims: "30"
+    count/replicationcontrollers: "20"
+    count/jobs.batch: "100"
 ---
 apiVersion: v1
 kind: ResourceQuota
@@ -61,7 +79,12 @@ metadata:
   name: object-count-guardrail
   namespace: postgres
 spec:
-  hard: *counts
+  hard:
+    count/pods: "100"
+    count/services: "40"
+    count/persistentvolumeclaims: "30"
+    count/replicationcontrollers: "20"
+    count/jobs.batch: "100"
 ---
 apiVersion: v1
 kind: ResourceQuota
@@ -69,7 +92,12 @@ metadata:
   name: object-count-guardrail
   namespace: tailscale
 spec:
-  hard: *counts
+  hard:
+    count/pods: "100"
+    count/services: "40"
+    count/persistentvolumeclaims: "30"
+    count/replicationcontrollers: "20"
+    count/jobs.batch: "100"
 ---
 apiVersion: v1
 kind: ResourceQuota
@@ -77,7 +105,12 @@ metadata:
   name: object-count-guardrail
   namespace: traefik
 spec:
-  hard: *counts
+  hard:
+    count/pods: "100"
+    count/services: "40"
+    count/persistentvolumeclaims: "30"
+    count/replicationcontrollers: "20"
+    count/jobs.batch: "100"
 ---
 apiVersion: v1
 kind: ResourceQuota
@@ -85,4 +118,9 @@ metadata:
   name: object-count-guardrail
   namespace: wikijs
 spec:
-  hard: *counts
+  hard:
+    count/pods: "100"
+    count/services: "40"
+    count/persistentvolumeclaims: "30"
+    count/replicationcontrollers: "20"
+    count/jobs.batch: "100"
