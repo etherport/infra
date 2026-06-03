@@ -45,16 +45,14 @@ resource "twilio_api_accounts_incoming_phone_numbers" "primary" {
   emergency_status      = "Active"
   emergency_address_sid = twilio_api_accounts_addresses.primary.sid
 
-  // SMS → the shared AWS Lambda webhook (var.webhook_url), the SAME handler the
-  // forward DIDs use — replacing the per-number Studio Flow that was attached in
-  // the console. Makes inbound SMS to the primary/SIP DID consistent with every
-  // other number. (A Studio Flow on a number just sets the messaging webhook URL,
-  // so setting sms_url here overrides it.)
-  sms_url    = var.webhook_url
-  sms_method = "POST"
-
-  // voice_url/voice_method/status_callback intentionally NOT managed — the
-  // primary DID's voice is routed via the SIP trunk (operator-tuned in console).
+  // NOTE: sms_url is intentionally NOT managed here. We tried pointing it at the
+  // shared Lambda (var.webhook_url) to replace the Studio Flow, but Twilio
+  // rejects updating the messaging config of a number with an E911 emergency
+  // address attached — ApiError 21631 "remove the emergency address before
+  // performing this action". The durable fix is a Messaging Service whose
+  // inbound webhook is the Lambda, with this number added as a sender (routes
+  // SMS without touching the number's emergency-locked config). See README #23.
+  // voice routing stays in the console (SIP trunk).
 
   lifecycle {
     ignore_changes = [
