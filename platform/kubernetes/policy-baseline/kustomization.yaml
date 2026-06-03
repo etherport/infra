@@ -7,3 +7,4 @@ kind: Kustomization
 # monitoring.yaml). See 00-namespace-labels.yaml for the patch payload.
 resources:
   - limitranges/default-limits.yaml
+  - resourcequotas/default-quota.yaml

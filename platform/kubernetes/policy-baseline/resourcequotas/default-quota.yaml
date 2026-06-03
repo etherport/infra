@@ -1,0 +1,88 @@
+# Per-namespace ResourceQuotas — object-count guardrails (M5).
+#
+# Deliberately COUNT-ONLY (no requests.cpu/memory): a compute quota would force
+# every pod to declare requests and risks rejecting workloads if mis-sized, and
+# right-sizing compute per namespace needs real usage data. Object counts are
+# safe — generously above current usage, they never interfere with normal
+# operation but cap a runaway (a misconfigured controller spawning thousands of
+# pods/PVCs/services). Applied to the same tenant namespaces as the LimitRanges.
+#
+# Current usage is well under these (largest is monitoring at ~25 pods / ~15 svc
+# / ~10 PVC), so these are pure backstops.
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: object-count-guardrail
+  namespace: backups
+spec:
+  hard: &counts
+    count/pods: "100"
+    count/services: "40"
+    count/persistentvolumeclaims: "30"
+    count/replicationcontrollers: "20"
+    count/jobs.batch: "100"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: object-count-guardrail
+  namespace: dns
+spec:
+  hard: *counts
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: object-count-guardrail
+  namespace: home-automation
+spec:
+  hard: *counts
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: object-count-guardrail
+  namespace: monitoring
+spec:
+  hard: *counts
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: object-count-guardrail
+  namespace: ollama
+spec:
+  hard: *counts
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: object-count-guardrail
+  namespace: postgres
+spec:
+  hard: *counts
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: object-count-guardrail
+  namespace: tailscale
+spec:
+  hard: *counts
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: object-count-guardrail
+  namespace: traefik
+spec:
+  hard: *counts
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: object-count-guardrail
+  namespace: wikijs
+spec:
+  hard: *counts
