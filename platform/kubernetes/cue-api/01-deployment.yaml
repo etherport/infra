@@ -123,6 +123,14 @@ spec:
             # time-neutral framing, training-day carbs, food-turn-only avoids. User-authorized.
             - name: CUE_PROSE_REPLY
               value: 'true'
+            # 2026-06-03 (delivery deep-links): render up to 3 real nearby storefront links
+            # (Uber Eats / DoorDash / Talabat / Deliveroo, from the live-lookup citations) as
+            # one-tap Telegram inline URL buttons instead of a single pasted link. Host+path
+            # anchored (rejects listicles/lookalikes); search pushed to surface specific
+            # storefronts. Honest limit: opens the store in the user's app (no pre-filled cart).
+            # Unit-tested (262 green); not gold-set-evaluable (needs live search). User-authorized.
+            - name: CUE_DELIVERY_LINKS
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
