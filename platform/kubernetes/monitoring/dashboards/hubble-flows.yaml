@@ -1,0 +1,76 @@
+# Grafana dashboard — Cilium Hubble network flows.
+# Backed by the hubble_* metrics scraped via platform/kubernetes/monitoring/
+# hubble-servicemonitor.yaml. Gives flow/drop visibility while the NetworkPolicy
+# Phase-2 observation window matures (and ongoing network observability after).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hubble-flows-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  hubble-flows.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "graphTooltip": 1,
+      "time": { "from": "now-6h", "to": "now" },
+      "refresh": "1m",
+      "title": "Cilium Hubble — Network Flows",
+      "uid": "hubble-flows",
+      "schemaVersion": 39,
+      "tags": ["cilium", "hubble", "network"],
+      "templating": { "list": [] },
+      "panels": [
+        {
+          "id": 1, "title": "Flow rate (total)", "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+          "targets": [ { "expr": "sum(rate(hubble_flows_processed_total[5m]))", "refId": "A" } ],
+          "fieldConfig": { "defaults": { "unit": "flps", "color": { "mode": "thresholds" }, "thresholds": { "steps": [ { "color": "green", "value": null } ] } } }
+        },
+        {
+          "id": 2, "title": "Drop rate", "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+          "targets": [ { "expr": "sum(rate(hubble_drop_total[5m]))", "refId": "A" } ],
+          "fieldConfig": { "defaults": { "unit": "flps", "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 50 } ] } } }
+        },
+        {
+          "id": 3, "title": "Lost events/s (buffer overflow → raise event-buffer-capacity)", "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 4, "w": 12, "x": 12, "y": 0 },
+          "targets": [ { "expr": "sum(rate(hubble_lost_events_total[5m]))", "refId": "A" } ],
+          "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.001 } ] } } }
+        },
+        {
+          "id": 4, "title": "Flows by verdict", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+          "targets": [ { "expr": "sum by (verdict) (rate(hubble_flows_processed_total[5m]))", "legendFormat": "{{verdict}}", "refId": "A" } ],
+          "fieldConfig": { "defaults": { "unit": "flps", "custom": { "drawStyle": "line", "fillOpacity": 15, "stacking": { "mode": "normal" } } } }
+        },
+        {
+          "id": 5, "title": "Drops by reason", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+          "targets": [ { "expr": "sum by (reason) (rate(hubble_drop_total[5m]))", "legendFormat": "{{reason}}", "refId": "A" } ],
+          "fieldConfig": { "defaults": { "unit": "flps", "custom": { "drawStyle": "line", "fillOpacity": 15, "stacking": { "mode": "normal" } } } }
+        },
+        {
+          "id": 6, "title": "Flows by L4 protocol", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+          "targets": [ { "expr": "sum by (protocol) (rate(hubble_flows_processed_total[5m]))", "legendFormat": "{{protocol}}", "refId": "A" } ],
+          "fieldConfig": { "defaults": { "unit": "flps", "custom": { "drawStyle": "line", "fillOpacity": 10 } } }
+        },
+        {
+          "id": 7, "title": "TCP flags", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+          "targets": [ { "expr": "sum by (flag) (rate(hubble_tcp_flags_total[5m]))", "legendFormat": "{{flag}}", "refId": "A" } ],
+          "fieldConfig": { "defaults": { "unit": "flps", "custom": { "drawStyle": "line", "fillOpacity": 10 } } }
+        }
+      ]
+    }

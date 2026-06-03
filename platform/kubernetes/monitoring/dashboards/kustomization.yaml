@@ -6,3 +6,4 @@ resources:
   - service-status.yaml
   - ai-advisor.yaml
   - blackbox-appliances.yaml
+  - hubble-flows.yaml
