@@ -124,16 +124,10 @@ metadata:
     pod-security.kubernetes.io/warn: baseline
     pod-security.kubernetes.io/enforce: baseline
 ---
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: cert-manager
-  labels:
-    tier: data
-    pod-security.kubernetes.io/audit: baseline
-    pod-security.kubernetes.io/warn: baseline
-    pod-security.kubernetes.io/enforce: baseline
----
+# NOTE: cert-manager + rclone-gdrive are intentionally NOT here — their
+# Namespaces are created by HelmReleases/runtime, not in the kustomize build,
+# so a strategic-merge patch has no target and breaks the whole build. PSS for
+# those would need to be set on the namespace at its creation source instead.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -148,16 +142,6 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: rclone
-  labels:
-    tier: data
-    pod-security.kubernetes.io/audit: baseline
-    pod-security.kubernetes.io/warn: baseline
-    pod-security.kubernetes.io/enforce: baseline
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: rclone-gdrive
   labels:
     tier: data
     pod-security.kubernetes.io/audit: baseline
