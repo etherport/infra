@@ -113,6 +113,16 @@ spec:
             # no-state-recital / variation prompt changes ride the COACH_PROMPT_VERSION bump.
             - name: CUE_AVOID_RELEVANCE
               value: 'true'
+            # 2026-06-03 (coach quality, prose overhaul): the user-facing reply is now rich
+            # adaptive coaching PROSE (the `reply` field) instead of the structured
+            # Decision/Why/Target template — closing the gap to the original GPT-thread voice.
+            # Tuned + A/B-validated on a 13-turn gold set mined verbatim from the real thread:
+            # prose 75.4 vs template 70.0 overall, 85% vs 62% pass; clears template on
+            # correctness + specificity, with avoidRelevance +22 and voice +11. Rides the
+            # COACH_PROMPT_VERSION bump (prose-meal-anchor-scoped): meal-log macro anchor,
+            # time-neutral framing, training-day carbs, food-turn-only avoids. User-authorized.
+            - name: CUE_PROSE_REPLY
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
