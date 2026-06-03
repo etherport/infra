@@ -110,6 +110,90 @@ metadata:
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
 ---
+# Phase 2 extension (2026-06-02): additional tenant app namespaces, all scanned
+# with zero baseline violations → straight to enforce. (cue deployed this round;
+# cert-manager/cloudflare-ddns/rclone/auto-remediation/unifi-cert-sync/
+# cloudwatch-to-loki were running unlabeled.)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cue
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudflare-ddns
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rclone
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rclone-gdrive
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: auto-remediation
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: unifi-cert-sync
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudwatch-to-loki
+  labels:
+    tier: data
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
+---
 # Privileged-by-design namespaces — tier=system, no PSS enforcement.
 apiVersion: v1
 kind: Namespace
