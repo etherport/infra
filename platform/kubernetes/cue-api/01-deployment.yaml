@@ -131,6 +131,13 @@ spec:
             # Unit-tested (262 green); not gold-set-evaluable (needs live search). User-authorized.
             - name: CUE_DELIVERY_LINKS
               value: 'true'
+            # 2026-06-04 (multi-photo): a 2nd meal photo within ~3 min is treated as another
+            # ANGLE of the same meal — the two reads are FUSED into one higher-confidence estimate
+            # and rolled ONCE (replaces the first via correctsRecommendationId), so the day total
+            # never double-counts; reply says "got both angles". Pure fusion unit-tested; rides
+            # cue@b058b4c+. User-authorized after dogfooding.
+            - name: CUE_MEAL_MULTIPHOTO
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
