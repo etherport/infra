@@ -145,6 +145,16 @@ spec:
             # Pure mealCoachMessage directive, unit-tested; rides cue@20b4c5b+. User-authorized.
             - name: CUE_PHOTO_HEDGE
               value: 'true'
+            # 2026-06-04 (album fusion): photos sent as ONE Telegram album (shared media_group_id)
+            # arrive as racing webhooks → without buffering they fuse-miss and reply N times. When ON,
+            # album items are buffered (2.5s debounce) and fused into ONE estimate + ONE reply by
+            # chaining the existing fusion path (forceMeal + skipCoach intermediates; replaces the roll,
+            # never double-counts; converges on the meal_photo dedup flow so a straggler/stray angle
+            # fuses too). Needs CUE_MEAL_MULTIPHOTO (on). Adversarially reviewed (all 4 majors fixed) +
+            # tested (AlbumCollector + flushAlbum chain); rides cue@eba57db (image :latest, CI green).
+            # User-authorized.
+            - name: CUE_PHOTO_ALBUM
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
