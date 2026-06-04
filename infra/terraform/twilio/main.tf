@@ -116,3 +116,27 @@ resource "twilio_trunking_trunks_origination_urls_v1" "talk_primary" {
   priority      = var.sip_origination_priority
   enabled       = true
 }
+
+// ---------------------------------------------------------------------------
+// Trunk bindings — finish IaC'ing the trunk by associating EXISTING resources
+// (no secrets enter Terraform):
+//   - the primary DID assigned to the trunk (outbound caller ID + the number
+//     this trunk serves)
+//   - the "windtryst" SIP credential list that authenticates the UDM's
+//     registration. The list's username/password live in 1Password +
+//     the UDM Talk config, NOT here — TF only links the existing list (CL…)
+//     to the trunk by SID.
+//
+// IMPORT (one-time, before first apply — these already exist in Twilio):
+//   terraform import twilio_trunking_trunks_phone_numbers_v1.talk_primary <TRUNK_SID>/<PN_SID>
+//   terraform import twilio_trunking_trunks_credential_lists_v1.talk     <TRUNK_SID>/<CL_SID>
+// ---------------------------------------------------------------------------
+resource "twilio_trunking_trunks_phone_numbers_v1" "talk_primary" {
+  trunk_sid        = twilio_trunking_trunks_v1.talk.sid
+  phone_number_sid = twilio_api_accounts_incoming_phone_numbers.primary.sid
+}
+
+resource "twilio_trunking_trunks_credential_lists_v1" "talk" {
+  trunk_sid           = twilio_trunking_trunks_v1.talk.sid
+  credential_list_sid = var.sip_credential_list_sid
+}
