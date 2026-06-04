@@ -51,7 +51,7 @@ or call DELETE on it without first contacting Twilio support.
 - `domain_name`: `windtryst.pstn.twilio.com`
 - `secure`: false (sRTP unsupported by UniFi Talk — blocks full secure trunking; see task #80)
 - `cnam_lookup`: true
-- Origination URL: `sips:sip.wind.etherport.net:5061;transport=tls` (TLS signaling, RTP media — migrated 2026-05-27 from broken `sip:wind.gmsmeg.net:6767`)
+- Origination URL: `sips:sip.wind.etherport.net:5061;transport=tls` (TLS signaling, cleartext RTP media — set 2026-05-27)
 
 **Emergency address `AD1fe17`:**
 
@@ -134,8 +134,9 @@ export TWILIO_API_SECRET=$(op item get twilio-tf-api --fields credential --revea
 
 - CF DNS A record `sip.wind.etherport.net` → `47.159.189.5` (UDM WAN)
   added to `cloudflare/variables.tf` dns_records_a.
-- Windtryst trunk Origination URL flipped from `sip:wind.gmsmeg.net:6767`
-  → `sips:sip.wind.etherport.net:5061;transport=tls`.
+- Windtryst trunk Origination URL set to
+  `sips:sip.wind.etherport.net:5061;transport=tls` (replacing a dead
+  legacy host that had silently broken inbound).
 - UDM-side: user flipped proxy to port 5061 + added Custom Field
   `register-transport: tls` in the UniFi Talk 3rd-party SIP config
   (UI change; no IaC for Talk yet — see "IaC for UniFi Talk config"
@@ -172,6 +173,6 @@ TF provider is broken on UniFi 10+ per session memory).
   `sips:sip.wind.etherport.net:5061;transport=tls` (TLS signaling,
   cleartext RTP). Restores inbound routing AND encrypts signaling.
   Full TLS+sRTP blocked by UniFi Talk → task #80 (SBC).
-- Earlier: confirmed `gmsmeg.net` is delegated to AWS NS but has no
-  hosted zone — origination URL had been silently broken for inbound
-  for an unknown period. Likely few/no inbound calls noticed.
+- Earlier: the previous origination host had been silently broken for
+  inbound for an unknown period (delegated to AWS NS but no hosted
+  zone). Likely few/no inbound calls noticed.
