@@ -74,17 +74,6 @@ variable "sip_trunk_secure" {
   default     = false
 }
 
-variable "sip_credential_list_sid" {
-  description = <<-EOT
-    SID (CL…) of the SIP credential list that authenticates the UDM's
-    registration to the Windtryst trunk. The list's username/password
-    are NOT managed here — they live in 1Password + the UDM Talk config.
-    This only links the existing list to the trunk.
-  EOT
-  type        = string
-  default     = "CLecc02b31535c15e6aff6c9347e96236c"
-}
-
 variable "sip_origination_url" {
   description = <<-EOT
     URI for inbound SIP routing — Twilio sends incoming calls here.

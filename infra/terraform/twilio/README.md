@@ -37,10 +37,10 @@ any console URL (`.../console/account/{AC...}/...`).
 
 ### 3. Add GitHub repo secrets
 
-For the future `terraform-twilio.yml` workflow:
-- `TWILIO_ACCOUNT_SID`
-- `TWILIO_API_KEY_SID`
-- `TWILIO_API_KEY_SECRET`
+For the `terraform-twilio.yml` workflow (exact secret names it reads):
+- `TWILIO_ACCOUNT_SID` (AC…)
+- `TWILIO_API_KEY` (SK… — the API Key SID)
+- `TWILIO_API_SECRET` (the API Key secret)
 
 ## Initial import
 
@@ -50,10 +50,10 @@ After credentials are in place:
 cd infra/terraform/twilio
 terraform init
 
-# Set env vars from 1P
-export TWILIO_ACCOUNT_SID=$(op item get twilio-tf-token --fields 'account name' --reveal)
-export TWILIO_API_KEY_SID=$(op item get twilio-tf-token --fields username --reveal)
-export TWILIO_API_KEY_SECRET=$(op item get twilio-tf-token --fields credential --reveal)
+# Set env vars from 1P (item "twilio-tf-api")
+export TWILIO_ACCOUNT_SID=$(op item get twilio-tf-api --fields 'account name' --reveal)
+export TWILIO_API_KEY=$(op item get twilio-tf-api --fields username --reveal)
+export TWILIO_API_SECRET=$(op item get twilio-tf-api --fields credential --reveal)
 
 # Discover current state — what's actually in the account today
 # (these listings will be the source of SIDs to import)
@@ -81,11 +81,11 @@ terraform import twilio_trunking_trunks_v1.talk <TK-sid>
 
 # Origination URLs for the trunk (one per URL)
 terraform import twilio_trunking_trunks_origination_urls_v1.talk_primary <TK-sid>/<OU-sid>
-
-# Trunk bindings (associate existing primary DID + credential list to the trunk)
-terraform import twilio_trunking_trunks_phone_numbers_v1.talk_primary <TK-sid>/<PN-sid>
-terraform import twilio_trunking_trunks_credential_lists_v1.talk <TK-sid>/<CL-sid>
 ```
+
+> The trunk's number assignment + credential-list link are **not** TF-managed
+> (the provider can't import them without a perpetual replace diff). They're
+> configured directly in Twilio — see the note in `main.tf`.
 
 Run `terraform plan` after import — should show only the deltas representing your INTENDED changes (e.g., new emergency address, secure=true if trunk was UDP).
 
