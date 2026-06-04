@@ -138,6 +138,13 @@ spec:
             # cue@b058b4c+. User-authorized after dogfooding.
             - name: CUE_MEAL_MULTIPHOTO
               value: 'true'
+            # 2026-06-04 (photo UX): when a meal PHOTO's vision confidence isn't HIGH, the coach
+            # OPENS by hedging WHAT the food is ("that looks like a salad with chicken…") + invites a
+            # one-line correction, instead of asserting a possibly-wrong dish (the "bulgogi bowl"
+            # mis-ID). Photo-only (a text log is the user's own words). Needs CUE_MEAL_COACH (on).
+            # Pure mealCoachMessage directive, unit-tested; rides cue@20b4c5b+. User-authorized.
+            - name: CUE_PHOTO_HEDGE
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
