@@ -66,28 +66,28 @@ locals {
       vm_id     = 110
       ip        = "10.10.201.53"
       vcpus     = 4
-      memory_mb = 10240
+      memory_mb = 8192 # right-sized 2026-06-04 (was 10240; workers steady-state ~3-4 GB)
       disk_gb   = 80
     }
     k8s-w2 = {
       vm_id     = 111
       ip        = "10.10.201.54"
       vcpus     = 4
-      memory_mb = 10240
+      memory_mb = 8192 # right-sized 2026-06-04 (was 10240; workers steady-state ~3-4 GB)
       disk_gb   = 80
     }
     k8s-w3 = {
       vm_id     = 112
       ip        = "10.10.201.55"
       vcpus     = 4
-      memory_mb = 10240
+      memory_mb = 8192 # right-sized 2026-06-04 (was 10240; workers steady-state ~3-4 GB)
       disk_gb   = 80
     }
     k8s-w4 = {
       vm_id     = 113
       ip        = "10.10.201.56"
       vcpus     = 4
-      memory_mb = 10240
+      memory_mb = 8192 # right-sized 2026-06-04 (was 10240; workers steady-state ~3-4 GB)
       disk_gb   = 80
     }
   }
@@ -356,7 +356,7 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
   }
 
   memory {
-    dedicated = 20480 # 20GB - reduced from 24GB to fit new layout
+    dedicated = 12288 # 12GB (right-sized 2026-06-04: GPU node used only ~2.8 GB of 20 GB; bursts fine within 12)
   }
 
   disk {
