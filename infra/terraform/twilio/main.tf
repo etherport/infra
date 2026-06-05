@@ -116,3 +116,22 @@ resource "twilio_trunking_trunks_origination_urls_v1" "talk_primary" {
   priority      = var.sip_origination_priority
   enabled       = true
 }
+
+// ---------------------------------------------------------------------------
+// Trunk bindings — DELIBERATELY NOT Terraform-managed.
+//
+// The trunk's two bindings are already correct in Twilio and configured
+// directly there:
+//   - primary DID +19094142433 (PN2b49…) assigned to the trunk
+//   - the "windtryst" SIP credential list (CLecc02…) authenticating the
+//     UDM's registration (its username/password live in 1Password + the
+//     UDM Talk config, never in TF)
+//
+// They're left out of TF because the twilio/twilio v0.9 provider does NOT
+// hydrate the input attributes on import for `twilio_trunking_trunks_
+// phone_numbers_v1` / `_credential_lists_v1` — an imported resource shows a
+// permanent "forces replacement" diff, so managing them would mean a
+// destroy/recreate of the live number↔trunk + auth bindings on every apply.
+// Not worth that risk for a binding that never changes. Revisit if the
+// provider fixes import hydration.
+// ---------------------------------------------------------------------------

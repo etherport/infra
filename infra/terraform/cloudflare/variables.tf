@@ -169,7 +169,7 @@ variable "dns_records_a" {
     // ---- SIP trunk inbound (Twilio → UDM Talk) ----
     "sip.wind" = {
       value   = "47.159.189.5"
-      comment = "Twilio Windtryst trunk → UDM Talk inbound (replaces dead sip:wind.gmsmeg.net)"
+      comment = "Twilio Windtryst trunk → UDM Talk inbound (SIP origination host)"
     }
 
     // ---- Internal-only sinkholes (resolve to loopback, preserve naming

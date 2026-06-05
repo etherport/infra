@@ -32,6 +32,10 @@ _ses = boto3.client("ses", region_name=os.environ.get("SES_REGION", "us-west-2")
 # Trimmed-down sibling of the advisor's _EMAIL_CSS — same color tokens
 # + typography, no advisor-specific bits. Dark-mode aware.
 _EMAIL_CSS = """
+  /* Opt the message into both schemes so iOS/Apple Mail honors the
+     prefers-color-scheme block below instead of force-inverting (or
+     ignoring it). Pairs with the color-scheme <meta> tags in the head. */
+  :root { color-scheme: light dark; supported-color-schemes: light dark; }
   body { margin:0; padding:0; background:#f6f7f9; color:#0f172a;
     font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
     font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased; }
@@ -253,6 +257,8 @@ def _render_html(from_num, to_num, body, media_urls, received_at):
 
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
 <title>SMS from {html.escape(from_num)}</title>
 <style>{_EMAIL_CSS}</style></head>
 <body><div class="wrap">

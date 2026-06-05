@@ -19,7 +19,7 @@ provider "google" {
 }
 
 variable "gcp_project_id" {
-  description = "GCP project ID (e.g., cloudflare-zero-trust). Pre-exists (created in console)."
+  description = "Cloudflare Zero Trust SSO project ID (homelab-infra-497414). Pre-exists (created in console); supplied via the GCP_PROJECT_ID CI secret / TF_VAR_gcp_project_id locally."
   type        = string
 }
 

@@ -7,7 +7,7 @@ turns the 3 pending Talk tasks into TF apply'd changes:
 |---|---|---|
 | #20 fix 911 emergency address | New `twilio_api_accounts_addresses` resource + bound to primary DID via `emergency_address_sid` | ✅ applied |
 | #21 route or release orphan DID | `orphan_did_action` variable: `release`, `route_voicemail`, or `route_forward` | ✅ released |
-| #22 migrate SIP trunk UDP→TLS+sRTP | `twilio_trunking_trunks_v1.secure = true` + `sips:` scheme in origination URL | ⏳ **deferred** — the SIP endpoint is the UDM / UniFi Talk, which doesn't support SIP-TLS. `secure=false` matches reality; flip only once a TLS-capable SIP endpoint exists. |
+| #22 migrate SIP trunk UDP→TLS+sRTP | `sips:` scheme in origination URL (TLS signaling) — done. `twilio_trunking_trunks_v1.secure = true` (full TLS+sRTP) | 🟡 **partial** — TLS signaling live (`sips:sip.wind.etherport.net:5061;transport=tls`). Full `secure=true` deferred: UniFi Talk has no sRTP, which Twilio Secure Trunking requires. Revisit when Ubiquiti ships sRTP or an SBC is inserted (task #80). |
 | #23 uniform inbound SMS routing | `messaging-service.tf`: one Messaging Service (inbound webhook = the shared Lambda `var.webhook_url`, `use_inbound_webhook_on_number=false`) with all DIDs added as senders. Needed because a direct `sms_url` change on the primary DID is blocked by Twilio's E911 lock (ApiError 21631) — joining a Messaging Service routes SMS without touching the number's emergency-locked config. | ✅ applied |
 
 ## Prerequisites (one-time, ~5 min)
@@ -37,10 +37,10 @@ any console URL (`.../console/account/{AC...}/...`).
 
 ### 3. Add GitHub repo secrets
 
-For the future `terraform-twilio.yml` workflow:
-- `TWILIO_ACCOUNT_SID`
-- `TWILIO_API_KEY_SID`
-- `TWILIO_API_KEY_SECRET`
+For the `terraform-twilio.yml` workflow (exact secret names it reads):
+- `TWILIO_ACCOUNT_SID` (AC…)
+- `TWILIO_API_KEY` (SK… — the API Key SID)
+- `TWILIO_API_SECRET` (the API Key secret)
 
 ## Initial import
 
@@ -50,10 +50,10 @@ After credentials are in place:
 cd infra/terraform/twilio
 terraform init
 
-# Set env vars from 1P
-export TWILIO_ACCOUNT_SID=$(op item get twilio-tf-token --fields 'account name' --reveal)
-export TWILIO_API_KEY_SID=$(op item get twilio-tf-token --fields username --reveal)
-export TWILIO_API_KEY_SECRET=$(op item get twilio-tf-token --fields credential --reveal)
+# Set env vars from 1P (item "twilio-tf-api")
+export TWILIO_ACCOUNT_SID=$(op item get twilio-tf-api --fields 'account name' --reveal)
+export TWILIO_API_KEY=$(op item get twilio-tf-api --fields username --reveal)
+export TWILIO_API_SECRET=$(op item get twilio-tf-api --fields credential --reveal)
 
 # Discover current state — what's actually in the account today
 # (these listings will be the source of SIDs to import)
@@ -82,6 +82,10 @@ terraform import twilio_trunking_trunks_v1.talk <TK-sid>
 # Origination URLs for the trunk (one per URL)
 terraform import twilio_trunking_trunks_origination_urls_v1.talk_primary <TK-sid>/<OU-sid>
 ```
+
+> The trunk's number assignment + credential-list link are **not** TF-managed
+> (the provider can't import them without a perpetual replace diff). They're
+> configured directly in Twilio — see the note in `main.tf`.
 
 Run `terraform plan` after import — should show only the deltas representing your INTENDED changes (e.g., new emergency address, secure=true if trunk was UDP).
 
@@ -128,21 +132,21 @@ orphan_did_action = "route_forward"
 # Update main.tf voice_url placeholder with a TwiML Bin that <Dial>s the primary.
 ```
 
-### Task #22 — SIP trunk UDP → TLS + sRTP
+### Task #22 — SIP trunk TLS
 
-Just update `sip_origination_url` in variables.tf:
+**Done (TLS signaling):** `sip_origination_url = "sips:sip.wind.etherport.net:5061;transport=tls"`.
+The host is a CF DNS A record → the UDM WAN IP; the UDM Talk side runs the
+3rd-party SIP config on 5061 with `register-transport: tls`.
 
-```hcl
-# Before (UDP):
-# sip_origination_url = "sip:talk.wind.etherport.net:5060"
+**Deferred (full secure trunking):** `sip_trunk_secure` stays `false`.
+Twilio Secure Trunking requires TLS **and** sRTP; UniFi Talk doesn't do
+sRTP, so flipping `secure=true` would break calls. Revisit when Ubiquiti
+ships sRTP, or front the UDM with an SBC (FreeSWITCH/Kamailio/Asterisk) —
+task #80. See `docs/runbooks/twilio-talk.md`.
 
-# After (TLS):
-sip_origination_url = "sips:talk.wind.etherport.net:5061;transport=tls"
-```
-
-And ensure `twilio_trunking_trunks_v1.talk.secure = true` (already in main.tf).
-
-> ⚠ Make sure the SIP endpoint (probably FreePBX or similar at `talk.wind.etherport.net`) actually has TLS+sRTP enabled BEFORE you switch the trunk to require it — otherwise inbound calls break. Standard pattern: enable TLS server-side first, test with a soft-phone, then flip the trunk.
+> ⚠ Before ever setting `secure=true`, confirm the SIP endpoint actually
+> negotiates TLS+sRTP — otherwise inbound calls break. Enable server-side
+> first, test with a soft-phone, then flip the trunk.
 
 ## Apply workflow (future)
 

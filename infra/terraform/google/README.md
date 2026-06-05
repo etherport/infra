@@ -1,87 +1,147 @@
-# Google Cloud Platform — partial IaC
+# Google Cloud Platform — partial IaC + replication runbooks
 
-## What this module covers
+The homelab's entire GCP footprint after the 2026-06-03 audit: **two
+credential/OAuth-only projects**, no billable compute/storage anywhere
+(GCP spend ≈ $0). This module codifies the projects + API enablements;
+the OAuth clients/consent screens they hold are **not** Terraform-manageable
+(Google's API doesn't expose them) and are documented as replication
+runbooks below.
 
-- The GCP project (`google_project`, imported from existing dashboard-created project)
-- API enablements (`google_project_service` — IAM, IAM credentials, cloud resource manager)
-- Future: service accounts + IAM bindings as those become needed
+| Project | ID | Holds | Billing |
+|---|---|---|---|
+| Cloudflare Zero Trust SSO | `homelab-infra-497414` | OAuth client for CF Access Google IdP | enabled |
+| Home Assistant · Nest (SDM) | `poised-lens-448222-d2` | OAuth client + Device Access link for Nest | **disabled** (free tier) |
 
-## What this module CAN'T cover (Google API limitations)
+> Deleted in the 2026-06-03 cleanup (recoverable until ~2026-07-03 via
+> `gcloud projects undelete`): `nas-access-457504` (dead TrueNAS-sync
+> leftover), `youtube-api-keys-410001` (unused key, 0 traffic/90d),
+> `extended-ripple-463516-q7` (empty "My First Project").
 
-These are deliberately manual + documented in the runbook below:
+## What Terraform manages here
 
-- **OAuth consent screen** — App name, support email, scopes, test users, publish-to-production. Google's API doesn't expose programmatic creation of consent screen configuration on non-Enterprise accounts.
-- **OAuth 2.0 Client IDs** — The Client ID + Client Secret pair that Cloudflare Zero Trust uses for Google SSO IdP. `google_iap_client` only works for IAP-protected GCP-internal resources, not for third-party OIDC integrations.
+- Both `google_project` resources (pre-created in console, **imported** into state; `prevent_destroy = true`)
+- `google_project_service` for the two APIs Nest needs (`smartdevicemanagement`, `pubsub`)
+- The CF SSO project needs **no** extra API enabled (OIDC uses Google defaults)
 
-These are one-time setup; once done they don't change. The runbook captures the exact procedure so any future re-setup is deterministic.
+## What it CAN'T manage (Google API limitations)
 
-## Setup runbook (one-time, ~5 min)
+These are deliberately manual + captured in the runbooks below so any
+re-setup is deterministic:
 
-Already done 2026-05-25 for the existing Cloudflare Zero Trust IdP. Recapped here for replay-ability.
+- **OAuth consent screens** — app name, support email, scopes, test users, publish flow
+- **OAuth 2.0 Client IDs** — the Client ID + Secret pairs (CF Access IdP; Nest). `google_iap_client` only covers IAP-internal resources, not third-party OIDC/SDM.
+- **Nest Device Access Console project** — registered at console.nest.google ($5 one-time, paid), entirely separate from Cloud Console.
 
-### 1. Create project in console
-[console.cloud.google.com](https://console.cloud.google.com) → project dropdown → New Project
-- Name: `cloudflare-zero-trust`
-- No organization
-- Create + switch to it
+Client **IDs** are recorded below (they're not secret — they appear in
+redirect flows). Client **secrets** live only in 1Password + the
+consuming service (Cloudflare / Home Assistant), never in git.
 
-### 2. Configure OAuth consent screen
-Sidebar → APIs & Services → OAuth consent screen
+---
+
+## Verified config (2026-06-03)
+
+- **CF SSO** — OAuth client `909531984469-evt1p0dn5h3v1op7vllntc5b5iob1k7q.apps.googleusercontent.com` (the `909531984469` prefix == this project's number, confirming it belongs here). No special API needed for OIDC. Functional proof: CF Access Google login works.
+- **Nest** — `smartdevicemanagement.googleapis.com` (device control) + `pubsub.googleapis.com` (event stream) both enabled = exactly what HA Nest requires. Functional proof: Nest devices live in Home Assistant.
+
+---
+
+## Runbook A — Cloudflare Zero Trust Google SSO  (`homelab-infra-497414`)
+
+Done 2026-05-25. Recapped for replay-ability.
+
+### 1. Project
+Console → New Project. (Current display name: `homelab-infra`. The TF
+`name` matches it; change there to rename.)
+
+### 2. OAuth consent screen
+APIs & Services → OAuth consent screen
 - User type: **External** (personal Gmail)
-- App name: `Cloudflare Access — Etherport`
-- User support email: `grahamsm@gmail.com`
-- Developer contact: same
-- **Scopes**: skip (defaults — email, profile, openid — are what CF needs)
-- **Test users**: add `grahamsm@gmail.com` so you can log in while app is in "Testing" mode (Production publish requires Google review for non-default scope sets; not needed for our use)
-- Save
+- App name: `Cloudflare Access — Etherport`; support + developer email: `grahamsm@gmail.com`
+- Scopes: defaults (email, profile, openid) — what CF needs
+- Test users: add `grahamsm@gmail.com` (keeps it in "Testing"; production publish not needed for default scopes)
 
-### 3. Create OAuth 2.0 Client ID
-Sidebar → APIs & Services → Credentials → + Create credentials → OAuth client ID
-- Application type: **Web application**
-- Name: `Cloudflare Zero Trust`
-- **Authorized JavaScript origins**: `https://<cf-team>.cloudflareaccess.com`
-- **Authorized redirect URIs**: `https://<cf-team>.cloudflareaccess.com/cdn-cgi/access/callback`
-- Create → save Client ID + Secret
+### 3. OAuth 2.0 Client ID
+APIs & Services → Credentials → Create credentials → OAuth client ID
+- Type: **Web application**, name `Cloudflare Zero Trust`
+- Authorized JS origins: `https://<cf-team>.cloudflareaccess.com`
+- Authorized redirect URI: `https://<cf-team>.cloudflareaccess.com/cdn-cgi/access/callback`
+- **Current Client ID**: `909531984469-evt1p0dn5h3v1op7vllntc5b5iob1k7q.apps.googleusercontent.com`
 
-### 4. Save credentials
-- 1P item: `Cloudflare Zero Trust Google IdP`
-  - `client_id` (Concealed)
-  - `client_secret` (Concealed)
-  - Notes: project name + CF team URL
-- Paste both into Cloudflare Zero Trust → Settings → Authentication → Add Google IdP
+### 4. Wire + store
+- 1Password item `Cloudflare Zero Trust Google IdP` (client_id in `username`, secret concealed)
+- Paste both into Cloudflare Zero Trust → Settings → Authentication → Google IdP
 
-### 5. Import the project into TF state
+### Rotation
+Credentials → client → Reset secret → update 1P → paste into CF Access → takes effect next login.
+
+---
+
+## Runbook B — Home Assistant ↔ Nest (SDM)  (`poised-lens-448222-d2`)
+
+Three linked pieces: the GCP project (OAuth client + APIs), the **Device
+Access Console** project, and the HA integration. Replication order:
+
+### 1. GCP project — enable APIs (Terraform-managed)
+`smartdevicemanagement.googleapis.com` + `pubsub.googleapis.com` (this
+module's `google_project_service.ha_nest`).
+
+### 2. OAuth consent screen + Client ID
+- Consent screen: External, add `grahamsm@gmail.com` as test user, add the
+  SDM scope `https://www.googleapis.com/auth/sdm.service`.
+- Credentials → OAuth client ID → **Web application**.
+- Authorized redirect URI: `https://my.home-assistant.io/redirect/oauth`
+  (HA "My" redirect) **and/or** `https://<ha-external-url>/auth/external/callback`.
+- Record the Client ID here when replicating: `<nest-oauth-client-id>` (secret → 1P + HA).
+
+### 3. Device Access Console  (console.nest.google/device-access)
+- $5 one-time fee (already paid). Create/keep a project; note its
+  **Device Access Project ID** (a UUID — this is HA's `project_id`).
+- Link it to the OAuth Client ID from step 2.
+- Enable Pub/Sub events.
+
+### 4. Home Assistant
+Settings → Devices & Services → Google Nest. Supply: OAuth `client_id` +
+`client_secret`, the Device Access `project_id`, then complete the OAuth
+consent flow. HA auto-creates the Pub/Sub subscription for events.
+
+> **Note:** this project is intentionally **standalone** (not folded into
+> `homelab-infra`). It costs $0, and migrating the OAuth client + Device
+> Access link + re-authing HA would briefly break Nest for zero benefit.
+
+---
+
+## Initial import (one-time)
 
 ```bash
 cd infra/terraform/google
 terraform init
 
-# Find the project ID (from console URL: dashboard?project=<project-id>)
-PROJECT_ID="<from console>"
+# Project 1 — CF SSO (project ID from the GCP_PROJECT_ID CI secret)
+TF_VAR_gcp_project_id=homelab-infra-497414 \
+  terraform import google_project.cloudflare_zero_trust homelab-infra-497414
 
-TF_VAR_gcp_project_id=$PROJECT_ID \
-  terraform import google_project.cloudflare_zero_trust $PROJECT_ID
+# Project 2 — HA Nest (hardcoded in main.tf)
+TF_VAR_gcp_project_id=homelab-infra-497414 \
+  terraform import google_project.home_assistant_nest poised-lens-448222-d2
+
+# Nest's two API enablements
+for api in smartdevicemanagement.googleapis.com pubsub.googleapis.com; do
+  TF_VAR_gcp_project_id=homelab-infra-497414 \
+    terraform import "google_project_service.ha_nest[\"$api\"]" "poised-lens-448222-d2/$api"
+done
 ```
 
-After import, `terraform plan` should show zero changes if the project state matches the TF resource declaration.
+After import, `terraform plan` should show **zero changes** (sanity that
+TF matches reality).
 
 ## Apply
 
 ```bash
-TF_VAR_gcp_project_id=$PROJECT_ID terraform plan
-TF_VAR_gcp_project_id=$PROJECT_ID terraform apply
+TF_VAR_gcp_project_id=homelab-infra-497414 terraform plan
+TF_VAR_gcp_project_id=homelab-infra-497414 terraform apply
 ```
-
-## Rotation
-
-To rotate the OAuth Client Secret:
-1. console → Credentials → click your "Cloudflare Zero Trust" client → "Reset secret"
-2. Copy new secret → update 1P item
-3. Paste into Cloudflare Zero Trust → Settings → Authentication → Google → Edit → Client secret
-4. SSO continues working (CF caches the secret in memory; takes effect immediately on next login)
 
 ## Future scope (when needed)
 
-- Service accounts for any GCP-resident tooling (none today)
-- google_storage_bucket if we ever move backups off S3 to GCS (not planned)
-- google_dns_managed_zone if we ever delegate a subdomain to GCP (not planned)
+- Service accounts for GCP-resident tooling (none today; would add `iam`/`iamcredentials` APIs to the CF SSO project)
+- `google_storage_bucket` if backups ever move from S3 to GCS (not planned)

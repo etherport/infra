@@ -42,9 +42,9 @@ variable "emergency_address" {
     customer_name    = string
     street           = string
     city             = string
-    region           = string   # state code (e.g., "WA")
+    region           = string # state code (e.g., "WA")
     postal_code      = string
-    iso_country      = string   # 2-letter country code (e.g., "US")
+    iso_country      = string # 2-letter country code (e.g., "US")
     street_secondary = optional(string, "")
   })
   default = {
@@ -77,9 +77,9 @@ variable "sip_trunk_secure" {
 variable "sip_origination_url" {
   description = <<-EOT
     URI for inbound SIP routing — Twilio sends incoming calls here.
-    Migrated 2026-05-27 from dead sip:wind.gmsmeg.net:6767 to
-    sips:sip.wind.etherport.net:5061;transport=tls. The hostname is a
-    CF DNS A record pointing at the UDM WAN IP (47.159.189.5).
+    Points at sips:sip.wind.etherport.net:5061;transport=tls (set
+    2026-05-27). The hostname is a CF DNS A record pointing at the
+    UDM WAN IP (47.159.189.5).
 
     Uses `sips:` scheme for TLS-encrypted signaling. sip_trunk_secure
     stays false (no Twilio Secure Trunking) because UniFi Talk doesn't

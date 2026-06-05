@@ -9,10 +9,11 @@ terraform {
 }
 
 # Twilio provider: Account SID + API Key/Secret (preferred over Auth Token —
-# API keys are scoped + rotatable; Auth Token is the master). Env vars:
-#   TWILIO_ACCOUNT_SID
-#   TWILIO_API_KEY_SID
-#   TWILIO_API_KEY_SECRET
+# API keys are scoped + rotatable; Auth Token is the master). Env vars
+# (exact names the twilio/twilio provider reads):
+#   TWILIO_ACCOUNT_SID   (AC…)
+#   TWILIO_API_KEY       (SK… — the API Key SID)
+#   TWILIO_API_SECRET    (the API Key secret)
 #
 # Create API Key one-time in console:
 #   console.twilio.com → Account → API keys & tokens → Create API key

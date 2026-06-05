@@ -112,8 +112,7 @@ This document outlines the plan to migrate existing homelab AWS resources into T
 | `ha.wind.etherport.net` | Home Assistant - migrate |
 | `*.etherport.net` | Wildcard - migrate |
 | `*.grahamsmith.net` | Personal - migrate |
-| `*.gmsmeg.net` | Legacy? - review |
-| `ha.wind.gmsmeg.net` | Legacy? - review |
+| (2 deprecated legacy wildcard/host certs) | Cleaned up - see Phase 3 |
 
 **us-east-1 (CloudFront):**
 | Domain | Notes |
@@ -121,7 +120,7 @@ This document outlines the plan to migrate existing homelab AWS resources into T
 | `smithforsb.com` | **Out of scope** - campaign |
 | `stopthecastle.com` | **Out of scope** - campaign |
 | `smith4sb.com` | **Out of scope** - campaign |
-| `ha.wind.gmsmeg.net` | Legacy? - review |
+| (1 deprecated legacy host cert) | Cleaned up - see Phase 3 |
 
 #### IAM Roles (Lambda)
 
@@ -243,7 +242,7 @@ This document outlines the plan to migrate existing homelab AWS resources into T
 1. ✅ Create `load-balancing` module
 2. ✅ Import `private-infra-alb`, listeners, target groups
 3. ✅ Import listener certificates (SNI)
-4. ✅ Clean up deprecated gmsmeg.net certificates
+4. ✅ Clean up deprecated legacy certificates
 
 **Module:** `infra/terraform/aws/load-balancing/`
 **State:** `terraform.wind.etherport.net/aws/load-balancing/terraform.tfstate`
@@ -283,7 +282,7 @@ This document outlines the plan to migrate existing homelab AWS resources into T
    - `email-fwd_grahamsmith-role-dm8wvl0h`
    - `snapshot_archive-role-jktpa8nv`
 5. ✅ Deleted empty S3 bucket: `archive-test.wind.etherport.net`
-6. ✅ Legacy ACM certificates (gmsmeg.net) already cleaned up in Phase 3
+6. ✅ Legacy ACM certificates already cleaned up in Phase 3
 
 ---
 
