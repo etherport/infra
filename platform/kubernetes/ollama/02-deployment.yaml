@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: ollama
-          image: ollama/ollama:0.30.4 # {"$imagepolicy": "flux-system:ollama"}
+          image: ollama/ollama:0.30.5 # {"$imagepolicy": "flux-system:ollama"}
           ports:
             - containerPort: 11434
               name: http
@@ -41,17 +41,17 @@ spec:
             - name: OLLAMA_CONTEXT_LENGTH
               value: "8192"
           resources:
-            # The namespace-default LimitRange (policy-baseline) caps
-            # memory at 4Gi for pods that don't set their own limit.
-            # Ollama legitimately needs 8Gi+ to load real models, so
-            # we set explicit limits here — the request stays 8Gi and
-            # the limit gives headroom for whatever model is loaded
-            # plus the inference working set.
+            # request = scheduling reservation, limit = OOM ceiling.
+            # Right-sized 2026-06-04: steady-state RSS is ~2.8Gi, so the
+            # request is 4Gi (was 8Gi — that over-reserved the GPU node and
+            # blocked plex from scheduling alongside it). The 12Gi LIMIT is
+            # kept so ollama can still burst to load a large model + its
+            # inference working set; it just isn't reserved up-front.
             limits:
               nvidia.com/gpu.shared: 1
               memory: "12Gi"
             requests:
-              memory: "8Gi"
+              memory: "4Gi"
               cpu: "2"
           volumeMounts:
             - name: ollama-data
