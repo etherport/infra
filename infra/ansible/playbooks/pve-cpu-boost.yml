@@ -1,0 +1,71 @@
+---
+# Disable AMD CPU core boost on the PVE host (acoustic + thermal).
+#
+# Background — 2026-06-04: the chassis fans ran near-max and audible from
+# other floors. Root cause turned out NOT to be the BMC fan curve (which on
+# this board — ASRock Rack B650D4U, AMI MegaRAC 6.04 — keys off `FSC_INDEX`,
+# a PECI/Tctl-derived sensor that runs ~10-14 C hotter than `TEMP_CPU` and is
+# effectively untunable: the Open Loop curve does NOT govern the fans; the
+# only lever is the Fan Mode "Maximum Duty" clamp, set in the BMC web UI).
+#
+# The real cause: Precision Boost Overdrive drove the Ryzen 7000 to ~84-90 C
+# (FSC_INDEX 89-95 C, near the 95 C TjMax) even at idle (~3 load average), so
+# the BMC kept the fans pegged. Disabling core boost drops the CPU ~27 C
+# (84 -> 57 C) for a negligible perf hit at this host's steady load, which
+# lets the BMC Max-Duty clamp be lowered to ~40% safely (quiet + cool).
+#
+# This is the durable half of the fix; the BMC "Maximum Duty = 40%" half is
+# a one-time web-UI change (the BMC fan controls aren't reachable via IPMI/
+# Redfish on this firmware). See docs/runbooks for the BMC side.
+#
+# Idempotent. Safe to re-run. To restore boost: disable+remove the unit and
+# `echo 1 > /sys/devices/system/cpu/cpufreq/boost` (or just reboot after
+# removal).
+#
+# Usage:
+#   ansible-playbook -i inventory/wind/inventory.ini playbooks/pve-cpu-boost.yml --diff
+#   (or via .github/workflows/ansible-proxmox.yml, playbook: pve-cpu-boost)
+
+- name: Disable AMD CPU core boost on PVE (thermal/acoustic)
+  hosts: proxmox_hosts
+  become: true
+  gather_facts: false
+
+  vars:
+    ansible_ssh_args: "-o ControlMaster=auto -o ControlPersist=120s -o ControlPath=/tmp/ansible-cm-%C -o StrictHostKeyChecking=no"
+
+  tasks:
+    - name: Confirm the cpufreq boost control exists
+      ansible.builtin.stat:
+        path: /sys/devices/system/cpu/cpufreq/boost
+      register: boost_ctl
+
+    - name: Install disable-cpu-boost systemd unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/disable-cpu-boost.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Disable AMD CPU core boost (acoustic/thermal)
+          # PBO boosted the Ryzen 7000 to ~84-90C (FSC_INDEX/PECI ~89-95C,
+          # near TjMax) even at idle, pinning the BMC fans near max.
+          # Disabling boost drops the CPU ~27C for a negligible perf hit at
+          # this host's load. Managed by infra/ansible/playbooks/pve-cpu-boost.yml.
+          ConditionPathExists=/sys/devices/system/cpu/cpufreq/boost
+
+          [Service]
+          Type=oneshot
+          ExecStart=/bin/sh -c 'echo 0 > /sys/devices/system/cpu/cpufreq/boost'
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=multi-user.target
+      when: boost_ctl.stat.exists
+
+    - name: Enable + start disable-cpu-boost.service
+      ansible.builtin.systemd:
+        name: disable-cpu-boost.service
+        enabled: true
+        state: started
+        daemon_reload: true
+      when: boost_ctl.stat.exists
