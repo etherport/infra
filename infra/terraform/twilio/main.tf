@@ -118,20 +118,22 @@ resource "twilio_trunking_trunks_origination_urls_v1" "talk_primary" {
 }
 
 // ---------------------------------------------------------------------------
-// Trunk bindings — DELIBERATELY NOT Terraform-managed.
+// Trunk bindings — associate the EXISTING primary DID + "windtryst" credential
+// list with the trunk by SID (no secrets enter TF). The twilio/twilio v0.9
+// provider doesn't hydrate input attrs on import, so adopting these took a
+// one-time destroy/recreate (2026-06-04, user-authorized) — recreated
+// identically by SID, so the credential-list contents and the UDM's SIP
+// config are untouched (the UDM just briefly re-registers). After that one
+// apply they're stable (created fresh ⇒ full attrs in state ⇒ clean plans).
 //
-// The trunk's two bindings are already correct in Twilio and configured
-// directly there:
-//   - primary DID +19094142433 (PN2b49…) assigned to the trunk
-//   - the "windtryst" SIP credential list (CLecc02…) authenticating the
-//     UDM's registration (its username/password live in 1Password + the
-//     UDM Talk config, never in TF)
-//
-// They're left out of TF because the twilio/twilio v0.9 provider does NOT
-// hydrate the input attributes on import for `twilio_trunking_trunks_
-// phone_numbers_v1` / `_credential_lists_v1` — an imported resource shows a
-// permanent "forces replacement" diff, so managing them would mean a
-// destroy/recreate of the live number↔trunk + auth bindings on every apply.
-// Not worth that risk for a binding that never changes. Revisit if the
-// provider fixes import hydration.
+// IMPORT (one-time): terraform import <addr> <TRUNK_SID>/<SID>
 // ---------------------------------------------------------------------------
+resource "twilio_trunking_trunks_phone_numbers_v1" "talk_primary" {
+  trunk_sid        = twilio_trunking_trunks_v1.talk.sid
+  phone_number_sid = twilio_api_accounts_incoming_phone_numbers.primary.sid
+}
+
+resource "twilio_trunking_trunks_credential_lists_v1" "talk" {
+  trunk_sid           = twilio_trunking_trunks_v1.talk.sid
+  credential_list_sid = var.sip_credential_list_sid
+}
