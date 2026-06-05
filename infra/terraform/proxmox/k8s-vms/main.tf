@@ -356,7 +356,7 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
   }
 
   memory {
-    dedicated = 12288 # 12GB (right-sized 2026-06-04: GPU node used only ~2.8 GB of 20 GB; bursts fine within 12)
+    dedicated = 16384 # 16GB (right-sized 2026-06-04 from 20GB; sized for REQUESTS not usage — ollama reserves 8Gi + plex 2Gi + daemonsets, so 12GB was too tight to schedule both)
   }
 
   disk {
