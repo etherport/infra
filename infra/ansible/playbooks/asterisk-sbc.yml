@@ -1,0 +1,187 @@
+---
+# =============================================================================
+# Asterisk PJSIP SBC — Twilio (TLS+sRTP) ⇄ UniFi Talk (UDP/RTP LAN) bridge
+# Task #80. See docs/runbooks/twilio-talk.md for the why.
+#
+# This box is the stable, IaC-managed SIP edge that sits between Twilio and
+# UniFi Talk so Talk's fragile built-in 3rd-party-SIP listener never faces the
+# internet again (it died on the 2026-06-05 UDM firmware update because nothing
+# in port-forward/firewall/IaC held its WAN port open).
+#
+#   PSTN ─▶ Twilio ──TLS+sRTP──▶ [ this SBC ] ──UDP+RTP(LAN)──▶ UniFi Talk
+#          (secure=true)         10.10.201.40                  10.10.199.1
+#
+# Idempotent. Re-run freely:
+#   ansible-playbook -i inventory/wind playbooks/asterisk-sbc.yml
+#
+# All config values resolved 2026-06-05 (Twilio IP ranges from docs, Talk port
+# + creds from the live Talk SIP-provider config + 1Password). Until the Phase-3
+# cutover, Asterisk runs but receives nothing — Twilio's origination URL, Talk's
+# proxy, and the WAN port-forwards still point at the old direct path — so
+# running this playbook early just stages a ready, idle SBC.
+# =============================================================================
+- name: Provision Asterisk PJSIP SBC
+  hosts: sbc_servers
+  become: true
+
+  vars:
+    # --- Secrets (SOPS — decrypts in CI via SOPS_AGE_KEY and locally via the
+    #     Homelab age key; same pattern as technitium.yml. NOT 1Password, so it
+    #     works in the ansible-vm-fleet CI runner which has no `op`). ----------
+    sbc_secrets_file: "{{ playbook_dir }}/secrets/asterisk-sbc.sops.yaml"
+    _sbc_secrets: "{{ lookup('pipe', 'sops -d ' ~ (sbc_secrets_file | quote)) | from_yaml }}"
+
+    # --- Topology ----------------------------------------------------------
+    sbc_lan_ip: "10.10.201.40"
+    sbc_external_host: "sip.wind.etherport.net" # CF A record → UDM WAN (47.159.189.5)
+    local_nets:
+      - "10.10.0.0/16"
+      - "127.0.0.1/32"
+
+    # --- Twilio Elastic SIP Trunk (Windtryst) ------------------------------
+    # Generic termination domain (= trunk domain_name). Lets Twilio route to the
+    # nearest healthy edge; UniFi Talk had pinned the umatilla edge variant.
+    twilio_term_domain: "windtryst.pstn.twilio.com" # termination (outbound) target
+    twilio_cred_user: "graham"                       # credential-list username
+    # Credential-list password — same secret UniFi Talk used (Talk's hidden
+    # "password" field). Lives SOPS-encrypted in sbc_secrets_file.
+    twilio_cred_pass: "{{ _sbc_secrets.twilio_sip_password }}"
+    # Twilio SIGNALING source IPs for ORIGINATION (inbound to us). PJSIP
+    # `identify` ACL so only Twilio can present inbound INVITEs (toll-fraud
+    # guard). ALL edges included per Twilio's "allow all ranges for redundancy"
+    # guidance. Confirmed 2026-06-05 from twilio.com/docs/sip-trunking/ip-addresses
+    # (matches the ranges already in Talk's Advanced → IP Address Range list).
+    twilio_signaling_nets:
+      - "54.172.60.0/30"     # us1  N. Virginia
+      - "54.244.51.0/30"     # us2  Oregon
+      - "54.171.127.192/30"  # ie1  Ireland
+      - "35.156.191.128/30"  # de1  Frankfurt
+      - "54.65.63.192/30"    # jp1  Tokyo
+      - "54.169.127.128/30"  # sg1  Singapore
+      - "54.252.254.64/30"   # au1  Sydney
+      - "177.71.206.192/30"  # br1  São Paulo
+    # Twilio MEDIA (sRTP) source range — for the WAN media port-forward ACL.
+    twilio_media_net: "168.86.128.0/18"
+
+    # --- UniFi Talk leg (LAN side) -----------------------------------------
+    talk_host: "10.10.199.1"
+    # Port Talk listens on for inbound trunk INVITEs — 6767 (its trunk listener;
+    # the retired WAN port-forward was 6767→10.10.199.1:6767). The SBC sends
+    # inbound (Twilio-originated) calls here; at cutover Talk's SIP Provider
+    # `proxy` is repointed FROM windtryst.pstn.umatilla.twilio.com:5061 TO this
+    # SBC (10.10.201.40), transport stays udp.
+    talk_port: 6767
+
+    # --- TLS (Twilio requires a CA-trusted cert on the origination URI) -----
+    tls_cert_dir: "/etc/asterisk/keys"
+    le_domain: "{{ sbc_external_host }}"
+    # certbot DNS-01 via Cloudflare. Same token Terraform's cloudflare module
+    # uses (Zone:DNS:Edit), copied into sbc_secrets_file so the playbook is
+    # self-contained in CI (CLOUDFLARE_API_TOKEN also exists as a GH secret for
+    # TF; kept here too to avoid workflow-env coupling). DNS-01 needs no inbound
+    # ports, so the cert issues before any WAN cutover.
+    cf_dns_api_token: "{{ _sbc_secrets.cloudflare_dns_token }}"
+
+  tasks:
+    # -------------------------------------------------------------------------
+    # Packages
+    # -------------------------------------------------------------------------
+    - name: Install Asterisk + TLS tooling
+      ansible.builtin.apt:
+        name:
+          - asterisk
+          - certbot
+          - python3-certbot-dns-cloudflare
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    # -------------------------------------------------------------------------
+    # TLS certificate for the Twilio-facing leg (sip.wind.etherport.net)
+    # -------------------------------------------------------------------------
+    - name: Ensure cert key dir exists
+      ansible.builtin.file:
+        path: "{{ tls_cert_dir }}"
+        state: directory
+        owner: asterisk
+        group: asterisk
+        mode: "0750"
+
+    - name: Write Cloudflare DNS credentials for certbot
+      ansible.builtin.copy:
+        dest: /etc/letsencrypt/cloudflare.ini
+        content: "dns_cloudflare_api_token = {{ cf_dns_api_token }}\n"
+        owner: root
+        group: root
+        mode: "0600"
+      when: cf_dns_api_token | length > 0
+      no_log: true
+
+    - name: Obtain/renew Let's Encrypt cert via Cloudflare DNS-01
+      ansible.builtin.command:
+        cmd: >-
+          certbot certonly --non-interactive --agree-tos
+          --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini
+          -d {{ le_domain }} -m 4unsaved_candies@icloud.com
+        creates: "/etc/letsencrypt/live/{{ le_domain }}/fullchain.pem"
+      when: cf_dns_api_token | length > 0
+
+    # Asterisk runs as `asterisk` and can't read /etc/letsencrypt/live directly.
+    # Copy the cert+key into its keydir on each run (renewal-safe).
+    - name: Stage cert + key into Asterisk keydir
+      ansible.builtin.shell:
+        cmd: >-
+          install -o asterisk -g asterisk -m 0640
+          /etc/letsencrypt/live/{{ le_domain }}/fullchain.pem {{ tls_cert_dir }}/fullchain.pem &&
+          install -o asterisk -g asterisk -m 0640
+          /etc/letsencrypt/live/{{ le_domain }}/privkey.pem {{ tls_cert_dir }}/privkey.pem
+        creates: "{{ tls_cert_dir }}/fullchain.pem"
+      when: cf_dns_api_token | length > 0
+
+    # -------------------------------------------------------------------------
+    # Asterisk configuration (templated)
+    # -------------------------------------------------------------------------
+    - name: Template PJSIP (transports, Twilio + Talk endpoints)
+      ansible.builtin.template:
+        src: asterisk/pjsip.conf.j2
+        dest: /etc/asterisk/pjsip.conf
+        owner: asterisk
+        group: asterisk
+        mode: "0640"
+      notify: Reload Asterisk PJSIP
+
+    - name: Template dialplan (inbound/outbound bridge)
+      ansible.builtin.template:
+        src: asterisk/extensions.conf.j2
+        dest: /etc/asterisk/extensions.conf
+        owner: asterisk
+        group: asterisk
+        mode: "0640"
+      notify: Reload Asterisk dialplan
+
+    - name: Template RTP port range
+      ansible.builtin.template:
+        src: asterisk/rtp.conf.j2
+        dest: /etc/asterisk/rtp.conf
+        owner: asterisk
+        group: asterisk
+        mode: "0640"
+      notify: Restart Asterisk
+
+    - name: Enable + start Asterisk
+      ansible.builtin.systemd:
+        name: asterisk
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Reload Asterisk PJSIP
+      ansible.builtin.command: asterisk -rx "pjsip reload"
+
+    - name: Reload Asterisk dialplan
+      ansible.builtin.command: asterisk -rx "dialplan reload"
+
+    - name: Restart Asterisk
+      ansible.builtin.systemd:
+        name: asterisk
+        state: restarted

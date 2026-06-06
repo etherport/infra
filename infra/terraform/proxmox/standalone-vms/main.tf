@@ -75,6 +75,23 @@ locals {
       description = "GitHub Actions self-hosted runner for K8s-lifecycle workflows (outside the cluster it manages)"
       tags        = ["terraform", "runner", "standalone"]
     }
+    asterisk-sbc = {
+      vm_id    = 1004
+      ip       = "10.10.201.40"
+      bridge   = "servers" # SDN VNet (VLAN 201) — Trusted zone, has a Trusted→Internal allow to reach Talk
+      vlan_tag = null      # VNet handles VLAN tagging
+      # SBC for task #80: Asterisk PJSIP B2BUA bridging Twilio (TLS+sRTP,
+      # internet-facing) ⇄ UniFi Talk (plain UDP/RTP on the LAN). Replaces
+      # Talk's fragile WAN-facing 3rd-party-SIP listener, which died on the
+      # 2026-06-05 firmware update (nothing in port-forward/firewall/IaC held
+      # it open). 2 vCPU / 2 GB is ample for one low-volume trunk with no
+      # transcoding (both legs negotiate PCMU/PCMA).
+      vcpus       = 2
+      memory_mb   = 2048
+      disk_gb     = 20
+      description = "Asterisk PJSIP SBC — Twilio TLS+sRTP ⇄ UniFi Talk UDP bridge (task #80)"
+      tags        = ["terraform", "voip", "sbc", "standalone"]
+    }
   }
 
   # Imported VMs - pre-existing VMs adopted into Terraform (no clone block)

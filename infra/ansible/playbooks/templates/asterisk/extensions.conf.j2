@@ -1,0 +1,21 @@
+; {{ ansible_managed }}
+; Dialplan — pure B2BUA bridge. No PBX logic lives here; UniFi Talk does the
+; extension/ring-group routing. The SBC only forwards each leg to the other.
+; Task #80.
+; =============================================================================
+[globals]
+
+; --- Inbound: PSTN caller → Twilio → here → UniFi Talk -----------------------
+; Twilio sends the called DID as the request user. Hand the whole call to Talk
+; (10.10.199.1), which rings the UVP phones per its own config.
+[from-twilio]
+exten => _[+0-9].,1,NoOp(Inbound from Twilio to ${EXTEN})
+ same => n,Dial(PJSIP/${EXTEN}@talk,60)
+ same => n,Hangup()
+
+; --- Outbound: UVP phone → UniFi Talk → here → Twilio → PSTN -----------------
+; Talk sends the dialed number; forward it out the Twilio trunk.
+[from-talk]
+exten => _[+0-9].,1,NoOp(Outbound from Talk to ${EXTEN})
+ same => n,Dial(PJSIP/${EXTEN}@twilio,60)
+ same => n,Hangup()
