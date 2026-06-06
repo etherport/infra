@@ -1,0 +1,91 @@
+; {{ ansible_managed }}
+; Asterisk PJSIP — Twilio (TLS+sRTP) ⇄ UniFi Talk (UDP/RTP LAN) SBC. Task #80.
+; Two transports, two endpoints, B2BUA bridge via extensions.conf.
+; =============================================================================
+
+; ---- Transports -------------------------------------------------------------
+; TLS toward Twilio (internet). external_*_address make Asterisk advertise the
+; PUBLIC name in SIP/SDP while binding a private IP (it's behind UDM NAT).
+[transport-tls]
+type = transport
+protocol = tls
+bind = 0.0.0.0:5061
+cert_file = {{ tls_cert_dir }}/fullchain.pem
+priv_key_file = {{ tls_cert_dir }}/privkey.pem
+method = tlsv1_2
+external_media_address = {{ sbc_external_host }}
+external_signaling_address = {{ sbc_external_host }}
+{% for net in local_nets %}
+local_net = {{ net }}
+{% endfor %}
+
+; Plain UDP toward UniFi Talk (trusted LAN only — bound to the LAN IP).
+[transport-udp]
+type = transport
+protocol = udp
+bind = {{ sbc_lan_ip }}:5060
+
+; ============================================================================
+; TWILIO LEG  (termination = outbound to PSTN, origination = inbound from PSTN)
+; ============================================================================
+[twilio-auth]
+type = auth
+auth_type = userpass
+username = {{ twilio_cred_user }}
+password = {{ twilio_cred_pass }}
+
+[twilio-aor]
+type = aor
+; Secure trunking → TLS:5061 to the termination domain.
+contact = sip:{{ twilio_term_domain }}:5061;transport=tls
+qualify_frequency = 60
+
+[twilio]
+type = endpoint
+transport = transport-tls
+context = from-twilio
+disallow = all
+allow = ulaw
+allow = alaw
+aors = twilio-aor
+outbound_auth = twilio-auth
+from_domain = {{ twilio_term_domain }}
+; sRTP toward Twilio (the encryption #22 always wanted; Talk couldn't do it).
+media_encryption = sdes
+rtp_symmetric = yes
+force_rport = yes
+rewrite_contact = yes
+direct_media = no
+
+; Identify inbound INVITEs as Twilio by source IP (toll-fraud guard — without
+; this, anyone could present INVITEs to from-twilio and dial out).
+[twilio-identify]
+type = identify
+endpoint = twilio
+{% for net in twilio_signaling_nets %}
+match = {{ net }}
+{% endfor %}
+
+; ============================================================================
+; UNIFI TALK LEG  (plain UDP/RTP on the LAN)
+; ============================================================================
+[talk-aor]
+type = aor
+contact = sip:{{ talk_host }}:{{ talk_port }}
+qualify_frequency = 60
+
+[talk]
+type = endpoint
+transport = transport-udp
+context = from-talk
+disallow = all
+allow = ulaw
+allow = alaw
+aors = talk-aor
+direct_media = no
+rtp_symmetric = yes
+
+[talk-identify]
+type = identify
+endpoint = talk
+match = {{ talk_host }}

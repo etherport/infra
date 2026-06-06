@@ -1,0 +1,7 @@
+; {{ ansible_managed }}
+; RTP media port range. Must match the UDM WAN port-forward (UDP 10000-20000 →
+; {{ sbc_lan_ip }}) so Twilio's sRTP reaches the SBC behind NAT. Task #80.
+; =============================================================================
+[general]
+rtpstart = 10000
+rtpend = 20000

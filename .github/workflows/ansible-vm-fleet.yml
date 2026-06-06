@@ -31,6 +31,7 @@ on:
           - wireguard
           - tailscale
           - etcd-backup        # K8s control-plane only — pass `-f limit=kube_control_plane`
+          - asterisk-sbc       # Twilio⇄Talk SBC (task #80) — inventory=wind (targets [sbc_servers])
       inventory:
         description: 'Which inventory file(s)'
         required: true
