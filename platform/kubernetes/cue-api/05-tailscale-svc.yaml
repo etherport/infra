@@ -1,0 +1,32 @@
+---
+# Tailnet-only exposure of the Cue API, via the Tailscale K8s operator — so the
+# owner can reach the read-only dashboard (GET /ui/today) and the rest of the API
+# from a phone while out, over Tailscale, WITHOUT a port-forward. A DEDICATED
+# Service (the app's own 02-service.yaml stays ClusterIP for in-cluster + the
+# cloudflared tunnel). `loadBalancerClass: tailscale` makes the operator publish it
+# as a tailnet node (raw TCP, no public IP / no public LB), reachable at
+# cue-api.<tailnet>.ts.net:3000 (e.g. http://cue-api.tail48f596.ts.net:3000/ui/today?userId=…).
+#
+# SCOPE: this exposes ALL of cue-api's routes to the tailnet (not just /ui/today) —
+# same trust model as cue-db-ts above: access is governed by the tailnet ACL
+# (infra/tailscale/policy.hujson, currently allow-all → the owner's + collaborator's
+# devices). The PUBLIC surface is unchanged (still only the cloudflared tunnel's
+# /health + /telegram/webhook). Tighten the ACL there if/when the tailnet grows.
+apiVersion: v1
+kind: Service
+metadata:
+  name: cue-api-ts
+  namespace: cue
+  annotations:
+    tailscale.com/hostname: "cue-api" # stable MagicDNS name → cue-api.<tailnet>.ts.net
+    tailscale.com/tags: "tag:k8s" # operator proxy tag (owned by tag:k8s-operator in the ACL)
+spec:
+  type: LoadBalancer
+  loadBalancerClass: tailscale
+  selector:
+    app: cue-api
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      protocol: TCP
