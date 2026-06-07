@@ -1,0 +1,29 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Keep Asterisk's external_signaling/media_address in sync with the active WAN IP.
+#
+# sip.wind.etherport.net is DDNS-tracked (the cloudflare-ddns CronJob writes the
+# active WAN's IP to it every minute). Asterisk only resolves external_*_address
+# ONCE at module load, so on a WAN IP change (residential renewal or WAN1<->WAN2
+# failover) the SBC's Contact would go stale and Twilio's ACK would be unroutable
+# (408 ACK Timeout) until a reload. A systemd timer runs this every ~2 min.
+#
+# We resolve via a PUBLIC resolver (1.1.1.1) on purpose: this VM's split-horizon
+# DNS can't resolve sip.wind.etherport.net, and the CF record is the source of
+# truth for the active WAN anyway. Task #80.
+set -euo pipefail
+
+PJSIP=/etc/asterisk/pjsip.conf
+HOST={{ sbc_external_host }}
+
+NEW_IP=$(dig +short "$HOST" @1.1.1.1 2>/dev/null \
+  | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+# Resolution failed (DNS hiccup) — leave config untouched rather than break it.
+[ -z "${NEW_IP:-}" ] && exit 0
+
+CUR_IP=$(grep -oE '^external_signaling_address = [0-9.]+' "$PJSIP" | awk '{print $3}' | head -1)
+[ "$NEW_IP" = "${CUR_IP:-}" ] && exit 0   # no change
+
+sed -i -E "s/^(external_(signaling|media)_address) = .*/\1 = ${NEW_IP}/" "$PJSIP"
+asterisk -rx "pjsip reload" >/dev/null 2>&1 || true
+logger -t sbc-update-extip "external address ${CUR_IP:-none} -> ${NEW_IP}; pjsip reloaded"

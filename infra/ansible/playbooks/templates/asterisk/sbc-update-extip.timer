@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Periodically sync Asterisk external IP with the active WAN (task #80)
+
+[Timer]
+OnBootSec=90sec
+OnUnitActiveSec=2min
+AccuracySec=30sec
+
+[Install]
+WantedBy=timers.target

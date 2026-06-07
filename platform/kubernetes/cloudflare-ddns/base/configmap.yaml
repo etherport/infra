@@ -11,7 +11,10 @@ data:
   # Comma-separated list of DNS record names to keep in sync with
   # the current public IP. Order doesn't matter — each record is
   # processed independently against the same target IP.
-  record_names: "wind.etherport.net"
+  # sip.wind added 2026-06-07 (task #80): Twilio resolves it per-call for SIP
+  # origination, and the Asterisk SBC's external-IP timer resolves it too — so
+  # the whole inbound-call path follows the active WAN on failover / IP change.
+  record_names: "wind.etherport.net,sip.wind.etherport.net"
 
   # DNS record TTL in seconds
   ttl: "300"

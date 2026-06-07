@@ -100,6 +100,7 @@
           - asterisk
           - certbot
           - python3-certbot-dns-cloudflare
+          - dnsutils # `dig` for the WAN-IP sync timer
         state: present
         update_cache: true
         cache_valid_time: 3600
@@ -181,6 +182,46 @@
         name: asterisk
         enabled: true
         state: started
+
+    # -------------------------------------------------------------------------
+    # WAN-IP self-heal: keep external_*_address tracking the active WAN so the
+    # Twilio ACK stays routable across IP changes / WAN failover. See script.
+    # -------------------------------------------------------------------------
+    - name: Install external-IP sync script
+      ansible.builtin.template:
+        src: asterisk/sbc-update-extip.sh.j2
+        dest: /usr/local/sbin/sbc-update-extip.sh
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install external-IP sync systemd units
+      ansible.builtin.template:
+        src: "asterisk/{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - sbc-update-extip.service
+        - sbc-update-extip.timer
+
+    - name: Enable + start the external-IP sync timer
+      ansible.builtin.systemd:
+        name: sbc-update-extip.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    # Apply any pending pjsip/dialplan reloads BEFORE the one-shot sync so it
+    # reads the freshly-templated config, then correct external IP immediately
+    # (don't wait for the first timer tick) in case the WAN IP drifted.
+    - name: Apply pending Asterisk reloads
+      ansible.builtin.meta: flush_handlers
+
+    - name: Sync external IP to the active WAN now
+      ansible.builtin.command: /usr/local/sbin/sbc-update-extip.sh
+      changed_when: false
 
   handlers:
     - name: Reload Asterisk PJSIP
