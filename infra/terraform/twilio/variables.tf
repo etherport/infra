@@ -67,11 +67,14 @@ variable "sip_trunk_friendly_name" {
 variable "sip_trunk_secure" {
   description = <<-EOT
     When true, the SIP trunk requires TLS for signaling + sRTP for media.
-    Set to false until the SIP endpoint (sip_origination_url) is TLS-ready,
-    otherwise inbound calls break. See #22 for the migration.
+    Enabled 2026-06-06 (task #80): the origination endpoint is now the Asterisk
+    SBC (sip.wind.etherport.net:5061 → 10.10.201.40), which does TLS+sRTP toward
+    Twilio and plain RTP toward UniFi Talk on the LAN. This is the encryption #22
+    always wanted — UniFi Talk itself has no sRTP, so secure=true was impossible
+    until the SBC. Do NOT set true without the SBC in the path (inbound breaks).
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "sip_credential_list_sid" {
