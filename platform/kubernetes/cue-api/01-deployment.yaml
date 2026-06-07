@@ -155,6 +155,24 @@ spec:
             # User-authorized.
             - name: CUE_PHOTO_ALBUM
               value: 'true'
+            # 2026-06-07 (food-search + coach quality, from owner dogfooding in NYC):
+            # CUE_FOOD_FOLLOWUP — after live restaurant picks, a follow-up refinement ("something
+            # egg-y", "anything closer", "find me a spot") re-enters the LIVE lookup instead of
+            # falling to /coach/chat (which has no feed → "no live listings"); a short food_search
+            # flow carries the location + the last ~3 requests so a stated preference ("not the
+            # usual protein bowl") survives the re-search. CUE_LOOKUP_PROXIMITY — a coords pin is
+            # parsed as real coordinates (not a bogus city-wide search term), so the lookup ranks
+            # CLOSEST-first + names the neighborhood (fixes "recommended LES while in Midtown");
+            # verified live: all picks returned in Hell's Kitchen for the user's coords.
+            # CUE_ACTIVITY_LEADIN — weaves ONE activity question into a nutrition turn when today's
+            # training is unknown, throttled to <=1x/day via proactive_pings (the integrative ask).
+            # All flag-gated, unit-tested + live-validated; ride cue@020d21d. User-authorized.
+            - name: CUE_FOOD_FOLLOWUP
+              value: 'true'
+            - name: CUE_LOOKUP_PROXIMITY
+              value: 'true'
+            - name: CUE_ACTIVITY_LEADIN
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
