@@ -33,7 +33,15 @@
 
     # --- Topology ----------------------------------------------------------
     sbc_lan_ip: "10.10.201.40"
-    sbc_external_host: "sip.wind.etherport.net" # CF A record → UDM WAN (47.159.189.5)
+    sbc_external_host: "sip.wind.etherport.net" # CF A record → UDM WAN; used for the TLS cert CN
+    # UDM WAN IP as a LITERAL (not the hostname): Asterisk resolves
+    # external_signaling_address once at load, and this VM's split-horizon DNS
+    # can't resolve sip.wind.etherport.net — so a hostname there silently falls
+    # back to the private bind IP, putting 10.10.201.40 in the Contact and
+    # breaking Twilio's ACK (408 ACK Timeout, observed 2026-06-07). An IP literal
+    # is unambiguous. Matches the hardcoded WAN IP already in the cloudflare/
+    # twilio TF modules; if the residential WAN IP ever changes, update all three.
+    sbc_external_ip: "47.159.189.5"
     local_nets:
       - "10.10.0.0/16"
       - "127.0.0.1/32"
