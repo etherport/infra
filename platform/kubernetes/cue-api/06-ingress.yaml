@@ -13,7 +13,12 @@ metadata:
   name: cue-api
   namespace: cue
   annotations:
-    tailscale.com/tags: "tag:cluster-ingress"
+    # tag:k8s — the tag the operator's OAuth client is permitted to apply (same as the
+    # cue-db-ts / cue-api-ts LoadBalancers). tag:cluster-ingress 400s here ("invalid or not
+    # permitted" — it's not in this operator's allowed tags), so the cert/proxy never
+    # provisions. Add tag:cluster-ingress to the operator OAuth client in the Tailscale admin
+    # later if cleaner ingress-vs-service tag separation is wanted; tag:k8s works today.
+    tailscale.com/tags: "tag:k8s"
 spec:
   ingressClassName: tailscale
   defaultBackend:
