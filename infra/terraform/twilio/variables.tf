@@ -90,18 +90,20 @@ variable "sip_credential_list_sid" {
 
 variable "sip_origination_url" {
   description = <<-EOT
-    URI for inbound SIP routing — Twilio sends incoming calls here.
-    Points at sips:sip.wind.etherport.net:5061;transport=tls (set
-    2026-05-27). The hostname is a CF DNS A record pointing at the
-    UDM WAN IP (47.159.189.5).
+    URI for inbound SIP routing — Twilio sends incoming calls here (now the
+    Asterisk SBC via the WAN TCP-5061 forward → 10.10.201.40). The hostname is
+    a CF DNS A record at the UDM WAN IP (47.159.189.5).
 
-    Uses `sips:` scheme for TLS-encrypted signaling. sip_trunk_secure
-    stays false (no Twilio Secure Trunking) because UniFi Talk doesn't
-    support sRTP — Twilio would reject calls under full secure mode.
-    Plan: revisit when Ubiquiti ships sRTP, or insert an SBC (task #80).
+    Scheme is `sip:` with `;transport=tls` (NOT `sips:`). Transport is still
+    TLS-encrypted, but `sip:` avoids RFC-3261 end-to-end SIPS semantics. With
+    `sips:`, Asterisk refuses to bridge the secure inbound leg to UniFi Talk's
+    plain-UDP leg and returns `480 / Warning 381 "SIPS Required"` (observed
+    2026-06-07 — every inbound call failed with Twilio error 32011). `sip:` lets
+    the SBC terminate signaling security and bridge to Talk; sip_trunk_secure
+    stays true so the Twilio↔SBC media leg is still sRTP.
   EOT
   type        = string
-  default     = "sips:sip.wind.etherport.net:5061;transport=tls"
+  default     = "sip:sip.wind.etherport.net:5061;transport=tls"
 }
 
 variable "sip_origination_friendly_name" {
