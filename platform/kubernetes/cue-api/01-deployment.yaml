@@ -173,6 +173,19 @@ spec:
               value: 'true'
             - name: CUE_ACTIVITY_LEADIN
               value: 'true'
+            # 2026-06-07 (daily_state write path): CUE_TODAY_FROM_MEALS — run the today-state
+            # extractor on a meal LOG / photo caption too (not just /coach/chat), so "had eggs
+            # after my run" or a "post-gym lunch" photo sets completedCardio/Strength in
+            # daily_state BEFORE the meal take — the real food<->activity integration (and the
+            # activity lead-in then correctly stays quiet because training is KNOWN). Needs
+            # CUE_TODAY_STATE_EXTRACTION (on). CUE_TODAY_WEB — a read-only, auto-refreshing web
+            # view at GET /ui/today?userId=<uuid> (Tailnet/in-cluster only; the public tunnel
+            # exposes just /health + /telegram/webhook). Both unit-tested; ride cue@e9488cc.
+            # User-authorized. (parseCoords false-positive fix from the adversarial review: cue@e8977b0.)
+            - name: CUE_TODAY_FROM_MEALS
+              value: 'true'
+            - name: CUE_TODAY_WEB
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
