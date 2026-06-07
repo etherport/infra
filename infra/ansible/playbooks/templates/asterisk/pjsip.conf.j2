@@ -13,8 +13,11 @@ bind = 0.0.0.0:5061
 cert_file = {{ tls_cert_dir }}/fullchain.pem
 priv_key_file = {{ tls_cert_dir }}/privkey.pem
 method = tlsv1_2
-external_media_address = {{ sbc_external_host }}
-external_signaling_address = {{ sbc_external_host }}
+; WAN IP literal (NOT the hostname) — Asterisk resolves these once at load and
+; this VM can't resolve sip.wind.etherport.net, so a hostname falls back to the
+; private bind IP → Contact 10.10.201.40 → Twilio's ACK is unroutable (408).
+external_media_address = {{ sbc_external_ip }}
+external_signaling_address = {{ sbc_external_ip }}
 {% for net in local_nets %}
 local_net = {{ net }}
 {% endfor %}
