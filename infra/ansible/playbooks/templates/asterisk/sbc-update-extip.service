@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Sync Asterisk external_*_address with the active WAN IP (DDNS, task #80)
+After=asterisk.service
+Wants=asterisk.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/sbc-update-extip.sh

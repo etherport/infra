@@ -166,10 +166,13 @@ variable "dns_records_a" {
       comment = "AWS us-west-2 regional VPN EIP"
     }
 
-    // ---- SIP trunk inbound (Twilio → UDM Talk) ----
+    // ---- SIP trunk inbound (Twilio → Asterisk SBC) ----
+    // DDNS-managed as of 2026-06-07 (task #80): added to the cloudflare-ddns
+    // CronJob's record_names so it tracks the active WAN every minute. The
+    // value here is a placeholder the CronJob overwrites (same pattern as `wind`).
     "sip.wind" = {
       value   = "47.159.189.5"
-      comment = "Twilio Windtryst trunk → UDM Talk inbound (SIP origination host)"
+      comment = "Twilio Windtryst trunk → Asterisk SBC (SIP origination) — DDNS-tracked active WAN"
     }
 
     // ---- Internal-only sinkholes (resolve to loopback, preserve naming
