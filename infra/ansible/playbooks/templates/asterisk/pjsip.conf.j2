@@ -84,6 +84,14 @@ allow = alaw
 aors = talk-aor
 direct_media = no
 rtp_symmetric = yes
+force_rport = yes
+; UniFi Talk (FreeSWITCH) advertises the UDM WAN IP (47.159.189.5) in its
+; Contact + SDP — leftover from when it faced Twilio directly. Without this,
+; the SBC sends the ACK + RTP to that dead public address and the call never
+; establishes (200 OK answered but 0 RTP → caller hears silence). rewrite_contact
+; makes Asterisk use Talk's ACTUAL source (10.10.199.1); rtp_symmetric keeps the
+; media on that real path. (Observed 2026-06-07: voicemail answered, no audio.)
+rewrite_contact = yes
 
 [talk-identify]
 type = identify
