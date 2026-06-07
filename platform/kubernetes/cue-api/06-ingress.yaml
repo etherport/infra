@@ -1,0 +1,26 @@
+---
+# HTTPS exposure of the Cue API on the tailnet, via the Tailscale operator's Ingress
+# (ingressClassName: tailscale). Unlike the raw-TCP LoadBalancer (05-tailscale-svc.yaml,
+# http://cue-api…:3000), this terminates TLS with a real *.ts.net cert, giving a SECURE
+# CONTEXT at https://cue.<tailnet>.ts.net — REQUIRED for the PWA's browser Geolocation
+# ("share my location"): browsers silently deny geolocation on plain-HTTP origins (no prompt).
+# Also a cleaner URL (no :3000). Same tailnet-ACL trust model; the public cloudflared tunnel
+# (/health + /telegram/webhook only) is unchanged. tag:cluster-ingress is the dedicated
+# K8s-operator ingress tag (in infra/tailscale/policy.hujson).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cue-api
+  namespace: cue
+  annotations:
+    tailscale.com/tags: "tag:cluster-ingress"
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: cue-api # the ClusterIP Service (02-service.yaml)
+      port:
+        number: 3000
+  tls:
+    - hosts:
+        - cue # → https://cue.<tailnet>.ts.net
