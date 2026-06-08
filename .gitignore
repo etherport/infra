@@ -43,6 +43,7 @@
 !**/*secret-template*.yaml
 !**/*.secret-template.yaml
 !**/*.sops.yaml
+!**/secrets/*.manifest.yaml
 
 # Explicitly ignored secret files
 platform/kubernetes/cloudflare-ddns/base/secret.yaml
