@@ -99,11 +99,14 @@
         fstype: swap
         opts: sw
         state: present
+    - name: Check active swap
+      ansible.builtin.command: swapon --show=NAME --noheadings
+      register: _active_swap
+      changed_when: false
+
     - name: swapon
       ansible.builtin.command: swapon /swapfile
-      register: _swapon
-      changed_when: "'already' not in (_swapon.stderr | default(''))"
-      failed_when: _swapon.rc != 0 and 'already' not in (_swapon.stderr | default(''))
+      when: "'/swapfile' not in _active_swap.stdout"
 
     # -------------------------------------------------------------------------
     # Node.js + Claude Code
