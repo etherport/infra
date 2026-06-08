@@ -197,6 +197,14 @@ spec:
             # device assumption). Needs CUE_MEAL_COACH (on). User-authorized after review.
             - name: CUE_MEAL_FROM_CHAT
               value: 'true'
+            # 2026-06-08: record an EXPLICIT "no workout today" (rest day). The today-state extractor
+            # sets daily_states.rest_day on a no-training statement ("no workout", "rest day",
+            # "skipping the gym"); the coach then honors a declared rest day and never assumes a
+            # workout from an earlier day's messages. Positive-only (never clears a logged workout);
+            # a real completedStrength/Cardio overrides it in the prompt. Needs
+            # CUE_TODAY_STATE_EXTRACTION (on); migration 0010 adds the column. Rides cue@fb36d47.
+            - name: CUE_REST_DAY
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
