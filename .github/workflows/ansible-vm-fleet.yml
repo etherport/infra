@@ -32,6 +32,7 @@ on:
           - tailscale
           - etcd-backup        # K8s control-plane only — pass `-f limit=kube_control_plane`
           - asterisk-sbc       # Twilio⇄Talk SBC (task #80) — inventory=wind (targets [sbc_servers])
+          - devbox             # persistent Claude Code workstation — inventory=wind (targets [devboxes])
       inventory:
         description: 'Which inventory file(s)'
         required: true
