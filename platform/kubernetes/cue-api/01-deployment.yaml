@@ -186,6 +186,17 @@ spec:
               value: 'true'
             - name: CUE_TODAY_WEB
               value: 'true'
+            # 2026-06-08: capture meals stated in CHAT into daily_state — a /coach/chat turn that
+            # reports eaten food ("today I've had the omelette + a bar") estimates + rolls it (via
+            # /meals/log skipCoach) BEFORE the reply, so Today + the coach's running totals agree.
+            # TWICE adversarially reviewed; both double-count blockers fixed (B1 one-running-roll/day
+            # dedup via correctsRecommendationId; B2 planned-meal strip + estimator backstop). Rides
+            # cue@ab8c096+. Documented residuals accepted behind the flag: cross-surface dedup (chat
+            # mention + later explicit photo of the SAME meal not yet linked — mitigated by the meal
+            # showing on the dashboard) and the pre-existing dedup concurrent-replace race (single-
+            # device assumption). Needs CUE_MEAL_COACH (on). User-authorized after review.
+            - name: CUE_MEAL_FROM_CHAT
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
