@@ -205,6 +205,17 @@ spec:
             # CUE_TODAY_STATE_EXTRACTION (on); migration 0010 adds the column. Rides cue@fb36d47.
             - name: CUE_REST_DAY
               value: 'true'
+            # 2026-06-08: multi-thing meal parsing — a text meal-LOG (and chat-capture, via
+            # /meals/log) estimates the COMBINED total of EVERY meal/snack reported in one message
+            # + ignores non-food (activity, plans, questions), so "had the sweetgreen for lunch, a
+            # barbells bar for a snack, no workout today" captures BOTH foods instead of dropping one
+            # / returning 0. Adversarially reviewed: NO code blockers (lead synthesis; the cautious
+            # holds were behavioral + one misframed — the roll uses the LLM total, not a code-sum of
+            # items). Required: CUE_MEAL_DEDUP on (it is). Watch-items to monitor: intra-estimate
+            # dedup on a restated cumulative, non-food leakage in mixed sentences, vague-item typical
+            # estimates. Rides cue@80b0a6c. User-authorized after review.
+            - name: CUE_MEAL_MULTI
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
