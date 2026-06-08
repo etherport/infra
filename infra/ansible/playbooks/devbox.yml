@@ -32,6 +32,12 @@
     # decrypts in CI via SOPS_AGE_KEY (same pattern as the SBC).
     _secrets: "{{ lookup('pipe', 'sops -d ' ~ (playbook_dir | quote) ~ '/secrets/devbox.sops.yaml') | from_yaml }}"
     ssh_key_path: "/home/ubuntu/.ssh/id_ed25519_devbox"
+    # Homelab operational secrets (1P-mastered, synced to SOPS by
+    # scripts/sync-secrets.py). The box gets the automation SSH key for SSH to
+    # homelab hosts; Claude Code reads the rest on-demand via `sops -d` (age key
+    # deployed below) — no `op`, no 1Password unlocks.
+    _ops: "{{ lookup('pipe', 'sops -d ' ~ (playbook_dir | quote) ~ '/secrets/homelab-ops.sops.yaml') | from_yaml }}"
+    homelab_key_path: "/home/ubuntu/.ssh/id_ed25519_homelab"
 
   tasks:
     # -------------------------------------------------------------------------
@@ -215,6 +221,51 @@
         - { name: "commit.gpgsign", value: "true" }
         - { name: "tag.gpgsign", value: "true" }
         - { name: "core.sshCommand", value: "ssh -i {{ ssh_key_path }} -o IdentitiesOnly=yes" }
+
+    # -------------------------------------------------------------------------
+    # Resilient creds (no 1Password unlocks): the SOPS age key + the homelab
+    # automation SSH key. Option A — the box can `sops -d` ANY repo secret.
+    # -------------------------------------------------------------------------
+    - name: Ensure sops age key dir
+      ansible.builtin.file:
+        path: "{{ dev_home }}/.config/sops/age"
+        state: directory
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: "0700"
+
+    - name: Deploy SOPS age key (from CI SOPS_AGE_KEY) for headless sops -d
+      ansible.builtin.copy:
+        content: "{{ lookup('env', 'SOPS_AGE_KEY') }}\n"
+        dest: "{{ dev_home }}/.config/sops/age/keys.txt"
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: "0600"
+      no_log: true
+      when: (lookup('env', 'SOPS_AGE_KEY') | default('')) | length > 0
+
+    - name: Deploy homelab automation SSH key (SSH to PVE / k8s / SBC / VMs)
+      ansible.builtin.copy:
+        content: "{{ _ops.automation_ssh_private_key }}"
+        dest: "{{ homelab_key_path }}"
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: "0600"
+      no_log: true
+
+    - name: SSH config — use the homelab key for homelab hosts
+      ansible.builtin.blockinfile:
+        path: "{{ dev_home }}/.ssh/config"
+        create: true
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: "0600"
+        marker: "# {mark} ANSIBLE homelab"
+        block: |
+          Host 10.10.* pve.wind.etherport.net *.wind.etherport.net
+            IdentityFile {{ homelab_key_path }}
+            IdentitiesOnly yes
+            StrictHostKeyChecking accept-new
 
     # -------------------------------------------------------------------------
     # Clone the infra repo (needs the dedicated pubkey registered on GitHub).
