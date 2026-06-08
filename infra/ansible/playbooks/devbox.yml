@@ -1,0 +1,263 @@
+---
+# =============================================================================
+# Dev box — persistent remote Claude Code workstation
+#
+# A small always-on Ubuntu VM that runs Claude Code (+ other terminal tools) in
+# tmux, so a session survives the laptop dropping connectivity/power. Reached
+# from anywhere over Tailscale (direct node) or the existing homelab subnet
+# route. See docs note at bottom for the one-time interactive steps that can't
+# be IaC'd (account auth).
+#
+# Idempotent:  ansible-playbook -i inventory/wind playbooks/devbox.yml
+#
+# 1Password note: this account is personal/family (no service accounts), so the
+# box has its OWN git identity (dedicated SSH key, below) and does NOT depend on
+# `op` for the core workflow. `op` is installed for occasional agent-forwarded
+# use; there is no headless `op` auth wired.
+# =============================================================================
+- name: Provision dev box (Claude Code workstation)
+  hosts: devboxes
+  become: true
+
+  vars:
+    dev_user: ubuntu
+    dev_home: /home/ubuntu
+    git_user_name: "Graham Smith"
+    git_user_email: "graham@etherport.net"
+    repo_ssh_url: "git@github.com:sparked-diamond/infra.git"
+    repo_path: "/home/ubuntu/code/infra"
+    swap_gb: 4
+    node_major: "22"
+    # Secrets: dedicated git SSH key + (optional) Tailscale pre-auth key. SOPS,
+    # decrypts in CI via SOPS_AGE_KEY (same pattern as the SBC).
+    _secrets: "{{ lookup('pipe', 'sops -d ' ~ (playbook_dir | quote) ~ '/secrets/devbox.sops.yaml') | from_yaml }}"
+    ssh_key_path: "/home/ubuntu/.ssh/id_ed25519_devbox"
+
+  tasks:
+    # -------------------------------------------------------------------------
+    # Base toolchain
+    # -------------------------------------------------------------------------
+    - name: Install base dev packages
+      ansible.builtin.apt:
+        name:
+          - git
+          - curl
+          - wget
+          - build-essential
+          - tmux
+          - jq
+          - unzip
+          - ca-certificates
+          - gnupg
+          - ripgrep
+          - fd-find
+          - python3
+          - python3-pip
+          - sops
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    # -------------------------------------------------------------------------
+    # Swap (host has none; Claude Code can spike ~1 GB — swap keeps 2 GB safe)
+    # -------------------------------------------------------------------------
+    - name: Create swapfile
+      ansible.builtin.command: "fallocate -l {{ swap_gb }}G /swapfile"
+      args:
+        creates: /swapfile
+
+    - name: Secure + format swapfile
+      ansible.builtin.shell: "chmod 600 /swapfile && mkswap /swapfile"
+      args:
+        creates: /swapfile.formatted
+      register: _mkswap
+      changed_when: _mkswap.rc == 0
+
+    - name: Mark swapfile formatted
+      ansible.builtin.file:
+        path: /swapfile.formatted
+        state: touch
+      when: _mkswap is changed
+
+    - name: Enable swap in fstab + now
+      ansible.builtin.mount:
+        path: none
+        src: /swapfile
+        fstype: swap
+        opts: sw
+        state: present
+    - name: swapon
+      ansible.builtin.command: swapon /swapfile
+      register: _swapon
+      changed_when: "'already' not in (_swapon.stderr | default(''))"
+      failed_when: _swapon.rc != 0 and 'already' not in (_swapon.stderr | default(''))
+
+    # -------------------------------------------------------------------------
+    # Node.js + Claude Code
+    # -------------------------------------------------------------------------
+    - name: Add NodeSource repo
+      ansible.builtin.shell: "curl -fsSL https://deb.nodesource.com/setup_{{ node_major }}.x | bash -"
+      args:
+        creates: /etc/apt/sources.list.d/nodesource.list
+
+    - name: Install Node.js
+      ansible.builtin.apt:
+        name: nodejs
+        state: present
+        update_cache: true
+
+    - name: Install Claude Code (global npm)
+      community.general.npm:
+        name: "@anthropic-ai/claude-code"
+        global: true
+        state: present
+
+    # -------------------------------------------------------------------------
+    # 1Password CLI (installed; auth stays interactive/agent-forwarded)
+    # -------------------------------------------------------------------------
+    - name: Add 1Password apt key + repo
+      ansible.builtin.shell: |
+        curl -sS https://downloads.1password.com/linux/keys/1password.asc \
+          | gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/amd64 stable main" \
+          > /etc/apt/sources.list.d/1password.list
+      args:
+        creates: /etc/apt/sources.list.d/1password.list
+
+    - name: Install 1Password CLI
+      ansible.builtin.apt:
+        name: 1password-cli
+        state: present
+        update_cache: true
+
+    # -------------------------------------------------------------------------
+    # Tailscale (direct node — survives subnet-router outages; gives MagicDNS)
+    # Skipped cleanly if no auth key is in SOPS yet.
+    # -------------------------------------------------------------------------
+    - name: Add Tailscale apt key + repo
+      ansible.builtin.shell: |
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg \
+          -o /usr/share/keyrings/tailscale-archive-keyring.gpg
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list \
+          -o /etc/apt/sources.list.d/tailscale.list
+      args:
+        creates: /etc/apt/sources.list.d/tailscale.list
+
+    - name: Install Tailscale
+      ansible.builtin.apt:
+        name: tailscale
+        state: present
+        update_cache: true
+
+    - name: Join the tailnet (only if an auth key is present)
+      ansible.builtin.command: >-
+        tailscale up --ssh --hostname=devbox
+        --authkey={{ _secrets.tailscale_authkey }}
+      when: (_secrets.tailscale_authkey | default('')) | length > 0
+      register: _tsup
+      changed_when: "'Success' in (_tsup.stdout | default('')) or _tsup.rc == 0"
+      failed_when: false
+
+    # -------------------------------------------------------------------------
+    # Git identity — the box's OWN dedicated key (auth + SSH commit signing)
+    # -------------------------------------------------------------------------
+    - name: Ensure ~/.ssh exists
+      ansible.builtin.file:
+        path: "{{ dev_home }}/.ssh"
+        state: directory
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: "0700"
+
+    - name: Deploy dedicated git SSH private key
+      ansible.builtin.copy:
+        content: "{{ _secrets.git_ssh_private_key }}"
+        dest: "{{ ssh_key_path }}"
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: "0600"
+      no_log: true
+
+    - name: Deploy git SSH public key
+      ansible.builtin.copy:
+        content: "{{ _secrets.git_ssh_public_key }}\n"
+        dest: "{{ ssh_key_path }}.pub"
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: "0644"
+
+    - name: github.com in known_hosts
+      ansible.builtin.known_hosts:
+        path: "{{ dev_home }}/.ssh/known_hosts"
+        name: github.com
+        key: "{{ lookup('pipe', 'ssh-keyscan -t ed25519 github.com 2>/dev/null') }}"
+        state: present
+      become_user: "{{ dev_user }}"
+
+    - name: git global config (identity, SSH signing, key)
+      community.general.git_config:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        scope: global
+      become_user: "{{ dev_user }}"
+      loop:
+        - { name: "user.name", value: "{{ git_user_name }}" }
+        - { name: "user.email", value: "{{ git_user_email }}" }
+        - { name: "gpg.format", value: "ssh" }
+        - { name: "user.signingkey", value: "{{ ssh_key_path }}.pub" }
+        - { name: "commit.gpgsign", value: "true" }
+        - { name: "tag.gpgsign", value: "true" }
+        - { name: "core.sshCommand", value: "ssh -i {{ ssh_key_path }} -o IdentitiesOnly=yes" }
+
+    # -------------------------------------------------------------------------
+    # Clone the infra repo (needs the dedicated pubkey registered on GitHub).
+    # Non-fatal if the key isn't registered yet — re-run after registering.
+    # -------------------------------------------------------------------------
+    - name: Clone infra repo
+      ansible.builtin.git:
+        repo: "{{ repo_ssh_url }}"
+        dest: "{{ repo_path }}"
+        version: main
+        accept_hostkey: true
+        update: false
+      become_user: "{{ dev_user }}"
+      environment:
+        GIT_SSH_COMMAND: "ssh -i {{ ssh_key_path }} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+      register: _clone
+      failed_when: false
+
+    - name: Note if clone failed (pubkey not registered yet)
+      ansible.builtin.debug:
+        msg: >-
+          Repo clone did not succeed — register the dev box pubkey on GitHub
+          (Authentication + Signing) then re-run. pubkey: {{ ssh_key_path }}.pub
+      when: _clone.failed | default(false)
+
+    # -------------------------------------------------------------------------
+    # claude-dev launcher: starts Claude Code in the repo with remote control
+    # enabled, so the session is drivable from the Claude app anywhere.
+    # (Run inside tmux; one-time `claude auth login` + /config toggle required —
+    #  see the docs note. This launcher guarantees --remote-control regardless.)
+    # -------------------------------------------------------------------------
+    - name: Install claude-dev launcher
+      ansible.builtin.copy:
+        dest: /usr/local/bin/claude-dev
+        owner: root
+        group: root
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # Start a remote-control-enabled Claude Code session in the infra repo,
+          # inside a persistent tmux window so it survives disconnects.
+          # Usage: claude-dev [session-name]
+          set -euo pipefail
+          REPO="{{ repo_path }}"
+          NAME="${1:-devbox}"
+          cd "$REPO"
+          if ! command -v claude >/dev/null; then echo "claude not installed"; exit 1; fi
+          # reattach if a session with this name already exists
+          if tmux has-session -t "claude-$NAME" 2>/dev/null; then
+            exec tmux attach -t "claude-$NAME"
+          fi
+          exec tmux new-session -s "claude-$NAME" -c "$REPO" \
+            "claude --remote-control \"$NAME\"; exec bash"

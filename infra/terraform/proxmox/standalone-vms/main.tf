@@ -92,6 +92,26 @@ locals {
       description = "Asterisk PJSIP SBC — Twilio TLS+sRTP ⇄ UniFi Talk UDP bridge (task #80)"
       tags        = ["terraform", "voip", "sbc", "standalone"]
     }
+    devbox = {
+      vm_id    = 1005
+      ip       = "10.10.201.45"
+      bridge   = "servers" # SDN VNet (VLAN 201)
+      vlan_tag = null      # VNet handles VLAN tagging
+      # Persistent remote dev box: runs Claude Code (+ other terminal tools) in
+      # tmux so a session survives the laptop dropping connectivity/power. Reached
+      # from anywhere over Tailscale (direct node) or the existing subnet route.
+      # Lean on RAM by design — Claude Code idles ~250 MB, spikes ~1 GB; a 4 GB
+      # swapfile (host has no swap) absorbs spikes so 2 GB never OOMs. Host had
+      # ~17 GB free at provision time (2026-06-08). Bump memory_mb if it feels
+      # tight — the host can afford 3-4 GB.
+      # 4 vCPU: Claude Code's main loop is light, but parallel sub-agents/tool
+      # calls + builds benefit from the extra cores; host has plenty of CPU.
+      vcpus       = 4
+      memory_mb   = 2048
+      disk_gb     = 40
+      description = "Dev box — persistent tmux/Claude Code remote workstation"
+      tags        = ["terraform", "devbox", "standalone"]
+    }
   }
 
   # Imported VMs - pre-existing VMs adopted into Terraform (no clone block)
