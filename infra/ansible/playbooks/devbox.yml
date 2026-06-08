@@ -53,10 +53,17 @@
           - fd-find
           - python3
           - python3-pip
-          - sops
         state: present
         update_cache: true
         cache_valid_time: 3600
+
+    - name: Install sops binary (not in apt repos; useful for infra work in-repo)
+      ansible.builtin.get_url:
+        url: "https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64"
+        dest: /usr/local/bin/sops
+        mode: "0755"
+        owner: root
+        group: root
 
     # -------------------------------------------------------------------------
     # Swap (host has none; Claude Code can spike ~1 GB — swap keeps 2 GB safe)
