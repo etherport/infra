@@ -216,6 +216,18 @@ spec:
             # estimates. Rides cue@80b0a6c. User-authorized after review.
             - name: CUE_MEAL_MULTI
               value: 'true'
+            # ITEMIZE (needs CUE_MEAL_MULTI): a multi-item log estimates each item separately and the
+            # day total becomes the SUM of the items (not the model's holistic best_guess, which low-
+            # balled a big multi-meal day — dogfooding: sweetgreen 2x-chicken + bar + sushi + mochi
+            # came back ~1,100 for ~1,800 of food), and Today shows ONE ROW PER ITEM that reconciles
+            # to the total. Twice adversarially reviewed: NO-GO (2 must-fixes) → fixed → re-review GO.
+            # Blocker fixed: macro-lookup no longer collapses a summed multi-item total to one chain
+            # item (shouldLookupPublishedMacros skips items>=2). Major fixed: only rows STAMPED
+            # itemized (text path, itemizeTotals actually ran) explode — photos/fallbacks stay one
+            # combined row, so rows always reconcile to Eaten. Rides cue@ffd418b. User-authorized
+            # after review.
+            - name: CUE_MEAL_ITEMIZE
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
