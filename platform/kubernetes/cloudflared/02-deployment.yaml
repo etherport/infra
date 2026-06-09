@@ -36,7 +36,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: cloudflared
-          image: cloudflare/cloudflared:2026.5.2 # {"$imagepolicy": "flux-system:cloudflared"}
+          image: cloudflare/cloudflared:2026.6.0 # {"$imagepolicy": "flux-system:cloudflared"}
           # `--token <TOKEN>` carries everything cloudflared needs (tunnel
           # ID + secret + routes + ingress config from the cloudflare_tunnel_config
           # TF resource). No mounted credentials file required.
