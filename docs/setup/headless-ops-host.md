@@ -134,7 +134,39 @@ baked into the SOPS secret so headless hosts never need `op`:
    AWS_PROFILE=homelab aws sts get-caller-identity   # verify
    ```
 
-### 6. Claude Code Remote Control
+### 6. Proxmox provider creds (terraform)
+
+The `proxmox/*` stacks authenticate to PVE with an API token. CI passes it as
+`TF_VAR_proxmox_token_{id,secret}`; the headless equivalent injects it from SOPS:
+
+```bash
+scripts/tf-proxmox.sh k8s-vms plan   # decrypts the token into terraform's env
+```
+
+**Network caveat (the mini specifically):** PVE is a *host* in the **Management/200**
+zone (UDM-routed); the mini is on **Clients/202** (switch-routed, zoneless →
+Internal transit at the UDM). M56 makes Management *contained*, so mini → PVE
+(and other Management hosts) is default-denied. The exception — `Trusted admin
+clients (Clients/202) → Management (all)`, scoped to the `trusted-admin-clients`
+IP-group (mini + admin laptop) — lives in `infra/ansible/playbooks/udm-firewall.yml`.
+
+The **UDM/Gateway itself** (`10.10.200.1`) *is* reachable from Clients (Clients →
+Gateway is allowed — that's why the UDM web UI works from the mini's browser), so
+**the mini can apply the playbook headless** — UDM creds come from SOPS
+(`udm_tfadmin_user`/`udm_tfadmin_password` → `UDM_USERNAME`/`UDM_PASSWORD` env),
+no 1Password:
+
+```bash
+export UDM_USERNAME="$(sops -d infra/ansible/playbooks/secrets/homelab-ops.sops.yaml | sed -n 's/^udm_tfadmin_user: *//p'     | tr -d '"')"
+export UDM_PASSWORD="$(sops -d infra/ansible/playbooks/secrets/homelab-ops.sops.yaml | sed -n 's/^udm_tfadmin_password: *//p' | tr -d '"')"
+ansible-playbook infra/ansible/playbooks/udm-firewall.yml --check   # dry-run / diff
+ansible-playbook infra/ansible/playbooks/udm-firewall.yml           # apply
+```
+
+Until applied, only Management *hosts* (e.g. PVE `10.10.200.41`) are blocked from
+the mini — the Gateway/UDM is not.
+
+### 7. Claude Code Remote Control
 
 ```bash
 claude --remote-control "macmini"     # then approve / drive from the phone app
@@ -142,7 +174,7 @@ claude --remote-control "macmini"     # then approve / drive from the phone app
 
 Wrap it in a tmux session (`~/.local/bin/claude-rc`) so it survives SSH drops.
 
-### 7. Always-on + reachable
+### 8. Always-on + reachable
 
 ```bash
 sudo pmset -a disablesleep 1 sleep 0   # no deep sleep; stays reachable
