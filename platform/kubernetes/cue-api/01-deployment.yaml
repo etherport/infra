@@ -228,6 +228,23 @@ spec:
             # after review.
             - name: CUE_MEAL_ITEMIZE
               value: 'true'
+            # MACRO CACHE (needs CUE_MEAL_MACRO_LOOKUP): cache a named-chain item's PUBLISHED macros
+            # in published_macro_cache (migration 0011) so a repeat of the user's regular order is an
+            # instant, free hit instead of another web search. HIT TTL 90d / MISS TTL 7d (self-heals).
+            # Cache I/O is best-effort — any DB error falls back to a live lookup. Adversarially
+            # reviewed: GO (correct TTL/upsert/zero-cost, chain-scoped key, dormant-gated). Rides
+            # cue@44fb97a. User-authorized after review.
+            - name: CUE_MACRO_CACHE
+              value: 'true'
+            # PER-ITEM macro tightening (needs MULTI + ITEMIZE + MACRO_LOOKUP + MACRO_CACHE +
+            # DATABASE_URL; enforced fail-closed in env superRefine). In a multi-item log, tighten
+            # ONLY the clean named-chain item(s) from published macros and re-sum (never rewrite the
+            # whole total — that was the collapse bug). Twice reviewed: NO-GO (chain-detection major)
+            # → fixed (detect from full message, sole-chain attribution with other-source guard,
+            # text-level customization suppression) → re-review GO, no must-fix. Rides cue@44fb97a.
+            # User-authorized after review.
+            - name: CUE_MACRO_PERITEM
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
