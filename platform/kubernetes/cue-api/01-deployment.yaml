@@ -245,6 +245,16 @@ spec:
             # User-authorized after review.
             - name: CUE_MACRO_PERITEM
               value: 'true'
+            # Point the coach (reasoning capability) at Claude Fable 5. First attempt
+            # (8f2f842) was reverted (5f25d28) because the gateway forced tool_choice and
+            # Fable 5 400s on that. SAFE NOW: cue@baf383f added an auto/fallback tool-choice
+            # path (createStructured) — forced first, on the specific 400 it degrades to
+            # tool_choice:auto + a nudge — verified LIVE against claude-fable-5 (2026-06-10
+            # probe: structured estimate returned via the fallback). Standing user directive
+            # "OK while in testing mode". If a live coach turn fails, REVERT immediately.
+            # NOTE: src/config/pricing.ts claude-fable-5 rates are PROVISIONAL (Opus-4.8).
+            - name: CUE_MODEL_REASONING
+              value: 'claude-fable-5'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
