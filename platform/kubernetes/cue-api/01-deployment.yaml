@@ -61,12 +61,6 @@ spec:
                 secretKeyRef:
                   name: cue-db-app
                   key: uri
-            # Reasoning (the coach) model → Claude Fable 5 (owner-directed, 2026-06-09). Overrides
-            # the code default (claude-opus-4-8). ⚠️ pricing.ts carries a PROVISIONAL Fable 5 row
-            # (Opus-4.8 numbers) so cost doesn't meter $0 — verify real rates. Coach quality not yet
-            # re-evaled on Fable 5 (`pnpm eval -- --thread --vs`). vision/search/extraction unchanged.
-            - name: CUE_MODEL_REASONING
-              value: 'claude-fable-5'
             # Enable the interaction-style learn loop in dev (per deploy spec).
             - name: CUE_INTERACTION_LEARNING
               value: 'true'
