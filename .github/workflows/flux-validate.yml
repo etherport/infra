@@ -1,0 +1,65 @@
+# Flux manifest validation — the pre-merge gate Flux manifests previously lacked.
+# Terraform stacks get a PR `plan`; this gives the 44 kustomizations the same
+# safety: a typo in clusters/wind/kustomization.yaml would otherwise reconcile
+# straight to prod and can freeze ALL Flux reconciliation. Pure build + schema
+# validation — no cluster access, no secrets.
+name: flux-validate
+
+on:
+  pull_request:
+    paths:
+      - 'platform/**'
+      - 'clusters/**'
+      - '.github/workflows/flux-validate.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'platform/**'
+      - 'clusters/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flux-validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install kustomize + kubeconform
+        run: |
+          set -euo pipefail
+          KUSTOMIZE_VER=5.4.3
+          KUBECONFORM_VER=0.6.7
+          curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VER}/kustomize_v${KUSTOMIZE_VER}_linux_amd64.tar.gz" | sudo tar xz -C /usr/local/bin kustomize
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VER}/kubeconform-linux-amd64.tar.gz" | sudo tar xz -C /usr/local/bin kubeconform
+          kustomize version && kubeconform -v
+
+      - name: Build every kustomization overlay
+        run: |
+          set -uo pipefail
+          fail=0
+          while IFS= read -r k; do
+            d=$(dirname "$k")
+            echo "::group::kustomize build $d"
+            if ! kustomize build "$d" >/dev/null; then
+              echo "::error file=$k::kustomize build failed for $d"
+              fail=1
+            fi
+            echo "::endgroup::"
+          done < <(find platform clusters -name kustomization.yaml | sort)
+          exit $fail
+
+      - name: Schema-validate the rendered cluster (kubeconform)
+        run: |
+          set -euo pipefail
+          # -ignore-missing-schemas lets CRDs (Flux/cert-manager/CNPG/MetalLB/Cilium)
+          # pass when not in the catalog; the datreeio CRD catalog covers most.
+          kustomize build clusters/wind \
+            | kubeconform -strict -ignore-missing-schemas -summary \
+                -schema-location default \
+                -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.Kind}}_{{.ResourceVersion}}.json'

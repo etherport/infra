@@ -15,7 +15,7 @@ The four tracks below each carry their own prioritized items. Several items
 
 ## ⭐ Do first — cross-cutting, high value-per-effort
 
-1. **Flux manifest validation CI** *(R-/devex I1; S)* — the biggest correctness gap: every Terraform stack gets a PR `plan`, but the **43 kustomizations + 13 HelmReleases reconcile straight off `main` with no pre-merge check** — and a typo in `clusters/wind/kustomization.yaml` freezes *all* Flux reconciliation (the exact H32 hazard). Add `.github/workflows/flux-validate.yml`: `kustomize build` every overlay → `kubeconform`. **First step:** loop `kustomize build` over `find platform clusters -name kustomization.yaml` on PR. *(This session already relies on `kubectl kustomize clusters/wind` as a manual gate — automate it.)*
+1. ✅ **Flux manifest validation CI** *(devex I1; S)* — **LANDED 2026-06-11** (`.github/workflows/flux-validate.yml`) — the biggest correctness gap: every Terraform stack gets a PR `plan`, but the **43 kustomizations + 13 HelmReleases reconcile straight off `main` with no pre-merge check** — and a typo in `clusters/wind/kustomization.yaml` freezes *all* Flux reconciliation (the exact H32 hazard). Add `.github/workflows/flux-validate.yml`: `kustomize build` every overlay → `kubeconform`. **First step:** loop `kustomize build` over `find platform clusters -name kustomization.yaml` on PR. *(This session already relies on `kubectl kustomize clusters/wind` as a manual gate — automate it.)*
 2. **CI AWS auth → OIDC** *(= H29; M)* — already the "highest-ROI hardening"; also a **devex enabler** — every new automation (cost collector, CI metrics) otherwise needs another long-lived key. Stack designed in `hardening-plan-2026-06-10.md`; bootstrap needs admin creds.
 3. **kube-apiserver audit log → Loki** *(security S1; S)* — the audit log is *already written* (`kubernetes_audit: true`) but dies on the node, never queried. One Alloy scrape job + a few LogQL alerts (secret reads, exec/attach, RBAC escalate) = SIEM-lite on the stack you already run. Forensic substrate before more advisor autonomy.
 4. **AI-advisor → proactive ops (right-sizing + cost report)** *(capabilities C2 / devex I7; M)* — the advisor (18 actions, deep-mode, cross-session memory, **`bump_resource_request` already an action**) only fires reactively. A scheduled CronJob reusing its Claude+Prometheus+email plumbing → weekly right-sizing proposals (fixes L16's wild request:limit ratios) + cost narrative. Near-zero new infra.
@@ -68,7 +68,7 @@ The four tracks below each carry their own prioritized items. Several items
 
 | # | Initiative | Effort | Notes |
 |---|---|---|---|
-| D1 ★ | **Flux validation CI** (= Do-first #1) | S | |
+| D1 ★ | ✅ **Flux validation CI** (`.github/workflows/flux-validate.yml`, landed 2026-06-11) — `kustomize build` all 44 overlays + kubeconform on the rendered root | S | done |
 | D2 | **Conftest/policy tests on rendered manifests** — encode house rules as CI tests (every ServiceMonitor has `release: monitoring`; no `:latest`; requests set). On-ramp to Kyverno (B2). | M | builds on D1 |
 | D3 ★ | **Taskfile entrypoint** (= Do-first #5) | S | |
 | D4 | **CI gitleaks + pre-commit-in-CI** — pre-commit is client-side only (M60); the mini auto-pushes to `main` with no branch protection (L20). Server-side gate closes it. | S | |
