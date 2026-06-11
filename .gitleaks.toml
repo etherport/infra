@@ -1,0 +1,21 @@
+# gitleaks config for homelab-infra. Extends the default ruleset; the allowlist
+# below exempts the known-benign findings (verified 2026-06-11), so a CI/pre-commit
+# gitleaks run is clean and any NEW hit is a real signal.
+title = "homelab-infra"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Benign: SOPS templates (placeholders), doc examples, and the SES SMTP access-key ID (a public identifier — the secret access key is externalized in the alertmanager-smtp-config k8s Secret)."
+paths = [
+  '''.*\.sops\.yaml\.template$''',
+  '''docs/guides/localtuya/TROUBLESHOOTING\.md''',
+  '''docs/guides/localtuya/WEB-UI-EXTRACTION\.md''',
+  '''docs/planning/sops-vs-ansible-vault\.md''',
+  '''docs/runbooks/alertmanager-ses-quota\.md''',
+  '''docs/setup/secrets/SOPS-SETUP\.md''',
+]
+regexes = [
+  '''AKIA4C5DM33XKE5WUPG4''',
+]

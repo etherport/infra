@@ -260,9 +260,8 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Backed out fully:** removed the TF network (`unifi_network.loadbalancers` → VLAN 215 destroyed), the MetalLB `lb-vlan` pool + advertisement, and the migration runbook. All VIPs stay on 201 (BGP-advertised, working). The `.5` DNS pin decision still stands (it's a network-wide contract; stays on 201 regardless).
 - **If revisited:** only worth it if LB VIPs get their **own** zone (DMZ-style for service front-ends) — then re-create 215 as its own zone, not bundled with `Trusted`.
 
-### 🟡 M60. Secret-scanning in pre-commit + CI (gitleaks)
-- Review 2026-06-10. Pre-commit only has `sops-encryption-check` (fires on `*.sops.yaml` names) — a secret pasted into a `.tf`/`.md`/values/mis-named yaml sails through. Repo is clean today but unguarded.
-- ✅ **`gitleaks` pre-commit hook landed 2026-06-10.** Remaining: a CI gitleaks job on PRs (pre-commit only fires for those who run it). **Effort:** S.
+### ✅ M60. Secret-scanning in pre-commit + CI (gitleaks) — 2026-06-11
+- ✅ `gitleaks` pre-commit hook (2026-06-10) **+ CI `secret-scan.yml`** (2026-06-11) — runs on every PR + push to main (closes the client-side-only gap; the mini auto-pushes to main per L20). Added `.gitleaks.toml` with a verified allowlist (SOPS templates, doc examples, the SES SMTP access-key *ID* — confirmed no real plaintext-secret leaks in the tree).
 
 ### 🟡 M61. Expand pre-commit + Renovate coverage
 - Review 2026-06-10. ✅ **Landed 2026-06-10:** `terraform_tflint` (+ minimal `.tflint.hcl`) + `shellcheck` pre-commit hooks. Remaining: `ansible-lint` (needs a baseline-noise pass first), Renovate `github-actions` + `terraform` (provider) datasources, and centralizing the SOPS version (hardcoded `v3.9.4` in 2 workflows + the ansible-runner Dockerfile) into a composite `setup-sops` action with checksum verify. **Effort:** S-M.
