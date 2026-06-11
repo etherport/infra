@@ -19,7 +19,7 @@ The four tracks below each carry their own prioritized items. Several items
 2. **CI AWS auth → OIDC** *(= H29; M)* — already the "highest-ROI hardening"; also a **devex enabler** — every new automation (cost collector, CI metrics) otherwise needs another long-lived key. Stack designed in `hardening-plan-2026-06-10.md`; bootstrap needs admin creds.
 3. **kube-apiserver audit log → Loki** *(security S1; S)* — the audit log is *already written* (`kubernetes_audit: true`) but dies on the node, never queried. One Alloy scrape job + a few LogQL alerts (secret reads, exec/attach, RBAC escalate) = SIEM-lite on the stack you already run. Forensic substrate before more advisor autonomy.
 4. **AI-advisor → proactive ops (right-sizing + cost report)** *(capabilities C2 / devex I7; M)* — the advisor (18 actions, deep-mode, cross-session memory, **`bump_resource_request` already an action**) only fires reactively. A scheduled CronJob reusing its Claude+Prometheus+email plumbing → weekly right-sizing proposals (fixes L16's wild request:limit ratios) + cost narrative. Near-zero new infra.
-5. **Taskfile ops entrypoint** *(devex I3; S)* — the README's "How to apply changes" is a CLI spec in prose. A root `Taskfile.yml` wrapping the `gh workflow run …` incantations + `scripts/` makes ops discoverable (`task --list`) and rebuild/onboarding-friendly.
+5. ✅ **Taskfile ops entrypoint** *(devex I3; S)* — **LANDED 2026-06-11** (`Taskfile.yml`) — the README's "How to apply changes" is a CLI spec in prose. A root `Taskfile.yml` wrapping the `gh workflow run …` incantations + `scripts/` makes ops discoverable (`task --list`) and rebuild/onboarding-friendly.
 
 **Trivial quick wins (code already shipped):** finish **unifi-poller** (C7/M55 — staged, needs a UniFi account + secret); execute the **Phase-3 alert opt-in cadence** (L13/C2a — one `ai_remediation: "auto"` label/week); **Twilio 911 address** (M15 — a *safety* item, should outrank hygiene).
 
@@ -70,7 +70,7 @@ The four tracks below each carry their own prioritized items. Several items
 |---|---|---|---|
 | D1 ★ | ✅ **Flux validation CI** (`.github/workflows/flux-validate.yml`, landed 2026-06-11) — `kustomize build` all 44 overlays + kubeconform on the rendered root | S | done |
 | D2 | **Conftest/policy tests on rendered manifests** — encode house rules as CI tests (every ServiceMonitor has `release: monitoring`; no `:latest`; requests set). On-ramp to Kyverno (B2). | M | builds on D1 |
-| D3 ★ | **Taskfile entrypoint** (= Do-first #5) | S | |
+| D3 ★ | ✅ **Taskfile entrypoint** (`Taskfile.yml`, landed 2026-06-11) — validate/flux/tf/ansible/secrets tasks | S | done |
 | D4 | **CI gitleaks + pre-commit-in-CI** — pre-commit is client-side only (M60); the mini auto-pushes to `main` with no branch protection (L20). Server-side gate closes it. | S | |
 | D5 | **CI/CD observability** — 38 workflows + a single self-hosted runner with "intermittent SSH", no success-rate/duration/runner-health view. GH-API CronJob → pushgateway → Grafana. | M | |
 | D6 ★ | **Cost visibility** — clone the `cloudwatch-to-loki` boto3 CronJob → AWS Cost Explorer → Prometheus/Grafana + a monthly delta in the status-report email; Anthropic token-spend from the advisor's Loki audit log. | M | scoped Cost Explorer IAM (reuse `ai-advisor-readonly`) |

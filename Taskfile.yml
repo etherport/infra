@@ -1,0 +1,83 @@
+# Taskfile — single discoverable entrypoint for common ops (go-task: https://taskfile.dev).
+# Wraps the "How to apply changes" incantations from README.md so they're
+# `task --list`-able and typo-proof. `brew install go-task` then `task <name>`.
+version: '3'
+
+vars:
+  REPO_ROOT:
+    sh: git rev-parse --show-toplevel
+
+tasks:
+  default:
+    desc: List all tasks
+    cmds: [task --list]
+    silent: true
+
+  # ---- Local validation (runs the same gates as CI) ----
+  validate:
+    desc: Run all local gates — pre-commit + kustomize build sweep + gitleaks
+    cmds:
+      - task: validate:precommit
+      - task: validate:kustomize
+      - task: validate:secrets
+  validate:precommit:
+    desc: Run pre-commit on all files
+    cmds: ['pre-commit run --all-files']
+  validate:kustomize:
+    desc: Build every kustomization overlay + the cluster root (mirrors flux-validate CI)
+    dir: '{{.REPO_ROOT}}'
+    cmds:
+      - |
+        set -euo pipefail; fail=0
+        while IFS= read -r k; do d=$(dirname "$k")
+          kubectl kustomize "$d" >/dev/null || { echo "BUILD FAILED: $d"; fail=1; }
+        done < <(find platform clusters -name kustomization.yaml | sort)
+        [ $fail -eq 0 ] && echo "all overlays build OK"; exit $fail
+  validate:secrets:
+    desc: gitleaks secret scan (uses .gitleaks.toml allowlist)
+    dir: '{{.REPO_ROOT}}'
+    cmds: ['gitleaks detect --no-git --source . -c .gitleaks.toml --no-banner']
+
+  # ---- Flux / Kubernetes ----
+  flux:reconcile:
+    desc: Force a Flux reconcile of the cluster
+    cmds:
+      - kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
+  flux:status:
+    desc: Show Flux kustomizations + helmreleases
+    cmds: ['flux get kustomizations', 'flux get helmreleases -A']
+
+  # ---- Terraform (via the self-hosted gh-runner workflows) ----
+  # Usage: task tf:plan MODULE=compute   /   task tf:apply MODULE=networking
+  tf:plan:
+    desc: 'Plan a TF stack: task tf:plan MODULE=<networking|compute|unifi|cloudflare|s3|...>'
+    requires: {vars: [MODULE]}
+    cmds: ['gh workflow run terraform-{{.MODULE}}.yml -f action=plan']
+  tf:apply:
+    desc: 'Apply a TF stack: task tf:apply MODULE=<...>'
+    requires: {vars: [MODULE]}
+    cmds: ['gh workflow run terraform-{{.MODULE}}.yml -f action=apply']
+  tf:proxmox:
+    desc: 'Local headless proxmox TF (SOPS-injected creds): task tf:proxmox STACK=k8s-vms ARGS=plan'
+    requires: {vars: [STACK]}
+    cmds: ['{{.REPO_ROOT}}/scripts/tf-proxmox.sh {{.STACK}} {{.ARGS}}']
+
+  # ---- Ansible / Kubespray ----
+  ansible:proxmox: {desc: 'Run the PVE-host playbook', cmds: ['gh workflow run ansible-proxmox.yml']}
+  ansible:vm-fleet: {desc: 'Run the standalone-VM fleet playbook', cmds: ['gh workflow run ansible-vm-fleet.yml']}
+  kubespray:
+    desc: 'Kubespray: task kubespray PLAYBOOK=<cluster|scale|upgrade-cluster>'
+    requires: {vars: [PLAYBOOK]}
+    cmds: ['gh workflow run kubespray.yml -f playbook={{.PLAYBOOK}}']
+
+  # ---- Secrets ----
+  secrets:edit:
+    desc: 'Edit a SOPS file: task secrets:edit FILE=path/to/x.sops.yaml'
+    requires: {vars: [FILE]}
+    cmds: ['sops {{.FILE}}']
+  secrets:sync:
+    desc: 'Re-sync 1Password -> SOPS (needs op signed in)'
+    cmds: ['python3 {{.REPO_ROOT}}/scripts/sync-secrets.py']
+  secrets:render-aws:
+    desc: 'Render ~/.aws/credentials [homelab] from SOPS (headless)'
+    cmds: ['{{.REPO_ROOT}}/scripts/render-aws-credentials.sh']
