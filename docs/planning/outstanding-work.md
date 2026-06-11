@@ -59,6 +59,9 @@ personal-web CI all landed this session (see "Recently completed" below).
 
 ---
 
+> 🗺️ **Forward-looking dev roadmap** (reliability · security maturity · platform/capabilities ·
+> devex/automation/cost) lives in [`dev-roadmap-2026-06-11.md`](dev-roadmap-2026-06-11.md).
+
 ## Full-repo review — 2026-06-10
 
 A 5-dimension review (IaC consistency · k8s/Flux · docs · security-hardening ·
