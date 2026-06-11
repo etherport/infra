@@ -20,6 +20,9 @@ resources:
   - ../../platform/kubernetes/storage/ceph-csi
   # Cluster utilities
   - ../../platform/kubernetes/auto-remediation
+  # H32: confined cross-namespace RBAC for the remediation-controller (PVC delete +
+  # CNPG patch in postgres, velero backup create in velero — see the dir's README).
+  - ../../platform/kubernetes/auto-remediation-rbac
   # CloudWatch Logs -> Loki (M45 Phase C). 5-min CronJob in its own
   # ns; reads CW Logs via boto3 + pushes to in-cluster Loki. Closes
   # the on-prem/cloud log split — dashboards + advisor context now

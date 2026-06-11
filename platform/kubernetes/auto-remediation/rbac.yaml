@@ -45,21 +45,17 @@ rules:
 - apiGroups: ["batch"]
   resources: ["cronjobs"]
   verbs: ["get", "list", "patch"]
-# PVCs: expand_pvc patches .spec.resources.requests.storage. CNPG replica
-# reseed (recreate_replica) deletes the PVC for the failed replica so the
-# operator re-provisions it from the primary.
+# PVCs: cluster-wide is EXPAND ONLY (patch) — expand_pvc grows storage,
+# recoverable. The DATA-LOSS verb (delete) is NOT here; it is confined to the
+# postgres namespace via platform/kubernetes/auto-remediation-rbac/ (H32, 2026-06-11).
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]
-  verbs: ["get", "list", "patch", "delete"]
-# CNPG (postgresql.cnpg.io/v1): cnpg_recreate_replica patches the Cluster
-# CR's status to drop a misbehaving replica; the operator reseeds.
-- apiGroups: ["postgresql.cnpg.io"]
-  resources: ["clusters"]
-  verbs: ["get", "patch", "update"]
-# Velero: trigger_backup creates an ad-hoc Backup CR off an existing Schedule.
-- apiGroups: ["velero.io"]
-  resources: ["backups", "schedules"]
-  verbs: ["get", "list", "create", "patch"]
+  verbs: ["get", "list", "patch"]
+# H32: cnpg cluster patch (cnpg_recreate_replica) and velero backup create
+# (trigger_backup) were moved OUT of cluster scope into per-namespace Roles in
+# platform/kubernetes/auto-remediation-rbac/ (postgres + velero only), so these
+# irreversible/data-affecting verbs are reachable only where they legitimately
+# run — not in cnpg-system / rook-ceph / any other namespace.
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

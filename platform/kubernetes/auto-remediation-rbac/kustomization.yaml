@@ -1,0 +1,8 @@
+# H32: cross-namespace RBAC for the remediation-controller (confined destructive
+# verbs in postgres + velero). Deliberately NO `namespace:` transformer here — the
+# Roles must land in their own namespaces (postgres/velero), unlike the
+# auto-remediation/ kustomization which pins everything to auto-remediation.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - cross-namespace-roles.yaml

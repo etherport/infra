@@ -1,0 +1,63 @@
+# H32 (2026-06-11): the irreversible / data-affecting remediation verbs, confined
+# to the ONE namespace each legitimately runs in. Bound to the remediation-controller
+# ServiceAccount (which lives in auto-remediation). Kept in a SEPARATE dir from
+# auto-remediation/ because that kustomization has `namespace: auto-remediation`,
+# whose transformer would otherwise relocate these Roles out of postgres/velero.
+# The recoverable verbs (pod restart, scale, job cleanup, PVC *expand*) stay
+# cluster-wide in auto-remediation/rbac.yaml.
+---
+# PVC delete + CNPG cluster patch — ONLY in postgres.
+# cnpg_recreate_replica (namespace='postgres', hardcoded) deletes the failed
+# replica's PVC + patches the Cluster CR so the operator reseeds.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: remediation-controller-cnpg
+  namespace: postgres
+rules:
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "patch", "delete"]
+- apiGroups: ["postgresql.cnpg.io"]
+  resources: ["clusters"]
+  verbs: ["get", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: remediation-controller-cnpg
+  namespace: postgres
+subjects:
+- kind: ServiceAccount
+  name: remediation-controller
+  namespace: auto-remediation
+roleRef:
+  kind: Role
+  name: remediation-controller-cnpg
+  apiGroup: rbac.authorization.k8s.io
+---
+# Velero backup create — ONLY in velero.
+# trigger_velero_backup_now creates an ad-hoc Backup CR off an existing Schedule.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: remediation-controller-velero
+  namespace: velero
+rules:
+- apiGroups: ["velero.io"]
+  resources: ["backups", "schedules"]
+  verbs: ["get", "list", "create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: remediation-controller-velero
+  namespace: velero
+subjects:
+- kind: ServiceAccount
+  name: remediation-controller
+  namespace: auto-remediation
+roleRef:
+  kind: Role
+  name: remediation-controller-velero
+  apiGroup: rbac.authorization.k8s.io
