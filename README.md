@@ -173,8 +173,8 @@ via `docs/runbooks/grafana-admin-password.md`).
 
 | What | Tool | Destination | Schedule |
 |---|---|---|---|
-| K8s resources + PVs | Velero (10 schedules) | S3 `infra.wind.etherport.net/velero/` via Kopia | daily |
-| Postgres | CNPG Barman (WAL + base) | S3 `infra.wind.etherport.net/postgres/barman/` | continuous + daily base |
+| K8s resources + PVs | Velero (10 schedules) | S3 `velero.wind.etherport.net` (dedicated bucket) via Kopia | daily |
+| Postgres | CNPG Barman (WAL + base) | S3 `postgres-barman.wind.etherport.net` (dedicated bucket) | continuous + daily base |
 | etcd | systemd timer per CP + Velero `kube-system-daily` ships `/var/lib/etcd-snapshots` | local + S3 | daily 02:00 PT |
 | UDM controller-db + UDM/Protect core-config | `unifi-backup` CronJob | S3 `infra.wind.etherport.net/unifi/` | daily 04:00 PT |
 | NAS shares (7) | `s3-sync` CronJob per share | per-share S3 buckets | daily 01:00 PT |

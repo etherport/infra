@@ -13,6 +13,9 @@ The four tracks below each carry their own prioritized items. Several items
 
 ---
 
+> 📐 **Executable specs** for B1 (audit-log→Loki), A2 (3-2-1 backups), and C2/I7
+> (advisor right-sizing/cost) are in [`roadmap-specs-2026-06-11.md`](roadmap-specs-2026-06-11.md).
+
 ## ⭐ Do first — cross-cutting, high value-per-effort
 
 1. ✅ **Flux manifest validation CI** *(devex I1; S)* — **LANDED 2026-06-11** (`.github/workflows/flux-validate.yml`) — the biggest correctness gap: every Terraform stack gets a PR `plan`, but the **43 kustomizations + 13 HelmReleases reconcile straight off `main` with no pre-merge check** — and a typo in `clusters/wind/kustomization.yaml` freezes *all* Flux reconciliation (the exact H32 hazard). Add `.github/workflows/flux-validate.yml`: `kustomize build` every overlay → `kubeconform`. **First step:** loop `kustomize build` over `find platform clusters -name kustomization.yaml` on PR. *(This session already relies on `kubectl kustomize clusters/wind` as a manual gate — automate it.)*
