@@ -78,6 +78,11 @@ L16–L20**. Headline corrections + top gaps:
   minimal regex-scoped public tunnel surface; cloudflared pod well-hardened;
   broad+alerted backups; resource-prefixed `terraform-*` IAM policies.
 
+📋 **Detailed, ready-to-execute implementation plans for H3 + H29–H34** (steps,
+exact commands, sequencing, verification, rollback) live in
+[`hardening-plan-2026-06-10.md`](hardening-plan-2026-06-10.md). Recommended order:
+H34 → H31 → H29 → H30 → H33 → H32 → H3.
+
 ---
 
 ## Open items
