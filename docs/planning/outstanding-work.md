@@ -102,10 +102,11 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Fix:** IAM OIDC provider for `token.actions.githubusercontent.com` + `gh-actions-terraform` role (trust scoped to `repo:sparked-diamond/infra:ref:refs/heads/main`); add `permissions: id-token: write` + `aws-actions/configure-aws-credentials` `role-to-assume`; delete static keys. Free, mechanical — **highest-ROI hardening**.
 - **Effort:** M.
 
-### ⏳ H30. Supply chain — SHA-pin Actions + digest-pin images
-- **Source:** review 2026-06-10. **0** of 104 `uses:` are SHA-pinned (all floating `@vN`); **0** of 22 image refs are `@sha256`-pinned — in-house images pull mutable `:main` (`ansible-runner`, `cloudflare-ddns`, `aws-s3-sync`), bases float (`ubuntu:24.04`, `alpine:3.19`, `busybox`). A force-moved third-party tag runs with CI's AWS keys + GHCR push token; `:main` makes builds non-reproducible. Renovate currently *disables* the docker datasource for `sparked-diamond/*` + Flux images.
-- **Fix:** pin actions to commit SHAs (Renovate `pinGitHubActionDigests`); pin images by digest (extend Flux image-automation, which already writes some); re-enable Renovate digest tracking for in-house images; verify the SOPS-binary curl downloads with checksums.
-- **Effort:** M (Renovate does most).
+### 🟡 H30. Supply chain — SHA-pin Actions + digest-pin images
+- **Source:** review 2026-06-10. **0** of 104 `uses:` were SHA-pinned; **0** of 22 image refs `@sha256`-pinned; in-house images pull `:main`; SOPS binary curl'd unverified in 3 workflows.
+- ✅ **Done 2026-06-11 (safe/non-rolling):** added `helpers:pinGitHubActionDigests` to `renovate.json` (next Renovate run opens a reviewable PR SHA-pinning all actions); authored `.github/actions/setup-sops/action.yml` (pinned + **checksum-verified** SOPS install, sha256 `5488e32b…` from the official checksums).
+- ⏳ **Deferred to supervised (rolls pods / can break CI):** wire the 3 workflows (`terraform-drift-detection`, `terraform-aws-us-east-1`, `terraform-regional-vpn`) to `setup-sops`; add `digestReflectionPolicy: Always` to the 8 Flux `ImagePolicy` objects (image-reflector is v1.0.4 — supports it; triggers manifest-rewrite + pod rolls); fix the **dangling `cue-api` `$imagepolicy` marker** (no matching ImagePolicy → cue floats on `:latest`); bring in-house images under Flux + re-enable their Renovate digest tracking.
+- **Effort:** M remaining.
 
 ### 🟡 H31. Redesign `claude-admin` (break-glass, broad-but-not-escalation) + full IAM audit
 - **Reframe (owner 2026-06-11):** keep `claude-admin` as a deliberate one-off/break-glass user **outside Terraform**, but **broad-but-safe**. Chosen design: `PowerUserAccess` (all services except IAM/Org) + `claude-admin-oneoff-roles` (create/manage IAM roles under the `claude-*` prefix, **boundary-delegated** so no role it makes can do IAM writes → no escalation) + the scoped `claude-admin-policy`.
@@ -113,15 +114,17 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - ⏳ **Apply + full audit gated on admin/`claude-admin` creds** (the mini's `terraform-homelab` can only `list-users`). Ready-to-run apply bundle, verification, and the full-IAM-audit script (enumerate every user/policy, flag `Resource:*` writes + stale keys) are in [`aws-iam-review-2026-06-11.md`](aws-iam-review-2026-06-11.md). **Unblock:** add a `claude-admin` profile to the mini (now safe post-redesign).
 - **Effort:** S (apply) + M (audit + scope-correction sweep).
 
-### ⏳ H32. Scope auto-remediation RBAC (cluster-wide delete pods/PVCs)
-- **Source:** review 2026-06-10. `platform/kubernetes/auto-remediation/rbac.yaml` grants the controller SA cluster-wide `pods: delete`, `pvc: patch,delete`, `deploy/ds/sts: patch`, `cnpg clusters: patch,update` across ALL namespaces. Same controller runs the LLM advisor (Phase 1/3) — a prompt-injection or logic bug could delete a postgres data PVC anywhere.
-- **Fix:** namespaced RoleBindings for the namespaces it actually remediates; cluster-scope only for genuine reads (nodes/events). Hard-exclude `kube-system`/`ceph-*`/`postgres` PVC-delete in RBAC (the "never auto CNPG/Ceph" rule is design-doc only today — enforce in RBAC).
+### ⏳ H32. Scope auto-remediation RBAC (cluster-wide delete pods/PVCs) — needs SUPERVISED apply
+- **Source:** review 2026-06-10. `platform/kubernetes/auto-remediation/rbac.yaml` grants the controller SA cluster-wide `pods: delete`, `pvc: patch,delete`, `cnpg clusters: patch,update`. The "never auto CNPG/Ceph/kube-system" rule is code/prompt-only (`AI_NAMESPACE_DENYLIST`), not RBAC.
+- **Fix:** move the irreversible verbs (`pvc:delete`, `cnpg:patch`, `velero:create`) out of cluster scope into per-namespace Roles in `postgres`/`velero`; keep recoverable verbs (pod restart, scale, job cleanup, pvc *expand*) cluster-wide.
+- **⚠ BLOCKER (found 2026-06-11):** the auto-remediation `kustomization.yaml` has `namespace: auto-remediation`, so kustomize's namespace transformer **relocates any postgres/velero Role into auto-remediation** (verified via `kubectl kustomize`). Correct fixes both touch risky surfaces: (a) add a new dir/resource to `clusters/wind/kustomization.yaml` — a mistake there freezes ALL Flux reconciliation; or (b) drop the kustomization's `namespace:` directive + add explicit `namespace:` to every other auto-remediation resource. **Not safe to do unsupervised.** Interim verb-removal (drop the dangerous verbs, no namespaced Roles) was rejected — it would disable `cnpg_recreate_replica` auto-reseed while unattended. **Do when supervised.**
 - **Effort:** M.
 
-### ⏳ H33. Secrets-rotation runbook + 2nd age recipient (single-key blast radius)
-- **Source:** review 2026-06-10 (+ unchecked PRODUCTION-READINESS item). One age recipient decrypts ALL secrets (AWS, UDM, WG, Anthropic, SMTP, Ceph, CF); the private half lives un-passphrased on the always-on mini. No `secrets-rotation.md` exists — one file is the master key to the whole estate with no documented re-key path.
-- **Fix:** (1) write `docs/runbooks/secrets-rotation.md`; (2) add a 2nd offline age recipient (safe / 1P) to `.sops.yaml` so the primary can rotate without lockout; (3) optionally split recipients per blast-radius domain; (4) FileVault on the mini + a "mini compromised → rotate" procedure.
-- **Effort:** M.
+### 🟡 H33. Secrets-rotation runbook + 2nd age recipient (single-key blast radius)
+- **Source:** review 2026-06-10. One age recipient decrypts ALL secrets; the private half is replicated to **3 holders** (mini disk, GH `SOPS_AGE_KEY`, Flux `sops-age`) — that's the real blast radius. No re-key path existed.
+- ✅ **Done 2026-06-11:** wrote `docs/runbooks/secrets-rotation.md` (blast-radius inventory, routine two-phase rotation, full "mini compromised → rotate everything" incident procedure incl. the 1P-managed vs hand-edited secret split).
+- ⏳ **Remaining (needs a terminal — deferred from the unattended session):** (a) generate the offline backup age recipient + `sops updatekeys` re-key (the runbook's H33a — re-encrypts all 60 SOPS files; not run unattended since a botched re-key could break Flux decrypt); (b) FileVault on the mini; (c) optional per-domain recipient split.
+- **Effort:** S remaining.
 
 ### ✅ H34. Narrow + log the `trusted-admin-clients → Management` firewall rule (2026-06-11)
 - **Done:** rule narrowed from `protocol: all` → entire Management zone, to `protocol: tcp` + `Mgmt-Admin-Ports` (22/443/8006) + `mgmt-admin-hosts` address-group (PVE `10.10.200.41`), `logging: true`. Applied from the mini; old broad `(all)` policy deleted via API (the playbook is create-only, so narrowing = create-new + delete-old). **Verified:** admin ports 22/8006 connect, non-admin 8007/3128 time out (dropped). (ICMP to mgmt hosts still passes — a UniFi default, not this rule.)

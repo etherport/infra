@@ -1,0 +1,25 @@
+name: Setup SOPS
+description: Install a pinned, checksum-verified SOPS binary (single source of truth for the version).
+inputs:
+  version:
+    description: SOPS release tag
+    required: false
+    default: v3.9.4
+  sha256:
+    description: Expected sha256 of sops-<version>.linux.amd64 (from the official checksums.txt)
+    required: false
+    default: "5488e32bc471de7982ad895dd054bbab3ab91c417a118426134551e9626e4e85"
+runs:
+  using: composite
+  steps:
+    - name: Install SOPS (pinned + checksum-verified)
+      shell: bash
+      run: |
+        set -euo pipefail
+        ver="${{ inputs.version }}"
+        want="${{ inputs.sha256 }}"
+        url="https://github.com/getsops/sops/releases/download/${ver}/sops-${ver}.linux.amd64"
+        curl -fsSL -o /tmp/sops "$url"
+        echo "${want}  /tmp/sops" | sha256sum -c -
+        sudo install -m 0755 /tmp/sops /usr/local/bin/sops
+        sops --version
