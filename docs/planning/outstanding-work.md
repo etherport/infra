@@ -122,10 +122,9 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Fix:** (1) write `docs/runbooks/secrets-rotation.md`; (2) add a 2nd offline age recipient (safe / 1P) to `.sops.yaml` so the primary can rotate without lockout; (3) optionally split recipients per blast-radius domain; (4) FileVault on the mini + a "mini compromised → rotate" procedure.
 - **Effort:** M.
 
-### ⏳ H34. Narrow + log the `trusted-admin-clients → Management` firewall rule
-- **Source:** review 2026-06-10 (rule added same day). `udm-firewall.yml` opens mini+laptop to the ENTIRE Management zone, `protocol: all`, `logging: false`. The mini is the most-exposed host (always-on RC session, holds the age key) — a compromise gets unaudited run of the whole management plane.
-- **Fix:** narrow to the actual admin ports (22/443/8006) + specific dest hosts; set `logging: true` so client-VLAN→management access is auditable.
-- **Effort:** S.
+### ✅ H34. Narrow + log the `trusted-admin-clients → Management` firewall rule (2026-06-11)
+- **Done:** rule narrowed from `protocol: all` → entire Management zone, to `protocol: tcp` + `Mgmt-Admin-Ports` (22/443/8006) + `mgmt-admin-hosts` address-group (PVE `10.10.200.41`), `logging: true`. Applied from the mini; old broad `(all)` policy deleted via API (the playbook is create-only, so narrowing = create-new + delete-old). **Verified:** admin ports 22/8006 connect, non-admin 8007/3128 time out (dropped). (ICMP to mgmt hosts still passes — a UniFi default, not this rule.)
+- **Remaining nicety:** add switch mgmt-UI IPs to `mgmt-admin-hosts` if/when needed.
 
 ## MEDIUM — quality / hygiene
 

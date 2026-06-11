@@ -126,6 +126,11 @@
         members:
           - "10.10.202.101"  # Mac mini — Claude Code RC / ops host (Clients/202)
           # - "10.10.202.NNN"  # admin laptop LAN IP — added on apply from the laptop
+      - name: mgmt-admin-hosts
+        # H34: Management-plane hosts the trusted clients reach. Narrows the
+        # destination from the whole Management/200 zone to named hosts.
+        members:
+          - "10.10.200.41"   # pve.wind.etherport.net — Proxmox VE (tf provider :8006, SSH)
 
     # Reuse the syslog-port-514 port group that the legacy paultyng/unifi
     # attempt left behind (id `6a138b2e92b8269077a388a3` in our test).
@@ -152,6 +157,11 @@
         # Strict DNS (udp+tcp 53). Used to keep Management→Trusted to DNS only,
         # not any-port-to-the-resolvers.
         members: ["53"]
+
+      - name: Mgmt-Admin-Ports
+        # H34: admin-plane ports the trusted clients actually use — SSH(22),
+        # HTTPS admin UIs(443), Proxmox VE web/API(8006). All TCP.
+        members: ["22", "443", "8006"]
 
     # ---- Firewall policies (zone-based v2 API) ----
     # Each policy must specify:
@@ -272,23 +282,22 @@
         source: { zone_name: Management }
         destination: { zone_name: Trusted, ip_group_name: syslog-receiver-alloy, port_group_name: syslog-port-514 }
 
-      # ---- Trusted admin clients (Clients/202) → Management (2026-06-10) ----
+      # ---- Trusted admin clients (Clients/202) → Management admin ports (H34, 2026-06-11) ----
       # Named trusted hosts (mini RC box + admin laptop) reach the management
-      # plane (Proxmox, UDM, switches) so headless terraform-proxmox and admin
-      # work run on-LAN. Source matched by the trusted-admin-clients IP-group
-      # (zone_name Internal is the transit scope-hint, same as the syslog rule);
-      # does NOT open Clients or Internal broadly. Risk-equivalent to the
-      # already-allowed Vpn→Management path. NOTE: the UDM/Gateway itself is
-      # already reachable (Clients→Gateway); this is specifically for hosts in
-      # the Management VLAN (e.g. PVE 10.10.200.41).
-      - name: "Trusted admin clients (Clients/202) → Management (all)"
+      # plane on the admin ports they actually use (SSH/HTTPS/PVE-API), NOT all
+      # ports to the whole zone. Source matched by the trusted-admin-clients
+      # IP-group (zone_name Internal is the transit scope-hint, same as the
+      # syslog rule); destination scoped to mgmt-admin-hosts + Mgmt-Admin-Ports.
+      # logging:true so client-VLAN→management access is auditable. The
+      # UDM/Gateway itself is already reachable via Clients→Gateway.
+      - name: "Trusted admin clients (Clients/202) → Management (admin ports)"
         action: ALLOW
-        protocol: all
+        protocol: tcp
         index: 12260
         enabled: true
-        logging: false
+        logging: true
         source: { zone_name: Internal, ip_group_name: trusted-admin-clients }
-        destination: { zone_name: Management }
+        destination: { zone_name: Management, ip_group_name: mgmt-admin-hosts, port_group_name: Mgmt-Admin-Ports }
 
   pre_tasks:
     # Credentials: prefer env vars (CI — UDM_USERNAME/UDM_PASSWORD from
