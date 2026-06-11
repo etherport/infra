@@ -39,35 +39,64 @@ given PowerUser already excludes IAM.)
   - `ResourceDiscoveryReadOnly` — removed `secretsmanager:GetSecretValue/PutSecretValue/UpdateSecret`
     on `*` (read/overwrite every secret); kept `ListSecrets`/`DescribeSecret`.
 
-## Apply bundle (run with the `homelab`/admin profile, NOT as `claude-admin`)
+## Chosen design (owner, 2026-06-11): PowerUser + scoped IAM role-creation
+
+claude-admin gets: **`PowerUserAccess`** (broad ops) + **`claude-admin-oneoff-roles`**
+(create/manage IAM roles under the `claude-*` prefix) + the scoped `claude-admin-policy`
+(its terraform-* IAM duties + read). The role-creation grant is made safe by a
+**permissions-boundary delegation**: `claude-admin-oneoff-roles` only allows
+`CreateRole` when `iam:PermissionsBoundary == claude-oneoff-boundary`, forbids
+stripping that boundary, and the boundary (`claude-oneoff-boundary.json`) caps any
+`claude-*` role to all-services-EXCEPT-IAM/Org. Net: claude-admin can spin up one-off
+roles for tasks, but no role it creates (even with AdministratorAccess attached) can
+perform IAM writes → no escalation path. Policy files in `infra/terraform/aws/iam-policies/`:
+`claude-oneoff-boundary.json`, `claude-admin-oneoff-roles.json`, `claude-admin-policy.json` (scoped).
+
+## Apply bundle (run in the VNC terminal as `claude-admin`, while `temp` is still attached)
+
+`claude-admin` writes IAM via the (still-attached) `temp` grant for steps 1–3, then
+detaches `temp` last. (The mini's `claude-admin` shell is classifier-gated on IAM
+writes, so run this in your interactive VNC terminal.)
 
 ```bash
-ACC=830881980142
-# 0. snapshot current state (reversibility)
-aws iam list-attached-user-policies --user-name claude-admin > /tmp/claude-admin.before.json
-aws iam get-policy-version --policy-arn arn:aws:iam::$ACC:policy/claude-admin-policy \
-  --version-id "$(aws iam get-policy --policy-arn arn:aws:iam::$ACC:policy/claude-admin-policy --query Policy.DefaultVersionId --output text)" \
-  > /tmp/claude-admin-policy.before.json
+export AWS_PROFILE=claude-admin; ACC=830881980142; cd ~/code/infra
+# 0. snapshot (reversibility)
+aws iam list-attached-user-policies --user-name claude-admin > ~/claude-admin.before.json
 
-# 1. detach + delete the temp escalation policy
-aws iam detach-user-policy --user-name claude-admin --policy-arn arn:aws:iam::$ACC:policy/claude-admin-temp
-aws iam delete-policy       --policy-arn arn:aws:iam::$ACC:policy/claude-admin-temp
+# 1. create the boundary + the scoped role-mgmt policy (uses temp's CreatePolicy on *)
+aws iam create-policy --policy-name claude-oneoff-boundary \
+  --policy-document file://infra/terraform/aws/iam-policies/claude-oneoff-boundary.json
+aws iam create-policy --policy-name claude-admin-oneoff-roles \
+  --policy-document file://infra/terraform/aws/iam-policies/claude-admin-oneoff-roles.json
 
-# 2. push the scoped claude-admin-policy (this repo's JSON) as the new default version
+# 2. attach PowerUserAccess + the scoped role-mgmt policy (uses temp's AttachUserPolicy)
+aws iam attach-user-policy --user-name claude-admin --policy-arn arn:aws:iam::aws:policy/PowerUserAccess
+aws iam attach-user-policy --user-name claude-admin --policy-arn arn:aws:iam::$ACC:policy/claude-admin-oneoff-roles
+
+# 3. push the scoped claude-admin-policy (drops secrets-write, scopes orphan-cleanup) (uses temp's CreatePolicyVersion)
 aws iam create-policy-version --policy-arn arn:aws:iam::$ACC:policy/claude-admin-policy \
   --policy-document file://infra/terraform/aws/iam-policies/claude-admin-policy.json --set-as-default
-#    prune old versions if at the 5-version limit:
-#    aws iam list-policy-versions --policy-arn …/claude-admin-policy   # then delete-policy-version the oldest
+#    if at the 5-version limit: aws iam list-policy-versions … then delete-policy-version the oldest
 
-# 3. attach PowerUserAccess for broad one-off ops (replaces the deleted temp's "breadth")
-aws iam attach-user-policy --user-name claude-admin --policy-arn arn:aws:iam::aws:policy/PowerUserAccess
+# 4. de-escalate: detach the temp policy (do this LAST — steps 1–3 needed its perms)
+aws iam detach-user-policy --user-name claude-admin --policy-arn arn:aws:iam::$ACC:policy/claude-admin-temp
+
+# verify
+aws iam list-attached-user-policies --user-name claude-admin --query 'AttachedPolicies[].PolicyName' --output text
 ```
 
-**Verify:** `aws iam list-attached-user-policies --user-name claude-admin` shows
-`claude-admin-policy` + `PowerUserAccess` (no `claude-admin-temp`); a smoke test as
-claude-admin can e.g. `aws ec2 describe-instances` (PowerUser) but **cannot**
-`aws iam attach-user-policy …` (denied). **Rollback:** re-create temp from
-`/tmp/claude-admin.before.json` + `set-default-policy-version` to the prior version.
+After this, the **`claude-admin-temp` policy object is orphaned** (detached, grants
+nothing). claude-admin can't delete it post-detach (its DeletePolicy is scoped to
+`terraform-*`); delete the object via the **`gs_admin` console** (IAM → Policies →
+claude-admin-temp → Delete) when convenient — it's harmless meanwhile.
+
+**Verify:** attachments = `claude-admin-policy` + `PowerUserAccess` +
+`claude-admin-oneoff-roles` (no `claude-admin-temp`); `aws ec2 describe-instances`
+works (PowerUser); `aws iam create-role --role-name claude-test …` **fails without**
+`--permissions-boundary …/claude-oneoff-boundary` and **succeeds with** it.
+**Rollback:** re-attach temp (`aws iam attach-user-policy --user-name claude-admin
+--policy-arn …:policy/claude-admin-temp`), detach PowerUserAccess + oneoff-roles, and
+`set-default-policy-version` claude-admin-policy back to the prior version (`~/claude-admin.before.json` has the pre-state).
 
 ## Full IAM audit — script (run with `claude-admin` creds; it has the read set)
 
