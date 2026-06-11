@@ -1,5 +1,11 @@
 # Ubiquiti Router DDNS Configuration
 
+> ⚠️ **STALE / LEGACY (2026-06-10).** This describes the **Route53** DDNS path.
+> The Route53 zone was **deleted 2026-05-27** and authoritative DNS moved to
+> Cloudflare. DDNS is migrating to the Cloudflare API (tracked: `outstanding-work.md`
+> task #84 / M68 — the writers are currently marked BROKEN in the README DNS table).
+> Kept for the router-side config pattern only; do not use the Route53 endpoints below.
+
 Configure your Ubiquiti router (Dream Machine, UDM Pro, etc.) to update Route53 DNS records via the DDNS Lambda endpoint.
 
 ## Overview

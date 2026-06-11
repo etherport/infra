@@ -59,6 +59,16 @@ scripts/             Ad-hoc helpers (safety-check, service-status inventory drif
    └───────────────────────────────────────────────────────┘
 ```
 
+## Headless ops host (Mac mini)
+
+An always-on Mac mini (`10.10.202.101`, tailnet `100.79.165.113`) runs Claude
+Code in **Remote Control** mode as the headless ops box — full
+kubectl/terraform/sops/ansible with **no 1Password at runtime** (age key +
+on-disk SSH keys; AWS creds rendered from SOPS via `scripts/render-aws-credentials.sh`).
+It's a trusted admin client on Clients/202 with a scoped UDM allow into the
+Management zone (`trusted-admin-clients → Management` in `udm-firewall.yml`).
+Setup + design + migration plan: [`docs/setup/headless-ops-host.md`](docs/setup/headless-ops-host.md).
+
 ## Flux-managed components
 
 Reconciled from `clusters/wind/kustomization.yaml`. Adding a new
@@ -185,7 +195,8 @@ Restore procedures + RTO/RPO targets:
 | Storage VLAN (NAS NFS) | 209 (10.10.209.0/24) — kubelet NFS to the UNAS (`sequoia` 10.10.209.10), MTU 9000, on NAS-workload nodes w1–w4 + gpu1 via `enp6s23` (DHCP .100–.104). Added 2026-05-29 (BGP Phase A) to keep NFS on the switch fabric ahead of 201→UDM-routed. **UNAS NFS export ACL must list these 209 IPs** (UI-managed, not IaC). |
 | Multus parents | 202 (client), 204 (IoT), 205 (security) — `enp6s19/20/21` per K8s node, NADs in `platform/kubernetes/multus/` |
 | Proxmox SDN | Per-VLAN bridges: `servers`(201), `clients`(202), `iot`(204), `security`(205), `vsan`(209), `guest`(206), `unifi`(212). Standalone VMs migrated 2026-05-18. K8s VM migration in `infra/terraform/proxmox/sdn/` |
-| LoadBalancer | MetalLB L2, VIP pool 10.10.201.70-90 |
+| Firewall zones (UDM) | M56 (2026-05-31): **Trusted**={Servers/201}, **Management**={200, contained — device/admin plane}, Internal={Default/199}; plus IoT/Security/Infrastructure custom zones. See [`docs/architecture/firewall-zones.md`](docs/architecture/firewall-zones.md) |
+| LoadBalancer | MetalLB **BGP** (eBGP→UDM, ECMP), VIP pool 10.10.201.70-90 — L2 mode removed 2026-05-31 (M18/M36, BGP-only) |
 | Ingress | Traefik (10.10.201.70), wildcard cert `*.wind.etherport.net` via cert-manager + TLSStore default |
 | Site-to-site VPN | K8s WireGuard pod primary (VRRP prio 150), `vpn-local` backup (prio 100), shared VIP 10.10.201.20 |
 | AWS VPC | 10.10.100.0/22, peered with future spokes; ALB at `*.wind.etherport.net` (planned drop after CF migration) |

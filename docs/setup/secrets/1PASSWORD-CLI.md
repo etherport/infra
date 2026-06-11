@@ -2,14 +2,20 @@
 
 Quick reference for managing secrets with 1Password CLI in this infrastructure.
 
+> ℹ️ **Canonical secrets doc is [`SOPS-SETUP.md`](SOPS-SETUP.md)** — the 1Password →
+> SOPS pipeline (`scripts/sync-secrets.py` + the manifest) is the source of truth.
+> This file is a thin `op` quick-reference. **Stale (2026-06-10):** the "Route 53
+> Updater" item below is **deleted in 1Password** and the Route53 zone is gone
+> (2026-05-27) — DDNS is migrating to Cloudflare (see `outstanding-work.md` M68).
+
 ## Available Credentials
 
 | 1Password Item | Item ID | Purpose |
 |----------------|---------|---------|
-| AWS Key (Route 53 Updater) | `ooefsxjnvx4khtbh63tn5fr3pu` | Route53 DDNS updates |
+| ~~AWS Key (Route 53 Updater)~~ | ~~`ooefsxjnvx4khtbh63tn5fr3pu`~~ | **DELETED** — Route53 decommissioned |
 | AWS Key (Kubernetes S3 NAS Backups) | *(get ID)* | S3 backup operations |
 | AWS Key (Velero Backups) | *(get ID)* | Velero Kubernetes backups |
-| AWS Key (Terraform) | *(get ID)* | Terraform infrastructure |
+| AWS Key (Terraform) | `ojbjsshj45oup6mcu3vlxxb7re` | Terraform S3 backend (`username`=access key, `password`=secret) |
 
 ## Common Commands
 

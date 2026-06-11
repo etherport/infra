@@ -1,7 +1,7 @@
 # Outstanding Work — Consolidated Priority List
 
-Latest revision: 2026-05-29. Canonical filename `outstanding-work.md`
-is stable; older dated snapshots live in `archive/`.
+Latest revision: 2026-06-10 (full-repo review). Canonical filename
+`outstanding-work.md` is stable; older dated snapshots live in `archive/`.
 
 Successor to `archive/outstanding-work-2026-05-16.md`. Resets the priority lattice
 after a multi-day session covering SDN migration, Ceph VLAN move, post-
@@ -53,6 +53,31 @@ personal-web CI all landed this session (see "Recently completed" below).
 - ✅ Networking prod-review (`networking-prod-review-2026-05-31.md`): P1.2 default-deny verified, P1.3 DDNS confirmed working, NetFlow decided (superseded by unifi-poller).
 - ✅ Doc consolidation: archived 21 done/superseded docs; this tracker trimmed 684→~270 lines (full snapshot in `archive/outstanding-work-snapshot-2026-05-31.md`).
 
+**Recently completed (2026-06-01 → 10):**
+- ✅ **Headless ops host** — always-on Mac mini (`10.10.202.101`, tailnet `100.79.165.113`) provisioned as the Claude Code Remote Control box: full kubectl/terraform/sops/ansible with **no 1Password at runtime** (commits `00f365f`, `14e1f07`). AWS creds baked into SOPS (`scripts/render-aws-credentials.sh`); proxmox tf creds via `scripts/tf-proxmox.sh`; scoped `trusted-admin-clients → Management` UDM rule (applied from the mini). Procedure: `docs/setup/headless-ops-host.md`.
+- ✅ Doc accuracy pass (2026-06-10): README (headless host, M56 zone split, MetalLB BGP-not-L2) + `firewall-zones.md` (the new trusted-admin-clients rule) updated.
+
+---
+
+## Full-repo review — 2026-06-10
+
+A 5-dimension review (IaC consistency · k8s/Flux · docs · security-hardening ·
+CI/supply-chain) ran 2026-06-10. New items carry IDs **H29–H34 / M60–M68 /
+L16–L20**. Headline corrections + top gaps:
+
+- ⚠️ **H3 was overstated** — the "audit-only CNPs already deployed" claim is
+  FALSE. There are **zero** NetworkPolicy/CiliumNetworkPolicy objects in the repo
+  and Cilium `policyEnforcementMode` is unset (allow-all). H3 reframed below.
+- **Top hardening gaps (new):** 22 CI workflows on long-lived static AWS keys, 0
+  OIDC (**H29**); 0 SHA-pinned actions / 0 digest-pinned images (**H30**);
+  orphaned `claude-admin-temp` IAM policy with `iam:*`/`DeleteUser` on `*`
+  (**H31**); auto-remediation SA has cluster-wide `delete pods/PVCs` (**H32**); no
+  secrets-rotation runbook + single age key (**H33**).
+- **What's genuinely solid** (don't re-spend): no plaintext secrets in tree/history;
+  SOPS pre-commit gate works; `kube_encrypt_secret_data: true`; EBS encryption;
+  minimal regex-scoped public tunnel surface; cloudflared pod well-hardened;
+  broad+alerted backups; resource-prefixed `terraform-*` IAM policies.
+
 ---
 
 ## Open items
@@ -61,10 +86,41 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 
 ## HIGH — production-readiness; 1–2 weeks
 
-### 🟡 H3. NetworkPolicies + ResourceQuotas + PDBs (Phase 1 — audit-only)
-- **Source:** `archive/outstanding-work-2026-05-16.md` H3; task #2 (in_progress)
-- Phase 1: LimitRanges + audit-only CNPs + conservative quotas already deployed via `platform/kubernetes/policy-baseline/`. Phase 2/3 (enforcement) pending Hubble observation window.
-- **Effort:** L for Phase 2+3 (observation + tuning).
+### 🟡 H3. NetworkPolicies — NONE deployed (corrected 2026-06-10)
+- **Source:** `archive/outstanding-work-2026-05-16.md` H3; task #2.
+- **Reality check (2026-06-10):** despite prior notes, `platform/kubernetes/policy-baseline/` contains ONLY LimitRanges + ResourceQuotas. There are **zero** NetworkPolicy / CiliumNetworkPolicy / CiliumClusterwideNetworkPolicy objects anywhere (verified by grep across `platform/` + `clusters/`), and Cilium `policyEnforcementMode` is unset (default allow-all). So every pod can reach every other pod + external host — a compromised workload (public-facing cue-api, plex) has unrestricted lateral movement to postgres/dns/wireguard/monitoring. The "audit-only CNPs already deployed" claim was wrong.
+- **Plan:** (1) ship the audit-only CNPs that were claimed → observe via Hubble; (2) default-deny + per-tier allowlist; isolate `postgres`, `wireguard`, `cue` first. The deployed part (LimitRanges/ResourceQuotas) stays.
+- **Effort:** L. **Largest internal-segmentation gap.**
+
+### ⏳ H29. CI AWS auth → GitHub OIDC (retire 22 long-lived static keys)
+- **Source:** review 2026-06-10. 22 workflows inject `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (GH secrets); **0** use OIDC (`role-to-assume`/`id-token: write` absent). Long-lived IAM keys in CI = classic exfil target, no expiry, manual rotation across many secrets.
+- **Fix:** IAM OIDC provider for `token.actions.githubusercontent.com` + `gh-actions-terraform` role (trust scoped to `repo:sparked-diamond/infra:ref:refs/heads/main`); add `permissions: id-token: write` + `aws-actions/configure-aws-credentials` `role-to-assume`; delete static keys. Free, mechanical — **highest-ROI hardening**.
+- **Effort:** M.
+
+### ⏳ H30. Supply chain — SHA-pin Actions + digest-pin images
+- **Source:** review 2026-06-10. **0** of 104 `uses:` are SHA-pinned (all floating `@vN`); **0** of 22 image refs are `@sha256`-pinned — in-house images pull mutable `:main` (`ansible-runner`, `cloudflare-ddns`, `aws-s3-sync`), bases float (`ubuntu:24.04`, `alpine:3.19`, `busybox`). A force-moved third-party tag runs with CI's AWS keys + GHCR push token; `:main` makes builds non-reproducible. Renovate currently *disables* the docker datasource for `sparked-diamond/*` + Flux images.
+- **Fix:** pin actions to commit SHAs (Renovate `pinGitHubActionDigests`); pin images by digest (extend Flux image-automation, which already writes some); re-enable Renovate digest tracking for in-house images; verify the SOPS-binary curl downloads with checksums.
+- **Effort:** M (Renovate does most).
+
+### ⏳ H31. Remove orphaned `claude-admin-temp` IAM policy (priv-esc primitive)
+- **Source:** review 2026-06-10. `infra/terraform/aws/iam-policies/claude-admin-temp.json` (committed since `8ddcc13`) grants `iam:CreateRole/AttachUserPolicy/AttachRolePolicy/DeleteUser/CreatePolicyVersion` + `s3:DeleteBucket` etc. **all on `Resource: "*"`**. Unreferenced by any Terraform, absent from the iam-policies README — a forgotten, unmanaged standing grant. `iam:CreateRole`+`AttachUserPolicy` on `*` = escalation-to-account-admin.
+- **Fix:** confirm in AWS console whether it's still attached to the `claude-admin` user; if one-shot, detach + delete the JSON. Bring `claude-admin` under Terraform (`iam-users`). Also scope `claude-admin-policy.json`'s `secretsmanager:Get/PutSecretValue` off `*`.
+- **Effort:** S.
+
+### ⏳ H32. Scope auto-remediation RBAC (cluster-wide delete pods/PVCs)
+- **Source:** review 2026-06-10. `platform/kubernetes/auto-remediation/rbac.yaml` grants the controller SA cluster-wide `pods: delete`, `pvc: patch,delete`, `deploy/ds/sts: patch`, `cnpg clusters: patch,update` across ALL namespaces. Same controller runs the LLM advisor (Phase 1/3) — a prompt-injection or logic bug could delete a postgres data PVC anywhere.
+- **Fix:** namespaced RoleBindings for the namespaces it actually remediates; cluster-scope only for genuine reads (nodes/events). Hard-exclude `kube-system`/`ceph-*`/`postgres` PVC-delete in RBAC (the "never auto CNPG/Ceph" rule is design-doc only today — enforce in RBAC).
+- **Effort:** M.
+
+### ⏳ H33. Secrets-rotation runbook + 2nd age recipient (single-key blast radius)
+- **Source:** review 2026-06-10 (+ unchecked PRODUCTION-READINESS item). One age recipient decrypts ALL secrets (AWS, UDM, WG, Anthropic, SMTP, Ceph, CF); the private half lives un-passphrased on the always-on mini. No `secrets-rotation.md` exists — one file is the master key to the whole estate with no documented re-key path.
+- **Fix:** (1) write `docs/runbooks/secrets-rotation.md`; (2) add a 2nd offline age recipient (safe / 1P) to `.sops.yaml` so the primary can rotate without lockout; (3) optionally split recipients per blast-radius domain; (4) FileVault on the mini + a "mini compromised → rotate" procedure.
+- **Effort:** M.
+
+### ⏳ H34. Narrow + log the `trusted-admin-clients → Management` firewall rule
+- **Source:** review 2026-06-10 (rule added same day). `udm-firewall.yml` opens mini+laptop to the ENTIRE Management zone, `protocol: all`, `logging: false`. The mini is the most-exposed host (always-on RC session, holds the age key) — a compromise gets unaudited run of the whole management plane.
+- **Fix:** narrow to the actual admin ports (22/443/8006) + specific dest hosts; set `logging: true` so client-VLAN→management access is auditable.
+- **Effort:** S.
 
 ## MEDIUM — quality / hygiene
 
@@ -193,6 +249,34 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Backed out fully:** removed the TF network (`unifi_network.loadbalancers` → VLAN 215 destroyed), the MetalLB `lb-vlan` pool + advertisement, and the migration runbook. All VIPs stay on 201 (BGP-advertised, working). The `.5` DNS pin decision still stands (it's a network-wide contract; stays on 201 regardless).
 - **If revisited:** only worth it if LB VIPs get their **own** zone (DMZ-style for service front-ends) — then re-create 215 as its own zone, not bundled with `Trusted`.
 
+### 🟡 M60. Secret-scanning in pre-commit + CI (gitleaks)
+- Review 2026-06-10. Pre-commit only has `sops-encryption-check` (fires on `*.sops.yaml` names) — a secret pasted into a `.tf`/`.md`/values/mis-named yaml sails through. Repo is clean today but unguarded.
+- ✅ **`gitleaks` pre-commit hook landed 2026-06-10.** Remaining: a CI gitleaks job on PRs (pre-commit only fires for those who run it). **Effort:** S.
+
+### 🟡 M61. Expand pre-commit + Renovate coverage
+- Review 2026-06-10. ✅ **Landed 2026-06-10:** `terraform_tflint` (+ minimal `.tflint.hcl`) + `shellcheck` pre-commit hooks. Remaining: `ansible-lint` (needs a baseline-noise pass first), Renovate `github-actions` + `terraform` (provider) datasources, and centralizing the SOPS version (hardcoded `v3.9.4` in 2 workflows + the ansible-runner Dockerfile) into a composite `setup-sops` action with checksum verify. **Effort:** S-M.
+
+### ⏳ M62. etcd snapshots → offsite (S3) + freshness alert (supersedes L15)
+- Review 2026-06-10. `etcd-backup.yml` writes local-disk only (14d); offsite only via Velero's `kube-system-daily` — the exact path that silently `PartiallyFailed` ≥4d recently. If a CP node is lost, its snapshots go with it. Push snapshots to S3 from the playbook + emit `etcd_snapshot_last_run_timestamp` (textfile collector) + a staleness alert. **Effort:** S.
+
+### ⏳ M63. k8s manifest hardening sweep
+- Review 2026-06-10. Per-workload gaps: (a) `cloudflared` ServiceMonitor missing `release: monitoring` label → metrics never scraped; (b) `rclone-gdrive` CronJob has NO securityContext (runs root); (c) no `startupProbe` on slow-boot workloads (technitium DNS, home-automation, wikijs, ollama) → restart risk mid-rollout; (d) no PDB for 2-replica `cloudflared`; (e) home-automation `privileged: true` → scope to explicit caps + device mounts. Small per-file fixes; template the hardened securityContext (cue-api/cloudflared already do it right). **Effort:** M (sweep).
+
+### ⏳ M64. Image-pinning model — pick one and apply repo-wide
+- Review 2026-06-10. Mixed: 18 manifests auto-update via Flux `$imagepolicy`, ~10 use hardcoded floating tags. Decide canonical (Flux ImagePolicy+digest everywhere, or pin-by-digest + manual bump) and apply; document which apps auto-update vs frozen. Ties to **H30**. **Effort:** M.
+
+### ⏳ M65. Terraform consistency — version pins, DRY, hardcoded IDs
+- Review 2026-06-10. (a) `required_version` ranges differ across stacks (`>= 1.0` … `>= 1.5.0`) while CI pins 1.14.3 — standardize to `>= 1.14`. (b) `unifi/networks.tf` repeats a 10-line `lifecycle.ignore_changes` block ×11 — extract to a `local`. (c) `aws/compute/main.tf` hardcodes VPC/subnet/SG IDs + the automation SSH pubkey (duplicated in 3 places) — source from module outputs / a shared var. (d) proxmox stacks hardcode the PVE endpoint ×3 → shared var. **Effort:** M.
+
+### ⏳ M66. Cilium pod-to-pod encryption — decide
+- Review 2026-06-10. `cilium_encryption_*` commented out (off). With BGP now spanning VLANs (wider trust boundary) + no NetworkPolicies (H3), east-west pod traffic (incl. postgres replication, WG key material) is cleartext + unrestricted. Either enable WireGuard-mode Cilium encryption or document the accepted risk. **Effort:** M (or doc-only).
+
+### ⏳ M67. Reconcile dead/contradictory Velero alerting config
+- Review 2026-06-10. `platform/kubernetes/backups/velero/values.yaml` sets `serviceMonitor.enabled: false` (dead — the live Flux release sets it true inline); `monitoring/06-backup-alerts.yaml` still says rules "stay dormant until the SM exists." A future edit could "fix" the wrong file + silently disable Velero alerting (the failure mode that hid the recent partial failure). Delete/reconcile the unused values.yaml + stale comment; confirm `VeleroBackupPartial` actually fires in-cluster. **Effort:** S.
+
+### 🟡 M68. Documentation consolidation + accuracy pass
+- Review 2026-06-10. ✅ **Landed 2026-06-10:** (a) staleness banners on the Route53 docs `ubiquiti-ddns.md` + `1PASSWORD-CLI.md` (+ fixed the dead `ooefsxjnvx4khtbh63tn5fr3pu` item ref, filled the real Terraform key ID, pointed to `SOPS-SETUP.md` as canonical); (b) archived `metallb-bgp-migration-2026-05-29.md` + `networking-prod-review-2026-05-31.md` (no non-archive `firewall-zones-future-state.md` exists). Remaining: (c) full merge of `1PASSWORD-CLI.md` into `SOPS-SETUP.md`; (d) BGP-phase index over `runbooks/bgp-phase-{a,b,c}.md`; (e) `docs/README.md` index gaps (setup/network/, terraform remote-state-backend, AI-advisor "archived but live" wording); (f) M14 ID-ambiguity footnote in `firewall-zones.md`. **Effort:** S remaining.
+
 ## LOW
 
 ### ⏳ L1. Proxmox HA cluster expansion
@@ -253,5 +337,20 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 ### ⏳ L6. Plex `ALLOWED_NETWORKS` parse error
 - **Source:** surfaced 2026-05-23 by the new Plex logtail sidecar (M41). Plex repeatedly logs `ERROR - Error parsing allowedNetworks entry ' 10.10.201.0 24': Invalid argument`. The space-separated CIDR fragments suggest Plex is reading from its Web UI "LAN Networks" setting where the slash got stripped — likely an old config from before the env-var was set. The `ALLOWED_NETWORKS` env in `02-deployment.yaml` is correct (`10.10.201.0/24,...`); need to clear the Web UI value or re-sync. Library Settings → Network → LAN Networks → check/clear the value.
 - **Effort:** Trivial (one UI click).
+
+### ⏳ L16. k8s consistency nits
+- Review 2026-06-10. Numbered-file convention (00-/01-) inconsistent across `platform/kubernetes/*`; Velero `backup-volumes-excludes` annotations present on some workloads, absent on most (cost — transient/media volumes get backed up); resource request:limit ratios vary wildly (ollama 12Gi limit vs 4Gi request). Standardize + lint. **Effort:** S each.
+
+### ✅ L17. `setup-terminal.sh` hardening (2026-06-10)
+- ✅ **Done:** `set -e` → `set -euo pipefail`. (The `brew install … || true` post-install `command -v` checks remain a nice-to-have but the strict-mode fix is the material one.)
+
+### ⏳ L18. `optional: true` secret refs can start pods degraded
+- Review 2026-06-10. e.g. `cue-api/01-deployment.yaml` — intentional for bootstrap, but a workload can run in a no-auth state; worth an alert on the empty-secret condition. **Effort:** S.
+
+### ⏳ L19. Verify Telegram webhook auth (cross-repo)
+- Review 2026-06-10. The one public POST (`/telegram/webhook`) relies on Telegram's secret-token header, validated in the separate `cue` app repo — not confirmable from infra. Verify the check exists (an unauthenticated webhook = abuse vector). **Effort:** S (verification).
+
+### ⏳ L20. Branch protection / CODEOWNERS (single-owner risk, accepted?)
+- Review 2026-06-10. `main` has no enforceable branch protection (GitHub free plan on a private repo blocks required-reviews/checks) and no `CODEOWNERS`; the headless mini auto-pushes to `main`. Mitigate with a mandatory pre-push CI gate, or explicitly accept the single-owner risk. **Effort:** S (decision).
 
 ---

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Terminal Setup Script for Homelab Access
 # Run this after cloning the homelab-infra repo on a fresh macOS install
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
