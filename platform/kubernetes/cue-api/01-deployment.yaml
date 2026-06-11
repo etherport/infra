@@ -263,6 +263,12 @@ spec:
             # fail-closed superRefine (auth on without the secret refuses to boot).
             - name: CUE_WEB_AUTH
               value: 'true'
+            # Conversational intake (cue PR #3): a bare-provisioned user (pnpm
+            # provision-user) is interviewed by the coach for the required profile fields;
+            # answers fill the profile (fill-only); afterwards optional gaps are asked at
+            # most 1x/day (proactive_pings-throttled). Collaborator #2 registers in-chat.
+            - name: CUE_CHAT_INTAKE
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
