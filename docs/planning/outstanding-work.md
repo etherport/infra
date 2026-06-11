@@ -107,10 +107,11 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Fix:** pin actions to commit SHAs (Renovate `pinGitHubActionDigests`); pin images by digest (extend Flux image-automation, which already writes some); re-enable Renovate digest tracking for in-house images; verify the SOPS-binary curl downloads with checksums.
 - **Effort:** M (Renovate does most).
 
-### ⏳ H31. Remove orphaned `claude-admin-temp` IAM policy (priv-esc primitive)
-- **Source:** review 2026-06-10. `infra/terraform/aws/iam-policies/claude-admin-temp.json` (committed since `8ddcc13`) grants `iam:CreateRole/AttachUserPolicy/AttachRolePolicy/DeleteUser/CreatePolicyVersion` + `s3:DeleteBucket` etc. **all on `Resource: "*"`**. Unreferenced by any Terraform, absent from the iam-policies README — a forgotten, unmanaged standing grant. `iam:CreateRole`+`AttachUserPolicy` on `*` = escalation-to-account-admin.
-- **Fix:** confirm in AWS console whether it's still attached to the `claude-admin` user; if one-shot, detach + delete the JSON. Bring `claude-admin` under Terraform (`iam-users`). Also scope `claude-admin-policy.json`'s `secretsmanager:Get/PutSecretValue` off `*`.
-- **Effort:** S.
+### 🟡 H31. Redesign `claude-admin` (break-glass, broad-but-not-escalation) + full IAM audit
+- **Reframe (owner intent 2026-06-11):** keep `claude-admin` as a deliberate one-off/break-glass user **outside Terraform** (so ad-hoc tasks don't need manual policy attachment), but make it **broad-but-safe**: AWS-managed `PowerUserAccess` (all services except IAM/Org) + the scoped `claude-admin-policy`. Closes the account-takeover paths while keeping operational breadth.
+- ✅ **IaC done 2026-06-11:** deleted `claude-admin-temp.json` (the `iam:*`/`DeleteUser`/`s3:DeleteBucket`-on-`*` escalation primitive — confirmed still attached live); scoped `claude-admin-policy.json` (`IAMOrphanCleanup` → `user/terraform-*`; dropped `secretsmanager` write on `*`).
+- ⏳ **Apply + full audit gated on admin/`claude-admin` creds** (the mini's `terraform-homelab` can only `list-users`). Ready-to-run apply bundle, verification, and the full-IAM-audit script (enumerate every user/policy, flag `Resource:*` writes + stale keys) are in [`aws-iam-review-2026-06-11.md`](aws-iam-review-2026-06-11.md). **Unblock:** add a `claude-admin` profile to the mini (now safe post-redesign).
+- **Effort:** S (apply) + M (audit + scope-correction sweep).
 
 ### ⏳ H32. Scope auto-remediation RBAC (cluster-wide delete pods/PVCs)
 - **Source:** review 2026-06-10. `platform/kubernetes/auto-remediation/rbac.yaml` grants the controller SA cluster-wide `pods: delete`, `pvc: patch,delete`, `deploy/ds/sts: patch`, `cnpg clusters: patch,update` across ALL namespaces. Same controller runs the LLM advisor (Phase 1/3) — a prompt-injection or logic bug could delete a postgres data PVC anywhere.

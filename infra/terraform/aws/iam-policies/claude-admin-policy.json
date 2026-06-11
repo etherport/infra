@@ -62,7 +62,7 @@
         "iam:DetachUserPolicy",
         "iam:DeleteUser"
       ],
-      "Resource": "*"
+      "Resource": "arn:aws:iam::830881980142:user/terraform-*"
     },
     {
       "Sid": "IAMPolicyTagging",
@@ -112,9 +112,6 @@
         "apigateway:GET",
         "secretsmanager:ListSecrets",
         "secretsmanager:DescribeSecret",
-        "secretsmanager:GetSecretValue",
-        "secretsmanager:PutSecretValue",
-        "secretsmanager:UpdateSecret",
         "elasticloadbalancing:Describe*",
         "events:List*",
         "events:DescribeRule",
