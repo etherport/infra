@@ -1,0 +1,70 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageIAMUsers",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateUser", "iam:DeleteUser", "iam:GetUser", "iam:ListUsers",
+        "iam:TagUser", "iam:UntagUser", "iam:UpdateUser",
+        "iam:PutUserPolicy", "iam:DeleteUserPolicy", "iam:GetUserPolicy",
+        "iam:ListUserPolicies", "iam:AttachUserPolicy", "iam:DetachUserPolicy",
+        "iam:ListAttachedUserPolicies",
+        "iam:CreateAccessKey", "iam:DeleteAccessKey", "iam:ListAccessKeys",
+        "iam:GetAccessKeyLastUsed", "iam:UpdateAccessKey"
+      ],
+      "Resource": "arn:aws:iam::830881980142:user/*"
+    },
+    {
+      "Sid": "ManageIAMRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:UpdateRole",
+        "iam:ListRoles", "iam:PassRole", "iam:TagRole", "iam:UntagRole",
+        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy",
+        "iam:ListRolePolicies", "iam:AttachRolePolicy", "iam:DetachRolePolicy",
+        "iam:ListAttachedRolePolicies", "iam:UpdateAssumeRolePolicy",
+        "iam:CreateServiceLinkedRole",
+        "iam:CreateInstanceProfile", "iam:DeleteInstanceProfile", "iam:GetInstanceProfile",
+        "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile",
+        "iam:ListInstanceProfilesForRole"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ManageIAMPolicies",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreatePolicy", "iam:DeletePolicy", "iam:GetPolicy", "iam:GetPolicyVersion",
+        "iam:ListPolicies", "iam:ListPolicyVersions", "iam:CreatePolicyVersion",
+        "iam:DeletePolicyVersion", "iam:SetDefaultPolicyVersion", "iam:ListEntitiesForPolicy",
+        "iam:TagPolicy", "iam:UntagPolicy"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ManageOIDCProvider",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetOpenIDConnectProvider", "iam:CreateOpenIDConnectProvider",
+        "iam:UpdateOpenIDConnectProviderThumbprint", "iam:AddClientIDToOpenIDConnectProvider",
+        "iam:TagOpenIDConnectProvider", "iam:ListOpenIDConnectProviders"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyPrivilegeEscalationViaAdminPolicyAttach",
+      "Effect": "Deny",
+      "Action": ["iam:AttachRolePolicy", "iam:AttachUserPolicy"],
+      "Resource": "*",
+      "Condition": {
+        "ArnEquals": {
+          "iam:PolicyARN": [
+            "arn:aws:iam::aws:policy/AdministratorAccess",
+            "arn:aws:iam::aws:policy/IAMFullAccess"
+          ]
+        }
+      }
+    }
+  ]
+}
