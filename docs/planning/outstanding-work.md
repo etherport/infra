@@ -100,11 +100,12 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Plan:** (1) ship the audit-only CNPs that were claimed → observe via Hubble; (2) default-deny + per-tier allowlist; isolate `postgres`, `wireguard`, `cue` first. The deployed part (LimitRanges/ResourceQuotas) stays.
 - **Effort:** L. **Largest internal-segmentation gap.**
 
-### 🟡 H29. CI AWS auth → GitHub OIDC (retire 22 long-lived static keys) — STACK AUTHORED
+### ✅ H29. CI AWS auth → GitHub OIDC — CUTOVER COMPLETE 2026-06-12
 - **Source:** review 2026-06-10. 22 workflows inject `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (GH secrets); **0** use OIDC (`role-to-assume`/`id-token: write` absent). Long-lived IAM keys in CI = classic exfil target, no expiry, manual rotation across many secrets.
 - **Fix:** IAM OIDC provider for `token.actions.githubusercontent.com` + `gh-actions-terraform` role (trust scoped to `repo:sparked-diamond/infra:ref:refs/heads/main`); add `permissions: id-token: write` + `aws-actions/configure-aws-credentials` `role-to-assume`; delete static keys. Free, mechanical — **highest-ROI hardening**.
 - 🟡 **Stack authored 2026-06-12** (`infra/terraform/aws/github-oidc/`): OIDC provider + `gh-actions-terraform` role (trust = repo main+PR) + `PowerUserAccess` + scoped `gh-actions-terraform-iam` (anti-escalation Deny). `terraform validate` passes. **Bootstrap needs a one-time ADMIN apply** (claude-admin is PowerUser/no iam:* — use a temp `gs_admin` key; see the stack README), then cutover the 22 workflows. NOT yet applied.
-- **Effort:** M (bootstrap + cutover remain).
+- ✅ **Bootstrap applied** (gs_admin one-time, 2026-06-12) + **all 22 AWS-using workflows migrated** to the `gh-actions-terraform` OIDC role (13 github-hosted + 5 self-hosted action-input + 4 self-hosted job-env). Verified green: 13 github-hosted plans, cloudflare (self-hosted action-input), unifi (self-hosted job-env). `grep secrets.AWS_ACCESS_KEY_ID .github/workflows` = 0.
+- ⏳ **Final step (owner):** deactivate→delete the `terraform-homelab` access key + the `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` GH secrets. **Note:** `terraform-google` fails on a *pre-existing* empty `GCP_SA_KEY` secret (unrelated to OIDC — its AWS half works).
 
 ### 🟡 H30. Supply chain — SHA-pin Actions + digest-pin images
 - **Source:** review 2026-06-10. **0** of 104 `uses:` were SHA-pinned; **0** of 22 image refs `@sha256`-pinned; in-house images pull `:main`; SOPS binary curl'd unverified in 3 workflows.
