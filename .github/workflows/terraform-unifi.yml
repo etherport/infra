@@ -23,6 +23,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write   # H29 OIDC
   pull-requests: write
 
 env:
@@ -36,8 +37,6 @@ jobs:
     # cluster is up or not.
     runs-on: [self-hosted, lifecycle]
     env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: us-west-2
       # UniFi local admin (tf-admin) — see infra/terraform/unifi/README.md
       # for how these secrets get populated from 1Password.
@@ -50,6 +49,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::830881980142:role/gh-actions-terraform
+          aws-region: us-west-2
+
 
       - name: Install unzip
         run: |
