@@ -1,0 +1,31 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageSesPutS3Role",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:UpdateRole",
+        "iam:TagRole", "iam:UntagRole", "iam:UpdateAssumeRolePolicy", "iam:PassRole",
+        "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy",
+        "iam:ListRolePolicies", "iam:ListAttachedRolePolicies",
+        "iam:ListInstanceProfilesForRole"
+      ],
+      "Resource": "arn:aws:iam::830881980142:role/ses_put_s3_role"
+    },
+    {
+      "Sid": "DenyPrivilegeEscalationViaAdminPolicyAttach",
+      "Effect": "Deny",
+      "Action": ["iam:AttachRolePolicy", "iam:AttachUserPolicy"],
+      "Resource": "*",
+      "Condition": {
+        "ArnEquals": {
+          "iam:PolicyARN": [
+            "arn:aws:iam::aws:policy/AdministratorAccess",
+            "arn:aws:iam::aws:policy/IAMFullAccess"
+          ]
+        }
+      }
+    }
+  ]
+}
