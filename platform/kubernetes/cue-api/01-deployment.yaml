@@ -274,6 +274,10 @@ spec:
             # "budget reached" reply, no AI call. Safety gates are never cost-gated.
             - name: CUE_MONTHLY_COST_CAP_USD
               value: '100'
+            # W3 (cue PR #6): reuse live-lookup findings for the same (area, craving)
+            # within 2h — refinements/re-asks skip the billed web search.
+            - name: CUE_LOOKUP_CACHE
+              value: 'true'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
