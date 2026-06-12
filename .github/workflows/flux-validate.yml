@@ -16,6 +16,8 @@ on:
     paths:
       - 'platform/**'
       - 'clusters/**'
+      - '.github/workflows/flux-validate.yml'
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -59,7 +61,9 @@ jobs:
           set -euo pipefail
           # -ignore-missing-schemas lets CRDs (Flux/cert-manager/CNPG/MetalLB/Cilium)
           # pass when not in the catalog; the datreeio CRD catalog covers most.
+          # -skip Secret: SOPS-encrypted Secrets carry a `sops:` field that the
+          # strict Secret schema rejects (they're decrypted by Flux at apply).
           kustomize build clusters/wind \
-            | kubeconform -strict -ignore-missing-schemas -summary \
+            | kubeconform -strict -ignore-missing-schemas -skip Secret -summary \
                 -schema-location default \
                 -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
