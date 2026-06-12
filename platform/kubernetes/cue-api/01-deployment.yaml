@@ -269,6 +269,11 @@ spec:
             # most 1x/day (proactive_pings-throttled). Collaborator #2 registers in-chat.
             - name: CUE_CHAT_INTAKE
               value: 'true'
+            # Testing-phase budget (owner-directed 2026-06-12): $100/mo ALL-IN across all
+            # users (global calendar-month cap; cue PR #5). Tripped -> a deterministic
+            # "budget reached" reply, no AI call. Safety gates are never cost-gated.
+            - name: CUE_MONTHLY_COST_CAP_USD
+              value: '100'
           # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
