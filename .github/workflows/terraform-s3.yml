@@ -24,6 +24,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  id-token: write   # H29: mint the GitHub OIDC token to assume the AWS role
 
 env:
   TF_VERSION: '1.14.3'
@@ -47,11 +48,10 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: arn:aws:iam::830881980142:role/gh-actions-terraform
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform Init
