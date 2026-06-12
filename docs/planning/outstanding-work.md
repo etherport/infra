@@ -362,6 +362,9 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 ### ⏳ L19. Verify Telegram webhook auth (cross-repo)
 - Review 2026-06-10. The one public POST (`/telegram/webhook`) relies on Telegram's secret-token header, validated in the separate `cue` app repo — not confirmable from infra. Verify the check exists (an unauthenticated webhook = abuse vector). **Effort:** S (verification).
 
+### ⏳ L21. `terraform-google` fails on empty `GCP_SA_KEY` (pre-existing)
+- Surfaced during the H29 cutover (2026-06-12) but **pre-existing** — `terraform-google.yml` has failed since before OIDC (the GCP module's `Auth to GCP` step errors `GCP_SA_KEY secret is empty`). Its AWS half is fine (now OIDC). Either populate the `GCP_SA_KEY` GH secret (if the GCP module is wanted) or remove/skip the module + its workflow. **Effort:** S (decision).
+
 ### ⏳ L20. Branch protection / CODEOWNERS (single-owner risk, accepted?)
 - Review 2026-06-10. `main` has no enforceable branch protection (GitHub free plan on a private repo blocks required-reviews/checks) and no `CODEOWNERS`; the headless mini auto-pushes to `main`. Mitigate with a mandatory pre-push CI gate, or explicitly accept the single-owner risk. **Effort:** S (decision).
 
