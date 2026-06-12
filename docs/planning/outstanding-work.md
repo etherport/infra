@@ -100,10 +100,11 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Plan:** (1) ship the audit-only CNPs that were claimed → observe via Hubble; (2) default-deny + per-tier allowlist; isolate `postgres`, `wireguard`, `cue` first. The deployed part (LimitRanges/ResourceQuotas) stays.
 - **Effort:** L. **Largest internal-segmentation gap.**
 
-### ⏳ H29. CI AWS auth → GitHub OIDC (retire 22 long-lived static keys)
+### 🟡 H29. CI AWS auth → GitHub OIDC (retire 22 long-lived static keys) — STACK AUTHORED
 - **Source:** review 2026-06-10. 22 workflows inject `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (GH secrets); **0** use OIDC (`role-to-assume`/`id-token: write` absent). Long-lived IAM keys in CI = classic exfil target, no expiry, manual rotation across many secrets.
 - **Fix:** IAM OIDC provider for `token.actions.githubusercontent.com` + `gh-actions-terraform` role (trust scoped to `repo:sparked-diamond/infra:ref:refs/heads/main`); add `permissions: id-token: write` + `aws-actions/configure-aws-credentials` `role-to-assume`; delete static keys. Free, mechanical — **highest-ROI hardening**.
-- **Effort:** M.
+- 🟡 **Stack authored 2026-06-12** (`infra/terraform/aws/github-oidc/`): OIDC provider + `gh-actions-terraform` role (trust = repo main+PR) + `PowerUserAccess` + scoped `gh-actions-terraform-iam` (anti-escalation Deny). `terraform validate` passes. **Bootstrap needs a one-time ADMIN apply** (claude-admin is PowerUser/no iam:* — use a temp `gs_admin` key; see the stack README), then cutover the 22 workflows. NOT yet applied.
+- **Effort:** M (bootstrap + cutover remain).
 
 ### 🟡 H30. Supply chain — SHA-pin Actions + digest-pin images
 - **Source:** review 2026-06-10. **0** of 104 `uses:` were SHA-pinned; **0** of 22 image refs `@sha256`-pinned; in-house images pull `:main`; SOPS binary curl'd unverified in 3 workflows.
@@ -186,10 +187,10 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Scope:** add a `cloudflare_ruleset` (http_request_dynamic_redirect) resource in `smithforsb.tf`; import the existing rule or recreate. Verify the redirect still 301s after apply.
 - **Effort:** S once M53 unblocks it.
 
-### ⏳ M55. Add UniFi telemetry exporter (unifi-poller) for UDM/network metrics
+### ✅ M55. UniFi telemetry exporter (unifi-poller) — LIVE
 - **Source:** 2026-05-30. UDM observability is logs-complete but metrics-thin. Syslog → Alloy → Loki works (UDM-Pro-Max actively shipping, verified). But Prometheus has NO full UniFi telemetry — only `probe_success` (blackbox reachability, fixed 2026-05-30) + `unifi_backup_*`. Missing: client counts, throughput, WAN, port/PoE, AP/client RSSI, per-device health.
 - **Scope:** deploy unpoller (unifi-poller) as a Deployment scraping the UDM controller API → Prometheus `ServiceMonitor` (must carry label `release: monitoring`, per the probeSelector lesson) → Grafana dashboards. Needs a read-only UniFi local account + creds (SOPS secret). Keep the UI/API access internal (Tailscale-only constraint).
-- ✅ **IaC staged 2026-05-31** (`376af86`): full `platform/kubernetes/unifi-poller/` (Deployment v2.15.3 + Service + ServiceMonitor `release: monitoring`), inert/unwired so no CrashLoop noise. **GATED on operator:** create UniFi View-Only local account → encrypt `01-secret.sops.yaml` → uncomment the dir in `clusters/wind/kustomization.yaml` + the secret in its kustomization. 3-step runbook + dashboard IDs in `platform/kubernetes/unifi-poller/README.md`.
+- ✅ **LIVE** (activated commits `75aec6f`/`d5c9e3d`): `platform/kubernetes/unifi-poller/` (Deployment v2.15.3 + Service + ServiceMonitor `release: monitoring`) is wired into `clusters/wind/kustomization.yaml` with the SOPS secret; deployment Running. Dashboard IDs in the dir README.
 - **Effort:** S remaining (account + secret + uncomment + import dashboards).
 
 ### ✅ M56. Servers/201 → Trusted zone + Management split — COMPLETE 2026-05-31

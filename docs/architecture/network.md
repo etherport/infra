@@ -29,7 +29,7 @@ Overview of the network topology and VLAN structure for the homelab.
 External Request
       |
       v
-  DNS (Route53 — Cloudflare zone in parallel, NS-cutover pending)
+  DNS (Cloudflare — authoritative for etherport.net since 2026-05; Route53 deleted 2026-05-27)
       |
       +------------------------+
       |                        |

@@ -83,9 +83,10 @@ velero · tailscale-operator + tailscale-connector ·
 github-actions-runner.
 
 **Kustomization-only** (no Helm): metallb · technitium · ceph-csi ·
-auto-remediation · cloudflared · blackbox-exporter ·
+auto-remediation (+ auto-remediation-rbac) · cloudflared · blackbox-exporter ·
 cloudwatch-to-loki · policy-baseline · cnpg (Cluster CR) ·
-home-automation · plex · rclone-gdrive · kopia · wikijs · ollama ·
+home-automation · plex · rclone-gdrive · wikijs · ollama ·
+cue-api + cue-db (CNPG) · unifi-poller ·
 tailscale (subnet router) · wireguard · cloudflare-ddns · unifi-backup ·
 unifi-cert-sync · monitoring (alerts, dashboards, status report) ·
 backups (Velero schedules + 7 s3-sync shares + daily report).
@@ -95,7 +96,7 @@ inline explain *why* each include is there.
 
 ## AI alert advisor (`auto-remediation` namespace)
 
-The big surface area. Static rule-based remediation (22 rules in
+The big surface area. Static rule-based remediation (21 rules in
 `configmap.yaml`) is the floor; on top of that sits a 3-phase AI
 advisor that diagnoses + acts on alerts the static rules miss.
 
@@ -277,7 +278,9 @@ Project → workflow map:
 | `infra/terraform/aws/external-monitoring` | `terraform-external-monitoring.yml` |
 | `infra/terraform/aws/homeassistant-alexa` | `terraform-homeassistant-alexa.yml` |
 | `infra/terraform/aws/ai-advisor-iam` | `terraform-ai-advisor-iam.yml` |
+| `infra/terraform/aws-us-east-1` | `terraform-aws-us-east-1.yml` |
 | `infra/terraform/aws-regional-vpn` | `terraform-regional-vpn.yml` |
+| `infra/terraform/aws/github-oidc` | *(bootstrap once with admin; then CI uses OIDC — H29)* |
 
 Daily drift detection runs across all of these via
 `terraform-drift-detection.yml` and opens a GH issue if anything
@@ -311,9 +314,24 @@ pre-commit run --all-files
 ```
 
 Configured (see `.pre-commit-config.yaml`):
-- `terraform_fmt` — `terraform fmt` on every `*.tf`
+- `terraform_fmt` + `terraform_tflint` — format + lint every `*.tf`
 - `yamllint` — lenient YAML lint (config `.yamllint.yml`)
 - `sops-encryption-check` — fail if any `*.sops.yaml` is plaintext
+- `shellcheck` — lint shell scripts
+- `gitleaks` — block accidental plaintext secrets (config `.gitleaks.toml`)
+
+## CI gates (pull request + push to main)
+
+- `flux-validate.yml` — `kustomize build` every overlay + `kubeconform` the
+  rendered cluster (pre-merge safety the Flux layer otherwise lacks).
+- `secret-scan.yml` — `gitleaks` server-side (the pre-commit hook only fires locally).
+- `terraform-drift-detection.yml` — daily; opens an issue on AWS drift.
+
+## Task runner
+
+`Taskfile.yml` (go-task) wraps the ops above: `task validate` (pre-commit +
+kustomize-build + gitleaks), `task tf:plan MODULE=<x>`, `task flux:reconcile`,
+`task secrets:edit FILE=<x>`, etc. `task --list` for all.
 
 ## Documentation map
 

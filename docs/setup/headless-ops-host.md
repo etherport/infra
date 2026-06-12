@@ -147,8 +147,11 @@ scripts/tf-proxmox.sh k8s-vms plan   # decrypts the token into terraform's env
 zone (UDM-routed); the mini is on **Clients/202** (switch-routed, zoneless →
 Internal transit at the UDM). M56 makes Management *contained*, so mini → PVE
 (and other Management hosts) is default-denied. The exception — `Trusted admin
-clients (Clients/202) → Management (all)`, scoped to the `trusted-admin-clients`
-IP-group (mini + admin laptop) — lives in `infra/ansible/playbooks/udm-firewall.yml`.
+clients (Clients/202) → Management (admin ports)` — lives in
+`infra/ansible/playbooks/udm-firewall.yml`: scoped to the `trusted-admin-clients`
+IP-group (mini + admin laptop), **narrowed by H34 (2026-06-11) to `protocol: tcp`
+on `Mgmt-Admin-Ports` (22/443/8006) to `mgmt-admin-hosts` (PVE `10.10.200.41`)**,
+with `logging: true` — not all-ports-to-the-whole-zone.
 
 The **UDM/Gateway itself** (`10.10.200.1`) *is* reachable from Clients (Clients →
 Gateway is allowed — that's why the UDM web UI works from the mini's browser), so
