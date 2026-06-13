@@ -57,6 +57,14 @@ resource "cloudflare_zone" "etherport" {
 // chain isn't validated — no security gain or harm.
 resource "cloudflare_zone_dnssec" "etherport" {
   zone_id = cloudflare_zone.etherport.id
+
+  // v5 makes `status` a settable attribute: omitting it plans status -> null
+  // (which would DISABLE DNSSEC), and pinning "active" fights any zone CF has
+  // server-side pending. Activation is a CF lifecycle, not TF-driven — ignore
+  // it. (Learned from the personal-web v5 migration, 2026-06-13.)
+  lifecycle {
+    ignore_changes = [status]
+  }
 }
 
 // ---------------------------------------------------------------------------

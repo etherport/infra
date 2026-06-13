@@ -216,15 +216,15 @@ variable "dns_records_cname" {
 
     // ---- ACME DNS-01 validation (cert-manager renewals depend on these) ----
     "_8e381876b8967e8fa6ba2c810f7c420c.wind" = {
-      value   = "_0d84538a58eaaee14b4e6fe7720c526d.jkddzztszm.acm-validations.aws."
+      value   = "_0d84538a58eaaee14b4e6fe7720c526d.jkddzztszm.acm-validations.aws"
       comment = "ACME validation — wildcard *.wind.etherport.net cert (cert-manager renewals)"
     }
     "_1ccc76b4b2b06ff626fc1c649b61ab26.ha.wind" = {
-      value   = "_93aad1195f5deb9d8d22297d5166c990.jkddzztszm.acm-validations.aws."
+      value   = "_93aad1195f5deb9d8d22297d5166c990.jkddzztszm.acm-validations.aws"
       comment = "ACME validation — ha.wind.etherport.net cert (cert-manager renewals)"
     }
     "_f6abe49fcaf7ee83c8013566f97ee85a" = {
-      value   = "_2bab704205eefe6455fdb32fcc37c0c2.jkddzztszm.acm-validations.aws."
+      value   = "_2bab704205eefe6455fdb32fcc37c0c2.jkddzztszm.acm-validations.aws"
       comment = "ACME validation — apex etherport.net cert (cert-manager renewals)"
     }
 
