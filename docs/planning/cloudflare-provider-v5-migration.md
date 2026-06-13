@@ -1,8 +1,13 @@
 # M69 — Cloudflare Terraform provider v4 → v5 migration
 
-**Status:** 🟡 in progress (2026-06-13). v4 baseline confirmed clean; v5 HCL
-rewrite done + `terraform validate`-passing on branch `cf-provider-v5-migration`.
-**Remaining: the state migration (rm+import of 51 resources) — windowed work, not yet done.**
+**Status:** ✅ APPLIED + VERIFIED 2026-06-13. Migrated live headless from the
+mini: `39 imported, 11 benign in-place, 0 destroyed`; post-apply `terraform plan`
+= **No changes**. cloudflared 0 restarts (tunnel-secret `ignore_changes` held);
+Access gating intact (approve/grafana/wiki all 302 to CF Access externally; wiki
+internal = split-horizon Traefik by design). PR **#66** reconciles `main` to v5.
+The `migrate-v5.sh` rm+import flow + the four gotchas played out as documented;
+the live plan also needed `connect_timeout` numeric, `config_src="cloudflare"`,
+and the `accounts/` import-ID discriminator for Access apps + service token.
 
 ## Progress log
 
