@@ -113,6 +113,7 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 ### 🟡 H30. Supply chain — SHA-pin Actions + digest-pin images
 - **Source:** review 2026-06-10. **0** of 104 `uses:` were SHA-pinned; **0** of 22 image refs `@sha256`-pinned; in-house images pull `:main`; SOPS binary curl'd unverified in 3 workflows.
 - ✅ **Done 2026-06-11 (safe/non-rolling):** added `helpers:pinGitHubActionDigests` to `renovate.json` (next Renovate run opens a reviewable PR SHA-pinning all actions); authored `.github/actions/setup-sops/action.yml` (pinned + **checksum-verified** SOPS install, sha256 `5488e32b…` from the official checksums).
+- ✅ **Actions SHA-pinned 2026-06-13:** Renovate PR **#62** ("pin dependencies") merged — **all 111 `uses:` now digest-pinned** (was 0). (The pin PR was unblocked by raising `prConcurrentLimit` 5→8, and went green once L21's WIF fixed `terraform-google`.)
 - ⏳ **Deferred to supervised (rolls pods / can break CI):** wire the 3 workflows (`terraform-drift-detection`, `terraform-aws-us-east-1`, `terraform-regional-vpn`) to `setup-sops`; add `digestReflectionPolicy: Always` to the 8 Flux `ImagePolicy` objects (image-reflector is v1.0.4 — supports it; triggers manifest-rewrite + pod rolls); fix the **dangling `cue-api` `$imagepolicy` marker** (no matching ImagePolicy → cue floats on `:latest`); bring in-house images under Flux + re-enable their Renovate digest tracking.
 - **Effort:** M remaining.
 
