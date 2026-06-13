@@ -1,0 +1,5 @@
+# M69 v5 migration — transient + sensitive artifacts produced by migrate-v5.sh.
+# .migrate-v5-backup/ holds RAW pulled state (contains secrets) — never commit.
+.migrate-v5-backup/
+generated_imports.tf
+plan-v5.txt
