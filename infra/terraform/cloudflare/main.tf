@@ -134,6 +134,16 @@ resource "cloudflare_zero_trust_tunnel_cloudflared" "wind_cluster" {
   account_id    = var.cloudflare_account_id
   name          = "wind-cluster"
   tunnel_secret = random_id.tunnel_secret.b64_std
+
+  // tunnel_secret is write-only — the API never returns it, so after import
+  // state has no secret and a plan would want to (re)set it from random_id,
+  // re-issuing the tunnel token and dropping the live cloudflared connection.
+  // The tunnel already exists with a working token; manage it, don't rotate.
+  // (To deliberately rotate: remove this, taint random_id, apply, then
+  //  redeploy platform/kubernetes/cloudflared/01-tunnel-token.sops.yaml.)
+  lifecycle {
+    ignore_changes = [tunnel_secret]
+  }
 }
 
 // ---------------------------------------------------------------------------
