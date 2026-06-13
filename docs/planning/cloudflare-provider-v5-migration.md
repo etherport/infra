@@ -1,6 +1,37 @@
 # M69 — Cloudflare Terraform provider v4 → v5 migration
 
-**Status:** ⏳ planned (2026-06-13). Spike (plan-only blast-radius) pending.
+**Status:** 🟡 in progress (2026-06-13). v4 baseline confirmed clean; v5 HCL
+rewrite done + `terraform validate`-passing on branch `cf-provider-v5-migration`.
+**Remaining: the state migration (rm+import of 51 resources) — windowed work, not yet done.**
+
+## Progress log
+
+- **2026-06-13 — v4 baseline (headless from mini):** `terraform plan` against
+  live CF = `0 add, 1 change, 0 destroy`. The one change is a cosmetic `comment`
+  drift on `cloudflare_record.a["sip.wind"]` (HCL updated for the SBC/#80 work,
+  never applied). No real config drift — clean starting point.
+- **2026-06-13 — v5 HCL rewrite (branch `cf-provider-v5-migration`, commit
+  `3809489`):** all of `main.tf` / `alexa-service-token.tf` / `outputs.tf` /
+  `providers.tf` rewritten to v5; **`terraform validate` passes against
+  cloudflare v5.20.0**. Decisions baked in:
+  - Dropped the v4-only provider `retries`/`min_backoff`/`max_backoff` knobs
+    (v5 SDK retries internally; `parallelism=2` still gates the rate limit).
+  - `cloudflare_record`→`cloudflare_dns_record`; `value`→`content`; `name` now
+    full FQDN (`"${key}.${zone}"`); `allow_overwrite` dropped.
+  - Tunnel + config renamed; `config{}`/`ingress_rule{}` blocks → `config = {
+    ingress = [...] }` (static + map services + catch-all `concat`ed);
+    `tunnel_token` now via the `..._cloudflared_token` **data source**.
+  - `cloudflare_zone`: `account_id`→`account.id`, `zone`→`name`, `plan` dropped.
+  - **Access policies folded inline** into each app's `policies` list (v5 drops
+    the standalone `application_id`/`precedence` policy resources). HA keeps its
+    ordered dual policy (service-token bypass `{service_token={token_id}}` +
+    SSO `[for e in allowed_emails: {email={email=e}}]`).
+- **NOT done — the dangerous part:** `validate` proves schema-correctness only,
+  NOT that the live API accepts every body, and it does NOT cover the **state
+  migration**. The 24 `record`→`dns_record` type renames + tunnel + folding 9
+  standalone policies into apps all need `state rm` + `import {}` (with
+  `-generate-config-out`) and a `plan`-to-zero-diff in a maintenance window,
+  Tunnel/Access applied last and watched.
 **Scope:** two repos — `infra/terraform/cloudflare/` (hard: Tunnel + Access) and
 `sparked-diamond/personal-web` `terraform/cloudflare-dns/` (DNS + DNSSEC only,
 owned by the personal-web thread).
