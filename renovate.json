@@ -12,7 +12,7 @@
     "dependencies",
     "renovate"
   ],
-  "prConcurrentLimit": 5,
+  "prConcurrentLimit": 8,
   "packageRules": [
     {
       "description": "Container images managed by Flux - disable Renovate",
