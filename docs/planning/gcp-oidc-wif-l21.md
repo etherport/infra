@@ -1,9 +1,24 @@
 # L21 — GCP Terraform auth → Workload Identity Federation (no static key)
 
-**Status:** ⏳ bootstrap pending (gcloud-admin-gated). Decided 2026-06-13 to make
-the `infra/terraform/google` module **live** via GitHub→GCP Workload Identity
-Federation — NOT a static `GCP_SA_KEY` (which would reintroduce the kind of
-long-lived cloud credential H29 just eliminated for AWS).
+**Status:** ✅ DONE 2026-06-13. `infra/terraform/google` is now live via
+GitHub→GCP Workload Identity Federation — NO static key (mirrors H29). CI
+dispatch plan = "No changes. Your infrastructure matches the configuration."
+
+**What it took (beyond the bootstrap below):**
+- Set the `GCP_PROJECT_ID` repo secret (`homelab-infra-497414`) — it was empty,
+  separate from the never-set `GCP_SA_KEY`.
+- Enabled `iamcredentials.googleapis.com` (required for WIF token exchange) +
+  `cloudresourcemanager.googleapis.com` + `cloudbilling.googleapis.com` on the
+  host project.
+- Imported `google_project.cloudflare_zero_trust`, `google_project.home_assistant_nest`,
+  and the 2 `google_project_service.ha_nest[*]` (locally, via owner ADC).
+- Declared `billing_account = "0169E4-61F6AE-AFE6C8"` on the CF-SSO project to
+  stop import drift wanting to detach billing.
+- `GCP_SA_KEY` was never actually a secret (404 on delete) — no cleanup needed.
+
+Original plan retained below for the record.
+
+---
 
 ## Background
 
