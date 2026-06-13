@@ -6,6 +6,20 @@ rewrite done + `terraform validate`-passing on branch `cf-provider-v5-migration`
 
 ## Progress log
 
+- **2026-06-13 — personal-web migrated FIRST (proving ground), PR green.** Its
+  DNS-only v5 run plans clean against migrated state (via the OIDC role). Two
+  live-plan findings (which offline `validate` can't catch) were **applied to
+  the infra branch** (commit `3d8e930`):
+  1. **CNAME trailing dot** — v5 stores CNAME content without it. Dropped the
+     trailing `.` on infra's 3 ACM-validation CNAMEs (`*.acm-validations.aws.`)
+     so they don't show as in-place diffs post-import.
+  2. **`cloudflare_zone_dnssec.status`** is settable in v5; omitting it plans
+     `status -> null` (disables DNSSEC). Added `lifecycle { ignore_changes = [status] }`
+     to `etherport`.
+  - Also noted (no infra change needed): TXT quoting was a non-issue; `value`→
+    `content` already done. personal-web's `smithforsb.com` DNSSEC-pending is a
+    separate personal-web item (DS not yet validated at the `.com` parent).
+
 - **2026-06-13 — v4 baseline (headless from mini):** `terraform plan` against
   live CF = `0 add, 1 change, 0 destroy`. The one change is a cosmetic `comment`
   drift on `cloudflare_record.a["sip.wind"]` (HCL updated for the SBC/#80 work,
