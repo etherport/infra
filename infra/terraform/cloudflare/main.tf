@@ -17,18 +17,10 @@
 //     get rewritten to use CF DNS API post-cutover (see runbook)
 //
 // PROVIDER v5 (M69, 2026-06-13): migrated from cloudflare/cloudflare ~> 4.0.
-// Resource renames + structural changes — see
-// docs/planning/cloudflare-provider-v5-migration.md. Key changes applied here:
-//   - cloudflare_record            -> cloudflare_dns_record (value->content,
-//                                     name now full FQDN, allow_overwrite gone)
-//   - cloudflare_tunnel            -> cloudflare_zero_trust_tunnel_cloudflared
-//                                     (secret -> tunnel_secret)
-//   - cloudflare_tunnel_config     -> cloudflare_zero_trust_tunnel_cloudflared_config
-//                                     (config{} block -> config = {} attribute;
-//                                      ingress_rule{} blocks -> ingress list)
-//   - cloudflare_zone              -> account_id -> account.id, zone -> name
-//   - Access policies fold inline into the application's `policies` attribute
-//     (the standalone application_id/precedence model is gone in v5).
+// The full v5 rename map + structural changes (record->dns_record, tunnel/config
+// renames, zone account nesting, inline Access policies) are documented in
+// docs/planning/cloudflare-provider-v5-migration.md — kept there rather than
+// inline so the per-resource comments below stay the source of truth.
 
 // ---------------------------------------------------------------------------
 // 1. Cloudflare zone — imported (NOT created — see top-of-file).
