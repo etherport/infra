@@ -15,6 +15,12 @@
 //     (VPC-internal resolution, not in public NS chain)
 //   - The two ddns writers (ddns-updater Lambda + cloudflare-ddns CronJob)
 //     get rewritten to use CF DNS API post-cutover (see runbook)
+//
+// PROVIDER v5 (M69, 2026-06-13): migrated from cloudflare/cloudflare ~> 4.0.
+// The full v5 rename map + structural changes (record->dns_record, tunnel/config
+// renames, zone account nesting, inline Access policies) are documented in
+// docs/planning/cloudflare-provider-v5-migration.md — kept there rather than
+// inline so the per-resource comments below stay the source of truth.
 
 // ---------------------------------------------------------------------------
 // 1. Cloudflare zone — imported (NOT created — see top-of-file).
@@ -22,10 +28,11 @@
 //    creating the zone in the CF dashboard.
 // ---------------------------------------------------------------------------
 resource "cloudflare_zone" "etherport" {
-  account_id = var.cloudflare_account_id
-  zone       = var.cf_zone_domain
-  plan       = "free"
-  type       = "full"
+  account = {
+    id = var.cloudflare_account_id
+  }
+  name = var.cf_zone_domain
+  type = "full"
 
   // Don't allow accidental TF destroy of the zone — that would delete all
   // records + break DNS authority. Manual cleanup in the dashboard if ever
@@ -42,67 +49,68 @@ resource "cloudflare_zone" "etherport" {
 // chain isn't validated — no security gain or harm.
 resource "cloudflare_zone_dnssec" "etherport" {
   zone_id = cloudflare_zone.etherport.id
+
+  // v5 makes `status` a settable attribute: omitting it plans status -> null
+  // (which would DISABLE DNSSEC), and pinning "active" fights any zone CF has
+  // server-side pending. Activation is a CF lifecycle, not TF-driven — ignore
+  // it. (Learned from the personal-web v5 migration, 2026-06-13.)
+  lifecycle {
+    ignore_changes = [status]
+  }
 }
 
 // ---------------------------------------------------------------------------
 // 2. DNS records — A, CNAME, MX, TXT.
 //    Each resource block uses for_each over the corresponding variable map
 //    so adding a new record is a one-line change in variables.tf.
+//    v5: name is the full FQDN ("${each.key}.${zone}"), value -> content.
 // ---------------------------------------------------------------------------
 
-resource "cloudflare_record" "a" {
+resource "cloudflare_dns_record" "a" {
   for_each = var.dns_records_a
 
   zone_id = var.cloudflare_zone_id
-  name    = each.key
+  name    = "${each.key}.${var.cf_zone_domain}"
   type    = "A"
-  value   = each.value.value
+  content = each.value.value
   ttl     = each.value.ttl
   proxied = each.value.proxied
   comment = each.value.comment
-  # CF auto-creates default records on zone create (e.g. mail MX) — let TF
-  # overwrite them instead of conflicting. We're the source of truth.
-  allow_overwrite = true
 }
 
-resource "cloudflare_record" "cname" {
+resource "cloudflare_dns_record" "cname" {
   for_each = var.dns_records_cname
 
   zone_id = var.cloudflare_zone_id
-  name    = each.key
+  name    = "${each.key}.${var.cf_zone_domain}"
   type    = "CNAME"
-  value   = each.value.value
+  content = each.value.value
   ttl     = each.value.ttl
   proxied = each.value.proxied
   comment = each.value.comment
-  # CF auto-creates default records on zone create (e.g. mail MX) — let TF
-  # overwrite them instead of conflicting. We're the source of truth.
-  allow_overwrite = true
 }
 
-resource "cloudflare_record" "mx" {
+resource "cloudflare_dns_record" "mx" {
   for_each = var.dns_records_mx
 
-  zone_id         = var.cloudflare_zone_id
-  name            = each.key
-  type            = "MX"
-  value           = each.value.value
-  priority        = each.value.priority
-  ttl             = each.value.ttl
-  comment         = each.value.comment
-  allow_overwrite = true
+  zone_id  = var.cloudflare_zone_id
+  name     = "${each.key}.${var.cf_zone_domain}"
+  type     = "MX"
+  content  = each.value.value
+  priority = each.value.priority
+  ttl      = each.value.ttl
+  comment  = each.value.comment
 }
 
-resource "cloudflare_record" "txt" {
+resource "cloudflare_dns_record" "txt" {
   for_each = var.dns_records_txt
 
-  zone_id         = var.cloudflare_zone_id
-  name            = each.key
-  type            = "TXT"
-  value           = each.value.value
-  ttl             = each.value.ttl
-  comment         = each.value.comment
-  allow_overwrite = true
+  zone_id = var.cloudflare_zone_id
+  name    = "${each.key}.${var.cf_zone_domain}"
+  type    = "TXT"
+  content = each.value.value
+  ttl     = each.value.ttl
+  comment = each.value.comment
 }
 
 // ---------------------------------------------------------------------------
@@ -114,93 +122,95 @@ resource "random_id" "tunnel_secret" {
   byte_length = 35
 }
 
-resource "cloudflare_tunnel" "wind_cluster" {
-  account_id = var.cloudflare_account_id
-  name       = "wind-cluster"
-  secret     = random_id.tunnel_secret.b64_std
+resource "cloudflare_zero_trust_tunnel_cloudflared" "wind_cluster" {
+  account_id    = var.cloudflare_account_id
+  name          = "wind-cluster"
+  tunnel_secret = random_id.tunnel_secret.b64_std
+  // Ingress is managed remotely via the API (the _config resource below), so
+  // the tunnel's config source is "cloudflare", not the local cloudflared file.
+  config_src = "cloudflare"
+
+  // tunnel_secret is write-only — the API never returns it, so after import
+  // state has no secret and a plan would want to (re)set it from random_id,
+  // re-issuing the tunnel token and dropping the live cloudflared connection.
+  // The tunnel already exists with a working token; manage it, don't rotate.
+  // (To deliberately rotate: remove this, taint random_id, apply, then
+  //  redeploy platform/kubernetes/cloudflared/01-tunnel-token.sops.yaml.)
+  lifecycle {
+    ignore_changes = [tunnel_secret]
+  }
 }
 
 // ---------------------------------------------------------------------------
 // 4. Tunnel ingress configuration — declarative routing inside the tunnel.
+//    v5: config{} block -> config = {} attribute; ingress_rule{} blocks -> a
+//    single `ingress` list of objects; origin_request{} -> origin_request = {}.
+//    The static rules + the map-driven services + the required catch-all are
+//    concatenated into one ordered list.
 // ---------------------------------------------------------------------------
-resource "cloudflare_tunnel_config" "wind_cluster" {
+resource "cloudflare_zero_trust_tunnel_cloudflared_config" "wind_cluster" {
   account_id = var.cloudflare_account_id
-  tunnel_id  = cloudflare_tunnel.wind_cluster.id
+  tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.wind_cluster.id
 
-  config {
-    ingress_rule {
-      hostname = var.approval_hostname
-      service  = var.approval_origin_url
-      origin_request {
-        no_tls_verify   = false
-        connect_timeout = "10s"
-      }
-    }
-    // wiki-js — first migration off the AWS ALB / Traefik public path
-    // (2026-05-26). Hostname is wiki.wind.etherport.net (matches site
-    // namespacing: wind = the active homelab site). Multi-level subdomain
-    // needs ACM ($10/mo on etherport.net zone) for free certs to cover
-    // *.wind.etherport.net. Traefik IngressRoute at the same hostname is
-    // retained as split-horizon fallback for VPN/local access; CF DNS
-    // proxied=true overrides the *.wind wildcard CNAME → ALB for this
-    // specific hostname.
-    ingress_rule {
-      hostname = "wiki.wind.etherport.net"
-      service  = "http://wiki-js.wikijs.svc.cluster.local:3000"
-      origin_request {
-        no_tls_verify   = false
-        connect_timeout = "10s"
-      }
-    }
-    // Home Assistant — needs dual-policy Access app (service token for
-    // Alexa Lambda + SSO for browser users). Inline rather than in the
-    // map (which generates single-policy apps). See alexa-service-token.tf.
-    ingress_rule {
-      hostname = "ha.wind.etherport.net"
-      service  = "http://home-assistant.home-automation.svc.cluster.local:8123"
-      origin_request {
-        no_tls_verify   = false
-        connect_timeout = "10s"
-      }
-    }
-    // Cue API (cue.etherport.net) — single-owner dev app handling personal
-    // health data + spending on an LLM key. Deliberately NOT in the
-    // cf_tunnel_services map: that wires a CF Access (SSO) app, which would
-    // block the Telegram webhook (Telegram can't do SSO). Instead, restrict
-    // PUBLIC reachability at the tunnel to exactly the two endpoints that must
-    // be internet-facing — the Telegram webhook (app additionally verifies the
-    // TELEGRAM_WEBHOOK_SECRET header) and the health check. Every other path
-    // (/coach, /meals, /onboarding, /progress, /digestion, ...) fails to match
-    // this rule's `path` and falls through to the 404 catch-all below, so it is
-    // unreachable from the public internet. The owner hits those over Tailscale
-    // (the Service is ClusterIP / reachable in-cluster + on the tailnet).
-    ingress_rule {
-      hostname = "cue.etherport.net"
-      path     = "^/health$|^/telegram/webhook/?$"
-      service  = "http://cue-api.cue.svc.cluster.local:3000"
-      origin_request {
-        no_tls_verify   = false
-        connect_timeout = "10s"
-      }
-    }
-    // All other CF-Tunnel-exposed services come from the
-    // cf_tunnel_services map (variables.tf). Add new services there;
-    // this dynamic block generates the matching ingress rule.
-    dynamic "ingress_rule" {
-      for_each = var.cf_tunnel_services
-      content {
-        hostname = "${ingress_rule.key}.etherport.net"
-        service  = ingress_rule.value.cluster_service_url
-        origin_request {
-          no_tls_verify   = false
-          connect_timeout = "10s"
+  // v5: config{} block -> config = {} attribute; ingress_rule{} blocks -> a
+  // single `ingress` list. Every element carries the SAME keys (hostname/path/
+  // service/origin_request, null where N/A) so concat() unifies to one object
+  // type. connect_timeout is a NUMBER of seconds in v5 (not the v4 "10s").
+  config = {
+    ingress = concat(
+      [
+        {
+          hostname       = var.approval_hostname
+          path           = null
+          service        = var.approval_origin_url
+          origin_request = { no_tls_verify = false, connect_timeout = 10 }
+        },
+        // wiki-js — migrated off the AWS ALB / Traefik public path (2026-05-26).
+        {
+          hostname       = "wiki.wind.etherport.net"
+          path           = null
+          service        = "http://wiki-js.wikijs.svc.cluster.local:3000"
+          origin_request = { no_tls_verify = false, connect_timeout = 10 }
+        },
+        // Home Assistant — dual-policy Access app (Alexa service token + SSO).
+        {
+          hostname       = "ha.wind.etherport.net"
+          path           = null
+          service        = "http://home-assistant.home-automation.svc.cluster.local:8123"
+          origin_request = { no_tls_verify = false, connect_timeout = 10 }
+        },
+        // Cue API — NOT in the cf_tunnel_services map (that wires CF Access SSO,
+        // which would block the Telegram webhook). Public reachability is
+        // restricted to exactly the webhook + health endpoints via `path`;
+        // everything else 404s at the catch-all and is reachable only over
+        // Tailscale.
+        {
+          hostname       = "cue.etherport.net"
+          path           = "^/health$|^/telegram/webhook/?$"
+          service        = "http://cue-api.cue.svc.cluster.local:3000"
+          origin_request = { no_tls_verify = false, connect_timeout = 10 }
+        },
+      ],
+      // All other CF-Tunnel-exposed services come from the cf_tunnel_services
+      // map (variables.tf). Add new services there.
+      [
+        for k, v in var.cf_tunnel_services : {
+          hostname       = "${k}.etherport.net"
+          path           = null
+          service        = v.cluster_service_url
+          origin_request = { no_tls_verify = false, connect_timeout = 10 }
         }
-      }
-    }
-    // Catch-all required by cloudflared
-    ingress_rule {
-      service = "http_status:404"
-    }
+      ],
+      // Catch-all required by cloudflared (same key shape, nulls for N/A).
+      [
+        {
+          hostname       = null
+          path           = null
+          service        = "http_status:404"
+          origin_request = null
+        }
+      ],
+    )
   }
 }
 
@@ -208,43 +218,36 @@ resource "cloudflare_tunnel_config" "wind_cluster" {
 // 5. CNAME for approve.etherport.net → tunnel
 //    Apex-level subdomain ("approve" relative to etherport.net zone), so the
 //    free Universal SSL cert (covers root + *.etherport.net) handles TLS.
-//    Two-deep hostnames like approve.etherport.net would have needed
-//    paid Total TLS / ACM.
 // ---------------------------------------------------------------------------
-resource "cloudflare_record" "approve_cname" {
+resource "cloudflare_dns_record" "approve_cname" {
   zone_id = var.cloudflare_zone_id
-  name    = "approve"
+  name    = "approve.${var.cf_zone_domain}"
   type    = "CNAME"
-  value   = "${cloudflare_tunnel.wind_cluster.id}.cfargotunnel.com"
+  content = "${cloudflare_zero_trust_tunnel_cloudflared.wind_cluster.id}.cfargotunnel.com"
   ttl     = 1    # 1 = auto when proxied
   proxied = true # required for CF Access to intercept
   comment = "CF tunnel for AI advisor approval URL (CF Access in front)"
 }
 
-// Cue API — apex-level "cue.etherport.net" so Universal SSL (root + *.etherport.net)
-// covers TLS (a valid public cert is required for the Telegram webhook). Proxied
-// so the edge terminates TLS and the path-restricted tunnel ingress rule applies.
-// NO CF Access app here (unlike approve.*): the Telegram webhook must be reachable
-// without SSO — it is protected by the path restriction + the app's webhook-secret
-// header check, and everything else 404s at the tunnel.
-resource "cloudflare_record" "cue_cname" {
+// Cue API — apex-level "cue.etherport.net" so Universal SSL (root +
+// *.etherport.net) covers TLS (a valid public cert is required for the
+// Telegram webhook). Proxied so the edge terminates TLS and the
+// path-restricted tunnel ingress rule applies. NO CF Access app here.
+resource "cloudflare_dns_record" "cue_cname" {
   zone_id = var.cloudflare_zone_id
-  name    = "cue"
+  name    = "cue.${var.cf_zone_domain}"
   type    = "CNAME"
-  value   = "${cloudflare_tunnel.wind_cluster.id}.cfargotunnel.com"
+  content = "${cloudflare_zero_trust_tunnel_cloudflared.wind_cluster.id}.cfargotunnel.com"
   ttl     = 1
   proxied = true
   comment = "CF tunnel for Cue API (public paths: /telegram/webhook + /health only)"
 }
 
 // ---------------------------------------------------------------------------
-// 6 + 7. CF Access Application + Policy — gates the approval URL
-//
-// Uncommented 2026-05-26 after etherport.net NS flip completed and the CF
-// zone went Active. CF Access validates `domain` against zones in your
-// account and would reject ("domain does not belong to zone (12130)")
-// while the zone is in Pending Nameserver Update — that gate is now passed.
-
+// 6 + 7. CF Access Application — gates the approval URL. v5 folds the policy
+// inline (the standalone cloudflare_zero_trust_access_policy + application_id
+// model is gone).
+// ---------------------------------------------------------------------------
 resource "cloudflare_zero_trust_access_application" "approve" {
   account_id                = var.cloudflare_account_id
   name                      = "AI Advisor Approval URL"
@@ -254,46 +257,26 @@ resource "cloudflare_zero_trust_access_application" "approve" {
   app_launcher_visible      = false
   auto_redirect_to_identity = true
   allowed_idps              = [var.google_idp_id]
-}
 
-resource "cloudflare_zero_trust_access_policy" "approve_allow" {
-  account_id     = var.cloudflare_account_id
-  application_id = cloudflare_zero_trust_access_application.approve.id
-  name           = "Allow listed emails"
-  precedence     = 1
-  decision       = "allow"
-
-  include {
-    email = var.allowed_emails
-  }
+  policies = [
+    {
+      name       = "Allow listed emails"
+      decision   = "allow"
+      precedence = 1
+      include    = [for e in var.allowed_emails : { email = { email = e } }]
+    }
+  ]
 }
 
 // ---------------------------------------------------------------------------
-// wiki-js — first ALB → CF Tunnel migration.
-//
-// Pattern (mirror of approve.* above):
-//   - CNAME wiki.wind.etherport.net → tunnel (proxied for CF Access interception)
-//   - Access Application with self_hosted type + Google IdP
-//   - Access Policy allowing listed emails
-//
-// The matching ingress_rule lives in cloudflare_tunnel_config.wind_cluster
-// above. Origin is the in-cluster wiki-js Service (ClusterIP).
-//
-// Naming: wiki.wind.etherport.net (site-namespaced under "wind") not the
-// apex. Requires ACM on etherport.net zone ($10/mo) for SSL to cover
-// 2-level subdomains. ACM enabled 2026-05-27.
-//
-// Split-horizon fallback: the existing Traefik IngressRoute at
-// wiki.wind.etherport.net stays untouched. CF DNS proxied CNAME below
-// overrides the *.wind wildcard → ALB for this specific hostname; the
-// wildcard still serves the rest of .wind.* via the legacy path until
-// each migrates individually.
+// wiki-js — first ALB → CF Tunnel migration. (matching ingress rule lives in
+// cloudflare_zero_trust_tunnel_cloudflared_config.wind_cluster above.)
 // ---------------------------------------------------------------------------
-resource "cloudflare_record" "wiki_cname" {
+resource "cloudflare_dns_record" "wiki_cname" {
   zone_id = var.cloudflare_zone_id
-  name    = "wiki.wind"
+  name    = "wiki.wind.${var.cf_zone_domain}"
   type    = "CNAME"
-  value   = "${cloudflare_tunnel.wind_cluster.id}.cfargotunnel.com"
+  content = "${cloudflare_zero_trust_tunnel_cloudflared.wind_cluster.id}.cfargotunnel.com"
   ttl     = 1
   proxied = true
   comment = "CF tunnel for wiki-js (CF Access in front)"
@@ -308,36 +291,30 @@ resource "cloudflare_zero_trust_access_application" "wiki" {
   app_launcher_visible      = true
   auto_redirect_to_identity = true
   allowed_idps              = [var.google_idp_id]
-}
 
-resource "cloudflare_zero_trust_access_policy" "wiki_allow" {
-  account_id     = var.cloudflare_account_id
-  application_id = cloudflare_zero_trust_access_application.wiki.id
-  name           = "Allow listed emails"
-  precedence     = 1
-  decision       = "allow"
-
-  include {
-    email = var.allowed_emails
-  }
+  policies = [
+    {
+      name       = "Allow listed emails"
+      decision   = "allow"
+      precedence = 1
+      include    = [for e in var.allowed_emails : { email = { email = e } }]
+    }
+  ]
 }
 
 // ---------------------------------------------------------------------------
 // Generic CF-Tunnel-exposed services (map-driven).
 //
-// One DNS CNAME + one Access app + one Access policy per entry in the
+// One DNS CNAME + one Access app (policy inline) per entry in the
 // cf_tunnel_services map (variables.tf). Matching tunnel ingress rules
-// are generated by the dynamic block in cloudflare_tunnel_config above.
-//
-// Naming convention: map key is the subdomain relative to the zone.
-// "grafana.wind" → grafana.wind.etherport.net (CNAME name "grafana.wind").
+// are generated by the `ingress` concat in the tunnel config above.
 // ---------------------------------------------------------------------------
-resource "cloudflare_record" "cf_tunnel_services" {
+resource "cloudflare_dns_record" "cf_tunnel_services" {
   for_each = var.cf_tunnel_services
   zone_id  = var.cloudflare_zone_id
-  name     = each.key
+  name     = "${each.key}.${var.cf_zone_domain}"
   type     = "CNAME"
-  value    = "${cloudflare_tunnel.wind_cluster.id}.cfargotunnel.com"
+  content  = "${cloudflare_zero_trust_tunnel_cloudflared.wind_cluster.id}.cfargotunnel.com"
   ttl      = 1
   proxied  = true
   comment  = "CF tunnel for ${each.value.access_name}"
@@ -353,17 +330,13 @@ resource "cloudflare_zero_trust_access_application" "cf_tunnel_services" {
   app_launcher_visible      = true
   auto_redirect_to_identity = true
   allowed_idps              = [var.google_idp_id]
-}
 
-resource "cloudflare_zero_trust_access_policy" "cf_tunnel_services_allow" {
-  for_each       = var.cf_tunnel_services
-  account_id     = var.cloudflare_account_id
-  application_id = cloudflare_zero_trust_access_application.cf_tunnel_services[each.key].id
-  name           = "Allow listed emails"
-  precedence     = 1
-  decision       = "allow"
-
-  include {
-    email = var.allowed_emails
-  }
+  policies = [
+    {
+      name       = "Allow listed emails"
+      decision   = "allow"
+      precedence = 1
+      include    = [for e in var.allowed_emails : { email = { email = e } }]
+    }
+  ]
 }
