@@ -1,6 +1,13 @@
 output "tunnel_id" {
   description = "Tunnel ID — used in the CNAME target (<id>.cfargotunnel.com)"
-  value       = cloudflare_tunnel.wind_cluster.id
+  value       = cloudflare_zero_trust_tunnel_cloudflared.wind_cluster.id
+}
+
+# v5: the tunnel token is no longer an attribute on the tunnel resource —
+# it's fetched via a dedicated data source.
+data "cloudflare_zero_trust_tunnel_cloudflared_token" "wind_cluster" {
+  account_id = var.cloudflare_account_id
+  tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.wind_cluster.id
 }
 
 output "tunnel_token" {
@@ -9,7 +16,7 @@ output "tunnel_token" {
     platform/kubernetes/cloudflared/01-tunnel-token.sops.yaml secret.
     Retrieve with: terraform output -raw tunnel_token | pbcopy
   EOT
-  value       = cloudflare_tunnel.wind_cluster.tunnel_token
+  value       = data.cloudflare_zero_trust_tunnel_cloudflared_token.wind_cluster.token
   sensitive   = true
 }
 
