@@ -45,23 +45,18 @@ jobs:
           # Self-hosted runner doesn't have Node; the wrapper requires it.
           terraform_wrapper: false
 
-      - name: Auth to GCP
-        # Service-account JSON stored as repo secret. The SA needs:
-        #   roles/serviceusage.serviceUsageAdmin (for API enablements)
-        #   roles/resourcemanager.projectIamAdmin (for IAM bindings)
-        #   roles/owner (only for initial bootstrap; downgrade later)
-        # Workload-identity-federation would be cleaner long-term but
-        # the SA-key path is simpler for a self-hosted runner.
-        env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-        run: |
-          if [ -z "$GCP_SA_KEY" ]; then
-            echo "::error::GCP_SA_KEY secret is empty. Either add it or skip this module."
-            exit 1
-          fi
-          mkdir -p "$RUNNER_TEMP/gcp"
-          echo "$GCP_SA_KEY" > "$RUNNER_TEMP/gcp/sa.json"
-          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/gcp/sa.json" >> "$GITHUB_ENV"
+      - name: Auth to GCP (Workload Identity Federation)
+        # L21: GitHub OIDC -> GCP WIF — short-lived creds, no static key
+        # (mirrors H29 for AWS). The action writes a credential file and
+        # exports GOOGLE_APPLICATION_CREDENTIALS, which the google terraform
+        # provider (ADC) picks up. Trust is scoped to this repo via the WIF
+        # provider's attribute condition. SA gh-actions-terraform has
+        # serviceUsageAdmin + projectIamAdmin + viewer on both projects.
+        # See docs/planning/gcp-oidc-wif-l21.md.
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/909531984469/locations/global/workloadIdentityPools/github/providers/github
+          service_account: gh-actions-terraform@homelab-infra-497414.iam.gserviceaccount.com
 
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
