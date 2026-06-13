@@ -8,11 +8,10 @@
 // headers, CF checks them against a policy bound to this token, forwards
 // to origin if matched.
 //
-// Order of policies on the HA app:
+// Order of policies on the HA app (v5: inline in `policies`, ordered by
+// precedence):
 //   1. (precedence 1) Service token policy — Alexa Lambda lands here
 //   2. (precedence 2) SSO policy — browser users land here
-//
-// Both policies attached to the same Application.
 
 resource "cloudflare_zero_trust_access_service_token" "alexa_skill" {
   account_id = var.cloudflare_account_id
@@ -37,56 +36,55 @@ output "alexa_service_token_client_secret" {
 }
 
 // -------------------------------------------------------------------------
-// HA Access Application + dual-policy (SSO + service token).
+// HA Access Application + dual-policy (SSO + service token), inline (v5).
 // -------------------------------------------------------------------------
 
 resource "cloudflare_zero_trust_access_application" "ha" {
-  account_id                = var.cloudflare_account_id
-  name                      = "Home Assistant"
-  domain                    = "ha.wind.etherport.net"
-  type                      = "self_hosted"
-  session_duration          = "24h"
-  app_launcher_visible      = true
+  account_id           = var.cloudflare_account_id
+  name                 = "Home Assistant"
+  domain               = "ha.wind.etherport.net"
+  type                 = "self_hosted"
+  session_duration     = "24h"
+  app_launcher_visible = true
   // auto_redirect_to_identity intentionally false here — a service-token
   // request must reach CF Access without a redirect; SSO browser users
   // get the IdP picker (single IdP = effectively automatic).
   auto_redirect_to_identity = false
   allowed_idps              = [var.google_idp_id]
-}
 
-resource "cloudflare_zero_trust_access_policy" "ha_alexa_service_token" {
-  account_id     = var.cloudflare_account_id
-  application_id = cloudflare_zero_trust_access_application.ha.id
-  name           = "Alexa skill Lambda (service token bypass)"
-  precedence     = 1   # evaluated first; non-identity matches short-circuit
-  decision       = "non_identity"
-  include {
-    service_token = [cloudflare_zero_trust_access_service_token.alexa_skill.id]
-  }
-}
-
-resource "cloudflare_zero_trust_access_policy" "ha_sso" {
-  account_id     = var.cloudflare_account_id
-  application_id = cloudflare_zero_trust_access_application.ha.id
-  name           = "Allow listed emails (browser users)"
-  precedence     = 2
-  decision       = "allow"
-  include {
-    email = var.allowed_emails
-  }
+  policies = [
+    // 1. evaluated first; non-identity service-token match short-circuits
+    {
+      name       = "Alexa skill Lambda (service token bypass)"
+      decision   = "non_identity"
+      precedence = 1
+      include = [
+        {
+          service_token = {
+            token_id = cloudflare_zero_trust_access_service_token.alexa_skill.id
+          }
+        }
+      ]
+    },
+    // 2. browser users
+    {
+      name       = "Allow listed emails (browser users)"
+      decision   = "allow"
+      precedence = 2
+      include    = [for e in var.allowed_emails : { email = { email = e } }]
+    },
+  ]
 }
 
 // -------------------------------------------------------------------------
 // CNAME for ha.wind.etherport.net → tunnel.
-// Replaces the explicit ha.wind → ALB record formerly in
-// variables.tf dns_records_cname (removed 2026-05-27).
 // -------------------------------------------------------------------------
 
-resource "cloudflare_record" "ha_cname" {
+resource "cloudflare_dns_record" "ha_cname" {
   zone_id = var.cloudflare_zone_id
-  name    = "ha.wind"
+  name    = "ha.wind.${var.cf_zone_domain}"
   type    = "CNAME"
-  value   = "${cloudflare_tunnel.wind_cluster.id}.cfargotunnel.com"
+  content = "${cloudflare_zero_trust_tunnel_cloudflared.wind_cluster.id}.cfargotunnel.com"
   ttl     = 1
   proxied = true
   comment = "HA via CF tunnel — replaces the ALB alias"

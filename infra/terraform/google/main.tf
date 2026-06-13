@@ -26,6 +26,11 @@
 resource "google_project" "cloudflare_zero_trust" {
   project_id = var.gcp_project_id
   name       = "homelab-infra"
+  // Billing account attached to the live project — declared so TF does NOT
+  // detach it (omitting this makes TF plan billing_account -> null). The
+  // project is OAuth-only/no billable usage, but keeping billing as-is is the
+  // zero-change choice; detaching is a separate, deliberate decision.
+  billing_account = "0169E4-61F6AE-AFE6C8"
 
   // Destroying this project would delete the OAuth credentials CF Access SSO
   // depends on. Never let TF do that.

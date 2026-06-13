@@ -435,7 +435,7 @@ resource "aws_instance" "vpn" {
 
   user_data = base64encode(templatefile("${path.module}/user-data.sh.tpl", {
     # wg0 - Direct tunnel to homelab (unique keys per region)
-    wg0_private_key        = var.wg0_private_key
+    wg0_private_key        = var.wg0_private_key # gitleaks:allow (TF var ref, not a literal secret — key sourced from SOPS)
     wg0_tunnel_ip          = var.wg0_tunnel_ip
     homelab_wg0_public_key = data.sops_file.homelab_keys.data["stringData.wg0_public_key"]
     homelab_endpoint       = var.homelab_endpoint
