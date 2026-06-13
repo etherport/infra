@@ -3,3 +3,6 @@
 .migrate-v5-backup/
 generated_imports.tf
 plan-v5.txt
+
+# v5 migration apply log (may reference sensitive outputs)
+apply-v5.txt

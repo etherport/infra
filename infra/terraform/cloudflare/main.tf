@@ -134,6 +134,9 @@ resource "cloudflare_zero_trust_tunnel_cloudflared" "wind_cluster" {
   account_id    = var.cloudflare_account_id
   name          = "wind-cluster"
   tunnel_secret = random_id.tunnel_secret.b64_std
+  // Ingress is managed remotely via the API (the _config resource below), so
+  // the tunnel's config source is "cloudflare", not the local cloudflared file.
+  config_src = "cloudflare"
 
   // tunnel_secret is write-only — the API never returns it, so after import
   // state has no secret and a plan would want to (re)set it from random_id,
@@ -157,73 +160,62 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "wind_cluster" {
   account_id = var.cloudflare_account_id
   tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.wind_cluster.id
 
+  // v5: config{} block -> config = {} attribute; ingress_rule{} blocks -> a
+  // single `ingress` list. Every element carries the SAME keys (hostname/path/
+  // service/origin_request, null where N/A) so concat() unifies to one object
+  // type. connect_timeout is a NUMBER of seconds in v5 (not the v4 "10s").
   config = {
     ingress = concat(
       [
         {
-          hostname = var.approval_hostname
-          service  = var.approval_origin_url
-          origin_request = {
-            no_tls_verify   = false
-            connect_timeout = "10s"
-          }
+          hostname       = var.approval_hostname
+          path           = null
+          service        = var.approval_origin_url
+          origin_request = { no_tls_verify = false, connect_timeout = 10 }
         },
-        // wiki-js — first migration off the AWS ALB / Traefik public path
-        // (2026-05-26). Hostname is wiki.wind.etherport.net (matches site
-        // namespacing: wind = the active homelab site).
+        // wiki-js — migrated off the AWS ALB / Traefik public path (2026-05-26).
         {
-          hostname = "wiki.wind.etherport.net"
-          service  = "http://wiki-js.wikijs.svc.cluster.local:3000"
-          origin_request = {
-            no_tls_verify   = false
-            connect_timeout = "10s"
-          }
+          hostname       = "wiki.wind.etherport.net"
+          path           = null
+          service        = "http://wiki-js.wikijs.svc.cluster.local:3000"
+          origin_request = { no_tls_verify = false, connect_timeout = 10 }
         },
-        // Home Assistant — dual-policy Access app (service token for Alexa
-        // Lambda + SSO for browser users). See alexa-service-token.tf.
+        // Home Assistant — dual-policy Access app (Alexa service token + SSO).
         {
-          hostname = "ha.wind.etherport.net"
-          service  = "http://home-assistant.home-automation.svc.cluster.local:8123"
-          origin_request = {
-            no_tls_verify   = false
-            connect_timeout = "10s"
-          }
+          hostname       = "ha.wind.etherport.net"
+          path           = null
+          service        = "http://home-assistant.home-automation.svc.cluster.local:8123"
+          origin_request = { no_tls_verify = false, connect_timeout = 10 }
         },
-        // Cue API (cue.etherport.net) — single-owner dev app handling personal
-        // health data + spending on an LLM key. Deliberately NOT in the
-        // cf_tunnel_services map: that wires a CF Access (SSO) app, which would
-        // block the Telegram webhook (Telegram can't do SSO). Instead, restrict
-        // PUBLIC reachability at the tunnel to exactly the two endpoints that
-        // must be internet-facing — the Telegram webhook (app additionally
-        // verifies TELEGRAM_WEBHOOK_SECRET) and the health check. Every other
-        // path falls through to the 404 catch-all, so it is unreachable from
-        // the public internet (owner hits those over Tailscale).
+        // Cue API — NOT in the cf_tunnel_services map (that wires CF Access SSO,
+        // which would block the Telegram webhook). Public reachability is
+        // restricted to exactly the webhook + health endpoints via `path`;
+        // everything else 404s at the catch-all and is reachable only over
+        // Tailscale.
         {
-          hostname = "cue.etherport.net"
-          path     = "^/health$|^/telegram/webhook/?$"
-          service  = "http://cue-api.cue.svc.cluster.local:3000"
-          origin_request = {
-            no_tls_verify   = false
-            connect_timeout = "10s"
-          }
+          hostname       = "cue.etherport.net"
+          path           = "^/health$|^/telegram/webhook/?$"
+          service        = "http://cue-api.cue.svc.cluster.local:3000"
+          origin_request = { no_tls_verify = false, connect_timeout = 10 }
         },
       ],
       // All other CF-Tunnel-exposed services come from the cf_tunnel_services
       // map (variables.tf). Add new services there.
       [
         for k, v in var.cf_tunnel_services : {
-          hostname = "${k}.etherport.net"
-          service  = v.cluster_service_url
-          origin_request = {
-            no_tls_verify   = false
-            connect_timeout = "10s"
-          }
+          hostname       = "${k}.etherport.net"
+          path           = null
+          service        = v.cluster_service_url
+          origin_request = { no_tls_verify = false, connect_timeout = 10 }
         }
       ],
-      // Catch-all required by cloudflared
+      // Catch-all required by cloudflared (same key shape, nulls for N/A).
       [
         {
-          service = "http_status:404"
+          hostname       = null
+          path           = null
+          service        = "http_status:404"
+          origin_request = null
         }
       ],
     )

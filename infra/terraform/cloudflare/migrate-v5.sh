@@ -26,7 +26,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$HERE/../../../.." && pwd)"
+ROOT="$(cd "$HERE/../../.." && pwd)"  # repo root: infra(repo)/infra/terraform/cloudflare -> up 3
 IMPORTS_FILE="$HERE/generated_imports.tf"
 BACKUP_DIR="$HERE/.migrate-v5-backup"
 
@@ -74,8 +74,10 @@ RENAME = {
 SAME = {
     "cloudflare_zone":                           "{id}",           # id == zone id
     "cloudflare_zone_dnssec":                    "{z}",
-    "cloudflare_zero_trust_access_application":  "{a}/{id}",
-    "cloudflare_zero_trust_access_service_token":"{a}/{id}",
+    # Access app + service-token v5 imports need the accounts/ discriminator:
+    # "<{accounts|zones}/{id}>/<app_id>". Tunnel/config use plain {a}/{id}.
+    "cloudflare_zero_trust_access_application":  "accounts/{a}/{id}",
+    "cloudflare_zero_trust_access_service_token":"accounts/{a}/{id}",
 }
 # folded inline into the app's `policies` in v5 — remove, do NOT import.
 DROP = {"cloudflare_zero_trust_access_policy"}
