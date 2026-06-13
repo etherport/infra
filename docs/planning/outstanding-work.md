@@ -32,6 +32,7 @@ personal-web CI all landed this session (see "Recently completed" below).
 | 3 | **M53 CF token scoping** | account-scoped token shared infra↔personal-web | Mint zone-scoped tokens; also unblocks M54 |
 | 4 | **M54 smithforsb redirect IaC** | CF Single Redirect is manual in dashboard | Codify in `personal-web/cloudflare-dns/smithforsb.tf` once M53 lands |
 | 5 | **M48/M49/M50 UNAS+Protect IaC** | UI-only | Per-device API keys → Ansible playbooks + coverage audit |
+| 6 | **M69 Cloudflare provider v4→v5** | 51 resources incl. Tunnel + Zero Trust Access (breaking rewrite) | Plan in [`cloudflare-provider-v5-migration.md`](cloudflare-provider-v5-migration.md). Renovate #48 closed (auto-bump would break plan). personal-web does its (DNS-only) half first as proving ground. |
 
 **Recently completed (this session, 2026-05-27 → 29):**
 - ✅ BGP **Phase A** — 209 (vsan) NIC added to w1-4 + gpu1 (DHCP .100-.104); kubelet NFS to the UNAS now egresses `enp6s23` at L2. Caught + fixed the source-IP gap: UNAS NFS export ACL extended to the 209 IPs on all 9 shares (UI, not IaC — re-apply on rebuild). Runbook updated with the "additive path ≠ no behaviour change" lesson.
