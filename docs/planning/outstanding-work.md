@@ -166,6 +166,13 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 ### ⏳ M17. Twilio Talk: migrate SIP trunk UDP → TLS+sRTP
 - Source: task #22. Out-of-band.
 
+**Evidence / loose end (spotted 2026-06-12 in Loki):** the UDM logs a recurring
+`ubios-udapi-server ... firewall: Destroying set(s) unifi_talk_addresses, unifi_talk_ports failed and will retry soon: command ipset ...`
+(seen 06-05). The Talk firewall ipsets fail to tear down cleanly — likely
+stale Talk firewall state on the UDM. Worth clearing while doing the Talk
+work above (M16 DID release / M17 SIP migration) so the sets aren't
+orphaned. Not service-affecting on its own.
+
 
 ### ⏳ M53. Mint zone-scoped CF API tokens (de-couple infra ↔ personal-web)
 - **Source:** 2026-05-29. Both repos currently use the same account-scoped `cloudflare-tf-token` (1Password). It works across all zones, which is why personal-web TF applied locally before it had CI. Best practice: each repo gets a token scoped to ONLY its zones.

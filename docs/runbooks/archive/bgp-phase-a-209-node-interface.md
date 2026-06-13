@@ -91,3 +91,11 @@ The kubelet mounts NFS at pod-start, so existing mounts won't move until the pod
 - No routing change in Phase A — the 201 path is untouched; NAS still works exactly as today until the 209 NIC is up, then it just gets faster/more-direct.
 - Can be done one node at a time (drain optional — hot-plug doesn't require it).
 - The risky routing move (Phase B) is gated behind this completing + verifying.
+
+## Expected first-boot noise (not an error)
+When the new 209 NICs first DHCP, `switch-rackpoe` logs a short burst of
+`DHCPS: Conflict detected(ping) ... pool dynamic 3 of intf vlan 209` /
+`Lease Abandoned(conflict)` for `10.10.209.100–104` (and the `.10` static)
+as the DHCP server probes addresses still ARP-cached from prior boots. Seen
+once on 2026-06-03; silent since. Benign — the leases settle on the next
+request. Only investigate if it **recurs** well beyond initial bring-up.
