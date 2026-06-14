@@ -253,8 +253,11 @@ spec:
             # probe: structured estimate returned via the fallback). Standing user directive
             # "OK while in testing mode". If a live coach turn fails, REVERT immediately.
             # NOTE: src/config/pricing.ts claude-fable-5 rates are PROVISIONAL (Opus-4.8).
+            # Reverted to Opus 4.8 (2026-06-14): Anthropic RETIRED claude-fable-5 — the
+            # API now 404s "Claude Fable 5 is not available. Please use Opus 4.8." cue@<next>
+            # adds an automatic model-unavailable fallback, but the explicit default is Opus.
             - name: CUE_MODEL_REASONING
-              value: 'claude-fable-5'
+              value: 'claude-opus-4-8'
             # Per-user web auth (cue@PR#2, 2026-06-11): every route except /health +
             # /telegram/webhook + the PWA shell assets needs a SIGNED access link
             # (pnpm mint-web-token) or the in-process internal header. Closes the
