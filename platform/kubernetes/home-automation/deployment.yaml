@@ -67,6 +67,34 @@ spec:
                     operator: NotIn
                     values:
                       - k8s-gpu1
+      initContainers:
+        # Install the localtuya custom component into the config volume so HA can
+        # do LOCAL Tuya control (no cloud dependency / no expiring subscription).
+        # Pinned to an IMMUTABLE COMMIT SHA (a tag can move); verifies the manifest
+        # version before installing; idempotent (skips if that SHA is installed).
+        # HA loads any component under /config/custom_components on startup.
+        # Source: github.com/xZetsubou/hass-localtuya (the maintained localtuya fork).
+        - name: install-localtuya
+          image: alpine:3.20
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              SHA=ea1954154ca485b5c82429c3da6a39f08ec6eec3   # tag 2025.11.0
+              VER=2025.11.0
+              DEST=/config/custom_components/localtuya
+              if [ -f "$DEST/.installed-$SHA" ]; then echo "localtuya $SHA already installed"; exit 0; fi
+              mkdir -p /config/custom_components /tmp/lt && cd /tmp/lt
+              wget -qO- "https://codeload.github.com/xZetsubou/hass-localtuya/tar.gz/$SHA" | tar xz
+              SRC="hass-localtuya-$SHA/custom_components/localtuya"
+              grep -q "\"version\": *\"$VER\"" "$SRC/manifest.json" || { echo "manifest version != $VER, aborting"; exit 1; }
+              rm -rf "$DEST"
+              cp -r "$SRC" "$DEST"
+              touch "$DEST/.installed-$SHA"
+              echo "installed localtuya $VER ($SHA)"
+          volumeMounts:
+            - name: config
+              mountPath: /config
       containers:
         - name: home-assistant
           image: ghcr.io/home-assistant/home-assistant:2026.6.3 # {"$imagepolicy": "flux-system:home-assistant"}
