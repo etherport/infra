@@ -1,7 +1,8 @@
 # Outstanding Work — Consolidated Priority List
 
-Latest revision: 2026-06-10 (full-repo review). Canonical filename
-`outstanding-work.md` is stable; older dated snapshots live in `archive/`.
+Latest revision: 2026-06-15 (Protect webhook fix + agent handoff system; prior
+full-repo review 2026-06-10). Canonical filename `outstanding-work.md` is stable;
+older dated snapshots live in `archive/`. Per-session narrative: `session-log.md`.
 
 Successor to `archive/outstanding-work-2026-05-16.md`. Resets the priority lattice
 after a multi-day session covering SDN migration, Ceph VLAN move, post-
@@ -58,6 +59,13 @@ personal-web CI all landed this session (see "Recently completed" below).
 **Recently completed (2026-06-01 → 10):**
 - ✅ **Headless ops host** — always-on Mac mini (`10.10.202.101`, tailnet `100.79.165.113`) provisioned as the Claude Code Remote Control box: full kubectl/terraform/sops/ansible with **no 1Password at runtime** (commits `00f365f`, `14e1f07`). AWS creds baked into SOPS (`scripts/render-aws-credentials.sh`); proxmox tf creds via `scripts/tf-proxmox.sh`; scoped `trusted-admin-clients → Management` UDM rule (applied from the mini). Procedure: `docs/setup/headless-ops-host.md`.
 - ✅ Doc accuracy pass (2026-06-10): README (headless host, M56 zone split, MetalLB BGP-not-L2) + `firewall-zones.md` (the new trusted-admin-clients rule) updated.
+
+**Recently completed (2026-06-13 → 15):**
+- ✅ **M69 / L21 / M53** — Cloudflare provider v4→v5 (PR #66), CI→GCP WIF, zone-scoped CF token (details in their tier entries + planning docs).
+- ✅ **localtuya migration** — all 8 Tuya devices moved cloud→local (localtuya), entity_ids/names/automations preserved; trial-expiry-proof. (HA-side, not in repo IaC.)
+- ✅ **Protect webhooks → HA fixed** (commits `9fd7c50`, `840f6c0`). Root cause was a Protect Alarm Manager bug (`ERR_INVALID_IP_ADDRESS` on hostname webhooks), NOT DNS/network. Added a dedicated plain-HTTP Traefik `webhook` entrypoint (`:8088`, `PathPrefix(/api/webhook/)` → HA:8123); Protect uses `http://10.10.201.70:8088/api/webhook/<id>`. Full narrative in [`session-log.md`](session-log.md).
+- ✅ **HA motion-light automations → `mode: restart`** so re-triggered motion resets the off-timer (was `single`).
+- ✅ **Agent handoff system** — added root `CLAUDE.md` (entry point + operating model + maintenance rules) + this file's companion [`session-log.md`](session-log.md) (narrative journal).
 
 ---
 
@@ -299,6 +307,12 @@ orphaned. Not service-affecting on its own.
 
 ### 🟡 M68. Documentation consolidation + accuracy pass
 - Review 2026-06-10. ✅ **Landed 2026-06-10:** (a) staleness banners on the Route53 docs `ubiquiti-ddns.md` + `1PASSWORD-CLI.md` (+ fixed the dead `ooefsxjnvx4khtbh63tn5fr3pu` item ref, filled the real Terraform key ID, pointed to `SOPS-SETUP.md` as canonical); (b) archived `metallb-bgp-migration-2026-05-29.md` + `networking-prod-review-2026-05-31.md` (no non-archive `firewall-zones-future-state.md` exists). Remaining: (c) full merge of `1PASSWORD-CLI.md` into `SOPS-SETUP.md`; (d) BGP-phase index over `runbooks/bgp-phase-{a,b,c}.md`; (e) `docs/README.md` index gaps (setup/network/, terraform remote-state-backend, AI-advisor "archived but live" wording); (f) M14 ID-ambiguity footnote in `firewall-zones.md`. **Effort:** S remaining.
+
+### ⏳ M70. Protect webhook follow-ups (after the 2026-06-15 fix)
+- **Confirm all 5 Alarm Manager URLs flipped** to `http://10.10.201.70:8088/api/webhook/<id>` (IP-literal + plain-HTTP — Protect's hostname-webhook bug). Owner updated some via the Protect UI; verify none remain on `https://`/hostname or the old `https://10.10.202.25/...-bY8...`. **UI-only** (no Protect write API for Alarm Manager). Test after dark — the automations carry a `condition: sun` (sunset→sunrise) so daytime tests won't actuate lights (by design).
+- **(optional)** add the `protect-tf` 1P key to the SOPS bundle for headless Protect *integration*-API reads (camera/motion state into HA). Read-only; not needed for the webhook fix.
+- **(optional, owner-declined)** source-lock the `:8088` route to Protect's IP. Blocked by Traefik LB `externalTrafficPolicy: Cluster` (SNATs client IP → `ipAllowList` 403s). Would need `externalTrafficPolicy: Local` (cluster-wide) or a UDM firewall rule. Marginal for a LAN-only, path-scoped, secret-ID-gated endpoint. See [`session-log.md`](session-log.md).
+- **Effort:** S (verify) / done otherwise.
 
 ## LOW
 
