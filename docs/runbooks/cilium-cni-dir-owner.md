@@ -53,13 +53,19 @@ kubectl -n kube-system delete pod <crashlooping-cilium-pods>
 kubectl -n kube-system rollout status ds/cilium
 ```
 
-## Prevention
+## Prevention (2026-06-15)
 
-**Always run `pre-flight.yml` AFTER any kubespray `cluster.yml` / `--tags=cilium` run**
-(the wrapper does not do this automatically). Open items to make this un-missable:
-see `outstanding-work.md` (modernize the stale `kubespray.sh` wrapper to auto-run
-pre-flight; evaluate a Cilium chart `DAC_OVERRIDE` on `mount-cgroup` so it tolerates a
-`kube`-owned dir; or a per-dir owner override).
+1. **Run kubespray ONLY via `infra/kubespray/kubespray.sh`** — it now **auto-runs
+   `pre-flight.yml`** after `cluster.yml`/`upgrade-cluster.yml`/`scale.yml`, restoring
+   `/opt/cni/bin` to `root:root` every time. A raw `ansible-playbook` invocation bypasses
+   this — don't.
+2. **Backstop (config-level):** the inventory sets `cilium_extra_values` adding
+   `DAC_OVERRIDE` to Cilium `mount-cgroup`, so it can write to a `kube`-owned cni dir even
+   if pre-flight is skipped. Armed for the next kubespray render; **validate it on the next
+   supervised run** (outstanding-work H35) — confirm no other init container (e.g.
+   `install-cni-binaries`) also needs it.
+3. `kube_owner: root` was **rejected** — `/etc/kubernetes` + `/etc/cni/net.d` are genuinely
+   `kube`-owned, so flipping it would broadly re-chown system paths.
 
 ## Running kubespray from the mini (the actual, current path)
 

@@ -54,15 +54,31 @@ incident. Recovered. **Audit mode NOT enabled; deferred to the surgical path.**
 - New runbook `docs/runbooks/cilium-cni-dir-owner.md` (symptom/cause/recovery + the actual
   kubespray run path, since `kubespray.sh` is stale). CLAUDE.md §5 gotchas updated.
 
+**Audit mode ENABLED + made IaC-durable (later same day):**
+- Enabled live via the **surgical path** the owner authorized: `kubectl patch cm cilium-config
+  policy-audit-mode=true` + `kubectl rollout restart ds/cilium`. Rolled clean (dir is root-owned);
+  **runtime `PolicyAuditMode: Enabled` on all 8 agents**, 8/8 nodes Ready. (helm rollback to
+  rev 14 was the cleaner route but the auto-mode classifier blocked it as out-of-scope.)
+- **Durability (owner: "don't let a future kubespray run overwrite these"):** (1) NetworkPolicies
+  are Flux-managed → kubespray-safe. (2) `cilium_policy_audit_mode: true` committed to the
+  kubespray inventory (source of truth → a kubespray render keeps audit on). (3) `kubespray.sh`
+  wrapper rewritten (correct venv/inventory paths + **auto-runs `pre-flight.yml` after
+  cluster.yml/upgrade/scale**, restoring `/opt/cni/bin` root owner) — so a kubespray run no
+  longer breaks Cilium *when run via the wrapper*. (4) Backstop armed: `cilium_extra_values`
+  adds `DAC_OVERRIDE` to Cilium `mount-cgroup` so it tolerates a kube-owned cni dir even on a
+  raw kubespray run (not yet validated live — needs a kubespray render; tracked H35).
+- `kube_owner: root` was **rejected** — `/etc/kubernetes` + `/etc/cni/net.d` are genuinely
+  kube-owned, so flipping it would broadly re-chown system paths.
+
 **Open / next:**
-- **Helm release `cilium` is `failed` (rev 15)** though the DaemonSet is healthy 8/8. Needs
-  a clean-up (a `helm rollback cilium <good-rev>` now succeeds since the dir is fixed) — but
-  that rolls Cilium again, so **consent-gated**, not done autonomously post-recovery.
-- **Audit mode still off.** When resumed, enable via the **surgical path** (patch
-  `cilium-config` `policy-audit-mode: "true"` + `rollout restart ds/cilium` — works now the
-  dir is root-owned), NOT kubespray. Then wire `networkpolicies/` into Flux + observe.
-- Tracker: new items for modernizing the stale kubespray wrapper + auto-running pre-flight,
-  and evaluating a Cilium `DAC_OVERRIDE` chart value so it tolerates a kube-owned cni dir.
+- **Helm release `cilium` is still `failed` (rev 15)** + now drifts from the live ConfigMap
+  (patched audit=true; helm's stored manifest says false). DaemonSet healthy 8/8. Cleanup
+  needs a helm op (rolls Cilium) — **consent-gated**; classifier blocked helm twice. H35.
+- **NetworkPolicies not yet wired into Flux.** Audit mode is on but no CNPs are applied yet
+  (so nothing is being audited). Next: wire `platform/kubernetes/networkpolicies/` into
+  `clusters/wind`, then **label a namespace `netpol.wind/enforced=true`** (start postgres) to
+  begin collecting `hubble observe --verdict AUDIT` data. Both are further cluster changes →
+  present for go.
 
 ---
 

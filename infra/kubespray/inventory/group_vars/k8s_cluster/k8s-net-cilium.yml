@@ -145,12 +145,26 @@ cilium_l2announcements: false
 
 ### Host Firewall and Policy Audit Mode
 # cilium_enable_host_firewall: false
-# NOTE (2026-06-15): do NOT enable cilium_policy_audit_mode here. Running
-# `cluster.yml --tags=cilium` to apply it ALSO re-chowns /opt/cni/bin to
-# kube_owner and breaks Cilium (see docs/runbooks/cilium-cni-dir-owner.md +
-# session-log 2026-06-15). H3 audit mode is instead toggled surgically via the
-# cilium-config ConfigMap + `kubectl rollout restart ds/cilium` (no kubespray).
-# cilium_policy_audit_mode: false
+# H3 (2026-06-15): audit mode ON — default-deny/allow CNPs log would-be drops as
+# AUDIT verdicts without enforcing (observation phase). This var is the IaC source
+# of truth so the setting SURVIVES a kubespray run. Flip to false (+ re-apply) only
+# AFTER Phase-2 per-tier enforcement is complete & stable.
+# IMPORTANT: a kubespray cluster.yml/--tags=cilium run re-chowns /opt/cni/bin to
+# kube_owner and breaks Cilium — the kubespray.sh wrapper now auto-runs pre-flight.yml
+# afterward to restore root ownership. See docs/runbooks/cilium-cni-dir-owner.md.
+cilium_policy_audit_mode: true
+
+# Backstop so Cilium tolerates a kube-owned /opt/cni/bin even without the pre-flight
+# fix (mount-cgroup runs root+drop:[ALL]; DAC_OVERRIDE lets it write regardless of
+# owner). Armed for the next kubespray render; validate per outstanding-work H35.
+cilium_extra_values:
+  securityContext:
+    capabilities:
+      mountCgroup:
+        - SYS_ADMIN
+        - SYS_CHROOT
+        - SYS_PTRACE
+        - DAC_OVERRIDE
 
 # Pin Cilium to the currently-running version so a `--tags=cilium` reconfigure
 # (rolling out Hubble) only changes config, never the version — and a future

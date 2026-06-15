@@ -105,14 +105,15 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
 - **kubespray `cluster.yml`/`--tags=cilium` breaks Cilium** by chowning `/opt/cni/bin`
   to `kube_owner` (`kube`); Cilium's `mount-cgroup` (root, `drop:[ALL]`, no DAC_OVERRIDE)
   then can't write there → `Init:CrashLoopBackOff` on the **next agent restart** (latent
-  until then). **Always re-run `infra/kubespray/inventory/pre-flight.yml` after any
-  kubespray cilium run** to restore `root:root`. Cilium is **Helm-managed** (release
-  `cilium`/kube-system), not Flux. The `kubespray.sh` wrapper is **stale** (wrong
-  venv/inventory paths) — real run path + full incident in `docs/runbooks/cilium-cni-dir-owner.md`.
-- **Enable Cilium policy-audit-mode the surgical way**, NOT via kubespray: patch the
-  `cilium-config` ConfigMap (`policy-audit-mode: "true"`) + `kubectl rollout restart
-  ds/cilium` (agents read it only at startup). H3 NetworkPolicy manifests live (inert,
-  not Flux-wired) in `platform/kubernetes/networkpolicies/`.
+  until then). **Run kubespray ONLY via `infra/kubespray/kubespray.sh`** — it auto-runs
+  `pre-flight.yml` afterward to restore `root:root`. Real run path (venv, `--tags=cilium,download`)
+  + full incident: `docs/runbooks/cilium-cni-dir-owner.md`. Cilium is **Helm-managed**
+  (release `cilium`/kube-system), **not** Flux.
+- **Cilium `policy-audit-mode` is ON** (H3 observation phase). IaC source of truth =
+  `cilium_policy_audit_mode: true` in the kubespray inventory; toggle live via the
+  `cilium-config` ConfigMap + `kubectl rollout restart ds/cilium` (read only at startup),
+  NOT a raw kubespray run. H3 NetworkPolicy manifests in `platform/kubernetes/networkpolicies/`
+  (enforcement is per-namespace opt-in via the `netpol.wind/enforced=true` label).
 
 ## 6. Maintenance rules (keep this memory alive)
 
