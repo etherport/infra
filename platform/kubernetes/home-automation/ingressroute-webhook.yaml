@@ -23,20 +23,19 @@
 #   Protect posts to:  http://10.10.201.70:8088/api/webhook/<id>
 #
 #   Least-exposure by design: PathPrefix(/api/webhook/) means the HA UI/API is
-#   NOT reachable on :8088 (everything else 404s), and the ipAllowList means only
-#   the Protect host can use it. CF Access is unaffected (it's edge-only; the
-#   normal https://ha.wind.etherport.net route via the Cloudflare tunnel keeps
-#   its auth). The HA webhook IDs themselves remain the shared secret.
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: protect-only
-  namespace: home-automation
-spec:
-  ipAllowList:
-    sourceRange:
-      - 10.10.212.10/32 # Windprotect (UNVR / Protect controller, VLAN 212)
----
+#   NOT reachable on :8088 (everything else 404s). CF Access is unaffected (it's
+#   edge-only; the normal https://ha.wind.etherport.net route via the Cloudflare
+#   tunnel keeps its auth). The HA webhook IDs are long random secrets and are
+#   the shared secret for this path.
+#
+#   NOTE: a Traefik ipAllowList(10.10.212.10/32) was tried to lock this to the
+#   Protect host, but the shared Traefik LoadBalancer runs
+#   externalTrafficPolicy: Cluster, so kube-proxy SNATs the client IP to a node
+#   IP and the allowlist 403s everything. Preserving the real client IP would
+#   need externalTrafficPolicy: Local (or PROXY protocol) on the shared service
+#   — a broad change deferred on purpose. To re-add a source lock later, the
+#   cleaner control is a UDM firewall rule (only 10.10.212.10 -> 10.10.201.70
+#   tcp/8088) in infra/ansible/playbooks/udm-firewall.yml.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -48,8 +47,6 @@ spec:
   routes:
     - match: PathPrefix(`/api/webhook/`)
       kind: Rule
-      middlewares:
-        - name: protect-only
       services:
         - name: home-assistant
           port: 8123
