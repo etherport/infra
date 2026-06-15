@@ -105,16 +105,30 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
 
 ## 6. Maintenance rules (keep this memory alive)
 
-**At the end of any substantive working session, before you stop:**
+**Docs are part of the change, not an afterthought.** Treat documentation like code:
+if a change alters documented behavior, update the relevant docs **in the same change
+(or an immediate follow-up commit)**. A change isn't done until its docs are current.
+This applies to **everything** — not just the handoff files:
+- **Component READMEs** (e.g. `infra/terraform/*/README.md`, `platform/kubernetes/*/README.md`)
+  and the **root `README.md`** when structure/architecture/procedures change.
+- **Runbooks** (`docs/runbooks/`) and **architecture docs** (`docs/architecture/`, e.g.
+  `firewall-zones.md`) when the system or an operational procedure changes.
+- The **`docs/README.md` index** when you add/move/retire a doc.
+- Add **staleness banners** or **archive** (`docs/planning/archive/`, `docs/runbooks/archive/`)
+  superseded docs instead of leaving contradictory ones (a stale doc is worse than none).
+
+**Specifically, at the end of any substantive working session, before you stop:**
 1. **Update `docs/planning/outstanding-work.md`** — flip status glyphs, add new items
    with the next free ID per tier, note what landed (commit SHAs help).
 2. **Append an entry to `docs/planning/session-log.md`** — date, what you did, key
    decisions + *why*, current state, and explicit next steps. Newest at the top.
-3. **Update this `CLAUDE.md`** if the operating model, access, or an invariant changed
+3. **Update all docs your change touched** per the principle above (READMEs, runbooks,
+   architecture, indexes) — don't let the prose drift from reality.
+4. **Update this `CLAUDE.md`** if the operating model, access, or an invariant changed
    (new gotcha, new credential, new convention). Keep it lean — link, don't duplicate.
-4. **Save durable, non-obvious cross-session facts** to the user's Claude Code memory
+5. **Save durable, non-obvious cross-session facts** to the user's Claude Code memory
    (`~/.claude/projects/.../memory/`) too, with a one-line pointer in its `MEMORY.md`.
-5. Commit docs together with the change they describe (or as a follow-up commit). The
+6. Commit docs together with the change they describe (or as a follow-up commit). The
    mini auto-pushes `main`; docs/ and this file are **not** Flux-reconciled (Flux only
    watches `clusters/wind`), so committing them is purely for durable handoff.
 
