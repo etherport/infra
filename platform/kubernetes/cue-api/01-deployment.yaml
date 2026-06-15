@@ -272,6 +272,11 @@ spec:
             # most 1x/day (proactive_pings-throttled). Collaborator #2 registers in-chat.
             - name: CUE_CHAT_INTAKE
               value: 'true'
+            # Apple Health ingest (cue PR #10, Phase 1 wiring): registers POST
+            # /ingest/healthkit (auth = the web-auth token as Bearer). Reachable on the
+            # tailnet Ingress; nothing posts until the phone exporter is configured.
+            - name: CUE_HEALTHKIT_INGEST
+              value: 'true'
             # Testing-phase budget (owner-directed 2026-06-12): $100/mo ALL-IN across all
             # users (global calendar-month cap; cue PR #5). Tripped -> a deterministic
             # "budget reached" reply, no AI call. Safety gates are never cost-gated.
