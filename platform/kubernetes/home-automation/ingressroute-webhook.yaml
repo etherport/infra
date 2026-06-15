@@ -1,0 +1,56 @@
+# Plain-HTTP webhook ingress for UniFi Protect Alarm Manager.
+#
+# WHY THIS EXISTS
+#   UniFi Protect's Alarm Manager webhook client has a bug: it feeds a
+#   multi-address dns.lookup() result (an array of {address,family} objects)
+#   into Node's single-IP connect path, so net.isIP([ [Object] ]) throws
+#   ERR_INVALID_IP_ADDRESS and the request dies BEFORE a TCP connection is
+#   made. This breaks every *hostname*-based webhook (e.g.
+#   https://ha.wind.etherport.net/api/webhook/...) — confirmed in
+#   /srv/unifi-protect/logs/automationManager.log on Windprotect (10.10.212.10),
+#   which showed zero successful httpActions, ever. curl/getent resolve the
+#   hostname fine; only Protect's bundled client is broken.
+#
+#   The only workaround is an IP-literal URL (no DNS lookup -> bug bypassed).
+#   Protect reaches the Traefik VIP (10.10.201.70) on the Servers VLAN, but:
+#     * the normal route is keyed on Host(ha.wind...) -> a bare-IP request 404s;
+#     * the wildcard TLS cert (*.wind.etherport.net) won't match a bare IP, and
+#       Protect's client validates, so https-by-IP fails the handshake.
+#
+#   So we expose a dedicated PLAIN-HTTP entrypoint (`webhook`, :8088, no
+#   80->443 redirect, no TLS — defined in clusters/wind/helm-releases/traefik.yaml)
+#   that serves ONLY the webhook path and is locked to Protect's source IP.
+#   Protect posts to:  http://10.10.201.70:8088/api/webhook/<id>
+#
+#   Least-exposure by design: PathPrefix(/api/webhook/) means the HA UI/API is
+#   NOT reachable on :8088 (everything else 404s), and the ipAllowList means only
+#   the Protect host can use it. CF Access is unaffected (it's edge-only; the
+#   normal https://ha.wind.etherport.net route via the Cloudflare tunnel keeps
+#   its auth). The HA webhook IDs themselves remain the shared secret.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: protect-only
+  namespace: home-automation
+spec:
+  ipAllowList:
+    sourceRange:
+      - 10.10.212.10/32 # Windprotect (UNVR / Protect controller, VLAN 212)
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: home-assistant-webhook
+  namespace: home-automation
+spec:
+  entryPoints:
+    - webhook
+  routes:
+    - match: PathPrefix(`/api/webhook/`)
+      kind: Rule
+      middlewares:
+        - name: protect-only
+      services:
+        - name: home-assistant
+          port: 8123
+          serversTransport: home-assistant-transport

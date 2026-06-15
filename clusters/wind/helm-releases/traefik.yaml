@@ -119,6 +119,22 @@ spec:
           enabled: true
         http3:
           enabled: true
+      # Dedicated PLAIN-HTTP entrypoint for UniFi Protect Alarm Manager webhooks.
+      # No 80->443 redirect, no TLS. It only ever serves the single IngressRoute
+      # home-automation/home-assistant-webhook (PathPrefix(/api/webhook/), locked
+      # to Protect's source IP). Rationale: Protect's webhook client has a bug
+      # (ERR_INVALID_IP_ADDRESS — it feeds a multi-address dns.lookup result into
+      # a single-IP connect path) so it cannot POST to ANY hostname URL; it must
+      # use an IP literal. The normal https route is keyed on Host(ha.wind...) +
+      # a wildcard cert that won't match a bare IP, so Protect instead posts to
+      # http://10.10.201.70:8088/api/webhook/<id>. See
+      # platform/kubernetes/home-automation/ingressroute-webhook.yaml.
+      webhook:
+        port: 8088
+        exposedPort: 8088
+        protocol: TCP
+        expose:
+          default: true
     service:
       enabled: true
       type: LoadBalancer

@@ -9,6 +9,7 @@ resources:
   - deployment.yaml
   - service.yaml
   - ingressroute.yaml
+  - ingressroute-webhook.yaml
   - middleware.yaml
   - serverstransport.yaml
   - secrets.sops.yaml
