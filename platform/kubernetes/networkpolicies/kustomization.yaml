@@ -5,7 +5,12 @@ kind: Kustomization
 # Applying this before policy-audit-mode is active = immediate outage. See README.md.
 
 resources:
-  - 00-default-deny.yaml
+  # NOTE: no standalone default-deny object — Cilium's operator rejects an empty-rule
+  # policy ("rule must have at least one of Ingress/Egress/..."). In Cilium, being
+  # SELECTED by any policy with rules in a direction = default-deny for that direction.
+  # The allow-* CCNPs below (which select enforced namespaces and carry both ingress and
+  # egress rules) therefore establish the default-deny + allowlist. Keep both directions
+  # represented across them or a direction silently reverts to allow-all.
   - 01-allow-dns.yaml
   - 02-allow-cluster-essentials.yaml
   - 03-allow-monitoring-scrape.yaml

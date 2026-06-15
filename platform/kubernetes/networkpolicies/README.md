@@ -31,8 +31,13 @@ that order). `kube-system`, `flux-system`, `wireguard` (hostNetwork → node ide
 
 ## Files
 
-- `00-default-deny.yaml` — CCNP: default-deny ingress+egress for any pod in a namespace
-  labeled `netpol.wind/enforced=true` (via `enableDefaultDeny`, no allow rules of its own).
+> **No standalone default-deny object.** Cilium's operator rejects an empty-rule policy
+> ("rule must have at least one of Ingress/Egress/..."). In Cilium, an endpoint is
+> default-deny for a direction the moment it's **selected by any policy with rules in that
+> direction** — so the `allow-*` CCNPs below (which select enforced namespaces and together
+> cover both ingress and egress) *are* the default-deny. Invariant: keep both directions
+> represented across them, or that direction silently reverts to allow-all.
+
 - `01-allow-dns.yaml` — CCNP: those pods may resolve DNS. **Critical:** allows
   `toEntities:[host,remote-node]:53` because pods send DNS to nodelocaldns at the
   link-local `169.254.25.10` (host identity), plus the kube-dns selector as belt-and-braces.
