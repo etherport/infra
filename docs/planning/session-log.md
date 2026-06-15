@@ -15,9 +15,11 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ## 2026-06-15 — H3 NetworkPolicies Phase-1 + Cilium incident (kubespray cni-owner)
 
-**Goal:** start H3 (default-deny NetworkPolicies). Authored Phase-1 manifests, then
-attempted to enable Cilium audit mode via kubespray — which caused a contained Cilium
-incident. Recovered. **Audit mode NOT enabled; deferred to the surgical path.**
+**Goal:** start H3 (default-deny NetworkPolicies). Authored Phase-1 manifests, hit a
+contained Cilium incident enabling audit mode via kubespray (recovered), then enabled
+audit mode the surgical way + made it IaC-durable + **started observation on postgres**.
+**End state: audit mode ON (8/8 agents), NetworkPolicies live via Flux under audit,
+postgres labeled (audit-both), helm release clean, cluster healthy.**
 
 **What shipped (good):**
 - `platform/kubernetes/networkpolicies/` (commit `3c299d9`) — default-deny + universal
@@ -70,15 +72,28 @@ incident. Recovered. **Audit mode NOT enabled; deferred to the surgical path.**
 - `kube_owner: root` was **rejected** — `/etc/kubernetes` + `/etc/cni/net.d` are genuinely
   kube-owned, so flipping it would broadly re-chown system paths.
 
-**Open / next:**
-- **Helm release `cilium` is still `failed` (rev 15)** + now drifts from the live ConfigMap
-  (patched audit=true; helm's stored manifest says false). DaemonSet healthy 8/8. Cleanup
-  needs a helm op (rolls Cilium) — **consent-gated**; classifier blocked helm twice. H35.
-- **NetworkPolicies not yet wired into Flux.** Audit mode is on but no CNPs are applied yet
-  (so nothing is being audited). Next: wire `platform/kubernetes/networkpolicies/` into
-  `clusters/wind`, then **label a namespace `netpol.wind/enforced=true`** (start postgres) to
-  begin collecting `hubble observe --verdict AUDIT` data. Both are further cluster changes →
-  present for go.
+**Completed (owner said "start H3 and get this fixed now, OK to roll Cilium"):**
+- **NetworkPolicies wired into Flux** (`clusters/wind/kustomization.yaml`, commits `4005fed`+`00bdb81`).
+  Removed the standalone default-deny CCNP — Cilium's operator rejects an empty-rule policy
+  ("rule must have at least one of Ingress/Egress/..."); instead the `allow-*` CCNPs (which
+  select enforced namespaces + cover both directions) establish default-deny per Cilium's
+  selection semantics. 3 allow CCNPs + `postgres-ingress` all `VALID: True`.
+- **Observation STARTED on postgres** — labeled `postgres` ns `netpol.wind/enforced=true`;
+  verified its endpoint is `POLICY (ingress/egress): Disabled (Audit)` = audit-both, and the
+  pod carries `io.cilium.k8s.namespace.labels.netpol.wind/enforced=true` (selector matches).
+- **Helm release cleaned** — `helm rollback cilium 14` (rev 14 = audit=true) → clean
+  `deployed` rev 16, supersedes the `failed` rev 15. Audit still Enabled on all 8 agents.
+
+**Next (the multi-week observation phase):**
+- Watch `hubble observe --namespace postgres --verdict AUDIT` (cover the CNPG backup/cron
+  paths). Refine the postgres allowlist from real flows, then ENFORCE postgres (it's already
+  in audit; the switch is disabling audit for it — but global `policy-audit-mode` is
+  cluster-wide, so enforcement = keep audit on elsewhere and verify postgres' allowlist is
+  complete before the final global audit-off).
+- Then label the next tier (cue → dns → traefik → monitoring), writing each `1x-tier-*`
+  allowlist from audit data. Exclude wireguard/kube-system/flux-system.
+- **H35 follow-ups remain:** validate the `cilium_extra_values` DAC_OVERRIDE backstop on the
+  next supervised kubespray run; review `setup.sh`.
 
 ---
 
