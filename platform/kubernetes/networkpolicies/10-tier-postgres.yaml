@@ -1,0 +1,31 @@
+# Tier 1 (lowest blast radius). The shared postgres cluster's only consumers are
+# the CNPG operator (cnpg-system) + wikijs (verified in the H3 plan; cue-api uses
+# its OWN cue-db in ns `cue`, NOT this cluster). monitoring scrapes the
+# postgres-exporter on :9187. Intra-namespace allow covers CNPG instance↔instance
+# replication. This CNP is the allowlist; full enforcement also needs the postgres
+# namespace labelled netpol.wind/enforced=true (for egress default-deny + DNS/api).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: postgres-ingress
+  namespace: postgres
+spec:
+  description: "Restrict postgres :5432 to cnpg-system + wikijs (+ intra-cluster); :9187 to monitoring."
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cnpg-system
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: wikijs
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: postgres
+      toPorts:
+        - ports:
+            - { port: "5432", protocol: TCP }
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+      toPorts:
+        - ports:
+            - { port: "9187", protocol: TCP }

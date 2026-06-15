@@ -1,0 +1,29 @@
+# DNS egress for enforced namespaces. CRITICAL: pods send DNS to nodelocaldns at
+# the link-local 169.254.25.10, which Cilium classifies as `host` identity — so a
+# kube-dns podSelector alone would blackhole DNS. Allow host+remote-node:53 first,
+# kube-dns selector as belt-and-braces.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: allow-dns
+spec:
+  description: "DNS resolution (nodelocaldns via host identity + kube-dns) for enforced namespaces."
+  endpointSelector:
+    matchLabels:
+      io.cilium.k8s.namespace.labels.netpol.wind/enforced: "true"
+  egress:
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - { port: "53", protocol: UDP }
+            - { port: "53", protocol: TCP }
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - { port: "53", protocol: UDP }
+            - { port: "53", protocol: TCP }

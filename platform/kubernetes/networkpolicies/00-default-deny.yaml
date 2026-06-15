@@ -1,0 +1,17 @@
+# Default-deny (ingress+egress) for every pod in a namespace labelled
+# netpol.wind/enforced=true. Allows are granted by the sibling allow-* policies
+# and per-tier CNPs. A namespace is allow-all until it carries the label, so this
+# is a safe, reversible, per-namespace opt-in (the Phase-2 rollout knob).
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: default-deny-enforced
+spec:
+  description: "Default-deny ingress+egress for namespaces labelled netpol.wind/enforced=true."
+  endpointSelector:
+    matchLabels:
+      io.cilium.k8s.namespace.labels.netpol.wind/enforced: "true"
+  # Empty rule lists = select the endpoint for both directions with zero allows
+  # → default-deny ingress+egress. The sibling allow-*/tier CNPs add the permits.
+  ingress: []
+  egress: []

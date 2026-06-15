@@ -1,0 +1,22 @@
+# kube-apiserver egress (operators, controllers, anything using the API) + host/
+# remote-node comms (kubelet liveness/readiness probes arrive as host identity;
+# nodelocaldns + hostNetwork services live there too). Broad on host purpose-built
+# for the audit phase; tighten per-tier later from Hubble data if warranted.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: allow-cluster-essentials
+spec:
+  description: "kube-apiserver egress + host/remote-node health & probe comms for enforced namespaces."
+  endpointSelector:
+    matchLabels:
+      io.cilium.k8s.namespace.labels.netpol.wind/enforced: "true"
+  egress:
+    - toEntities:
+        - kube-apiserver
+        - host
+        - remote-node
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node

@@ -104,11 +104,13 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 
 ## HIGH — production-readiness; 1–2 weeks
 
-### 🟡 H3. NetworkPolicies — NONE deployed (corrected 2026-06-10)
+### 🟡 H3. NetworkPolicies — Phase-1 manifests authored (inert) 2026-06-15
 - **Source:** `archive/outstanding-work-2026-05-16.md` H3; task #2.
-- **Reality check (2026-06-10):** despite prior notes, `platform/kubernetes/policy-baseline/` contains ONLY LimitRanges + ResourceQuotas. There are **zero** NetworkPolicy / CiliumNetworkPolicy / CiliumClusterwideNetworkPolicy objects anywhere (verified by grep across `platform/` + `clusters/`), and Cilium `policyEnforcementMode` is unset (default allow-all). So every pod can reach every other pod + external host — a compromised workload (public-facing cue-api, plex) has unrestricted lateral movement to postgres/dns/wireguard/monitoring. The "audit-only CNPs already deployed" claim was wrong.
-- **Plan:** (1) ship the audit-only CNPs that were claimed → observe via Hubble; (2) default-deny + per-tier allowlist; isolate `postgres`, `wireguard`, `cue` first. The deployed part (LimitRanges/ResourceQuotas) stays.
-- **Effort:** L. **Largest internal-segmentation gap.**
+- **Reality check (2026-06-10):** despite prior notes, `platform/kubernetes/policy-baseline/` contains ONLY LimitRanges + ResourceQuotas. There are **zero** NetworkPolicy / CiliumNetworkPolicy / CiliumClusterwideNetworkPolicy objects anywhere, and Cilium is allow-all. So every pod can reach every other pod + external — a compromised workload (public-facing cue-api, plex) has unrestricted lateral movement. The "audit-only CNPs already deployed" claim was wrong.
+- ✅ **Phase-1 authored 2026-06-15** (`platform/kubernetes/networkpolicies/`, **NOT yet wired into Flux** — inert): default-deny CCNP + universal allows (DNS via host/remote-node:53 for the link-local nodelocaldns `169.254.25.10`, kube-apiserver, host/probe, monitoring scrape) + the first concrete tier (`postgres-ingress`: only cnpg-system + wikijs reach :5432, monitoring :9187). Phasing = per-namespace opt-in via the `netpol.wind/enforced=true` label. All 5 validate server-side against the live Cilium 1.18.6 CRDs. README documents the rollout/rollback.
+- ⚠️ **Findings that change the plan:** (a) **audit mode is OFF** (`policy-audit-mode: false`) — must be ON before anything applies or it's an instant outage (Cilium: any directional rule on a pod → default-deny that direction). (b) **Cilium is Helm-managed** (release `cilium`/kube-system) and the **kubespray submodule isn't checked out** on the mini — so the plan's `kubespray --tags=cilium` audit-flip isn't turnkey; mechanism TBD.
+- **Next:** enable + verify audit mode → wire the dir into `clusters/wind` → observe ≥1–2 wks via `hubble observe --verdict AUDIT` (cover CronJobs) → write remaining `1x-tier-*` allowlists from data → enforce per tier (postgres→cue→dns→traefik→monitoring; exclude wireguard/kube-system/flux-system).
+- **Effort:** L (phased over ~2 weeks of observation). **Largest internal-segmentation gap.**
 
 ### ✅ H29. CI AWS auth → GitHub OIDC — CUTOVER COMPLETE 2026-06-12
 - **Source:** review 2026-06-10. 22 workflows inject `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (GH secrets); **0** use OIDC (`role-to-assume`/`id-token: write` absent). Long-lived IAM keys in CI = classic exfil target, no expiry, manual rotation across many secrets.
@@ -141,8 +143,9 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Source:** review 2026-06-10. One age recipient decrypts ALL secrets; the private half is replicated to **3 holders** (mini disk, GH `SOPS_AGE_KEY`, Flux `sops-age`) — that's the real blast radius. No re-key path existed.
 - ✅ **Done 2026-06-11:** wrote `docs/runbooks/secrets-rotation.md` (blast-radius inventory, routine two-phase rotation, full "mini compromised → rotate everything" incident procedure incl. the 1P-managed vs hand-edited secret split).
 - ✅ **H33a done 2026-06-15:** added the offline backup age recipient `age1phcm…3466` ("Homelab SOPS Age Key (BACKUP)", offline only — never on mini/CI/Flux) to all 15 `.sops.yaml` (5 root rules + 14 nested) + `sops updatekeys` across all **39** secret files. Verified: every file carries both recipients; all 39 decrypt with the primary; the live system reconciled clean. Keypair generated on the laptop (private half offline only). The primary stayed a recipient throughout → no Flux/CI/GH-secret change, zero lockout window. (Renamed the existing 1P primary item → "Homelab SOPS Age Key (PRIMARY)".)
-- ⏳ **Remaining (still needs the owner):** (b) **FileVault on the mini** (the age key is un-passphrased on disk — System Settings, owner action); (c) optional per-domain recipient split. (a) is closed.
-- **Effort:** trivial remaining (FileVault toggle).
+- ✅ **(b) FileVault** confirmed already enabled on the mini (owner, 2026-06-15).
+- ⏳ **(c) optional per-domain recipient split** — deferred (nice-to-have; not blocking). H33 core is **done**.
+- **Effort:** none required; (c) optional.
 
 ### ✅ H34. Narrow + log the `trusted-admin-clients → Management` firewall rule (2026-06-11)
 - **Done:** rule narrowed from `protocol: all` → entire Management zone, to `protocol: tcp` + `Mgmt-Admin-Ports` (22/443/8006) + `mgmt-admin-hosts` address-group (PVE `10.10.200.41`), `logging: true`. Applied from the mini; old broad `(all)` policy deleted via API (the playbook is create-only, so narrowing = create-new + delete-old). **Verified:** admin ports 22/8006 connect, non-admin 8007/3128 time out (dropped). (ICMP to mgmt hosts still passes — a UniFi default, not this rule.)

@@ -1,0 +1,17 @@
+# Ingress from Prometheus so ServiceMonitor scraping survives default-deny. The
+# Prometheus pod runs in the `monitoring` namespace (pod identity); node-exporter
+# and some monitoring pods are hostNetwork → covered by the host/remote-node
+# ingress in 02-allow-cluster-essentials.yaml.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: allow-monitoring-scrape
+spec:
+  description: "Ingress from the monitoring namespace (Prometheus scrape) for enforced namespaces."
+  endpointSelector:
+    matchLabels:
+      io.cilium.k8s.namespace.labels.netpol.wind/enforced: "true"
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring

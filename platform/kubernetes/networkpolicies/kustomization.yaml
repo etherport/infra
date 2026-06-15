@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# NOTE: deliberately NOT referenced by clusters/wind/kustomization.yaml yet.
+# Applying this before policy-audit-mode is active = immediate outage. See README.md.
+
+resources:
+  - 00-default-deny.yaml
+  - 01-allow-dns.yaml
+  - 02-allow-cluster-essentials.yaml
+  - 03-allow-monitoring-scrape.yaml
+  - 10-tier-postgres.yaml
