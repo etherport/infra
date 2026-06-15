@@ -140,8 +140,9 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 ### 🟡 H33. Secrets-rotation runbook + 2nd age recipient (single-key blast radius)
 - **Source:** review 2026-06-10. One age recipient decrypts ALL secrets; the private half is replicated to **3 holders** (mini disk, GH `SOPS_AGE_KEY`, Flux `sops-age`) — that's the real blast radius. No re-key path existed.
 - ✅ **Done 2026-06-11:** wrote `docs/runbooks/secrets-rotation.md` (blast-radius inventory, routine two-phase rotation, full "mini compromised → rotate everything" incident procedure incl. the 1P-managed vs hand-edited secret split).
-- ⏳ **Remaining (needs a terminal — deferred from the unattended session):** (a) generate the offline backup age recipient + `sops updatekeys` re-key (the runbook's H33a — re-encrypts all 60 SOPS files; not run unattended since a botched re-key could break Flux decrypt); (b) FileVault on the mini; (c) optional per-domain recipient split.
-- **Effort:** S remaining.
+- ✅ **H33a done 2026-06-15:** added the offline backup age recipient `age1phcm…3466` ("Homelab SOPS Age Key (BACKUP)", offline only — never on mini/CI/Flux) to all 15 `.sops.yaml` (5 root rules + 14 nested) + `sops updatekeys` across all **39** secret files. Verified: every file carries both recipients; all 39 decrypt with the primary; the live system reconciled clean. Keypair generated on the laptop (private half offline only). The primary stayed a recipient throughout → no Flux/CI/GH-secret change, zero lockout window. (Renamed the existing 1P primary item → "Homelab SOPS Age Key (PRIMARY)".)
+- ⏳ **Remaining (still needs the owner):** (b) **FileVault on the mini** (the age key is un-passphrased on disk — System Settings, owner action); (c) optional per-domain recipient split. (a) is closed.
+- **Effort:** trivial remaining (FileVault toggle).
 
 ### ✅ H34. Narrow + log the `trusted-admin-clients → Management` firewall rule (2026-06-11)
 - **Done:** rule narrowed from `protocol: all` → entire Management zone, to `protocol: tcp` + `Mgmt-Admin-Ports` (22/443/8006) + `mgmt-admin-hosts` address-group (PVE `10.10.200.41`), `logging: true`. Applied from the mini; old broad `(all)` policy deleted via API (the playbook is create-only, so narrowing = create-new + delete-old). **Verified:** admin ports 22/8006 connect, non-admin 8007/3128 time out (dropped). (ICMP to mgmt hosts still passes — a UniFi default, not this rule.)
@@ -392,5 +393,8 @@ orphaned. Not service-affecting on its own.
 
 ### ⏳ L20. Branch protection / CODEOWNERS (single-owner risk, accepted?)
 - Review 2026-06-10. `main` has no enforceable branch protection (GitHub free plan on a private repo blocks required-reviews/checks) and no `CODEOWNERS`; the headless mini auto-pushes to `main`. Mitigate with a mandatory pre-push CI gate, or explicitly accept the single-owner risk. **Effort:** S (decision).
+
+### ⏳ L22. CI/pre-commit check that every `*.sops.yaml` decrypts (catch MAC/hand-edits)
+- **Source:** 2026-06-15 (surfaced during H33a). `platform/kubernetes/tailscale/01-oauth-secret.sops.yaml` had a **MAC mismatch** — its encrypted body had been hand-edited outside `sops` at some point (sops `lastmodified` 2026-04-12), so it no longer decrypted, yet nothing flagged it for ~2 months (the live secret kept working from the pre-corruption apply). Fixed by reconstructing `values.yaml` from the live `flux-system/tailscale-operator-oauth` secret + re-encrypting clean. **Gap:** neither pre-commit nor CI verifies decryptability. Add a check (`find . -name '*.sops.yaml' -not -name '.sops.yaml' | xargs -I{} sops -d {}` with `SOPS_AGE_KEY`) to pre-commit and/or a CI job so a broken MAC fails fast. **Effort:** S.
 
 ---

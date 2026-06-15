@@ -13,6 +13,55 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-15 — H33a: offline backup age recipient + repo-wide re-key
+
+**Goal:** close H33's single-key blast radius — one age recipient decrypted every
+`*.sops.yaml`, with no offline backup (lose/rotate it wrong → whole estate
+undecryptable). Add a second, **offline-only** recipient.
+
+**What landed:**
+- Owner generated a backup age keypair **on the laptop** (never on the mini); private
+  half → 1Password "Homelab SOPS Age Key (BACKUP)" + paper in the safe. Public key
+  `age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466` handed to me.
+- Added it (comma-joined, **primary kept first**) to all **15** `.sops.yaml` (5 root
+  `creation_rules` + 14 nested), then `sops updatekeys -y` across all **39** secret
+  files. **Guardrail:** re-keyed one file → verified it still `sops -d`s with the
+  primary → then batched the rest. Final verify: 39/39 carry **both** recipients,
+  0 decrypt failures, no plaintext leaked.
+- **No Flux/CI/GH-secret change** — the primary stayed a recipient throughout, so the
+  three online holders (mini disk, GH `SOPS_AGE_KEY`, Flux `sops-age`) keep working;
+  zero lockout window. The backup is pure offline break-glass.
+
+**Why this design (vs rotating the key):** H33a is *additive* redundancy, not a
+rotation. Adding a recipient + `updatekeys` only needs the **primary private** key (to
+decrypt, already on the mini) + the backup **public** key (to add). The backup
+*private* key never has to touch the mini — which is why I could run the mechanical
+re-key here despite this session being on the mini.
+
+**Pre-existing bug found + fixed (now L22):** `tailscale/01-oauth-secret.sops.yaml`
+had a **MAC mismatch** — its encrypted body had been hand-edited outside `sops` (sops
+`lastmodified` 2026-04-12), so it hadn't decrypted for ~2 months, undetected (the live
+operator kept running off the pre-corruption apply). Confirmed pre-existing by the
+identical failure on `git show HEAD:`. Fixed by pulling the good `values.yaml` from the
+live `flux-system/tailscale-operator-oauth` secret (33d, the helm `valuesFrom` source)
+into a temp file — **never printed** — rebuilding the manifest, and `sops -e -i`'ing it
+clean (both recipients, valid MAC). Verified by **sha256 equality** with the live
+value (`d1a0841e…`), not by dumping contents. Added **L22**: a CI/pre-commit check that
+every `*.sops.yaml` actually decrypts, so a broken MAC fails fast next time.
+
+**Docs updated:** `.sops.yaml` header (names both keys + re-key note), `secrets-rotation.md`
+(H33a marked done + blast-radius table), `headless-ops-host.md` + `SOPS-SETUP.md`
+(PRIMARY/BACKUP naming), `outstanding-work.md` (H33 → (a) done, (b) FileVault + (c)
+split remain; new L22). 1P: rename the existing primary item → "Homelab SOPS Age Key
+(PRIMARY)" (owner).
+
+**State:** committed + pushed; Flux reconciled clean (in-cluster decrypt confirmed).
+**Next:** H33 remainder is owner-only — **FileVault on the mini** (un-passphrased key
+on disk) + optional per-domain recipient split. Then the other HIGH items: H3
+(NetworkPolicies), H30 remainder (supervised), and the H29/H31 console tails.
+
+---
+
 ## 2026-06-14 → 06-15 — UniFi Protect webhooks → HA, + HA automation behavior
 
 **Goal:** Protect camera motion → HA light automations had stopped working

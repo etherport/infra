@@ -15,7 +15,7 @@ need, and what rotation must cover:
 | Mac mini (ops host) | `~/.config/sops/age/keys.txt` (un-passphrased) | headless `sops -d`, ansible, render scripts |
 | GitHub Actions | repo secret `SOPS_AGE_KEY` | CI workflows that decrypt (terraform-drift, post-bootstrap, aws-us-east-1, regional-vpn, ansible-vm-fleet) |
 | Flux (in-cluster) | secret `sops-age` in `flux-system` | decrypts `platform/kubernetes/**/*.sops.yaml` at reconcile |
-| **(planned) offline backup** | 1Password + paper in a safe — NEVER on the mini/CI/Flux | break-glass recovery + lockout-free re-key (H33a, below) |
+| **offline backup** ✅ (2026-06-15) | `age1phcm…3466` — 1Password "Homelab SOPS Age Key (BACKUP)" + paper in a safe — NEVER on the mini/CI/Flux | break-glass recovery + lockout-free re-key (added via H33a, below) |
 
 Downstream secrets fall into **two management classes** (rotation handles them differently):
 - **1P-managed (synced):** listed in `infra/ansible/playbooks/secrets/homelab-ops.manifest.yaml`, rendered by `scripts/sync-secrets.py` → `homelab-ops.sops.yaml`. Covers AWS (tf), UDM creds, Cloudflare token, Twilio, the automation SSH key.
@@ -24,6 +24,13 @@ Downstream secrets fall into **two management classes** (rotation handles them d
 ---
 
 ## H33a — add an offline backup recipient (do once, removes lockout risk)
+
+> ✅ **DONE 2026-06-15.** Backup recipient `age1phcm…3466` ("Homelab SOPS Age Key
+> (BACKUP)", offline only) added to all 5 `creation_rules` + 14 nested `.sops.yaml`
+> and `sops updatekeys`'d across all 39 secret files (verified: every file carries
+> both recipients; all 39 decrypt with the primary). Steps below are the reference
+> if you ever re-do it (e.g. for a 3rd recipient). The keypair was generated on the
+> laptop; the private half never touched the mini/CI/Flux.
 
 The single key today has no backup: lose/rotate it wrong and the whole estate is
 undecryptable. Add a second recipient held **offline** so you can always recover and

@@ -1,5 +1,11 @@
 # SOPS configuration for homelab-infra
-# Age public key stored in 1Password as "Homelab SOPS Age Key"
+# Two age recipients (either private key decrypts every file):
+#   PRIMARY  age1fszj…m53g  — 1Password "Homelab SOPS Age Key (PRIMARY)";
+#                             live on the mini, GH SOPS_AGE_KEY, Flux sops-age.
+#   BACKUP   age1phcm…3466  — 1Password "Homelab SOPS Age Key (BACKUP)" + paper
+#                             in the safe; OFFLINE break-glass only (H33a, 2026-06-15).
+# After editing creation_rules, re-key existing files: sops updatekeys -y <file>
+# (full procedure: docs/runbooks/secrets-rotation.md)
 #
 # Decrypt with: sops -d <file>
 # Edit with: sops <file>
@@ -8,20 +14,20 @@ creation_rules:
   # Kubernetes secrets
   - path_regex: 'platform/kubernetes/.*\.sops\.ya?ml$'
     encrypted_regex: '^(data|stringData)$'
-    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g,age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
 
   # WireGuard configs
   - path_regex: 'platform/wireguard/.*\.sops\.ya?ml$'
-    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g,age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
 
   # Terraform secrets
   - path_regex: 'infra/terraform/.*\.sops\.ya?ml$'
-    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g,age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
 
   # Ansible/Kubespray secrets
   - path_regex: 'infra/(ansible|kubespray)/.*\.sops\.ya?ml$'
-    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g,age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
 
   # Default rule for any .sops.yaml file
   - path_regex: '.*\.sops\.ya?ml$'
-    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g,age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466

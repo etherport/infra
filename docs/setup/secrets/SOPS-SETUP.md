@@ -409,11 +409,12 @@ This workflow shows how to add credentials to an app that reads a `secrets.yaml`
 ```bash
 cd platform/kubernetes/home-automation/
 
+# Both recipients (PRIMARY + offline BACKUP) so new files match the repo-wide set:
 cat > .sops.yaml <<'EOF'
 creation_rules:
   - path_regex: '.*\.sops\.ya?ml$'
     encrypted_regex: '^(data|stringData)$'
-    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+    age: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g,age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
 EOF
 ```
 

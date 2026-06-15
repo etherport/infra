@@ -86,8 +86,10 @@ git config --global user.signingkey ~/.ssh/id_ed25519_github.pub
 
 ### 3. SOPS age key
 
-Place the Homelab age private key at `~/.config/sops/age/keys.txt` (mode 600),
-and point sops at it for every shell — macOS sops otherwise only looks in
+Place the Homelab age **PRIMARY** private key at `~/.config/sops/age/keys.txt`
+(mode 600) — 1Password "Homelab SOPS Age Key (PRIMARY)". Do **not** place the
+offline BACKUP key (`age1phcm…3466`) here; it's break-glass only. Point sops at the
+key for every shell — macOS sops otherwise only looks in
 `~/Library/Application Support/sops/age/keys.txt`:
 
 ```bash
@@ -95,7 +97,8 @@ echo 'export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"' >> ~/.zshrc
 ```
 
 Verify: `sops -d infra/ansible/playbooks/secrets/homelab-ops.sops.yaml | head`
-(recipient `age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g`).
+(primary recipient `age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g`;
+files also carry the offline backup recipient `age1phcm…3466` since 2026-06-15).
 
 ### 4. kubeconfig
 

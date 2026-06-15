@@ -26,16 +26,25 @@ stringData:
     aws-full.conf: ENC[AES256_GCM,data:ozL3OYxFzUurxMOIbyMYMRrDw1QtRgJiip3q+09xWLVif3v/bVZPuQS0oX8/9MNJf5A+mndC89JMfU7XKQBAwUBtuTj2HNyzhz0i32M5XhQq7IN6TUzrqZGsN6o5yt0qSXqTjPFSQ8cSMNx4G6m/tjHRwISWd0SKIx8xx2P4dbmtd8AU1uQoSArL+nNd0+GCDzAUpv+44t23/bV+ozaa87YCNsGbr/hDcRLt/cab5HKWOHOPG9PNv7N5sZYYheoPB3+9rxSd8OR6TzZR4SneX/aecHFnaxbSXaKjbkTSHXbUhCEl/dESKqeXvJWdWVYV40St6CJrCjq2tjn5LBd8GxOtIPMqZFdsfUdKCsAbgstUWYiXWifeaYGlWU6BrYOYDg==,iv:voJbl0rYqP8DewSPQsGI1TZsx3DViIfDmQMxZvVfsys=,tag:JLlZzboOgbgqWvtVqmWpJg==,type:str]
 sops:
     age:
-        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
-          enc: |
+        - enc: |
             -----BEGIN AGE ENCRYPTED FILE-----
-            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBIM2lqVFE4VTdwQmF6czYw
-            eW83akZ0aDQwMGIvNmZUVkc5VStkc29yckRJCmZ3YWY3T3k1K0JnaC9ra2NHWVJX
-            L0tRWE5tU1pqdmJWR0U3aCsyTVU0STAKLS0tIGNPcDMyNmtqN2VuZTZPQmIwU09v
-            Z0RHT0lVbzV1TEhpRzdhSDdzWDdkcTAKeR0KIOkdSoJ9uPbfwhEOhJYxZN+seuZi
-            sbDRKEJE3r9VNMffNjGcdae3vVAYSBngedPOnBUhir2Mq4p/VEA5oQ==
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAvOG5vaUl6TWJ6RXIxV1lr
+            T3N2bCtjbjZGL0NFOVRZdVFsdm9WT2lnQkNBCmRxNjVtNDhQeFJIQ3M0VUUxbjlu
+            ekQzWGw0OVpCajJRdUF3Tm14eDl4TUkKLS0tIHU1clJjazM2aVc5c3A1RmtaWU0r
+            aDlscC81ZXpxMHZaQkllSXpadVNaSTQKAwM0Sg+XK/Qrl+ZsqSSveWRYdGhSjDHG
+            wdmjRRl9eXcQc5mHKtF1SHEidSxFZP2ma6FTfZa43xSorMSY1sGQHA==
             -----END AGE ENCRYPTED FILE-----
+          recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+        - enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBOM2ZSSk9XUHdoQkZCWG1E
+            a3hVSWlLZTRVY0VCN3BFdUFndVpSMTRZUmxnCjVsMTZQRE51SUd6QmdpbG5LaG5j
+            SmE4UHhrY0lZd2UreGNMMW9ZdWVsRkUKLS0tIEFxSXpQUmo3dWtINEsydjBORWdl
+            ak9WcmNUc3J3YytmQ2EwT3lLVVN1OFkK+qZOpSvx87tvqW8yWIFUcec2ybpZm2Ga
+            /YlJfrPDFODwgB8OfKzqgZ/2KrYuVY+ov5ObspUFRWqdwKkDlpv0mw==
+            -----END AGE ENCRYPTED FILE-----
+          recipient: age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
+    encrypted_regex: ^(data|stringData)$
     lastmodified: "2026-04-24T03:32:09Z"
     mac: ENC[AES256_GCM,data:MEWTtkcbdjwLMBDmz1laZchWGcLtRGVgFhLDDaYPuw1lz8PqvWJu2xTATxhDE3ydvfUaHxWczWg83jSMXZZXOeRHFzHLY/MzcMToHHGSEGE5SHVa1mjLCzGM7R596lsXo6kzIJ8QIfHpbdvDngCJuoZOKhwzRTzyaIZ5Ij0u27g=,iv:iMesvlMh2/pKq7mQ6JLbboR1NA44ORgsmFpDy8pUywg=,tag:5ox68rF9Gw8BpmHofA3B9Q==,type:str]
-    encrypted_regex: ^(data|stringData)$
     version: 3.11.0
