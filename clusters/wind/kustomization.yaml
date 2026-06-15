@@ -53,6 +53,11 @@ resources:
   # Phase 1 of the NetworkPolicies+Quotas+PDBs plan — observation-only,
   # no enforcement. See platform/kubernetes/policy-baseline/README.md.
   - ../../platform/kubernetes/policy-baseline
+  # H3 NetworkPolicies (Cilium). default-deny + universal allows + per-tier CNPs,
+  # gated per-namespace by the `netpol.wind/enforced=true` label. Cilium runs in
+  # policy-audit-mode (logs would-be drops, enforces nothing) during observation.
+  # See platform/kubernetes/networkpolicies/README.md.
+  - ../../platform/kubernetes/networkpolicies
   # Database (CloudNativePG cluster - operator installed via Helm)
   - ../../platform/kubernetes/cnpg
   # Cue app database — dedicated single-instance CNPG cluster (cue ns).

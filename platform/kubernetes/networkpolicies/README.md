@@ -4,10 +4,13 @@ Default-deny + per-tier allowlists for the `wind` cluster. Closes H3 (the larges
 internal-segmentation gap: today Cilium is allow-all, so a compromised pod has
 unrestricted lateral movement). Detailed plan: `docs/planning/hardening-plan-2026-06-10.md` §H3.
 
-> ⚠️ **THIS DIRECTORY IS NOT YET WIRED INTO FLUX.** It is staged/inert. Applying it
-> while `policy-audit-mode: false` would cause an **immediate cluster outage** (see the
-> Cilium gotcha below). Do **not** add it to `clusters/wind/kustomization.yaml` until
-> audit mode is confirmed active on every node.
+> ✅ **WIRED INTO FLUX 2026-06-15** (`clusters/wind/kustomization.yaml`), with Cilium
+> **`policy-audit-mode` ON** (verified runtime `Enabled` on all agents first). Under audit
+> mode these policies **log would-be drops as AUDIT verdicts and enforce nothing**, so they
+> are safe. They also currently select **no pods** — enforcement is gated on the
+> `netpol.wind/enforced=true` namespace label (none applied yet). Labeling a namespace is
+> what starts its observation. **Never disable audit mode while a namespace is labeled until
+> its allowlist is verified** (that would turn audit logs into real drops).
 
 ## The one rule that matters
 
