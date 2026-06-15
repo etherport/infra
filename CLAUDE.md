@@ -102,6 +102,17 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
 - **Home Assistant automations are UI-managed** in `/config/automations.yaml` (in the
   PVC, not git). Run mode (`single`/`restart`/…) is YAML-only (HA's visual editor
   doesn't expose it). Editing/reloading an automation **cancels any in-flight run**.
+- **kubespray `cluster.yml`/`--tags=cilium` breaks Cilium** by chowning `/opt/cni/bin`
+  to `kube_owner` (`kube`); Cilium's `mount-cgroup` (root, `drop:[ALL]`, no DAC_OVERRIDE)
+  then can't write there → `Init:CrashLoopBackOff` on the **next agent restart** (latent
+  until then). **Always re-run `infra/kubespray/inventory/pre-flight.yml` after any
+  kubespray cilium run** to restore `root:root`. Cilium is **Helm-managed** (release
+  `cilium`/kube-system), not Flux. The `kubespray.sh` wrapper is **stale** (wrong
+  venv/inventory paths) — real run path + full incident in `docs/runbooks/cilium-cni-dir-owner.md`.
+- **Enable Cilium policy-audit-mode the surgical way**, NOT via kubespray: patch the
+  `cilium-config` ConfigMap (`policy-audit-mode: "true"`) + `kubectl rollout restart
+  ds/cilium` (agents read it only at startup). H3 NetworkPolicy manifests live (inert,
+  not Flux-wired) in `platform/kubernetes/networkpolicies/`.
 
 ## 6. Maintenance rules (keep this memory alive)
 

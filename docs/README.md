@@ -44,6 +44,8 @@ docs/
 | [dns-resolution-issues.md](runbooks/dns-resolution-issues.md) | DNS troubleshooting |
 | [vlan-interfaces-netplan.md](runbooks/vlan-interfaces-netplan.md) | VLAN interface configuration |
 | [cert-manager-wildcard.md](runbooks/cert-manager-wildcard.md) | Wildcard cert issuance + Traefik TLSStore |
+| [cilium-cni-dir-owner.md](runbooks/cilium-cni-dir-owner.md) | Cilium CrashLoop after a kubespray run (/opt/cni/bin owner) + the real kubespray run path |
+| [secrets-rotation.md](runbooks/secrets-rotation.md) | SOPS age-key rotation (routine + post-compromise) + offline backup recipient |
 | [ceph-vlan-migration.md](runbooks/archive/ceph-vlan-migration.md) | Ceph mon/OSD migration to VLAN 210 (2026-05-18, done) |
 | [regional-vpn-deployment.md](runbooks/regional-vpn-deployment.md) | Multi-region AWS spoke VPN deployment |
 | [grafana-admin-password.md](runbooks/grafana-admin-password.md) | Rotate/recover Grafana admin password |

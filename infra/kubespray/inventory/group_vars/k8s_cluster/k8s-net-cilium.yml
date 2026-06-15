@@ -145,6 +145,11 @@ cilium_l2announcements: false
 
 ### Host Firewall and Policy Audit Mode
 # cilium_enable_host_firewall: false
+# NOTE (2026-06-15): do NOT enable cilium_policy_audit_mode here. Running
+# `cluster.yml --tags=cilium` to apply it ALSO re-chowns /opt/cni/bin to
+# kube_owner and breaks Cilium (see docs/runbooks/cilium-cni-dir-owner.md +
+# session-log 2026-06-15). H3 audit mode is instead toggled surgically via the
+# cilium-config ConfigMap + `kubectl rollout restart ds/cilium` (no kubespray).
 # cilium_policy_audit_mode: false
 
 # Pin Cilium to the currently-running version so a `--tags=cilium` reconfigure

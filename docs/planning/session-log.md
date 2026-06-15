@@ -13,6 +13,59 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-15 — H3 NetworkPolicies Phase-1 + Cilium incident (kubespray cni-owner)
+
+**Goal:** start H3 (default-deny NetworkPolicies). Authored Phase-1 manifests, then
+attempted to enable Cilium audit mode via kubespray — which caused a contained Cilium
+incident. Recovered. **Audit mode NOT enabled; deferred to the surgical path.**
+
+**What shipped (good):**
+- `platform/kubernetes/networkpolicies/` (commit `3c299d9`) — default-deny + universal
+  allows (DNS via host/remote-node:53 for link-local nodelocaldns, kube-apiserver, host,
+  monitoring scrape) + `postgres-ingress` tier. Per-ns opt-in via `netpol.wind/enforced`
+  label. **Inert** (not Flux-wired). All 5 validate vs live Cilium 1.18.6 CRDs.
+
+**The incident (root cause + recovery — don't re-walk this):**
+- To enable `policy-audit-mode`, ran kubespray `cluster.yml --tags=cilium,download` (v2.30,
+  via a freshly-bootstrapped `~/.kubespray-venv` since the mini had none; system ansible
+  2.21 is too new — kubespray needs 10.7.0/core-2.17). The run "succeeded" (exit 0) but a
+  follow-up `kubectl rollout restart ds/cilium` (needed because audit-mode is read only at
+  agent startup) put 2 agents into **`Init:CrashLoopBackOff`**.
+- **Root cause:** kubespray's "Create cni directories" task chowns `/opt/cni/bin` to
+  `kube_owner` (**`kube`** — set in `k8s-cluster.yml`). Cilium's `mount-cgroup` runs as
+  root with `drop:[ALL]` (no DAC_OVERRIDE) → can't write `cilium-mount` to a kube-owned
+  dir → `cp ... Permission denied`. **Latent** — the 6 un-restarted agents kept running off
+  loaded eBPF (nodes stayed Ready); only restarted agents crashed. Confirmed via `/opt/cni/bin`
+  **ctime = today 17:22** (chown updates ctime, not mtime — mtime still read Jun 5).
+- **Misstep:** first tried `helm rollback cilium 13` (thinking the v2.30 chart changed the
+  init container). It didn't help — rev-13's `mount-cgroup` securityContext is **identical**;
+  the chart was never the cause. The rollback left a **`failed` helm rev 15** (release
+  health still needs cleanup — see below) and reset `policy-audit-mode=false`.
+- **Actual fix:** `chown root:root /opt/cni/bin` on all 8 nodes (the existing
+  `pre-flight.yml` already enforces this — kubespray's cluster.yml had undone it) + delete
+  the crashing pods. One node (k8s-w1) was missed on the first pass (truncated output) →
+  always verify ALL nodes. Final: **8/8 agents Running (restart 0), 8/8 nodes Ready**,
+  audit mode `Disabled` (= original safe baseline).
+
+**Codified + documented (this entry's commit):**
+- Strengthened `inventory/pre-flight.yml` comment (CRITICAL: re-run after any cluster.yml).
+- Reverted the staged `cilium_policy_audit_mode` kubespray var (footgun) with a note to use
+  the ConfigMap path instead.
+- New runbook `docs/runbooks/cilium-cni-dir-owner.md` (symptom/cause/recovery + the actual
+  kubespray run path, since `kubespray.sh` is stale). CLAUDE.md §5 gotchas updated.
+
+**Open / next:**
+- **Helm release `cilium` is `failed` (rev 15)** though the DaemonSet is healthy 8/8. Needs
+  a clean-up (a `helm rollback cilium <good-rev>` now succeeds since the dir is fixed) — but
+  that rolls Cilium again, so **consent-gated**, not done autonomously post-recovery.
+- **Audit mode still off.** When resumed, enable via the **surgical path** (patch
+  `cilium-config` `policy-audit-mode: "true"` + `rollout restart ds/cilium` — works now the
+  dir is root-owned), NOT kubespray. Then wire `networkpolicies/` into Flux + observe.
+- Tracker: new items for modernizing the stale kubespray wrapper + auto-running pre-flight,
+  and evaluating a Cilium `DAC_OVERRIDE` chart value so it tolerates a kube-owned cni dir.
+
+---
+
 ## 2026-06-15 — H33a: offline backup age recipient + repo-wide re-key
 
 **Goal:** close H33's single-key blast radius — one age recipient decrypted every

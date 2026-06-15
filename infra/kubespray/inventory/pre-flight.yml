@@ -3,7 +3,16 @@
   become: true
 
   tasks:
-    - name: Ensure CNI binary directory exists
+    # CRITICAL — /opt/cni/bin MUST be root:root for Cilium.
+    # Cilium's `mount-cgroup` init container runs as root with capabilities
+    # `drop: [ALL]` (no DAC_OVERRIDE), so it can only write `cilium-mount` into
+    # this dir if root OWNS it. We set `kube_owner: kube` globally (k8s-cluster.yml),
+    # and kubespray's `cluster.yml` "Create cni directories" task chowns /opt/cni/bin
+    # to `kube_owner` — which BREAKS Cilium on the next agent restart
+    # (`cp: cannot create regular file '/hostbin/cilium-mount': Permission denied`,
+    # Init:CrashLoopBackOff). See docs/runbooks/cilium-cni-dir-owner.md.
+    # ==> RE-RUN THIS PLAYBOOK AFTER ANY cluster.yml / --tags=cilium RUN. <==
+    - name: Ensure CNI binary directory exists and is root-owned (Cilium requirement)
       file:
         path: /opt/cni/bin
         state: directory
