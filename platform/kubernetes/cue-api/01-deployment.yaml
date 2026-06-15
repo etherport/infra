@@ -277,6 +277,10 @@ spec:
             # tailnet Ingress; nothing posts until the phone exporter is configured.
             - name: CUE_HEALTHKIT_INGEST
               value: 'true'
+            # TEMPORARY (Apple Health setup): capture HAE's real payload once to map it
+            # precisely, then this comes back OFF. cue PR #11.
+            - name: CUE_HEALTHKIT_CAPTURE
+              value: 'true'
             # Testing-phase budget (owner-directed 2026-06-12): $100/mo ALL-IN across all
             # users (global calendar-month cap; cue PR #5). Tripped -> a deterministic
             # "budget reached" reply, no AI call. Safety gates are never cost-gated.
