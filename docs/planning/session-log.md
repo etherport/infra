@@ -78,9 +78,13 @@ postgres labeled (audit-both), helm release clean, cluster healthy.**
   ("rule must have at least one of Ingress/Egress/..."); instead the `allow-*` CCNPs (which
   select enforced namespaces + cover both directions) establish default-deny per Cilium's
   selection semantics. 3 allow CCNPs + `postgres-ingress` all `VALID: True`.
-- **Observation STARTED on postgres** — labeled `postgres` ns `netpol.wind/enforced=true`;
-  verified its endpoint is `POLICY (ingress/egress): Disabled (Audit)` = audit-both, and the
-  pod carries `io.cilium.k8s.namespace.labels.netpol.wind/enforced=true` (selector matches).
+- **Observation STARTED on postgres** — endpoint is `POLICY (ingress/egress): Disabled (Audit)`.
+  ⚠️ **Label must be in the namespace MANIFEST in git** (`cnpg/00-namespace.yaml`), not a
+  `kubectl label` — Flux SSA strips out-of-band labels on reconcile (hit this; fixed via git,
+  commit `7e83047`). `scripts/cilium/audit-report.py` reports cluster-wide AUDIT flows via the
+  hubble relay for enforced namespaces. First run: 1 AUDIT flow (intra-postgres TCP — likely
+  CNPG instance comms beyond :5432; investigate + add to the postgres allowlist). Recurring
+  check set up via `/loop` on the mini session.
 - **Helm release cleaned** — `helm rollback cilium 14` (rev 14 = audit=true) → clean
   `deployed` rev 16, supersedes the `failed` rev 15. Audit still Enabled on all 8 agents.
 
