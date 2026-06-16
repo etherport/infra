@@ -5,3 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: postgres
     app.kubernetes.io/managed-by: cnpg
+    # H3 NetworkPolicy enforcement opt-in (Cilium in policy-audit-mode → audited,
+    # not enforced). First tier under observation. See
+    # platform/kubernetes/networkpolicies/README.md. Remove to drop back to allow-all.
+    netpol.wind/enforced: "true"

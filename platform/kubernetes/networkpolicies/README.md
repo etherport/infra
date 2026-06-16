@@ -54,17 +54,23 @@ The per-tier allowlists (`1x-tier-*.yaml`) beyond postgres are **intentionally a
 
 ## Rollout procedure
 
-1. **Enable audit mode** (cluster-wide) and **verify** `policy-audit-mode: true` on every
-   cilium agent. See `docs/runbooks/` (and the H3 plan) — Cilium is Helm-managed here.
-2. Wire this dir into `clusters/wind/kustomization.yaml`; reconcile. Under audit, nothing drops.
-3. Observe ≥1–2 weeks: `hubble observe --verdict AUDIT --namespace <ns>` (cover CronJobs).
-4. Refine/add `1x-tier-*.yaml` allowlists from the audit data.
-5. **Enforce:** label a namespace `netpol.wind/enforced=true` (start postgres), watch
-   Hubble for `DROPPED`, widen allowlists as needed, then move to the next tier. Disable
-   global audit mode only once all target namespaces are labeled and stable.
+1. **Audit mode is ON** (`cilium_policy_audit_mode: true`, runtime `Enabled` on all agents).
+2. This dir is wired into `clusters/wind/kustomization.yaml` (done).
+3. **Opt a namespace into observation by adding the label to its namespace MANIFEST in git**
+   — `netpol.wind/enforced: "true"` (e.g. `platform/kubernetes/cnpg/00-namespace.yaml` for
+   postgres). **Do NOT `kubectl label`** a Flux-managed namespace — Flux's server-side apply
+   strips out-of-band labels on the next reconcile. Commit + reconcile → durable.
+4. Observe ≥1–2 weeks: `python3 scripts/cilium/audit-report.py` (cluster-wide AUDIT flows
+   via the hubble relay) — be sure to cover CronJobs/backups. Every AUDIT flow = a would-be
+   drop on enforcement.
+5. Add legit flows to the relevant per-tier CNP; write `1x-tier-*.yaml` for new tiers from
+   the audit data.
+6. **Enforce:** once all target namespaces' allowlists are verified, disable global audit
+   (`cilium_policy_audit_mode: false` → ConfigMap + `rollout restart ds/cilium`). Audit is
+   cluster-wide, so enforce all observed tiers together once they're all clean.
 
 ## Rollback
 
-`git revert` the wiring commit (Flux `prune: true` deletes the CCNPs in ~1 reconcile),
-or re-enable `policy-audit-mode: true` out-of-band, or `kubectl label ns <ns>
-netpol.wind/enforced-` to drop a single namespace back to allow-all.
+`git revert` the wiring commit (Flux `prune: true` deletes the CCNPs in ~1 reconcile), or
+remove the `netpol.wind/enforced` label from a namespace manifest (Flux reverts it to
+allow-all), or re-confirm `policy-audit-mode` is on (the safe, non-enforcing state).
