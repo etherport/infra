@@ -13,6 +13,48 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-16 — CNPG operator restart-loop (duplicate operator) — fixed
+
+**Trigger:** AI advisor email — "cloudnativepg pod is stuck." Full system check requested
+after the 06-15 Cilium/NetworkPolicy work.
+
+**System was healthy** except the operator: 8/8 nodes Ready, Flux all-Ready, both CNPG
+clusters healthy (postgres-cluster 3/3, cue-db 1/1), Cilium audit mode still `Enabled`
+(06-15 work intact, NOT enforcing — ruled out as the cause).
+
+**Root cause (pre-existing, NOT from 06-15):** **two** CNPG operator deployments in
+`cnpg-system` both running `controller --leader-elect` against the **same lease**
+(`db9c8771.cnpg.io`):
+- `cnpg-cloudnative-pg` — canonical, Helm/Flux-managed (`helm-releases/cnpg.yaml`, chart
+  0.22.1); backs `cnpg-webhook-service`.
+- `cnpg-controller-manager` — **orphan** from a pre-Helm raw-manifest install (no Helm/Flux
+  labels, not in git, doesn't back the webhook service).
+They fought over the lease → the loser hit `Put .../leases/...: context deadline exceeded`
+→ `leader election lost` → exit/restart, repeatedly (37 + 29 restarts). Leases 34d old =
+chronic. DBs unaffected (operator absence doesn't stop running Postgres).
+
+**Fix:** `kubectl -n cnpg-system delete deployment cnpg-controller-manager` (owner-approved;
+the Claude Code auto-mode classifier blocked it until the owner named the resource
+explicitly). Helm operator immediately acquired the lease uncontested (lease holder now
+`cnpg-cloudnative-pg-…`), started its controllers, restarts stopped climbing (held at 37),
+webhook endpoint ready. Both clusters healthy. **Residual (harmless):** orphan
+`ServiceAccount/cnpg-manager` (+ likely a cluster-scoped `cnpg-manager` Role/Binding) from
+the old install — unused, low-priority cleanup (tracker).
+
+**Why the AI advisor gave no remediation button (owner asked):** by design. The advisor's
+prompt (`auto-remediation/advisor-prompt-configmap.yaml`) lists `cnpg-system` under *NEVER
+PROPOSE* ("the executor allowlist excludes flux-system/kube-system/cnpg-system/rook-ceph/
+cert-manager — proposals silently dropped"), so even with Phase 2/3 enabled it can only
+**advise** (email) on cnpg-system, never offer an approve/auto action. Also "delete a
+deployment" / "pick which duplicate operator is the orphan" isn't in its action whitelist
+(restart_pods, scale, rollback_deployment, cnpg_recreate_replica, backups, …) and needs
+human judgment. Working as intended — critical stateful namespaces are human-in-the-loop.
+
+**Next:** confirm restarts stay at 37 (single operator = no contention); optional cleanup of
+the orphan `cnpg-manager` SA/RBAC.
+
+---
+
 ## 2026-06-15 — H3 NetworkPolicies Phase-1 + Cilium incident (kubespray cni-owner)
 
 **Goal:** start H3 (default-deny NetworkPolicies). Authored Phase-1 manifests, hit a
