@@ -115,12 +115,13 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - **Next (multi-week observation):** watch `hubble observe --namespace postgres --verdict AUDIT` (cover CNPG backup/cron paths) → refine the postgres allowlist → label the next tier (cue→dns→traefik→monitoring), one `1x-tier-*` allowlist per tier from audit data → when all target namespaces' allowlists are verified, disable global `policy-audit-mode` to enforce. Exclude wireguard/kube-system/flux-system.
 - **Effort:** L (phased over ~2 weeks of observation). **Largest internal-segmentation gap.**
 
-### 🟡 H35. Cilium/kubespray durability hardening (post-incident)
+### ✅ H35. Cilium/kubespray durability hardening (post-incident) — DONE 2026-06-15
 - **Source:** 2026-06-15 Cilium incident.
-- ✅ **(b) kubespray.sh wrapper rewritten 2026-06-15** — correct paths (`~/.kubespray-venv`, `inventory/inventory.ini`, ssh user/key) + **auto-runs `pre-flight.yml` after cluster.yml/upgrade-cluster.yml/scale.yml** so `/opt/cni/bin` root ownership is restored every run. `setup.sh` still to review.
-- ✅ **(c) `cilium_extra_values` DAC_OVERRIDE backstop committed** to the kubespray inventory (mount-cgroup tolerates a kube-owned cni dir). **Armed but NOT yet validated live** — needs a kubespray render to confirm it fully prevents the break (mount-cgroup is the known writer; confirm install-cni-binaries etc. are unaffected). Validate on the next supervised kubespray run.
-- ✅ **(a) Helm release cleaned 2026-06-15** — `helm rollback cilium 14` (rev 14 = audit=true) → clean `deployed` rev 16, superseding the `failed` rev 15. Audit still Enabled on all 8 agents; cluster healthy.
-- ⏳ **(d) review `setup.sh`** (the other stale kubespray wrapper) for the same path-correctness fixes applied to `kubespray.sh`. **Effort:** S.
+- ✅ **(b) kubespray.sh wrapper rewritten** — correct paths (`~/.kubespray-venv`, `inventory/inventory.ini`, ssh user/key) + **auto-runs `pre-flight.yml` after cluster.yml/upgrade-cluster.yml/scale.yml** so `/opt/cni/bin` root ownership is restored every run.
+- ✅ **(c) `cilium_extra_values` DAC_OVERRIDE backstop committed + validated by analysis** — kubespray passes it as the **last `-f`** to `cilium upgrade` (`roles/network_plugin/cilium/tasks/apply.yml`); the base `values.yaml.j2` doesn't set `mountCgroup`; the path matches the live chart default → the override renders on the next kubespray run. Full *functional* confirmation (DAC_OVERRIDE alone vs other init containers) comes naturally on the next real kubespray run; the wrapper's auto-pre-flight is the primary fix regardless.
+- ✅ **(a) Helm release cleaned** — `helm rollback cilium 14` → clean `deployed` rev 16, superseding `failed` rev 15. Audit still Enabled on all 8 agents.
+- ✅ **(d) `setup.sh` rewritten** — creates `~/.kubespray-venv` (matches the wrapper), drops the stale inventory symlink, points at `kubespray.sh` + the runbook.
+- **Residual:** the next real kubespray run is the live DAC_OVERRIDE functional test (watch Cilium agents come up healthy).
 
 ### ✅ H29. CI AWS auth → GitHub OIDC — CUTOVER COMPLETE 2026-06-12
 - **Source:** review 2026-06-10. 22 workflows inject `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (GH secrets); **0** use OIDC (`role-to-assume`/`id-token: write` absent). Long-lived IAM keys in CI = classic exfil target, no expiry, manual rotation across many secrets.

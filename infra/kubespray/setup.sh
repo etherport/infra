@@ -1,46 +1,35 @@
 #!/bin/bash
-# Kubespray setup script
-# Run this once after cloning the repo or when updating kubespray
+# Kubespray setup — run once after cloning, or when the kubespray submodule version
+# changes. Creates the venv kubespray.sh expects ($HOME/.kubespray-venv by default).
+# kubespray v2.30 needs ansible 10.7.0 (core 2.17) — DON'T use the system ansible.
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-KUBESPRAY_DIR="$SCRIPT_DIR/kubespray"
-INVENTORY_DIR="$SCRIPT_DIR/inventory"
+KUBESPRAY_DIR="$SCRIPT_DIR/kubespray"                 # git submodule (playbooks)
+VENV="${KUBESPRAY_VENV:-$HOME/.kubespray-venv}"       # MUST match kubespray.sh
 
 echo "=== Kubespray Setup ==="
 
-# Check if submodule is initialized
+# 1. Submodule
 if [ ! -f "$KUBESPRAY_DIR/requirements.txt" ]; then
     echo "Initializing kubespray submodule..."
-    git -C "$SCRIPT_DIR/../.." submodule update --init --recursive infra/kubespray/kubespray
+    git -C "$SCRIPT_DIR/../.." submodule update --init infra/kubespray/kubespray
 fi
 
-# Create virtual environment if it doesn't exist
-if [ ! -d "$KUBESPRAY_DIR/venv" ]; then
-    echo "Creating Python virtual environment..."
-    python3 -m venv "$KUBESPRAY_DIR/venv"
+# 2. Virtualenv (outside the repo tree, shared with the wrapper)
+if [ ! -x "$VENV/bin/ansible-playbook" ]; then
+    echo "Creating venv at $VENV ..."
+    python3 -m venv "$VENV"
 fi
-
-# Activate and install requirements
-echo "Installing Python dependencies..."
-source "$KUBESPRAY_DIR/venv/bin/activate"
-pip install -q --upgrade pip
-pip install -q -r "$KUBESPRAY_DIR/requirements.txt"
-
-# Create symlink to inventory
-if [ ! -L "$KUBESPRAY_DIR/inventory/wind" ]; then
-    echo "Linking inventory..."
-    ln -sf "$INVENTORY_DIR" "$KUBESPRAY_DIR/inventory/wind"
-fi
+echo "Installing Python deps (ansible 10.7.0 / core 2.17) ..."
+"$VENV/bin/pip" install -q --upgrade pip
+"$VENV/bin/pip" install -q -r "$KUBESPRAY_DIR/requirements.txt"
 
 echo ""
 echo "=== Setup Complete ==="
-echo ""
-echo "To use kubespray:"
-echo "  cd $KUBESPRAY_DIR"
-echo "  source venv/bin/activate"
-echo "  ansible-playbook -i inventory/wind/inventory.ini cluster.yml --become"
-echo ""
-echo "Or use the wrapper script:"
+echo "Run kubespray via the wrapper (it uses inventory/inventory.ini + auto-runs"
+echo "pre-flight.yml after cluster.yml to keep /opt/cni/bin root-owned for Cilium):"
 echo "  $SCRIPT_DIR/kubespray.sh cluster.yml"
+echo "  $SCRIPT_DIR/kubespray.sh cluster.yml --tags=cilium,download"
+echo "See docs/runbooks/cilium-cni-dir-owner.md for the full run path + gotchas."
