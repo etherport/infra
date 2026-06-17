@@ -25,7 +25,7 @@
 #   - .6 = next region
 
 terraform {
-  required_version = ">= 1.5"
+  required_version = ">= 1.14"
 
   required_providers {
     aws = {

@@ -26,7 +26,7 @@ locals {
     users:
       - name: ubuntu
         ssh_authorized_keys:
-          - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab"
+          - "${var.automation_ssh_pubkey}"
   EOT
 }
 
@@ -35,27 +35,27 @@ locals {
 #------------------------------------------------------------------------------
 
 data "aws_vpc" "private_infra" {
-  id = "vpc-0cf7cb3b71fc48958"
+  id = var.vpc_id
 }
 
 data "aws_subnet" "public1" {
-  id = "subnet-05df0a901053021dd"
+  id = var.public_subnet_id
 }
 
 data "aws_security_group" "vpn_server" {
-  id = "sg-08323ff8e98ecb563"
+  id = var.sg_vpn_server_id
 }
 
 data "aws_security_group" "dns_server" {
-  id = "sg-08d12e417159c18d2"
+  id = var.sg_dns_server_id
 }
 
 data "aws_security_group" "internal_comms" {
-  id = "sg-0c882ffea5692bd63"
+  id = var.sg_internal_comms_id
 }
 
 data "aws_security_group" "allow_ssh" {
-  id = "sg-0079fee23ee54417a"
+  id = var.sg_allow_ssh_id
 }
 
 #------------------------------------------------------------------------------

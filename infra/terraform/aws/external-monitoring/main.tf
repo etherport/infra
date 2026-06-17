@@ -3,7 +3,7 @@
 # Sends alerts via SNS when endpoints become unhealthy
 
 terraform {
-  required_version = ">= 1.0"
+  required_version = ">= 1.14"
   required_providers {
     aws = {
       source  = "hashicorp/aws"

@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.4.0"
+  required_version = ">= 1.14"
 
   required_providers {
     proxmox = {
@@ -10,7 +10,7 @@ terraform {
 }
 
 provider "proxmox" {
-  endpoint  = "https://pve.wind.etherport.net:8006/api2/json"
+  endpoint  = var.proxmox_endpoint
   api_token = "${var.proxmox_token_id}=${var.proxmox_token_secret}"
   insecure  = true
 }

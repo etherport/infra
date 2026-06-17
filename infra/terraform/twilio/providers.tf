@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.0"
+  required_version = ">= 1.14"
   required_providers {
     twilio = {
       source  = "twilio/twilio"

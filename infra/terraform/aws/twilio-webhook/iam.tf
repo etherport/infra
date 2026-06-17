@@ -45,7 +45,7 @@ resource "aws_iam_role_policy" "ses" {
         "ses:SendEmail",
         "ses:SendRawEmail",
       ]
-      Resource = "*"  # SES IAM rarely scopes by identity in practice; tighten via SES identity policies if needed
+      Resource = "*" # SES IAM rarely scopes by identity in practice; tighten via SES identity policies if needed
     }]
   })
 }

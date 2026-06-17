@@ -4,6 +4,12 @@ variable "aws_profile" {
   default     = "homelab"
 }
 
+variable "proxmox_endpoint" {
+  description = "Proxmox VE API endpoint URL"
+  type        = string
+  default     = "https://pve.wind.etherport.net:8006/api2/json"
+}
+
 variable "proxmox_token_id" {
   description = "Proxmox API token ID, e.g. root@pam!terraform"
   type        = string

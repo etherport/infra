@@ -19,11 +19,11 @@ resource "aws_lambda_function" "twilio_webhook" {
 
   environment {
     variables = {
-      FORWARD_NUMBER     = var.forward_number
-      EMAIL_TO           = var.email_to
-      SES_FROM           = var.ses_from
-      SES_REGION         = var.ses_region
-      TWILIO_AUTH_TOKEN  = var.twilio_auth_token
+      FORWARD_NUMBER    = var.forward_number
+      EMAIL_TO          = var.email_to
+      SES_FROM          = var.ses_from
+      SES_REGION        = var.ses_region
+      TWILIO_AUTH_TOKEN = var.twilio_auth_token
     }
   }
 
