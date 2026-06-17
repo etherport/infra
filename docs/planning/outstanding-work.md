@@ -205,27 +205,11 @@ work above (M16 DID release / M17 SIP migration) so the sets aren't
 orphaned. Not service-affecting on its own.
 
 
-### ⏳ M53. Mint zone-scoped CF API tokens (de-couple infra ↔ personal-web)
-- **Source:** 2026-05-29. Both repos currently use the same account-scoped `cloudflare-tf-token` (1Password). It works across all zones, which is why personal-web TF applied locally before it had CI. Best practice: each repo gets a token scoped to ONLY its zones.
-- **Scope:** (1) new CF token scoped to grahamsmith.net/smithforsb.com/stopthecastle.com (Zone:DNS:Edit + Zone:Read + the Single-Redirect/Ruleset perm needed for M54) → 1Password → update personal-web `CLOUDFLARE_API_TOKEN` secret. (2) optionally re-scope the infra token to etherport.net only.
-- **Note:** the current account-scoped token reportedly can't manage CF Single Redirect rules — confirm whether that's a scope/permission gap; if so the new token must include the Ruleset edit permission (this is what blocks M54).
-- **Effort:** S (dashboard token mint + secret update). Needs CF dashboard.
-- **Ready-to-execute spec (prepared 2026-05-30 — only the CF-dashboard mint needs you):**
-  - **Create token** — CF dashboard → My Profile → API Tokens → Create Token → *Custom token*:
-    - Permissions: `Zone → Zone → Read`, `Zone → DNS → Edit`, `Zone → DNSSEC → Edit` (required by the `cloudflare_zone_dnssec` resources), `Zone → Dynamic Redirect → Edit` (covers the Single Redirect ruleset → also unblocks **M54**).
-    - Zone Resources: *Include → Specific zone* ×3 — `grahamsmith.net`, `smithforsb.com`, `stopthecastle.com`. **Do NOT** include `etherport.net` or "All zones".
-    - Optional hardening: Client-IP filter → gh-runner egress IP; set a TTL.
-  - **Wire-in (targets verified 2026-05-30):** personal-web CI reads the token from GH secret **`CLOUDFLARE_API_TOKEN`** (`.github/workflows/terraform.yml:67`; provider auth via env var). Zone IDs are already separate `TF_VAR_*_ZONE_ID` secrets, so the token needs no name→ID lookup.
-    1. `gh secret set CLOUDFLARE_API_TOKEN -R sparked-diamond/personal-web` (paste new token) + save to 1Password.
-    2. `gh workflow run terraform.yml -R sparked-diamond/personal-web -f action=plan` → expect clean across all 3 zones incl. DNSSEC.
-    3. Leave the infra/etherport token in place (still in use); re-scoping it (part 2) is optional/separate.
-  - **Why not done autonomously:** CF token minting is dashboard-gated and no CF token is available locally (1Password locked this session) — this is the single step that requires you.
+### ✅ M53. Mint zone-scoped CF API tokens (de-couple infra ↔ personal-web) — DONE 2026-06-17
+- **Done (owner):** zone-scoped Cloudflare token minted + personal-web's `CLOUDFLARE_API_TOKEN` cut over to it, decoupling the two repos from the shared account-scoped token. (The Single-Redirect/Ruleset scope that this unblocked is now used in the personal-web repo, where **M54** also moved.)
 
-### ⏳ M54. Codify smithforsb.com redirect (CF Single Redirect) as IaC
-- **Source:** 2026-05-29. `smithforsb.com` → `instagram.com/graham.m.smith` is currently a **manual CF Single Redirect rule** in the dashboard — the one non-IaC piece of personal-web. Comment in `personal-web/terraform/cloudflare-dns/smithforsb.tf` notes it's deferred "until token scope upgraded".
-- **Blocked by:** M53 (the account-scoped token apparently lacks the Ruleset/Single-Redirect permission).
-- **Scope:** add a `cloudflare_ruleset` (http_request_dynamic_redirect) resource in `smithforsb.tf`; import the existing rule or recreate. Verify the redirect still 301s after apply.
-- **Effort:** S once M53 unblocks it.
+### ➡️ M54. Codify smithforsb.com redirect (CF Single Redirect) as IaC — MOVED to personal-web repo (2026-06-17)
+- **Closed here:** ownership of the `smithforsb.com` redirect moved entirely to the **personal-web** repo (it's a personal-web concern, codified alongside `cloudflare-dns/smithforsb.tf` there). No longer tracked in this infra repo. ID retained for grep history.
 
 ### ✅ M55. UniFi telemetry exporter (unifi-poller) — LIVE
 - **Source:** 2026-05-30. UDM observability is logs-complete but metrics-thin. Syslog → Alloy → Loki works (UDM-Pro-Max actively shipping, verified). But Prometheus has NO full UniFi telemetry — only `probe_success` (blackbox reachability, fixed 2026-05-30) + `unifi_backup_*`. Missing: client counts, throughput, WAN, port/PoE, AP/client RSSI, per-device health.
