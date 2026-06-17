@@ -49,21 +49,46 @@
           playbooks/secrets/etcd-backup.sops.yaml (keys: etcd_backup_aws_access_key_id,
           etcd_backup_aws_secret_access_key). See the vars block.
 
-    # awscli lives in the `universe` component, which is disabled on these
-    # kubespray-minimal nodes. Enable it (an official, Ubuntu-signed repo) so we
-    # can apt-install awscli — no third-party binary/GPG dance.
-    - name: Enable the universe apt component (provides awscli)
-      ansible.builtin.apt_repository:
-        repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} universe"
-        state: present
-        filename: ubuntu-universe
-        update_cache: false
+    # awscli is NOT packaged in Ubuntu 24.04 (noble) — install AWS CLI v2 from the
+    # official installer, sha256-verified. Idempotent: skipped once `aws` exists.
+    # If AWS rotates the artifact, get_url fails closed (won't install unverified) —
+    # re-pin aws_cli_zip_sha256 from `shasum -a 256` of the current zip.
+    - name: Remove stale universe .list from earlier apt-awscli attempts
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/ubuntu-universe.list
+        state: absent
 
-    - name: Install awscli (for the S3 offsite upload)
-      ansible.builtin.apt:
-        name: awscli
-        state: present
-        update_cache: true
+    - name: Check for existing aws CLI
+      ansible.builtin.command: aws --version
+      register: _aws_ver
+      changed_when: false
+      failed_when: false
+
+    - name: Install AWS CLI v2 (official, sha256-verified)
+      when: _aws_ver.rc != 0
+      block:
+        - name: Download AWS CLI v2 installer
+          ansible.builtin.get_url:
+            url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+            dest: /tmp/awscliv2.zip
+            checksum: "sha256:d0f7ec7d325c5e24ea63dce6aebea72e9326eb18cf83727a71c0a81359e5da04"
+            mode: "0644"
+        - name: Unpack the installer
+          ansible.builtin.unarchive:
+            src: /tmp/awscliv2.zip
+            dest: /tmp
+            remote_src: true
+        - name: Run the AWS CLI v2 installer
+          ansible.builtin.command: /tmp/aws/install
+          args:
+            creates: /usr/local/bin/aws
+        - name: Clean up installer artifacts
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: absent
+          loop:
+            - /tmp/awscliv2.zip
+            - /tmp/aws
 
     - name: Ensure /root/.aws exists
       ansible.builtin.file:
