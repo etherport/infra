@@ -35,8 +35,11 @@ provider "proxmox" {
 # =============================================================================
 
 locals {
-  # STAGE 1 = "ACCEPT" (permissive/observe). STAGE 2 = flip to "DROP" (enforce).
-  input_policy = "ACCEPT"
+  # STAGE 1 = "ACCEPT" (permissive/observe). STAGE 2 = "DROP" (enforce).
+  # Flipped to DROP 2026-06-17 after the observation window confirmed all admin
+  # sources (mini, TS/WG via 201, backup-WG 192.168.3.2) are in mgmt-admin and
+  # nothing legit hits 22/8006/3128 from outside it. Revert to "ACCEPT" to roll back.
+  input_policy = "DROP"
 }
 
 # --- Datacenter firewall framework -------------------------------------------
@@ -88,10 +91,9 @@ resource "proxmox_virtual_environment_cluster_firewall_security_group" "pve_mgmt
     source = "+${proxmox_virtual_environment_firewall_ipset.mgmt_admin.name}"
     proto  = "tcp"
     dport  = "22,3128,8006"
-    # Stage-1 observation: log=info gives POSITIVE confirmation that real admin
-    # sessions (TS/WG/mini/laptop) match mgmt-admin before the Stage-2 DROP flip.
-    # Drop to "nolog" once enforcing, to cut log noise.
-    log     = "info"
+    # Enforcing (Stage 2): nolog on the allow rule to cut noise. (Set back to
+    # "info" if you need to re-observe admin matches.)
+    log     = "nolog"
     comment = "SSH(22) + SPICE(3128) + PVE API/UI(8006) from mgmt-admin"
   }
 

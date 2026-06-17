@@ -66,6 +66,32 @@ for the mini, then retire this one; that's net-new work, not H29.
 
 ---
 
+## 2026-06-17 — H37 Stage 2 ENFORCED: Proxmox host firewall now default-deny
+
+After the Stage-1 observation window (below), verified coverage + flipped to enforce.
+
+**Observation verified:** firewall log showed every admin source hitting 22/8006 is in
+`mgmt-admin` — mini (`10.10.202.101`), TS/WG-via-201 (`10.10.201.55/.56`), and the **UDM
+backup WG** (`192.168.3.2`) — with **0 sources outside `mgmt-admin`** touching 22/8006/3128.
+Host only receives 22+8006 (no exporters to strand).
+
+**Back-door (break-glass) fixed:** the UDM backup WG (`WireGuard WAN1`, 192.168.3.0/24,
+terminates on the UDM → survives the host's VMs dying) initially couldn't reach PVE. Ruled
+out infra (server enabled, `Vpn→Management` ALLOW exists on the UDM, our fw was permissive)
+→ it was a **client-side DNS issue** (full-tunnel without internal DNS). Owner fixed it; now
+logs as `192.168.3.2`. Added `192.168.3.0/24` to `mgmt-admin`. IPMI/console break-glass confirmed.
+
+**Stage 2 applied:** `local.input_policy` ACCEPT→DROP + rule `log`→nolog. **Verified live:**
+datacenter `enable=1, policy_in=DROP`; host reachable (mini API 3/3 HTTP 200; ports **22+8006
+OPEN** from the mini through the enforcing fw); **all 13 guests still running**. The mini
+(`10.10.202.101`) is in `mgmt-admin`, so the agent's control path survives → reversible via
+`input_policy="ACCEPT"` + apply; IPMI = hard backstop. Owner separately confirming TS/WG/
+backup-WG interfaces.
+
+**H37 done** (host plane). k8s-node + standalone-VM firewalling = **M77**.
+
+---
+
 ## 2026-06-17 — H37 Stage 1 LIVE: Proxmox host firewall (permissive + observing)
 
 Zero-trust follow-on; owner-requested. Scope = **host management plane** (k8s-node +
