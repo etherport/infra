@@ -66,6 +66,48 @@ for the mini, then retire this one; that's net-new work, not H29.
 
 ---
 
+## 2026-06-17 — M61 + M68 + M5, and H36 caught a real Flux SSH outage
+
+Worked three tracker items end-to-end (commits `bc7c488`, `77d2678`, `bc02764`), plus
+M53/M54/M71 housekeeping and a live-incident validation of H36.
+
+**M61 — SOPS centralization + Renovate coverage:** wired the 3 inline-SOPS-curl terraform
+workflows (`terraform-drift-detection`, `terraform-aws-us-east-1`, `terraform-regional-vpn`;
+all ubuntu-latest/amd64) → the pinned+checksum-verified `setup-sops` composite action (also
+closes the H30 "wire 3 workflows" deferral). **Verified green in CI** (AWS US-East-1 + Regional
+VPN + sops-decrypt-check all passed). renovate.json: enabled the `pre-commit` manager (off by
+default → now bumps the 4 hook repos) + grouped github-actions/terraform/pre-commit PRs.
+ansible-runner Dockerfile: version-sync pointer to setup-sops + TODO for per-arch sha256.
+ansible-lint hook still deferred (needs baseline pass).
+
+**M68 — docs consolidation:** merged `1PASSWORD-CLI.md` → `SOPS-SETUP.md` (de-staled `op`
+quick-reference; **corrected** the false "agent can run op" claim — it's operator/VNC-only),
+old file → redirect stub. New `docs/runbooks/archive/README.md` (BGP-phase A→B→C index +
+others). Fixed `docs/README.md` (secrets rows, new Network subsection, **broken
+firewall-zones-future-state link** → archived path, AI-advisor "LIVE not retired" wording).
+firewall-zones.md: M14→M42 ID footnote + its own broken future-state link fixed.
+
+**M5 — velero (CRITICAL backup path, handled conservatively):** both original sub-tasks turned
+out riskier than the "S" rating. (1) **Ordering** = by-design: Schedules sit with the HR in the
+monolithic kustomization (repo-wide CR-after-HR pattern); Flux retry self-heals cold bootstrap.
+Restructure rejected (kustomize↔Helm cutover would risk deleting live Schedules). (2) **Quota**
+= rejected as unsafe: velero pods had **no requests** (all BestEffort), so any compute quota
+would silently reject ephemeral backup pods. Instead added **requests-only (no limits)** to
+server (250m/256Mi) + node-agent (200m/256Mi) → Burstable QoS (less eviction mid-backup), no
+OOM risk. **Verified live:** HR `UpgradeSucceeded` (v5, chart 11.4.0), node-agent rolled, all
+9 pods Running + Burstable. Both decisions documented in the velero README.
+
+**🔔 H36 validated itself in production:** mid-session the AI advisor emailed a
+`FluxReconciliationErrors` alert (the rule built last session) — Flux source-controller couldn't
+reach **GitHub SSH/22** for ~1h (13:33→~14:31 UTC), stuck at `fa72ed39`; proposed action `noop`,
+95% conf. **Self-resolved** (GitRepository + Kustomization now Ready at HEAD `77d2678`; all HRs
+Ready). No in-cluster impact (and none of the post-`fa72ed3` commits were even Flux-watched —
+M65 tf / M61 ci / M68 docs). Transient GitHub-SSH/WAN blip; nothing on our side changed routing.
+Advisor diagnosis was spot-on. **Takeaway:** H36 caught a real silent-wedge within its window —
+exactly its purpose.
+
+---
+
 ## 2026-06-17 — L23: deleted orphan cnpg-manager RBAC (duplicate-operator residue)
 
 **Goal:** remove the harmless residue from the 06-16 duplicate-CNPG-operator cleanup —
