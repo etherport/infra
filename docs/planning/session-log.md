@@ -13,6 +13,24 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-17 — L23: deleted orphan cnpg-manager RBAC (duplicate-operator residue)
+
+**Goal:** remove the harmless residue from the 06-16 duplicate-CNPG-operator cleanup —
+the orphan `cnpg-manager` ServiceAccount + ClusterRole + ClusterRoleBinding (raw-manifest
+install, never in git).
+
+**Verified orphaned before deleting:** live operator deployment `cnpg-cloudnative-pg` runs
+under SA `cnpg-cloudnative-pg` (Helm-managed), *not* `cnpg-manager`. The `cnpg-manager-rolebinding`
+CRB bound CR `cnpg-manager` → SA `cnpg-system/cnpg-manager` self-referentially; no pod used the
+SA. So the trio was a closed, unused loop.
+
+**Done:** `kubectl delete clusterrolebinding cnpg-manager-rolebinding` + `clusterrole cnpg-manager`
++ `sa cnpg-manager -n cnpg-system`. After: operator pod Running 1/1, `postgres-cluster` 3/3 +
+`cue-db` 1/1 both "Cluster in healthy state". Nothing to commit (objects were never in git).
+L23 ✅.
+
+---
+
 ## 2026-06-17 — M63 hardening safe-trio + "do all in order" wrap
 
 **Goal:** finish the "do all in order" pass — last open item was M63 (k8s manifest
