@@ -52,7 +52,12 @@ nodeAgent:
 metrics:
   enabled: true
   serviceMonitor:
-    enabled: false
+    # Mirror the HelmRelease (SM enabled since 2026-05-24) so this bootstrap
+    # reference doesn't contradict the live config (M67). `release: monitoring`
+    # is the label kube-prometheus-stack scrapes.
+    enabled: true
+    additionalLabels:
+      release: monitoring
 
 kubectl:
   image:

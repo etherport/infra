@@ -140,10 +140,10 @@ spec:
               was {{ $value | humanizeDuration }} ago.
 
     # ---------- Velero backup metrics ----------
-    # Needs Velero's serviceMonitor enabled (currently disabled in
-    # clusters/wind/helm-releases/velero.yaml — see L14 follow-up).
-    # Rules ship now but stay dormant until the SM exists; once it
-    # does, they activate automatically.
+    # LIVE: Velero's serviceMonitor is enabled (clusters/wind/helm-releases/velero.yaml,
+    # since 2026-05-24) and scraped — velero_backup_* series are present in Prometheus,
+    # so these rules evaluate against real data. The bootstrap reference
+    # backups/velero/values.yaml mirrors the SM setting; keep them in sync (M67).
     - name: velero-backups.rules
       rules:
         - alert: VeleroBackupFailed
