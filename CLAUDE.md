@@ -114,6 +114,14 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   `cilium-config` ConfigMap + `kubectl rollout restart ds/cilium` (read only at startup),
   NOT a raw kubespray run. H3 NetworkPolicy manifests in `platform/kubernetes/networkpolicies/`
   (enforcement is per-namespace opt-in via the `netpol.wind/enforced=true` label).
+- **Cilium WireGuard encryption is ON** (M66, 2026-06-17). East-west **pod-to-pod**
+  traffic is WireGuard-encrypted (`cilium_wg0`, full mesh, NodeEncryption off); was
+  cleartext VXLAN before. IaC source = `cilium_encryption_enabled: true` +
+  `cilium_encryption_type: "wireguard"` in the kubespray inventory. Cilium is a **Helm
+  release** (`cilium`/kube-system) — apply config changes via `helm upgrade cilium
+  --reuse-values --set …` (+ `rollout restart ds/cilium`), **not** a kubespray run
+  (cni-owner landmine). Verify: `kubectl -n kube-system exec ds/cilium -c cilium-agent --
+  cilium-dbg encrypt status`. Reverse: `--set encryption.enabled=false` + rollout restart.
 
 ## 6. Maintenance rules (keep this memory alive)
 

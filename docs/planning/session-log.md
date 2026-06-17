@@ -66,6 +66,37 @@ for the mini, then retire this one; that's net-new work, not H29.
 
 ---
 
+## 2026-06-17 — M66: enabled Cilium WireGuard pod-to-pod encryption
+
+**Decision (owner):** enable WireGuard, staged. Closes the cleartext-east-west gap
+(postgres replication, in-cluster WG key material, secrets traversed the node underlay
+as cleartext VXLAN).
+
+**State before:** Cilium v1.18.6, `routing-mode: tunnel`/vxlan, `kube-proxy-replacement:
+false`, encryption off. Cilium is a **Helm release** (`cilium`/kube-system, was rev 16).
+
+**Applied (Helm, not kubespray — avoids the cni-owner landmine):** backed up current
+values (`helm get values cilium` → /tmp), **dry-ran** the upgrade (confirmed the only
+config delta = `enable-wireguard: "true"`), then `helm upgrade cilium cilium/cilium
+--version 1.18.6 --reuse-values --set encryption.enabled=true --set
+encryption.type=wireguard` (→ rev 17) + `kubectl rollout restart ds/cilium` (maxUnavailable
+2, rolled clean). Config is read at agent startup so the restart is required.
+
+**Verified live:** `cilium-dbg encrypt status` → `Encryption: Wireguard`, iface `cilium_wg0`,
+**7 peers** (full mesh, all 8 nodes), `NodeEncryption: Disabled` (pod-to-pod only). All 8
+CiliumNodes published wg pub-keys. **Postgres stayed 3/3 healthy** (primary on w4, replicas
+w1/w2 — replication genuinely crosses nodes) through the roll; **0 unhealthy pods** cluster-wide.
+
+**Durability:** set `cilium_encryption_enabled: true` + `cilium_encryption_type: "wireguard"`
+in the kubespray inventory (`k8s-net-cilium.yml`) so a future kubespray run keeps it; live
+(helm rev 17) + inventory now agree. CLAUDE.md §5 invariant added. Kernel-mode WireGuard (no
+IPsec secret). Reversible via `--set encryption.enabled=false` + rollout restart.
+
+**Follow-on:** owner asked to evaluate broader **zero-trust** opportunities (incl. the
+**Proxmox host firewall**, not yet tracked) — see new items added to outstanding-work.md.
+
+---
+
 ## 2026-06-17 — M61 + M68 + M5, and H36 caught a real Flux SSH outage
 
 Worked three tracker items end-to-end (commits `bc7c488`, `77d2678`, `bc02764`), plus

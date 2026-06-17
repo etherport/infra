@@ -329,8 +329,15 @@ orphaned. Not service-affecting on its own.
   - **(b) NOT DONE — infeasible by design:** Terraform forbids `locals`/vars inside `lifecycle.ignore_changes` (it takes unquoted attribute refs only) — the file *already documents this* (`unifi/networks.tf` lines 17-19), and the 11 blocks aren't even identical (the `unifi` network adds `dhcp_dns`). The only DRY route is converting all 11 `unifi_network` resources into a single `for_each` module with `moved` blocks for every address — a risky state-churn refactor for marginal gain. Left as-is (the explanatory in-file comment is the mitigation). **If ever revisited:** module-ize under `modules/unifi-network/` + `moved {}` per resource; treat as its own item.
 - **Validation:** aws/compute `plan` = No changes; proxmox ×3 `validate` = valid; `terraform fmt -recursive -check` clean. Not applied (authoring only — applies ship via CI/owner per the safety rule).
 
-### ⏳ M66. Cilium pod-to-pod encryption — decide
+### ✅ M66. Cilium pod-to-pod encryption — ENABLED (WireGuard) 2026-06-17
 - Review 2026-06-10. `cilium_encryption_*` commented out (off). With BGP now spanning VLANs (wider trust boundary) + no NetworkPolicies (H3), east-west pod traffic (incl. postgres replication, WG key material) is cleartext + unrestricted. Either enable WireGuard-mode Cilium encryption or document the accepted risk. **Effort:** M (or doc-only).
+- **Decision (owner 2026-06-17):** enable WireGuard, staged.
+- ✅ **Done 2026-06-17 — verified live:**
+  - **State before:** Cilium v1.18.6, `routing-mode: tunnel`/vxlan, `kube-proxy-replacement: false`, encryption off → pod-to-pod was cleartext VXLAN over the node underlay.
+  - **Applied** via the Helm release (`cilium`/kube-system, no kubespray run → avoids the cni-owner landmine): `helm upgrade cilium cilium/cilium --version 1.18.6 --reuse-values --set encryption.enabled=true --set encryption.type=wireguard` (dry-run first confirmed the **only** delta = `enable-wireguard: "true"`; full values backed up to `/tmp` first), then `kubectl rollout restart ds/cilium` (maxUnavailable 2, rolled clean).
+  - **Verified:** `cilium-dbg encrypt status` → `Encryption: Wireguard`, `cilium_wg0`, **7 peers** (full mesh, all 8 nodes), `NodeEncryption: Disabled` (pod-to-pod only). All 8 CiliumNodes published wg pub-keys. **Postgres stayed 3/3 healthy** across 3 nodes through the roll; **0 unhealthy pods** cluster-wide. WireGuard is kernel-mode (no IPsec secret needed).
+  - **Durability:** set `cilium_encryption_enabled: true` + `cilium_encryption_type: "wireguard"` in the kubespray inventory (`k8s-net-cilium.yml`) so a future kubespray run keeps it. Live ConfigMap (helm rev 17) + inventory now agree. Documented in CLAUDE.md §5 + the cilium runbook.
+  - **Notes:** NodeEncryption (host-to-host) left off — pod-to-pod covers the stated risk (replication/keys/secrets). MTU auto-adjusts for VXLAN+WG (Cilium `MTU: 0` = auto). Reversible: `--set encryption.enabled=false` + rollout restart.
 
 ### ✅ M67. Reconcile dead/contradictory Velero alerting config — DONE 2026-06-17
 - Review 2026-06-10. `backups/velero/values.yaml` had `serviceMonitor.enabled: false` contradicting the live HelmRelease (`true` inline since 2026-05-24); `06-backup-alerts.yaml` said rules "stay dormant until the SM exists."
