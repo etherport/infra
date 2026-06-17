@@ -346,6 +346,14 @@ orphaned. Not service-affecting on its own.
 - **(optional, owner-declined)** source-lock the `:8088` route to Protect's IP. Blocked by Traefik LB `externalTrafficPolicy: Cluster` (SNATs client IP → `ipAllowList` 403s). Would need `externalTrafficPolicy: Local` (cluster-wide) or a UDM firewall rule. Marginal for a LAN-only, path-scoped, secret-ID-gated endpoint. See [`session-log.md`](session-log.md).
 - **Effort:** S (verify) / done otherwise.
 
+### ⏳ M71. AWS CLI auth modernization — kill standing static keys on the mini + terminals
+- **Source:** 2026-06-17 review (after H29 close). Current state = **long-lived static IAM access keys in plaintext** `~/.aws/credentials` (mode 0600) on the headless mini: `[homelab]`=terraform-homelab (6 `terraform-*` service policies, **no IAM** → bounded, can't self-escalate; key created 2025-12-31, never rotated) and `[claude-admin]`=PowerUserAccess break-glass (created 2026-04-01, never rotated). At rest protected only by FileVault + file perms. **Owner accepts this risk for now** (single-owner, tailnet-only, FileVault) — this item is the **medium-term proper fix**, not urgent.
+- **Target architecture:**
+  - **Headless mini → [IAM Roles Anywhere](https://docs.aws.amazon.com/rolesanywhere/latest/userguide/introduction.html).** X.509 trust anchor (CA) + per-host cert + `aws_signing_helper` as a `credential_process` → short-lived session creds, **zero standing key**. The blessed pattern for a persistent on-prem host. SSO is a poor fit here (needs periodic interactive login → breaks headless cron). Setup: trust anchor, cert issuance/rotation, profile per role.
+  - **Human/interactive laptops → IAM Identity Center (SSO).** `aws sso login`, short-lived + per-user + MFA. Fine where interactive login cost is acceptable.
+- **Cheap interim wins (can do anytime, owner-deferred for now):** (a) remove the `[claude-admin]` PowerUser block from the mini's standing creds — pull from SOPS / use from laptop only when break-glass is actually needed (biggest blast-radius cut for ~0 effort); (b) rotate both keys + set a cadence (terraform-homelab can't rotate itself — do from claude-admin/gs_admin).
+- **Effort:** M (Roles Anywhere) + S (interim a/b). See session-log 2026-06-17 for the full blast-radius assessment.
+
 ## LOW
 
 ### ⏳ L1. Proxmox HA cluster expansion
