@@ -13,7 +13,31 @@
     "renovate"
   ],
   "prConcurrentLimit": 8,
+  "pre-commit": {
+    "enabled": true
+  },
   "packageRules": [
+    {
+      "description": "Group GitHub Actions updates (github-actions datasource) into one tidy PR; helpers:pinGitHubActionDigests keeps them digest-pinned",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github-actions"
+    },
+    {
+      "description": "Group Terraform provider + module updates (terraform datasource) into one PR",
+      "matchManagers": [
+        "terraform"
+      ],
+      "groupName": "terraform providers"
+    },
+    {
+      "description": "Group pre-commit hook updates (pre-commit manager, enabled above) into one PR",
+      "matchManagers": [
+        "pre-commit"
+      ],
+      "groupName": "pre-commit hooks"
+    },
     {
       "description": "Container images managed by Flux - disable Renovate",
       "matchDatasources": [

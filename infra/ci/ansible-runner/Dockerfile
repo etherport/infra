@@ -26,6 +26,12 @@ RUN apt-get update \
 # community.sops.load_vars (delegate_to: localhost), e.g. wireguard.yml. The
 # age private key is supplied at runtime via the SOPS_AGE_KEY env (set from a
 # GH secret in the ansible workflows). Arch-aware (amd64/arm64).
+# Keep SOPS_VERSION in sync with the canonical pin in
+# .github/actions/setup-sops/action.yml (the workflow-side single source of
+# truth). This Dockerfile can't reuse that composite action (it's a build, not
+# a workflow) and is arch-dependent, so it's pinned separately by version.
+# TODO(M61/H30): add per-arch sha256 verification here too (setup-sops already
+# checksum-verifies the amd64 binary).
 ARG SOPS_VERSION=v3.9.4
 RUN ARCH="$(dpkg --print-architecture)" \
     && curl -fsSL -o /usr/local/bin/sops \

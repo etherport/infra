@@ -290,7 +290,12 @@ orphaned. Not service-affecting on its own.
 - ✅ `gitleaks` pre-commit hook (2026-06-10) **+ CI `secret-scan.yml`** (2026-06-11) — runs on every PR + push to main (closes the client-side-only gap; the mini auto-pushes to main per L20). Added `.gitleaks.toml` with a verified allowlist (SOPS templates, doc examples, the SES SMTP access-key *ID* — confirmed no real plaintext-secret leaks in the tree).
 
 ### 🟡 M61. Expand pre-commit + Renovate coverage
-- Review 2026-06-10. ✅ **Landed 2026-06-10:** `terraform_tflint` (+ minimal `.tflint.hcl`) + `shellcheck` pre-commit hooks. Remaining: `ansible-lint` (needs a baseline-noise pass first), Renovate `github-actions` + `terraform` (provider) datasources, and centralizing the SOPS version (hardcoded `v3.9.4` in 2 workflows + the ansible-runner Dockerfile) into a composite `setup-sops` action with checksum verify. **Effort:** S-M.
+- Review 2026-06-10. ✅ **Landed 2026-06-10:** `terraform_tflint` (+ minimal `.tflint.hcl`) + `shellcheck` pre-commit hooks.
+- ✅ **Done 2026-06-17:**
+  - **SOPS centralized:** the 3 terraform workflows that still curl'd SOPS inline (`terraform-drift-detection`, `terraform-aws-us-east-1`, `terraform-regional-vpn` — all `ubuntu-latest`/amd64) now `uses: ./.github/actions/setup-sops` (pinned + **checksum-verified**, single source of truth for the version). Also closes the H30 "wire 3 workflows to setup-sops" deferred item. (Verified: 0 inline `releases/download/v3.9.4/sops` curls remain in `.github/workflows/`; YAML lints clean.)
+  - **Renovate coverage:** enabled the `pre-commit` **manager** (off by default → now bumps the 4 externally-pinned hook repos: pre-commit-terraform, yamllint, shellcheck-py, gitleaks); added explicit `packageRules` grouping the `github-actions`, `terraform`, and `pre-commit` managers into tidy per-area PRs. (`github-actions` + `terraform` managers/datasources were already active via `config:recommended` — now intentionally grouped.) renovate.json validates.
+  - **ansible-runner Dockerfile:** can't reuse the composite action (it's a build, not a workflow) + is arch-dependent; already pinned to the same `v3.9.4`. Added a sync-pointer comment to `setup-sops` (the canonical version) + a `TODO(M61/H30)` for per-arch sha256 verification.
+- ⏳ **Remaining:** `ansible-lint` pre-commit hook — still deferred (needs a baseline-noise suppression pass first or it floods every commit). **Effort:** S remaining.
 
 ### ✅ M62. etcd snapshots → offsite (S3) + freshness alert (supersedes L15) — DONE 2026-06-17
 - Review 2026-06-10. `etcd-backup.yml` wrote local-disk only (14d); offsite only via Velero's `kube-system-daily` — the exact path that silently `PartiallyFailed` ≥4d recently. If a CP node is lost, its snapshots go with it; no freshness alert.
