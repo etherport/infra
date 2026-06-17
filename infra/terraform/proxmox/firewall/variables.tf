@@ -1,0 +1,52 @@
+variable "aws_profile" {
+  description = "AWS profile to use for S3 backend (empty string for environment variables in CI)"
+  type        = string
+  default     = "homelab"
+}
+
+variable "proxmox_endpoint" {
+  description = "Proxmox VE API endpoint URL"
+  type        = string
+  default     = "https://pve.wind.etherport.net:8006/api2/json"
+}
+
+variable "proxmox_token_id" {
+  description = "Proxmox API token ID, e.g. graham@pam!terraform"
+  type        = string
+}
+
+variable "proxmox_token_secret" {
+  description = "Proxmox API token secret"
+  type        = string
+  sensitive   = true
+}
+
+variable "node_name" {
+  description = "Proxmox node to firewall (host management plane)"
+  type        = string
+  default     = "pve"
+}
+
+# Trusted admin source ranges allowed to reach the PVE host management plane
+# (API 8006 / SSH 22 / SPICE / ping). Deliberately covers every path admin
+# access can arrive by — see H37 / zero-trust-assessment-2026-06-17.md:
+#   10.10.200.0/24  Management VLAN (local)
+#   10.10.201.0/24  Servers — WG-pod SNAT source + likely TS subnet-router
+#   10.10.202.0/24  Mac mini LAN (10.10.202.101)
+#   100.64.0.0/10   Tailscale CGNAT (if PVE is reached as a tailnet node)
+#   10.254.0.0/24   WireGuard client tunnel (wg1) — if not SNAT'd
+#   10.255.255.0/29 WireGuard site tunnel (wg0) — if not SNAT'd
+# Stage 1 is permissive (input policy ACCEPT) so this denies nothing yet; we
+# observe logs to pin the real SNAT sources before the Stage 2 DROP flip.
+variable "mgmt_admin_cidrs" {
+  description = "Trusted admin source CIDRs for the PVE host management plane"
+  type        = list(string)
+  default = [
+    "10.10.200.0/24",
+    "10.10.201.0/24",
+    "10.10.202.0/24",
+    "100.64.0.0/10",
+    "10.254.0.0/24",
+    "10.255.255.0/29",
+  ]
+}
