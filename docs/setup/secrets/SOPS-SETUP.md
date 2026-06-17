@@ -534,11 +534,45 @@ sops -d platform/kubernetes/home-automation/secrets.sops.yaml
 kubectl get secret home-assistant-secrets -n home-automation -o jsonpath='{.data.secrets\.yaml}' | base64 -d
 ```
 
+## 1Password CLI (`op`) quick-reference
+
+> Merged here from the former `1PASSWORD-CLI.md` (M68). 1Password holds the
+> original plaintext secrets; the **canonical pipeline** is `op` → SOPS via
+> `scripts/sync-secrets.py` + its manifest — see that script, not ad-hoc `op`
+> calls, for how a secret actually lands in the repo.
+
+**⚠️ `op` is operator-only.** It authorizes against the **user's interactive /
+VNC desktop session**, not an agent's headless bash and not the Mac mini's
+unattended shell. Don't try to drive `op` from automation — for headless work,
+read the agent-readable SOPS bundle
+(`infra/ansible/playbooks/secrets/homelab-ops.sops.yaml`) instead. If the bundle
+lacks a value, the operator dumps it from `op` in their VNC terminal.
+
+```bash
+# Always reference items by ID in scripts (names change, IDs don't);
+# always use --reveal for concealed (password) fields.
+op item get <ITEM_ID> --fields label=username
+op item get <ITEM_ID> --fields label=password --reveal
+
+# Find an item's ID
+op item list | grep -i "<name>"
+op item get "<Item Name>" --format json | jq -r '.id'
+```
+
+Known items: `AWS Key (Terraform)` = `ojbjsshj45oup6mcu3vlxxb7re`
+(`username`=access key, `password`=secret; backs the Terraform S3 backend).
+To push an `op` value into the repo, prefer `scripts/sync-secrets.py`; for a
+one-off, fetch with `op` then `sops -e -i` the target `*.sops.yaml`.
+
+**Troubleshooting:** `"no saved authentication found"` → `eval $(op signin)` (or
+enable desktop biometric unlock); invalid-character errors on item names → use
+the item **ID** instead.
+
 ## Related Documentation
 
-- [1Password CLI Integration](1PASSWORD-CLI.md)
 - [SOPS vs Ansible-Vault Decision](../../planning/sops-vs-ansible-vault.md)
 - [GitOps with Flux](../gitops/flux-overview.md)
+- [Secrets rotation runbook](../../runbooks/secrets-rotation.md)
 
 ## External References
 

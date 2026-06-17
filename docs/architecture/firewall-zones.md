@@ -412,8 +412,13 @@ ping 10.10.202.5       # Client
 ## References
 
 - `docs/planning/udm-audit-2026-05-23.md` — read-only audit that drives this doc (Part 1)
-- `docs/planning/firewall-zones-future-state.md` — proposed migration to a multi-zone design
+- `docs/planning/archive/firewall-zones-future-state-2026-05-29-completed.md` — the proposed multi-zone migration (now ✅ implemented + archived; **this** doc is the live state)
 - `docs/planning/outstanding-work.md` — M30 (reconcile zone arch), M42 (VPN cleanup)
 - `/tmp/unifi-state/` — live state dump from `scripts/unifi/dump-state.sh` (regenerate to refresh)
+
+> **ID note (M14 → M42):** the VPN/WireGuard cleanup referenced in this doc is tracked
+> as **M42**. Pre-2026-05-16 archives (and any stale cross-references) called it **M14**;
+> that ID was later reused for an unrelated `aws-s3-sync` SSL-probe item, so the WireGuard
+> cleanup was renumbered to **M42** to disambiguate. Notes citing "M14" for VPN cleanup mean M42.
 - [UniFi Zone-Based Firewalls — Ubiquiti Help Center](https://help.ui.com/hc/en-us/articles/115003173168-Zone-Based-Firewalls-in-UniFi)
 - [Migrating to Zone-Based Firewalls](https://help.ui.com/hc/en-us/articles/28223082254743-Migrating-to-Zone-Based-Firewalls-in-UniFi)

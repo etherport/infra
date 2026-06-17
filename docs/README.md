@@ -55,7 +55,7 @@ docs/
 | [image-pinning-policy.md](runbooks/image-pinning-policy.md) | Container image pinning + Renovate cadence |
 | [dependency-update-cadence.md](runbooks/dependency-update-cadence.md) | Renovate/Helm-release update cadence |
 | [auto-remediation/](runbooks/auto-remediation/) | Automated issue resolution system (legacy rule-based) |
-| **AI advisor (M41 / M45)** | |
+| **AI advisor (M41 / M45)** — ⚠️ system is **LIVE** (advisory + approve-via-email active); the per-phase *enable* runbooks below are **archived** because the one-time enablement is done, not because the feature is retired | |
 | [ai-advisor-phase1-enable.md](runbooks/archive/ai-advisor-phase1-enable.md) | Enable advisory-only diagnosis email path |
 | [ai-advisor-phase2-enable.md](runbooks/archive/ai-advisor-phase2-enable.md) | Enable approve-via-email (HMAC-signed buttons) |
 | [ai-advisor-phase3-enable.md](runbooks/archive/ai-advisor-phase3-enable.md) | Enable opt-in autonomous execute (`ai_remediation: auto`) |
@@ -108,8 +108,13 @@ docs/
 ### Secrets
 | Document | Description |
 |----------|-------------|
-| [SOPS-SETUP.md](setup/secrets/SOPS-SETUP.md) | Secret encryption with SOPS + age |
-| [1PASSWORD-CLI.md](setup/secrets/1PASSWORD-CLI.md) | 1Password CLI integration |
+| [SOPS-SETUP.md](setup/secrets/SOPS-SETUP.md) | **Canonical** secrets doc: SOPS + age, plus the `op` (1Password CLI) quick-reference |
+| [1PASSWORD-CLI.md](setup/secrets/1PASSWORD-CLI.md) | ⟶ merged into SOPS-SETUP.md (2026-06-17); now a redirect stub |
+
+### Network
+| Document | Description |
+|----------|-------------|
+| [ubiquiti-ddns.md](setup/network/ubiquiti-ddns.md) | ⚠️ **Superseded** — Route53-based UDM DDNS (Route53 retired 2026-05-27; DDNS moved to Cloudflare). Kept for history. |
 
 ## Reference
 
@@ -137,7 +142,7 @@ captured yet.
 | [outstanding-work.md](planning/outstanding-work.md) | **Source of truth** for prioritized open work (C/H/M/L tiers) + completed index |
 | [ai-alert-remediation-2026-05-23.md](planning/archive/ai-alert-remediation-2026-05-23.md) | AI advisor system design spec (M41) |
 | [ai-advisor-phases-2-3-scope.md](planning/archive/ai-advisor-phases-2-3-scope.md) | M41 Phase 2/3 implementation scope |
-| [firewall-zones-future-state.md](planning/firewall-zones-future-state.md) | Proposed 4-zone UDM design (M30) |
+| [firewall-zones-future-state-2026-05-29-completed.md](planning/archive/firewall-zones-future-state-2026-05-29-completed.md) | Proposed UDM zone design (M30) — ✅ implemented; archived. Live state: [architecture/firewall-zones.md](architecture/firewall-zones.md) |
 | [hardcoded-ephemeral-ip-audit-2026-05-23.md](planning/archive/hardcoded-ephemeral-ip-audit-2026-05-23.md) | EIP / ephemeral-IP audit |
 | [udm-audit-2026-05-23.md](planning/udm-audit-2026-05-23.md) | UDM / UniFi config audit (M25) |
 | [udm-config-drift-2026-05-17.md](planning/archive/udm-config-drift-2026-05-17.md) | UDM config drift snapshot |
