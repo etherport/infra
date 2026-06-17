@@ -13,6 +13,33 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-17 — M65 terraform consistency (+ M53/M54/M71 tracker housekeeping)
+
+**Goal:** the zero-risk terraform cleanup. Picked because it's provably zero plan-diff.
+
+**Done** (`687b519`):
+- **(a)** all **22** `required_version` → `>= 1.14` (local TF 1.15.5, CI pins 1.14.3). `fmt`
+  also normalized pre-existing whitespace in `aws/twilio-webhook/{iam,main}.tf`.
+- **(c)** `aws/compute`: 6 hardcoded data-source IDs (VPC/subnet/4×SG) + the inline cloud-init
+  automation pubkey → `variables.tf` (defaults = live values). **`terraform plan` = "No changes"**
+  (data sources resolve identically; user_data has `ignore_changes`).
+- **(d)** proxmox ×3: PVE endpoint → `variable "proxmox_endpoint"`.
+- **(b) deliberately NOT done — infeasible:** TF forbids `locals`/vars in
+  `lifecycle.ignore_changes`; `unifi/networks.tf` already documents this in-file (lines 17-19),
+  and the 11 blocks differ (unifi adds `dhcp_dns`). Only DRY path = risky 11-resource→`for_each`
+  module with `moved {}` blocks — left as-is, rationale in the tracker.
+
+**Validation:** aws/compute `plan` = No changes; proxmox ×3 `validate` = valid; `fmt -check` clean.
+Authoring only — not applied (applies ship via CI/owner). **Key lesson for future agents:**
+don't try to `local`-ize `ignore_changes` — Terraform won't allow it.
+
+**Tracker housekeeping same session:** M53 closed (zone-scoped CF token minted + personal-web
+cut over — owner); M54 moved to the personal-web repo (redirect codification is a personal-web
+concern); M71 added (AWS auth modernization → Roles Anywhere for the mini + SSO for laptops,
+medium-term; owner accepts the static-key risk for now).
+
+---
+
 ## 2026-06-17 — H29/H31 owner-tail verification: both already complete (no CloudShell action)
 
 **Context:** owner asked for CloudShell commands to finish H29 (delete old `terraform-homelab`
