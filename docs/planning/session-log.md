@@ -13,6 +13,41 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-17 — M63 hardening safe-trio + "do all in order" wrap
+
+**Goal:** finish the "do all in order" pass — last open item was M63 (k8s manifest
+hardening sweep). Ship only the low-risk subset; defer the ones that can break things.
+
+**Done** (`e91e150`, all `kubectl kustomize`-validated, Flux-reconciled + confirmed live):
+- **(a)** `cloudflared` ServiceMonitor — added `release: monitoring` label. Selectors are
+  match-all today so it was already scraped, but this keeps it safe if the selector is ever
+  tightened to `release=monitoring`.
+- **(b)** `rclone-gdrive` CronJob — added a **conservative** container securityContext:
+  `allowPrivilegeEscalation:false` + `capabilities.drop:[ALL]` + `seccompProfile:RuntimeDefault`.
+  **Deliberately NOT** `runAsNonRoot`/`readOnlyRootFilesystem` — rclone writes its working
+  config into `/config/rclone` (emptyDir) and the image's user expectations are untested here;
+  forcing non-root/RO-rootfs risked breaking the nightly GDrive sync for marginal gain.
+- **(d)** `cloudflared` — added `minAvailable:1` PDB (`03-pdb.yaml` + kustomization). The
+  Deployment runs 2 replicas; without a PDB a node drain could evict both and drop the public
+  tunnel. Confirmed live: `ALLOWED DISRUPTIONS 1`.
+
+**Deferred (NOT safe trio):** (c) `startupProbe`s — technitium is the cluster's split-horizon
+DNS; a misjudged probe could wedge DNS mid-rollout, so it needs per-workload boot-time
+measurement first. (e) home-automation `privileged:true` → explicit caps + device mounts —
+needs owner knowledge of which host devices (Zigbee/Z-Wave USB etc.) HA actually needs.
+
+**State / next steps:**
+- **M63** now 🟡 (a/b/d done, c/e deferred with rationale in the tracker).
+- **L23** (delete orphan `cnpg-manager` ClusterRole + ClusterRoleBinding + ServiceAccount in
+  cnpg-system) — still **blocked awaiting explicit owner authorization** (it's a delete of
+  shared RBAC; the classifier + safety rules require the owner to name the resources).
+- **Owner-only console tails** the agent can't run: **H29** (delete the old `terraform-homelab`
+  AWS access key + update GH secrets — but never delete the IAM key still shared with the local
+  homelab profile) and **H31** (delete orphan `claude-admin-temp` IAM policy). Both need the
+  user's AWS console / `op`-authorized terminal.
+
+---
+
 ## 2026-06-17 — H36: Flux reconciliation alerting (closes the silent-wedge gap)
 
 **Goal:** the 06-17 CNPG webhook incident wedged Flux for hours, undetected — Flux metrics
