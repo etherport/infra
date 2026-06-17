@@ -307,7 +307,7 @@ orphaned. Not service-affecting on its own.
 ### 🟡 M61. Expand pre-commit + Renovate coverage
 - Review 2026-06-10. ✅ **Landed 2026-06-10:** `terraform_tflint` (+ minimal `.tflint.hcl`) + `shellcheck` pre-commit hooks. Remaining: `ansible-lint` (needs a baseline-noise pass first), Renovate `github-actions` + `terraform` (provider) datasources, and centralizing the SOPS version (hardcoded `v3.9.4` in 2 workflows + the ansible-runner Dockerfile) into a composite `setup-sops` action with checksum verify. **Effort:** S-M.
 
-### 📋 M62. etcd snapshots → offsite (S3) + freshness alert (supersedes L15) — AUTHORED 2026-06-16
+### ✅ M62. etcd snapshots → offsite (S3) + freshness alert (supersedes L15) — DONE 2026-06-17
 - Review 2026-06-10. `etcd-backup.yml` wrote local-disk only (14d); offsite only via Velero's `kube-system-daily` — the exact path that silently `PartiallyFailed` ≥4d recently. If a CP node is lost, its snapshots go with it; no freshness alert.
 - ✅ **Authored 2026-06-16 (validated; applies pending):**
   - **TF** (`infra/terraform/aws/s3/`): dedicated **`etcd-snapshots.wind.etherport.net`** bucket — STANDARD storage, 30d expiry, versioned, public-access-blocked (NOT the `archive` bucket: it Deep-Archives in 2d → ~12h retrieval, wrong for DR). Scoped **`etcd-backup`** IAM user (PutObject-only to the bucket; mirrors `postgres_barman`). Access-key outputs added.
@@ -316,7 +316,8 @@ orphaned. Not service-affecting on its own.
 - ✅ **(1) terraform applied 2026-06-17** via CI (`terraform-s3.yml`, run 27660286692) — bucket + `etcd-backup` IAM live. (First apply failed on an invalid archive tag char; fixed + re-applied green.)
 - ✅ **(2) SOPS secret created** — `infra/ansible/playbooks/secrets/etcd-backup.sops.yaml` (scoped creds from TF outputs, both age recipients), committed `c9b64de`.
 - ✅ **Alerts + pushgateway pin LIVE via Flux** (`c9b64de` reconciled; `EtcdSnapshotStale` + `EtcdSnapshotS3UploadFailing` present, pushgateway ClusterIP pinned). (Flux apply was briefly blocked by the unrelated CNPG webhook-cert incident — see session-log 2026-06-17 — now resolved.)
-- ⏳ **(3) Last step — run `etcd-backup.yml --limit kube_control_plane`** (installs awscli + scoped creds + upgraded script; first run uploads to S3 + emits metrics). Headless or via `ansible-vm-fleet.yml`. **Effort:** S remaining (one playbook run).
+- ✅ **(3) Playbook ran 2026-06-17** via CI (`ansible-vm-fleet.yml`, etcd-backup, limit=kube_control_plane). **Verified end-to-end:** all 3 CP nodes uploaded snapshots to `s3://etcd-snapshots.wind.etherport.net/<host>/` (~205MB each), and Prometheus shows `etcd_snapshot_last_run_timestamp` (fresh), `etcd_snapshot_s3_upload_success=1`, `etcd_snapshot_size_bytes` for all 3.
+- **Wrinkle (resolved):** Ubuntu 24.04 dropped the `awscli` apt package (not in universe either) → switched to the **AWS CLI v2 official installer, sha256-pinned** in the playbook (`d0f7ec7d…`; fail-closed on artifact rotation). **M62 DONE.** (L15 superseded — the metric+alert replaces the journal-to-Loki idea.)
 
 ### ⏳ M63. k8s manifest hardening sweep
 - Review 2026-06-10. Per-workload gaps: (a) `cloudflared` ServiceMonitor missing `release: monitoring` label → metrics never scraped; (b) `rclone-gdrive` CronJob has NO securityContext (runs root); (c) no `startupProbe` on slow-boot workloads (technitium DNS, home-automation, wikijs, ollama) → restart risk mid-rollout; (d) no PDB for 2-replica `cloudflared`; (e) home-automation `privileged: true` → scope to explicit caps + device mounts. Small per-file fixes; template the hardened securityContext (cue-api/cloudflared already do it right). **Effort:** M (sweep).
@@ -368,12 +369,8 @@ orphaned. Not service-affecting on its own.
 - **Effort:** S.
 
 
-### ⏳ L15. Ship etcd snapshot timer logs to Loki
-- **Source:** M46 backup audit 2026-05-24. The Ansible-managed etcd snapshot systemd timer on each PVE control-plane node writes only to journald — never reaches Loki. Snapshots themselves are captured by Velero's `kube-system-daily` FS backup, but timer-side failures (disk full, snapshotter crash) are invisible.
-- **Fix options:**
-  - (a) Install `systemd-journal-upload` or rsyslog forwarder on the CP nodes pointing at `10.10.201.73:514` (existing Alloy syslog receiver). Same pattern as the PVE ipmi-monitoring playbook's rsyslog forwarder. Adds ~10 lines to `etcd-backup.yml` playbook.
-  - (b) Add a Prometheus textfile collector emitting `etcd_snapshot_last_run_timestamp` after each snapshot; add a staleness alert. More aligned with how other backup workloads alert.
-- **Effort:** S either way.
+### ✅ L15. Ship etcd snapshot timer logs to Loki — SUPERSEDED by M62 (2026-06-17)
+- **Source:** M46 backup audit 2026-05-24. Timer-side failures were invisible (journald-only). The etcd-backup.yml playbook already forwards the snapshot journal to Loki (rsyslog → Alloy `10.10.201.73:514`), AND **M62 added the Prometheus metric + staleness/upload alerts** (`etcd_snapshot_last_run_timestamp`/`_s3_upload_success` → Pushgateway → `EtcdSnapshotStale`/`EtcdSnapshotS3UploadFailing`). Both fix options realized. Closed.
 
 ### ⏳ L14. AI advisor public approval URL — needs auth gate before advertise
 - **Source:** Phase 2 wireup 2026-05-24. The `approve.etherport.net` Traefik IngressRoute is deployed but unadvertised (email links default to the Tailscale URL). HMAC-token-only auth on a public endpoint is too thin — anyone with email access can approve. Before flipping `APPROVAL_BASE_URL` to the public URL, add a zero-trust gate:

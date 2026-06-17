@@ -78,6 +78,15 @@ Flux helm-upgrade is a no-op on the immutable field.
 `playbooks/secrets/etcd-backup.sops.yaml` → run `etcd-backup.yml --limit kube_control_plane`.
 Flux ships the alert + pushgateway pin.
 
+**✅ COMPLETED 2026-06-17 (all via CI):** terraform applied (`terraform-s3.yml`; one
+invalid-tag-char retry), SOPS secret created, playbook ran (`ansible-vm-fleet.yml`). Hit two
+node wrinkles: (1) the unrelated CNPG webhook-cert incident briefly wedged Flux (fixed — see
+the 06-17 entry); (2) Ubuntu 24.04 dropped the `awscli` apt package → switched to the AWS CLI
+v2 official sha256-pinned installer. **Verified end-to-end:** 3 CP-node snapshots in
+`s3://etcd-snapshots.wind.etherport.net/<host>/` (~205MB each); Prometheus shows
+`etcd_snapshot_last_run_timestamp` (fresh), `_s3_upload_success=1`, `_size_bytes` for all 3;
+alerts live. L15 superseded.
+
 ---
 
 ## 2026-06-16 — CNPG operator restart-loop (duplicate operator) — fixed
