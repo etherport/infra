@@ -170,8 +170,11 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 
 ## MEDIUM — quality / hygiene
 
-### ⏳ M5. Velero schedule kustomization ordering + ResourceQuota CR
-- Source: `archive/outstanding-work-2026-05-16.md` M5.
+### ✅ M5. Velero schedule kustomization ordering + ResourceQuota CR — DONE 2026-06-17
+- Source: `archive/outstanding-work-2026-05-16.md` M5 ("Schedules currently apply before HR; quotas mentioned in 3 places never written").
+- ✅ **Done 2026-06-17** (`clusters/wind/helm-releases/velero.yaml` + velero README):
+  - **Ordering — resolved as by-design (no risky restructure):** the `Schedule` CRs sit in the monolithic `clusters/wind` kustomization alongside the velero HelmRelease — the **same CR-after-HelmRelease pattern the whole repo uses** (e.g. monitoring `PrometheusRule`/`ServiceMonitor`). On cold bootstrap the Schedules briefly fail until helm-controller installs the `velero.io` CRDs, then **Flux's retry self-heals**. A restructure (Helm `values.schedules` / separate `dependsOn` Kustomization) was rejected — zero gain on a healthy cluster, and the kustomize↔Helm ownership cutover risks deleting live Schedules on a critical backup path. Documented in the velero README.
+  - **Quota → safe alternative:** a namespace `ResourceQuota` is **unsafe here** — velero's pods declared **no resource requests** (all `BestEffort`), so any compute quota would silently reject ephemeral backup/restore/kopia-maintenance pods (= silent backup failure). Instead added resource **`requests` only (no limits)** to velero server (250m/256Mi) + node-agent (200m/256Mi): promotes both to `Burstable` QoS (node-agent less likely evicted mid-backup ⇒ more reliable backups), with **no limits** so Kopia can't be OOM-killed on large repos. Lays groundwork for a future *requests-based* quota after profiling. Rationale in the velero README. `kubectl kustomize clusters/wind` builds clean.
 
 ### ⏳ M6. Packer + ansible netplan dedup (F1.3)
 - Source: `archive/outstanding-work-2026-05-16.md` M6.

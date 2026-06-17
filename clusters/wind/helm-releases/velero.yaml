@@ -28,6 +28,20 @@ spec:
     remediation:
       retries: 3
   values:
+    # Resource REQUESTS only (no limits) — M5. Promotes velero server +
+    # node-agent from BestEffort to Burstable QoS so they're not first in line
+    # for eviction under node memory pressure (important: an evicted node-agent
+    # mid-backup = a PartiallyFailed run). Deliberately NO limits — Kopia
+    # fs-backup memory scales with repo size, and a too-low limit would OOM-kill
+    # backups (the failure mode the comments below warn about). A namespace
+    # ResourceQuota was evaluated and rejected: velero's pods are ephemeral with
+    # variable footprints, so any compute quota risks silently rejecting backup
+    # pods. Requests-only is the safe governance step; revisit a requests-based
+    # quota only after profiling real backup memory use.
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
     configuration:
       # Use Kopia (not Restic) for filesystem PV backups. Restic is being
       # phased out in upstream Velero and Kopia is significantly faster on
@@ -66,6 +80,11 @@ spec:
     # cilium's `tmp` volume ("daemonset pod not found in running state in node
     # k8s-cpX" x3). Tolerate the taint -> node-agent on all 8 -> backup clean.
     nodeAgent:
+      # Requests-only (no limits) — see the `resources:` note above (M5).
+      resources:
+        requests:
+          cpu: 200m
+          memory: 256Mi
       tolerations:
         - key: node-role.kubernetes.io/control-plane
           operator: Exists

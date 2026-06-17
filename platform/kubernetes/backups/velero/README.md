@@ -96,6 +96,36 @@ To add a new schedule, drop a `<name>.yaml` next to the others and add
 it to `schedules/kustomization.yaml` — Flux will reconcile it on the
 next sync. No CLI `velero schedule create` needed.
 
+### Schedule ordering vs the HelmRelease (M5)
+
+The `Schedule` CRs live in the monolithic `clusters/wind` kustomization
+**alongside** the velero HelmRelease that installs the `velero.io` CRDs. On a
+**cold bootstrap** the Schedules can briefly fail to apply (their CRD isn't
+installed until helm-controller reconciles the HR) — Flux **retries the
+Kustomization every interval and self-heals** once velero is up. This is the
+same CR-after-HelmRelease pattern the repo uses everywhere (e.g. the monitoring
+`PrometheusRule`/`ServiceMonitor` objects), so it's **by design**, not a bug. A
+restructure (Helm `values.schedules`, or a separate `dependsOn` Flux
+Kustomization) was considered and **rejected**: on a healthy cluster it buys
+nothing, and the kustomize↔Helm ownership cutover risks deleting live Schedules
+on a critical backup path.
+
+### Resource governance (M5)
+
+velero server + node-agent set **resource `requests` only, no limits** (in
+`clusters/wind/helm-releases/velero.yaml`):
+
+- **Requests** promote both from `BestEffort` → `Burstable` QoS, so they aren't
+  first to be evicted under node memory pressure (an evicted node-agent
+  mid-backup ⇒ a `PartiallyFailed` run).
+- **No limits** on purpose — Kopia fs-backup memory scales with repo size; a
+  too-low limit would OOM-kill backups.
+- **No namespace `ResourceQuota`** — evaluated and rejected. velero's backup /
+  restore / kopia-maintenance pods are ephemeral with variable footprints, so
+  *any* compute quota risks silently rejecting them (= silent backup failure,
+  the worst outcome for a backup system). Requests-only is the safe governance
+  step; revisit a *requests-based* quota only after profiling real backup memory.
+
 ## Installation
 
 ### Prerequisites
