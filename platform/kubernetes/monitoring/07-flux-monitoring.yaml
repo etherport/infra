@@ -5,7 +5,8 @@
 # them, so a wedged reconcile was invisible — e.g. the 2026-06-17 CNPG webhook-cert
 # incident silently blocked the flux-system Kustomization for hours. This PodMonitor
 # scrapes the controllers (the flux-system `allow-scraping` NetworkPolicy already
-# permits Prometheus → :8080) and the rule alerts on sustained Ready=False.
+# permits Prometheus → :8080) and the rule alerts on sustained reconcile errors
+# (this flux build doesn't export gotk_reconcile_condition; see the rule comment).
 #
 # The monitoring kustomization's `namespace: monitoring` transformer places both in
 # the monitoring namespace; the PodMonitor reaches flux-system via namespaceSelector.
@@ -42,26 +43,28 @@ spec:
   groups:
     - name: flux.rules
       rules:
-        - alert: FluxReconciliationFailed
-          # A Flux object (Kustomization/HelmRelease/GitRepository/…) has been
-          # Ready=False for >15m — its GitOps changes aren't applying. Transient
-          # reconcile blips are normal, hence 15m. Suspended objects are excluded.
-          # The flux-system/flux-system Kustomization being stuck = ALL GitOps
-          # blocked (the 2026-06-17 wedge); the labels make that obvious.
+        - alert: FluxReconciliationErrors
+          # This flux version does NOT export gotk_reconcile_condition (only
+          # gotk_reconcile_duration_seconds + controller_runtime_*), so we alert on
+          # sustained reconcile ERRORS instead: a wedged Kustomization/HelmRelease
+          # keeps erroring (e.g. the 2026-06-17 CNPG webhook-cert incident, which
+          # blocked the flux-system Kustomization for hours undetected). result=error
+          # rate > 0 for 15m = a real, sustained failure (transient blips are normal).
           expr: |
-            gotk_reconcile_condition{type="Ready",status="False"} == 1
-            unless on (kind, namespace, name) gotk_suspend_status == 1
+            sum by (app, controller) (
+              rate(controller_runtime_reconcile_total{namespace="flux-system", result="error"}[5m])
+            ) > 0
           for: 15m
           labels:
             severity: warning
             component: gitops
             namespace: flux-system
           annotations:
-            summary: "Flux {{ $labels.kind }} {{ $labels.namespace }}/{{ $labels.name }} not reconciling (>15m)"
+            summary: "Flux {{ $labels.controller }} ({{ $labels.app }}) reconcile errors >15m"
             description: |
-              Flux {{ $labels.kind }} `{{ $labels.namespace }}/{{ $labels.name }}` has
-              been Ready=False for over 15 minutes — its desired state is NOT being
-              applied. If this is the flux-system Kustomization, ALL GitOps is blocked.
+              Flux's {{ $labels.app }} has had sustained reconcile errors for the
+              `{{ $labels.controller }}` kind for over 15 minutes — desired state is
+              NOT being applied (a wedged Kustomization/HelmRelease blocks GitOps).
               Investigate:
                 kubectl get kustomizations,helmreleases -A | grep -iv ' True '
-                kubectl -n {{ $labels.namespace }} describe {{ $labels.kind | toLower }} {{ $labels.name }}
+                kubectl -n flux-system logs deploy/{{ $labels.app }} --tail=80
