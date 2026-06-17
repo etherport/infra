@@ -13,6 +13,41 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-17 — CNPG webhook cert wedged Flux (caBundle/serving-cert mismatch) — fixed
+
+**Surfaced while applying M62:** the flux-system Kustomization went `Ready=False`, blocking
+ALL GitOps — `ScheduledBackup/cue-db-daily dry-run failed: failed calling webhook
+"mscheduledbackup.cnpg.io": ... tls: failed to verify certificate: x509: certificate signed
+by unknown authority`. The CNPG admission webhook was down → Flux couldn't apply CNPG
+resources → couldn't advance past `0f43c36`.
+
+**Root cause (tail of the 06-16 duplicate-operator incident):** during yesterday's operator
+handoff/leader-churn, `cnpg-ca-secret` + `cnpg-webhook-cert` were regenerated (~12h before),
+but inconsistently — the webhook configs' `caBundle` held the OLD CA, and the serving cert
+was signed by yet another CA key (`ECDSA verification failure ... verifying ... cnpg-ca-secret`).
+So CA secret, serving cert, and caBundle were three-way out of sync. The running operator
+never self-healed it.
+
+**Fix (owner-authorized, two steps):** (1) patched the webhook `caBundle` from `cnpg-ca-secret`
+— necessary but INSUFFICIENT (serving cert was signed by a different/old CA). (2) **deleted
+`cnpg-webhook-cert` + `kubectl rollout restart deploy/cnpg-cloudnative-pg`** → operator
+re-issued a consistent serving cert + re-patched the caBundle on startup ("Updated current TLS
+certificate"). Webhook dry-run then succeeded; Flux advanced to `c9b64de` `Ready=True`;
+operator stable (`restarts=0`). DB clusters unaffected throughout (webhook only gates CNPG
+resource admission; per-cluster Postgres TLS is separate).
+
+**Durability:** the operator now owns a consistent, self-managed cert chain (its normal job;
+the break was a one-time handoff glitch). The caBundle can't be static IaC (operator-injected
+at runtime). Filed follow-ups: **H36** (Flux reconciliation alerting — gotk metrics are NOT
+scraped today, so this silent wedge was found only by luck) and a note to evaluate
+cert-manager-managed CNPG webhook certs (ca-injector = truly self-healing caBundle).
+
+**Lesson:** after a CNPG operator change, verify the webhook works
+(`kubectl -n <ns> get cluster <c> -o yaml | kubectl apply --dry-run=server -f -`) — cert
+inconsistency is silent until the next admission call / Flux apply.
+
+---
+
 ## 2026-06-16 — M62 authored: etcd snapshots → offsite S3 + freshness alert
 
 **Goal:** close the etcd-backup DR gap — snapshots were local-disk-only, offsite solely
