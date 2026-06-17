@@ -66,6 +66,36 @@ for the mini, then retire this one; that's net-new work, not H29.
 
 ---
 
+## 2026-06-17 — H37 Stage 1 LIVE: Proxmox host firewall (permissive + observing)
+
+Zero-trust follow-on; owner-requested. Scope = **host management plane** (k8s-node +
+standalone-VM firewalling split to **M77**).
+
+**Investigated:** PVE firewall was entirely OFF. Node `pve` (10.10.200.41), 13 running
+guests, **all VM NICs `firewall=0`** (so enabling the host firewall can't cascade onto
+guests — key safety fact). Admin-access SNAT ambiguity (TS subnet-router / WG-pod
+MASQUERADE / mini-LAN) → staged permissive→observe→enforce rollout.
+
+**New stack** `infra/terraform/proxmox/firewall/` (S3 backend, own state). Stage 1:
+cluster firewall **enabled, input_policy=ACCEPT** (permissive), out/forward ACCEPT; node
+`pve` enabled + `log_level_in=info`; IPset `mgmt-admin` (10.10.200/201/202 + 100.64/10
+tailnet + WG 10.254/24 + 10.255.255/29); SG `pve-mgmt` (ACCEPT 22/3128/8006 + Ping)
+attached to the node.
+
+**Blocker hit + cleared:** the `graham@pam!terraform` token lacked **`Sys.Modify`** →
+PVE 403 on all firewall writes. Owner granted it via a custom least-priv role
+(`pveum role add TerraformFirewall -privs "Sys.Audit Sys.Modify"` + `acl modify /
+-roles TerraformFirewall -tokens 'graham@pam!terraform'`). Re-applied: **5 resources
+created, verified LIVE, no lock-out, 13 guests still running.**
+
+**Now:** observation window — set the `pve-mgmt` allow rule `log=info` for positive
+confirmation. Watch `/nodes/pve/firewall/log`; confirm laptop-on-TS / laptop-on-WG /
+mini admin sessions all match `mgmt-admin` before the Stage-2 DROP flip. **Stage 2**
+(flip input_policy ACCEPT→DROP) pending observation + **IPMI/console break-glass
+confirmation.** Reversible throughout.
+
+---
+
 ## 2026-06-17 — M66: enabled Cilium WireGuard pod-to-pod encryption
 
 **Decision (owner):** enable WireGuard, staged. Closes the cleartext-east-west gap

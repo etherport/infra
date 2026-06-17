@@ -83,12 +83,15 @@ resource "proxmox_virtual_environment_cluster_firewall_security_group" "pve_mgmt
   comment = "H37: PVE host management plane allows (API/SSH/SPICE/ping)"
 
   rule {
-    type    = "in"
-    action  = "ACCEPT"
-    source  = "+${proxmox_virtual_environment_firewall_ipset.mgmt_admin.name}"
-    proto   = "tcp"
-    dport   = "22,3128,8006"
-    log     = "nolog"
+    type   = "in"
+    action = "ACCEPT"
+    source = "+${proxmox_virtual_environment_firewall_ipset.mgmt_admin.name}"
+    proto  = "tcp"
+    dport  = "22,3128,8006"
+    # Stage-1 observation: log=info gives POSITIVE confirmation that real admin
+    # sessions (TS/WG/mini/laptop) match mgmt-admin before the Stage-2 DROP flip.
+    # Drop to "nolog" once enforcing, to cut log noise.
+    log     = "info"
     comment = "SSH(22) + SPICE(3128) + PVE API/UI(8006) from mgmt-admin"
   }
 
