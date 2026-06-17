@@ -168,6 +168,12 @@ _Completed items (C1–C3, H1–H28, and the many done M-items) moved to the ful
 - ✅ **Done 2026-06-17** (`platform/kubernetes/monitoring/07-flux-monitoring.yaml`): **PodMonitor** for the flux controllers (`app.kubernetes.io/part-of: flux`, port `http-prom`/8080, `honorLabels`) — verified all 6 controllers scraping `up`. **`PrometheusRule` FluxReconciliationErrors** alerts on `sum by(app,controller) rate(controller_runtime_reconcile_total{namespace="flux-system",result="error"}[5m]) > 0 for 15m`. **Note:** this flux build does NOT export `gotk_reconcile_condition` (only `gotk_reconcile_duration_seconds` + `controller_runtime_*`), so the alert keys off sustained reconcile errors instead — a wedged Kustomization/HelmRelease errors continuously, so it fires within 15m. Rule loaded + evaluating (0 firing = healthy).
 - **Related (smaller):** evaluate switching CNPG webhook certs to **cert-manager + ca-injector** (`caBundle` auto-injected/maintained → no operator-managed-cert drift like the 06-17 incident). The operator self-managing certs is the default + worked again after a restart; cert-manager would make it self-healing. Deferred — bigger change for a one-time glitch.
 
+### ⏳ H37. Proxmox host firewall (datacenter/node/VM) — default-deny mgmt plane
+- **Source:** zero-trust assessment 2026-06-17 (owner-requested). The hypervisor is the crown jewel but its **PVE firewall is not in IaC and effectively permissive**. The `bpg/proxmox` provider already in use exposes `proxmox_virtual_environment_firewall_*` (node/VM firewall, security groups, IPsets). **Do:** enable default-deny inbound; allow PVE API `8006` + SSH `22` **from Management/200 + tailnet only**, cluster/VXLAN ports as needed, per-VM rules for standalone VMs. Codify in Terraform. **Risk:** lock-out — always keep the mgmt-source allow before apply; console/IPMI = break-glass. Full spec: [`zero-trust-assessment-2026-06-17.md`](zero-trust-assessment-2026-06-17.md). **Effort:** M.
+
+### ⏳ H38. Internal identity-aware access (forward-auth at Traefik) — kill "internal = trusted"
+- **Source:** zero-trust assessment 2026-06-17. **Biggest classic ZT gap:** CF Access is **edge-only**; any LAN host hitting Traefik VIP `10.10.201.70` reaches apps with **no auth**. **Do:** add a Traefik `forwardAuth` gate (Authelia/Authentik/oauth2-proxy, Google SSO + MFA) or Tailscale-serve/tsnet identity in front of internal ingress, sensitive apps first (Grafana, HA, wiki, admin UIs). Also unblocks **L14** (public approval URL auth gate). Spec: [`zero-trust-assessment-2026-06-17.md`](zero-trust-assessment-2026-06-17.md). **Effort:** M–L.
+
 ## MEDIUM — quality / hygiene
 
 ### ✅ M5. Velero schedule kustomization ordering + ResourceQuota CR — DONE 2026-06-17
@@ -367,7 +373,25 @@ orphaned. Not service-affecting on its own.
 - **Cheap interim wins (can do anytime, owner-deferred for now):** (a) remove the `[claude-admin]` PowerUser block from the mini's standing creds — pull from SOPS / use from laptop only when break-glass is actually needed (biggest blast-radius cut for ~0 effort); (b) rotate both keys + set a cadence (terraform-homelab can't rotate itself — do from claude-admin/gs_admin).
 - **Effort:** M (Roles Anywhere) + S (interim a/b). See session-log 2026-06-17 for the full blast-radius assessment.
 
+### ⏳ M72. Pod Security Admission: progress audit/warn → enforce
+- **Source:** zero-trust assessment 2026-06-17. `policy-baseline/` runs PSA in **audit/warn only** (Phase 1 by design) — violations logged, still admitted. **Do:** review the audit log (observation window elapsed since 2026-05), flip `pod-security.kubernetes.io/enforce: baseline` (→ `restricted` where workloads allow) per ns, documented exceptions for `wireguard`/`blackbox` (privileged). Same per-ns opt-in model as H3. Spec: [`zero-trust-assessment-2026-06-17.md`](zero-trust-assessment-2026-06-17.md). **Effort:** S–M.
+
+### ⏳ M73. Admission policy engine (Kyverno) — image provenance + guardrails
+- **Source:** zero-trust assessment 2026-06-17. No policy engine. **Do:** deploy Kyverno (audit→enforce): block unsigned images (cosign — ties **H30**), disallow floating `:latest` (ties **M64**; cue-api is the intentional exception), require resource requests/limits, gate privileged. Pairs with M72. Spec in the assessment doc. **Effort:** M.
+
+### ⏳ M74. Cilium Tetragon — eBPF runtime security / detection (assume-breach)
+- **Source:** zero-trust assessment 2026-06-17. We have Cilium/Hubble (flow visibility) but no **runtime** detection. **Do:** deploy Tetragon (Helm), default observability policies on tier-1 namespaces, events → Loki/alertmanager + AI advisor. Spec in the assessment doc. **Effort:** M.
+
+### ⏳ M75. In-cluster workload identity for cloud access (kill long-lived IAM secrets in etcd)
+- **Source:** zero-trust assessment 2026-06-17. velero/etcd-backup/rclone auth to AWS with **long-lived static IAM keys in K8s Secrets** — same standing-credential class H29 killed in CI / M71 targets on the mini. **Do:** stand up an IAM **OIDC provider for the cluster SA issuer** (IRSA-style) → pods assume roles for short-lived creds, no static keys in etcd. Migrate the consumers off `existingSecret`. Extends [[H29]]/[[M71]]. Spec in the assessment doc. **Effort:** M–L.
+
+### ⏳ M76. SSH to nodes/VMs via short-lived certs (Tailscale SSH / SSH CA)
+- **Source:** zero-trust assessment 2026-06-17. Node/VM SSH uses a **long-lived key** (`id_ed25519_homelab`). **Do:** move to short-lived identity-bound SSH — **Tailscale SSH** (hosts already on the tailnet; gate via ACL + check mode) or an SSH CA (step-ca) issuing minutes-long certs. Pairs with **M71** under one "kill standing creds" theme. Spec in the assessment doc. **Effort:** M.
+
 ## LOW
+
+### ⏳ L24. Authenticate BGP sessions (MetalLB ↔ UDM)
+- **Source:** zero-trust assessment 2026-06-17. The MetalLB↔UDM eBGP peers appear to run **without TCP-MD5/AO auth** → a rogue host on the peering VLAN could attempt route injection. Low real-world risk on a trusted fabric; cheap defense-in-depth: set a matching BGP password on both ends. Spec: [`zero-trust-assessment-2026-06-17.md`](zero-trust-assessment-2026-06-17.md). **Effort:** S.
 
 ### ⏳ L1. Proxmox HA cluster expansion
 - Source: `archive/outstanding-work-2026-05-16.md` L1. Blocked on adding a 2nd PVE node.

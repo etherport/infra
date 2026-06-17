@@ -140,6 +140,7 @@ captured yet.
 | Document | Description |
 |----------|-------------|
 | [outstanding-work.md](planning/outstanding-work.md) | **Source of truth** for prioritized open work (C/H/M/L tiers) + completed index |
+| [zero-trust-assessment-2026-06-17.md](planning/zero-trust-assessment-2026-06-17.md) | Zero-trust posture: what's done vs gaps (H37/H38, M72–M76, L24) |
 | [ai-alert-remediation-2026-05-23.md](planning/archive/ai-alert-remediation-2026-05-23.md) | AI advisor system design spec (M41) |
 | [ai-advisor-phases-2-3-scope.md](planning/archive/ai-advisor-phases-2-3-scope.md) | M41 Phase 2/3 implementation scope |
 | [firewall-zones-future-state-2026-05-29-completed.md](planning/archive/firewall-zones-future-state-2026-05-29-completed.md) | Proposed UDM zone design (M30) — ✅ implemented; archived. Live state: [architecture/firewall-zones.md](architecture/firewall-zones.md) |
