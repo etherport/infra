@@ -1,0 +1,51 @@
+# Verify every *.sops.yaml still decrypts (L22). Catches MAC mismatches / files
+# hand-edited outside `sops` — which are otherwise silent until something tries to
+# decrypt them (e.g. tailscale/01-oauth-secret.sops.yaml was corrupt for ~2 months,
+# 2026-06-15). Runs on every PR + push (no path filter) so it validates the WHOLE
+# tree, not just changed files — a long-corrupt file gets caught too. Fast (seconds).
+name: sops-decrypt-check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sops-decrypt-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  decrypt-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Setup SOPS
+        uses: ./.github/actions/setup-sops
+
+      - name: Configure SOPS age key
+        run: |
+          mkdir -p ~/.config/sops/age
+          echo "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
+          chmod 600 ~/.config/sops/age/keys.txt
+
+      - name: Decrypt every *.sops.yaml
+        run: |
+          set -uo pipefail
+          fail=0; n=0
+          while IFS= read -r f; do
+            n=$((n+1))
+            if ! err=$(sops -d "$f" 2>&1 >/dev/null); then
+              echo "::error file=${f}::sops decrypt FAILED: $(printf '%s' "$err" | tail -1)"
+              fail=1
+            fi
+          done < <(find . -name '*.sops.yaml' -not -name '.sops.yaml' -not -path './.git/*' | sort)
+          echo "checked ${n} encrypted file(s)"
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::one or more *.sops.yaml failed to decrypt (MAC mismatch / hand-edited outside sops)"
+            exit 1
+          fi
+          echo "all encrypted files decrypt cleanly ✓"
