@@ -397,6 +397,15 @@ orphaned. Not service-affecting on its own.
 ### ⏳ M76. SSH to nodes/VMs via short-lived certs (Tailscale SSH / SSH CA)
 - **Source:** zero-trust assessment 2026-06-17. Node/VM SSH uses a **long-lived key** (`id_ed25519_homelab`). **Do:** move to short-lived identity-bound SSH — **Tailscale SSH** (hosts already on the tailnet; gate via ACL + check mode) or an SSH CA (step-ca) issuing minutes-long certs. Pairs with **M71** under one "kill standing creds" theme. Spec in the assessment doc. **Effort:** M.
 
+### ⏳ M78. OneDrive (work) backup → NAS → S3
+- **Source:** owner 2026-06-17. Mirror the GDrive pattern (`platform/kubernetes/rclone-gdrive/`): an **rclone** CronJob `rclone sync onedrive: /backup/Graham/OneDrive/` into the NAS `Backups` share → auto-S3'd by the existing `aws-s3-sync` `backups` share. New `rclone-onedrive` ns/manifests + a SOPS `rclone-config` secret holding the OneDrive OAuth token. **Caveat:** it's **OneDrive for Business** (work tenant) — rclone's OAuth app may be blocked / require Azure-AD admin consent; owner runs the one-time `rclone authorize "onedrive"` against the work account first to confirm it's permitted (else fall back to syncing the Windows OneDrive client's local folder). **Effort:** S (mirrors gdrive) once auth confirmed.
+
+### ⏳ M79. iCloud Photos backup (priority) → NAS → S3 — run on the mini
+- **Source:** owner 2026-06-17. Highest-priority iCloud item. Want **individual files (not the .photoslibrary container) + attached settings**. Best fit = **`osxphotos`** on the mini (it's a Mac): sign the mini into iCloud Photos, "Download Originals", then `osxphotos export` writes **originals + edited + XMP sidecars carrying albums/keywords/faces/GPS/captions** as individual files → NAS `Backups` share → S3. (Lighter alt = **`icloudpd`** straight from iCloud via app-specific password — individual originals + EXIF only, **no** album/keyword metadata; `icloudpd` was previously planned, see the velero `infrastructure-daily` comment.) **Caveats:** Apple **2FA session expires** every ~weeks→months → periodic interactive re-auth via VNC; signing the ops mini into a personal Apple ID mixes personal/infra (owner's call). Schedule via `launchd`/cron on the mini. **Effort:** M.
+
+### ⏳ M80. iCloud Drive + Contacts + Messages backup → NAS → S3 — run on the mini
+- **Source:** owner 2026-06-17 (lower priority than Photos). **Drive:** rclone `iclouddrive` backend (app-specific pw) OR the mini's native CloudDocs sync (`~/Library/Mobile Documents/com~apple~CloudDocs/`) → rsync — both yield individual files. **Contacts:** **`vdirsyncer`** over iCloud **CardDAV** (app-specific pw) → individual `.vcf` vCards (clean, no sign-in). **Messages:** back up `~/Library/Messages/` (`chat.db` + attachments) — requires the mini signed into iMessage; it's a SQLite DB + attachment files (restorable to a Mac), the only viable path (no API). All → NAS `Backups` share → S3. **Effort:** M.
+
 ## LOW
 
 ### ⏳ L24. Authenticate BGP sessions (MetalLB ↔ UDM)
