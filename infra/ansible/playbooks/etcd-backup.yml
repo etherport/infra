@@ -32,7 +32,8 @@
     #   terraform -chdir=infra/terraform/aws/s3 output -raw etcd_backup_access_key_id
     #   terraform -chdir=infra/terraform/aws/s3 output -raw etcd_backup_secret_access_key
     etcd_s3_bucket: etcd-snapshots.wind.etherport.net
-    etcd_aws_region: us-east-1
+    etcd_aws_region: us-west-2   # matches the aws/s3 provider + bucket region
+
     etcd_pushgateway_url: "http://10.43.32.171:9091"   # pinned pushgateway ClusterIP (helm-releases/pushgateway.yaml)
     _etcd_secrets: "{{ lookup('pipe', 'sops -d ' ~ (playbook_dir | quote) ~ '/secrets/etcd-backup.sops.yaml') | from_yaml }}"
 
