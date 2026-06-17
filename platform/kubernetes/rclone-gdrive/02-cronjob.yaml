@@ -37,6 +37,17 @@ spec:
             command:
             - /bin/sh
             - /scripts/sync-and-report.sh
+            # Conservative hardening (M63): drop all caps + block privilege
+            # escalation. NOT runAsNonRoot/readOnlyRootFilesystem — rclone writes
+            # its working config into /config/rclone (emptyDir) and the image's
+            # default user expectations are untested here; keep those off to avoid
+            # breaking the nightly sync.
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: [ALL]
+              seccompProfile:
+                type: RuntimeDefault
             volumeMounts:
             - name: rclone-config
               mountPath: /config/rclone-secret

@@ -91,6 +91,11 @@ kind: ServiceMonitor
 metadata:
   name: cloudflared
   namespace: cloudflared
+  labels:
+    # Convention: kube-prometheus-stack's selectors are currently match-all so this
+    # is already scraped, but every other SM carries this — keep it consistent +
+    # safe if the selector is ever tightened to release=monitoring (M63).
+    release: monitoring
 spec:
   selector:
     matchLabels:
