@@ -13,6 +13,32 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-17 — H36: Flux reconciliation alerting (closes the silent-wedge gap)
+
+**Goal:** the 06-17 CNPG webhook incident wedged Flux for hours, undetected — Flux metrics
+weren't scraped. Close that blind spot.
+
+**Done** (`platform/kubernetes/monitoring/07-flux-monitoring.yaml`, commits `8f4c5d6`+`48fd4c7`):
+- **PodMonitor `flux-controllers`** — monitoring ns, `namespaceSelector: flux-system`,
+  `selector: app.kubernetes.io/part-of=flux`, port `http-prom` (8080), `honorLabels: true`.
+  Prometheus selects all PodMonitors (`{}`); the flux-system `allow-scraping` netpol already
+  permits :8080. Verified: all 6 controllers scraping `up`.
+- **PrometheusRule `FluxReconciliationErrors`** — `sum by(app,controller)
+  rate(controller_runtime_reconcile_total{namespace="flux-system",result="error"}[5m]) > 0
+  for 15m`, warning. Loaded + evaluating (0 firing = healthy).
+
+**Gotcha:** my first attempt used `gotk_reconcile_condition{type="Ready",status="False"}` — but
+**this flux build doesn't export that metric** (only `gotk_reconcile_duration_seconds` +
+`controller_runtime_*`; verified by curling a controller's :8080/metrics). Pivoted to the
+sustained-reconcile-error signal, which is per-controller (kind) not per-object but reliably
+catches a wedge. Also hit `function "lower" not defined` in the rule template — Prometheus
+uses `toLower`, not `lower`.
+
+**Result:** a wedged Kustomization/HelmRelease now pages within 15m instead of being found by
+luck. H36 done.
+
+---
+
 ## 2026-06-17 — CNPG webhook cert wedged Flux (caBundle/serving-cert mismatch) — fixed
 
 **Surfaced while applying M62:** the flux-system Kustomization went `Ready=False`, blocking
