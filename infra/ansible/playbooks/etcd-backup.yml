@@ -49,12 +49,21 @@
           playbooks/secrets/etcd-backup.sops.yaml (keys: etcd_backup_aws_access_key_id,
           etcd_backup_aws_secret_access_key). See the vars block.
 
+    # awscli lives in the `universe` component, which is disabled on these
+    # kubespray-minimal nodes. Enable it (an official, Ubuntu-signed repo) so we
+    # can apt-install awscli — no third-party binary/GPG dance.
+    - name: Enable the universe apt component (provides awscli)
+      ansible.builtin.apt_repository:
+        repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} universe"
+        state: present
+        filename: ubuntu-universe
+        update_cache: false
+
     - name: Install awscli (for the S3 offsite upload)
       ansible.builtin.apt:
         name: awscli
         state: present
         update_cache: true
-        cache_valid_time: 3600
 
     - name: Ensure /root/.aws exists
       ansible.builtin.file:
