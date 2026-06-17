@@ -94,8 +94,10 @@ resource "aws_s3_bucket" "archive" {
   }
 
   tags = {
-    Name    = "archive.wind.etherport.net"
-    Purpose = "snapshot-archives (s3-sync cold storage ONLY — Deep Archive, ~12h retrieval)"
+    Name = "archive.wind.etherport.net"
+    # AWS S3 tag values are char-restricted (no parens/commas/em-dash/tilde) — keep
+    # this terse; the full rationale is in the comment above this resource.
+    Purpose = "s3-sync-cold-storage-only-deep-archive"
   }
 }
 
