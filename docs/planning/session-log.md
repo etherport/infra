@@ -13,6 +13,32 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-17 — H29/H31 owner-tail verification: both already complete (no CloudShell action)
+
+**Context:** owner asked for CloudShell commands to finish H29 (delete old `terraform-homelab`
+AWS key + GH secrets) and H31 (delete orphan `claude-admin-temp` policy). Verified live state
+first (read-only, `homelab` profile, acct `830881980142`) — turns out **neither needs any
+command**:
+
+- **H31:** `claude-admin-temp` policy is **already gone** (`get-policy` → NoSuchEntity; absent
+  from `list-policies --scope Local`). Remaining `claude-*` policies = intended design
+  (`claude-admin-policy` + `claude-admin-oneoff-roles` attached, `claude-oneoff-boundary` 0
+  attachments = correct for a boundary). H31 ✅.
+- **H29:** the `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` GH secrets are **already removed**
+  (`gh secret list` has no `AWS_*`; 0 workflows reference static keys → CI is OIDC-only). The
+  `terraform-homelab` IAM user has **exactly one** access key (`AKIA…JHIX`), **Active + used
+  today** (S3/us-west-2) — and `aws configure get aws_access_key_id --profile homelab` returns
+  that same key. So it's the **live local-ops credential** the mini uses for headless terraform.
+  **Did NOT delete it** (CLAUDE.md §4 invariant). The original "delete the key" step is
+  **superseded**: the in-CI-exfil threat is already neutralized; the key now serves local ops
+  only (accepted risk). H29 ✅ (with that deliberate exception documented).
+
+**Takeaway for future agents:** don't run `aws iam delete-access-key` on `terraform-homelab` —
+it's the mini's own credential. A clean future state would be a *separate* dedicated key/user
+for the mini, then retire this one; that's net-new work, not H29.
+
+---
+
 ## 2026-06-17 — L23: deleted orphan cnpg-manager RBAC (duplicate-operator residue)
 
 **Goal:** remove the harmless residue from the 06-16 duplicate-CNPG-operator cleanup —
