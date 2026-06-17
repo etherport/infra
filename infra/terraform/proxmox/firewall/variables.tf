@@ -36,6 +36,11 @@ variable "node_name" {
 #   100.64.0.0/10   Tailscale CGNAT (if PVE is reached as a tailnet node)
 #   10.254.0.0/24   WireGuard client tunnel (wg1) — if not SNAT'd
 #   10.255.255.0/29 WireGuard site tunnel (wg0) — if not SNAT'd
+#   192.168.3.0/24  UDM backup WireGuard (WireGuard WAN1) — the OUT-OF-BAND
+#                   break-glass that terminates on the UDM itself, independent
+#                   of the host's VMs/pods. UDM routes (no SNAT) so PVE sees the
+#                   192.168.3.x client IP. MUST stay allowed — it's our last way
+#                   in if the host's WG-pod / TS-subnet-routers (both VMs) die.
 # Stage 1 is permissive (input policy ACCEPT) so this denies nothing yet; we
 # observe logs to pin the real SNAT sources before the Stage 2 DROP flip.
 variable "mgmt_admin_cidrs" {
@@ -48,5 +53,6 @@ variable "mgmt_admin_cidrs" {
     "100.64.0.0/10",
     "10.254.0.0/24",
     "10.255.255.0/29",
+    "192.168.3.0/24",
   ]
 }
