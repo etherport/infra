@@ -81,6 +81,11 @@ resource "aws_s3_bucket_public_access_block" "velero" {
 # Snapshot Archives (Deep Archive Storage)
 #------------------------------------------------------------------------------
 
+# ⚠️ USE THIS BUCKET ONLY FOR THE s3-sync ARCHIVE TASKS (cold, write-once-read-rarely).
+# Its lifecycle transitions ALL objects to Glacier DEEP_ARCHIVE after 2 days, so
+# retrieval takes ~12 hours. Do NOT default new backup/DR work here — anything that
+# may need timely retrieval (etcd snapshots, DB dumps, app backups) gets its OWN
+# STANDARD-storage bucket (see `etcd_snapshots` below and `postgres_barman`).
 resource "aws_s3_bucket" "archive" {
   bucket = "archive.wind.etherport.net"
 
@@ -90,7 +95,7 @@ resource "aws_s3_bucket" "archive" {
 
   tags = {
     Name    = "archive.wind.etherport.net"
-    Purpose = "snapshot-archives"
+    Purpose = "snapshot-archives (s3-sync cold storage ONLY — Deep Archive, ~12h retrieval)"
   }
 }
 
@@ -423,6 +428,106 @@ resource "aws_iam_user_policy" "postgres_barman" {
 
 resource "aws_iam_access_key" "postgres_barman" {
   user = aws_iam_user.postgres_barman.name
+}
+
+#------------------------------------------------------------------------------
+# etcd snapshot offsite backups (M62)
+#
+# Velero-independent offsite copy of the control-plane etcd snapshots that the
+# `etcd-backup.yml` systemd timer writes to /var/lib/etcd-snapshots on each cp
+# node. DELIBERATELY a dedicated bucket with STANDARD storage (NOT the `archive`
+# bucket, which transitions to Glacier Deep Archive after 2 days — ~12h retrieval
+# would prolong a control-plane outage). 30-day expiry; immediate retrieval.
+#------------------------------------------------------------------------------
+
+resource "aws_s3_bucket" "etcd_snapshots" {
+  bucket = "etcd-snapshots.wind.etherport.net"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Name    = "etcd-snapshots.wind.etherport.net"
+    Purpose = "etcd-snapshot-offsite-dr"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "etcd_snapshots" {
+  bucket = aws_s3_bucket.etcd_snapshots.id
+  versioning_configuration {
+    status     = "Enabled"
+    mfa_delete = "Disabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "etcd_snapshots" {
+  bucket = aws_s3_bucket.etcd_snapshots.id
+
+  rule {
+    id     = "Expire etcd snapshots after 30 days"
+    status = "Enabled"
+    filter {}
+
+    # Keep STANDARD storage class (no Deep Archive transition) so DR restores
+    # are immediate. 30 days of daily ~200MB snapshots x3 nodes is a few $/mo.
+    expiration {
+      days = 30
+    }
+    noncurrent_version_expiration {
+      noncurrent_days = 7
+    }
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "etcd_snapshots" {
+  bucket = aws_s3_bucket.etcd_snapshots.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Tightly-scoped writer for the cp-node snapshot script: PutObject only (the
+# lifecycle handles deletion). Can't read other buckets or delete — minimal
+# blast radius if a cp-node disk leaks the static key.
+resource "aws_iam_user" "etcd_backup" {
+  name = "etcd-backup"
+  path = "/services/"
+  tags = {
+    Purpose = "etcd-snapshot-offsite-backups"
+  }
+}
+
+resource "aws_iam_user_policy" "etcd_backup" {
+  name = "etcd-backup-s3-access"
+  user = aws_iam_user.etcd_backup.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ListBucket"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket", "s3:GetBucketLocation"]
+        Resource = aws_s3_bucket.etcd_snapshots.arn
+      },
+      {
+        Sid      = "WriteObjects"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:AbortMultipartUpload"]
+        Resource = "${aws_s3_bucket.etcd_snapshots.arn}/*"
+      },
+    ]
+  })
+}
+
+resource "aws_iam_access_key" "etcd_backup" {
+  user = aws_iam_user.etcd_backup.name
 }
 
 #------------------------------------------------------------------------------

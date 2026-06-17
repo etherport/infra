@@ -13,6 +13,38 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-16 — M62 authored: etcd snapshots → offsite S3 + freshness alert
+
+**Goal:** close the etcd-backup DR gap — snapshots were local-disk-only, offsite solely
+via the fragile Velero `kube-system-daily` path, no freshness alert.
+
+**Authored (validated; applies are supervised — see outstanding-work M62):**
+- **TF** `infra/terraform/aws/s3/`: new dedicated **`etcd-snapshots.wind.etherport.net`**
+  bucket (STANDARD, 30d, versioned, PAB) + scoped **`etcd-backup`** IAM user (PutObject-only),
+  mirroring the `postgres_barman` pattern. `terraform validate` clean.
+- **Playbook** `etcd-backup.yml`: awscli + scoped creds on cp nodes; `etcd-snapshot.sh` now
+  `aws s3 cp`s each snapshot offsite + pushes freshness/size/upload metrics to Pushgateway
+  (pinned ClusterIP `10.43.32.171`).
+- **Alert** `monitoring/06-backup-alerts.yaml`: `EtcdSnapshotStale` + `EtcdSnapshotS3UploadFailing`.
+
+**Key design call:** used a **dedicated Standard-storage bucket, NOT the `archive` bucket** —
+`archive.wind.etherport.net` transitions to Glacier Deep Archive after 2 days (~12h retrieval),
+which would prolong a control-plane outage during a restore. Owner flagged a recurring habit
+of defaulting new tasks to the archive bucket → added a loud "s3-sync cold storage ONLY"
+warning at the bucket's TF definition + a memory note. **Rule: archive bucket = s3-sync cold
+storage only; anything needing timely retrieval gets its own Standard bucket (like barman, etcd).**
+
+**Validation:** TF validate ✅; PrometheusRule server-dry-run ✅ (the `unknown field "sops"`
+errors in the kustomize dry-run are pre-existing SOPS secrets, Flux-decrypted, not ours);
+playbook YAML + `--syntax-check` ✅. Pushgateway ClusterIP pinned to its current value so the
+Flux helm-upgrade is a no-op on the immutable field.
+
+**Next (supervised):** terraform apply s3 → SOPS the etcd-backup key into
+`playbooks/secrets/etcd-backup.sops.yaml` → run `etcd-backup.yml --limit kube_control_plane`.
+Flux ships the alert + pushgateway pin.
+
+---
+
 ## 2026-06-16 — CNPG operator restart-loop (duplicate operator) — fixed
 
 **Trigger:** AI advisor email — "cloudnativepg pod is stuck." Full system check requested

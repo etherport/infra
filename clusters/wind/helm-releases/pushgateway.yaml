@@ -25,6 +25,11 @@ spec:
       retries: 3
   values:
     fullnameOverride: pushgateway
+    # Pin the ClusterIP so off-cluster pushers with a stable target (e.g. the
+    # cp-node etcd-snapshot.sh host script, M62) don't break if the Service is
+    # recreated. This is the IP it was already auto-assigned.
+    service:
+      clusterIP: 10.43.32.171
     serviceMonitor:
       enabled: true
       additionalLabels:

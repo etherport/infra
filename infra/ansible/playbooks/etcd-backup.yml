@@ -26,8 +26,65 @@
     snapshot_dir: /var/lib/etcd-snapshots
     snapshot_retention_days: 14
     snapshot_schedule_oncalendar: "*-*-* 09:00:00 UTC"  # 02:00 PT daily
+    # M62: offsite S3 copy + freshness metric. Bucket + scoped etcd-backup IAM
+    # user live in infra/terraform/aws/s3/. After `terraform apply`, create
+    # secrets/etcd-backup.sops.yaml from:
+    #   terraform -chdir=infra/terraform/aws/s3 output -raw etcd_backup_access_key_id
+    #   terraform -chdir=infra/terraform/aws/s3 output -raw etcd_backup_secret_access_key
+    etcd_s3_bucket: etcd-snapshots.wind.etherport.net
+    etcd_aws_region: us-east-1
+    etcd_pushgateway_url: "http://10.43.32.171:9091"   # pinned pushgateway ClusterIP (helm-releases/pushgateway.yaml)
+    _etcd_secrets: "{{ lookup('pipe', 'sops -d ' ~ (playbook_dir | quote) ~ '/secrets/etcd-backup.sops.yaml') | from_yaml }}"
 
   tasks:
+    - name: Assert etcd-backup S3 credentials are present
+      ansible.builtin.assert:
+        that:
+          - _etcd_secrets.etcd_backup_aws_access_key_id | default('') | length > 0
+          - _etcd_secrets.etcd_backup_aws_secret_access_key | default('') | length > 0
+        fail_msg: >-
+          etcd-backup AWS creds missing. terraform apply infra/terraform/aws/s3, then put
+          `terraform output -raw etcd_backup_access_key_id` / `_secret_access_key` into
+          playbooks/secrets/etcd-backup.sops.yaml (keys: etcd_backup_aws_access_key_id,
+          etcd_backup_aws_secret_access_key). See the vars block.
+
+    - name: Install awscli (for the S3 offsite upload)
+      ansible.builtin.apt:
+        name: awscli
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Ensure /root/.aws exists
+      ansible.builtin.file:
+        path: /root/.aws
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Install scoped etcd-backup AWS credentials
+      ansible.builtin.copy:
+        dest: /root/.aws/credentials
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          [default]
+          aws_access_key_id = {{ _etcd_secrets.etcd_backup_aws_access_key_id }}
+          aws_secret_access_key = {{ _etcd_secrets.etcd_backup_aws_secret_access_key }}
+      no_log: true
+
+    - name: Install AWS config (region)
+      ansible.builtin.copy:
+        dest: /root/.aws/config
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          [default]
+          region = {{ etcd_aws_region }}
+
     - name: Ensure snapshot directory exists
       ansible.builtin.file:
         path: "{{ snapshot_dir }}"
@@ -90,6 +147,30 @@
           # Verify the snapshot is consistent.
           ETCDCTL_API=3 /usr/local/bin/etcdctl snapshot status "$OUT" \
             --write-out=table
+
+          # ---- M62: offsite copy to S3 (Velero-independent) ----
+          # Scoped etcd-backup creds in /root/.aws/credentials (PutObject only,
+          # to s3://{{ etcd_s3_bucket }}). Non-fatal: a failed upload still
+          # leaves the local snapshot + is surfaced by the metric below.
+          S3_OK=0
+          if aws s3 cp "$OUT" "s3://{{ etcd_s3_bucket }}/${HOST}/$(basename "$OUT")" --only-show-errors; then
+            S3_OK=1
+          else
+            echo "WARN: S3 upload failed for $OUT" >&2
+          fi
+
+          # ---- M62: freshness metric to Pushgateway (best-effort) ----
+          # A failed snapshot exits before here (set -e), so the timestamp goes
+          # stale → the staleness alert fires. s3_upload_success catches a good
+          # snapshot that failed to ship. Never let the metric push fail the run.
+          { printf '# TYPE etcd_snapshot_last_run_timestamp gauge\n'
+            printf 'etcd_snapshot_last_run_timestamp %s\n' "$(date +%s)"
+            printf '# TYPE etcd_snapshot_size_bytes gauge\n'
+            printf 'etcd_snapshot_size_bytes %s\n' "$(stat -c%s "$OUT")"
+            printf '# TYPE etcd_snapshot_s3_upload_success gauge\n'
+            printf 'etcd_snapshot_s3_upload_success %s\n' "${S3_OK}"
+          } | curl -sS -m 10 --data-binary @- \
+            "{{ etcd_pushgateway_url }}/metrics/job/etcd_snapshot/instance/${HOST}" || true
 
           # Retain N days; delete older.
           find "$SNAPSHOT_DIR" -name "etcd-*.db" -type f -mtime "+$RETENTION_DAYS" -delete

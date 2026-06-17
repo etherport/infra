@@ -205,3 +205,45 @@ spec:
             description: |
               {{ $value | humanizeDuration }} since any Velero schedule
               completed successfully. All 10 schedules should run daily.
+
+    # ---------- etcd snapshot offsite (M62) ----------
+    # Metrics pushed to Pushgateway by /usr/local/bin/etcd-snapshot.sh on each
+    # control-plane node (job="etcd_snapshot", instance=<hostname>). See
+    # infra/ansible/playbooks/etcd-backup.yml + outstanding-work M62.
+    - name: etcd-snapshot.rules
+      rules:
+        - alert: EtcdSnapshotStale
+          # No fresh snapshot in >36h on a cp node (daily 09:00 UTC timer). A
+          # failed `etcdctl snapshot save` exits the script before it pushes, so
+          # the timestamp goes stale → this fires. etcd is critical → human-in-
+          # the-loop (kube-system is on the advisor denylist; advisory only).
+          expr: (time() - etcd_snapshot_last_run_timestamp) > 129600
+          for: 1h
+          labels:
+            severity: critical
+            component: backup
+            namespace: kube-system
+          annotations:
+            summary: "etcd snapshot stale on {{ $labels.instance }} (>36h)"
+            description: |
+              No fresh etcd snapshot from cp node `{{ $labels.instance }}` in
+              {{ $value | humanizeDuration }}. The systemd timer may have stopped
+              or `etcdctl snapshot save` is failing. Check:
+              systemctl status etcd-snapshot.timer etcd-snapshot.service
+              journalctl -u etcd-snapshot.service  (also Loki: app="etcd-snapshot")
+
+        - alert: EtcdSnapshotS3UploadFailing
+          # Snapshot saved locally but the offsite S3 copy failed — local-only
+          # is the single-point-of-failure M62 set out to remove.
+          expr: etcd_snapshot_s3_upload_success == 0
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+            namespace: kube-system
+          annotations:
+            summary: "etcd snapshot S3 upload failing on {{ $labels.instance }}"
+            description: |
+              The local etcd snapshot on `{{ $labels.instance }}` is not reaching
+              s3://etcd-snapshots.wind.etherport.net. Check awscli/creds on the node
+              + the etcd-backup IAM user. Local snapshot still exists (14d retention).
