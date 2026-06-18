@@ -5,11 +5,15 @@ host) — things that can't live in k8s/Flux because they need macOS APIs (Photo
 SMB/keychain, `launchd`, tmux). Version-controlled here; installed into the user's
 `~/Library/LaunchAgents` on the mini.
 
-## `net.wind.mount-nas` — keep `/Volumes/Personal-Drive` mounted across logins
+## `net.wind.mount-nas` — keep the NAS shares mounted across logins
 
-Ensures the NAS **`Personal-Drive`** share is mounted at **`/Volumes/Personal-Drive`**
-whenever the login session starts. Backs the iCloud **Photos** backup (M79): the
-Photos library lives in an APFS sparsebundle at `/Volumes/Personal-Drive/Photos/`.
+Ensures the NAS shares the iCloud backup needs are mounted at login:
+- **`/Volumes/Personal-Drive`** — holds the Photos library APFS sparsebundle (M79).
+- **`/Volumes/Backups`** — the **export target**; the k8s `aws-s3-sync` `backups`
+  share reads this same NAS share over NFS and ships it to S3. iCloud exports
+  (photos, and later Drive/Contacts/Messages from M80) land here under `iCloud/`.
+
+Edit the `SHARES=(...)` array in `mount-nas.sh` to add/remove shares.
 
 **Why `/Volumes/Personal-Drive` (not a custom `~/NAS`):** macOS auto-mounts SMB
 shares under `/Volumes/<share>`, and the shares are already connected there via
@@ -44,7 +48,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.wind.mount-nas.plist
 Verify (run each on its own line — don't paste comments):
 ```bash
 launchctl print gui/$(id -u)/net.wind.mount-nas | grep -E 'state|last exit'
-mount | grep -F ' on /Volumes/Personal-Drive '
+mount | grep -F -e ' on /Volumes/Personal-Drive ' -e ' on /Volumes/Backups '
 tail ~/Library/Logs/mount-nas.log
 ```
 Reload after editing the plist: `launchctl bootout gui/$(id -u)/net.wind.mount-nas`
