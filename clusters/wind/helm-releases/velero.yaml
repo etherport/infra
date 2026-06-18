@@ -15,7 +15,11 @@ spec:
   chart:
     spec:
       chart: velero
-      version: "11.x"
+      # Pinned exactly (was floating "11.x"). A floating range lets Flux
+      # auto-upgrade velero on its 1h interval with no commit/review — a latent
+      # durability risk on the critical backup path. Bump deliberately + verify
+      # a backup completes. (11.4.0 = app v1.17.1, the version running since 05-30.)
+      version: "11.4.0"
       sourceRef:
         kind: HelmRepository
         name: vmware-tanzu

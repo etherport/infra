@@ -2272,6 +2272,17 @@ data:
             return
         if _cap_reached():
             _audit('cap_reached', alertname=alert_name, daily_usd_spent=_cost_tracker['usd_spent'])
+            # Cooldown + once-per-day cap notice. A single broken subsystem can
+            # flap many DISTINCT alertnames; emailing the "[unavailable]" notice
+            # per-alertname floods the inbox after the cap is hit (2026-06-18
+            # velero incident: cap hit 18:02, then dozens of cap-notice emails
+            # because the 15min cooldown is per-alertname, not global). Send the
+            # heads-up ONCE per UTC day; the audit log still records every
+            # cap_reached for Loki.
+            recent_actions[alert_name] = datetime.now()
+            if _cost_tracker.get('cap_email_date') == _today_utc():
+                return
+            _cost_tracker['cap_email_date'] = _today_utc()
             _cap_text = (
                 f"AI advisor hit its ${AI_DAILY_USD_CAP}/day cost cap. "
                 f"Raw alert below.\n\n{json.dumps(alert, indent=2, default=str)}"
@@ -2301,10 +2312,6 @@ data:
                 body=_cap_text,
                 html_body=_cap_html,
             )
-            # Enter cooldown so flapping alertnames at AM repeat_interval
-            # don't spam "[unavailable]" emails every 5min for the rest
-            # of the day (caught in the 2026-05-24 code review).
-            recent_actions[alert_name] = datetime.now()
             return
 
         prompt = _load_prompt()
