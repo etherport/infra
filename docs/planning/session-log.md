@@ -13,6 +13,49 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-18 — Velero fs-backup incident (H39) + AI-advisor email-flood / cost-cap
+
+**Trigger:** owner reported a flood of AI-advisor emails + the advisor hitting its
+$0.50/day cost cap. Root-caused to a **real cluster-wide Velero failure** the advisor was
+faithfully (and noisily) reacting to.
+
+**Root cause:** Velero **filesystem (kopia) backups wedged cluster-wide since 2026-06-17
+15:30** — the exact moment helm **rev5** deployed (applied M5's `resources` change +
+restarted all node-agents). PodVolumeBackups (PVBs) piled into a **retry storm**
+(`timeout on preparing PVB`), backups went `PartiallyFailed` daily, two data-mover pods
+stuck `Running` 5–17h. Each alert fire → advisor called Claude + emailed → **cap hit
+18:02**, then it kept emailing `[unavailable]` **per flapping alertname** (the 15-min
+cooldown is per-alertname; one broken subsystem flaps many distinct alerts) = the flood.
+**Ruled out:** node capacity/health, kopia repos (all `Ready`), chart/app version
+(11.4.0/1.17.1, unchanged since 05-30). It was rev5.
+
+**Remediation (owner-approved):**
+1. **24h Alertmanager silence** on velero-ns alerts (`VeleroBackupPartial|VeleroLastBackupAgeHigh|KubePodNotReady`),
+   ID `4fe8a806`, time-boxed → stops the advisor emails immediately. ⚠️ silenced ⇒ a real
+   failure won't email; **watch tonight's scheduled run** manually.
+2. **Safe reset (no config gamble):** deleted 8 stuck PVBs (incl. 2 orphans from 04-20) +
+   their data-mover pods, force-cleared wedged `velero.io/pod-volume-finalizer`s,
+   `rollout restart` velero + all 8 node-agents. **Verified** via an on-demand `dns`
+   backup: the previously-failing step now works — data paths **prepare + start cleanly**,
+   one volume completed its full 633 MB, **no retry storm / no prepare-timeouts**.
+3. **Durability (`93cc970`):** pinned velero chart `version: "11.x"` → `"11.4.0"` (a
+   floating range let Flux auto-upgrade the *backup path* with no commit/review).
+4. **Advisor hardening (`93cc970`):** cost-cap `[unavailable]` notice now sent **once per
+   UTC day** instead of per-alertname (audit log still records every `cap_reached` for
+   Loki; per-alertname cooldown preserved). Advisor pod restarted to load it.
+
+**Residual (open — under watch):** the on-demand test's *second* volume —
+`technitium-1`'s data PVC on **k8s-w2** — got through kopia init (opened repo, found the
+06-17 03:03 parent snapshot) then **hung mid-snapshot at 0 bytes**, while its sibling on
+w3 finished fast. **Different, narrower** failure than the rev5 wedge (data path starts
+fine now) — looks volume/node-specific (w2 or that PVC), NOT the cluster-wide cause.
+Next: watch tonight's 02:00–05:00 schedules; if `technitium-1`/w2 recurs, dig into the
+w2 node-agent ↔ S3/kopia path (possible Cilium-WireGuard/MTU angle — M66 also landed 06-17).
+
+**Also noted (minor):** `PrometheusOutOfOrderTimestamps` fired earlier (monitoring, separate).
+
+---
+
 ## 2026-06-18 — Claude Code dev sessions migrated mini → devbox (M81), reboot-validated
 
 **Goal:** move the three persistent Claude Code dev sessions (`infra`, `cue`,
