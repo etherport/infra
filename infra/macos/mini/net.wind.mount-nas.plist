@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>net.wind.mount-nas</string>
+
+  <!-- Idempotent mount script lives in the git checkout so `git pull` updates it.
+       Adjust this path if the repo isn't at /Users/grahamsmith/code/infra. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/grahamsmith/code/infra/infra/macos/mini/mount-nas.sh</string>
+  </array>
+
+  <!-- Mount as soon as the user (Aqua) session starts (= at auto-login). -->
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- Keep retrying ONLY while it exits non-zero (network/NAS not up yet);
+       once the mount succeeds (exit 0) launchd stops relaunching it.
+       A later mount drop is healed by the osxphotos job's preflight remount. -->
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/grahamsmith/Library/Logs/mount-nas.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/grahamsmith/Library/Logs/mount-nas.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>
