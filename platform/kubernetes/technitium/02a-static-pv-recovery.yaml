@@ -70,48 +70,14 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ceph-rbd
   volumeMode: Filesystem
----
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: data-technitium-1-recovery
-  annotations:
-    pv.kubernetes.io/provisioned-by: rbd.csi.ceph.com
-spec:
-  accessModes:
-    - ReadWriteOnce
-  capacity:
-    # K8s capacity field carries 10Gi to match live (kubectl patch set
-    # this 2026-05-23 attempting expansion; PVC shrink is forbidden so
-    # we keep the source aligned). The underlying Ceph RBD image is
-    # still 5Gi — `rbd info k8s-ceph/<image>` would show the truth.
-    # 02b-set-log-retention-job keeps actual usage well under 5Gi
-    # so the mismatch is benign.
-    storage: 10Gi
-  claimRef:
-    apiVersion: v1
-    kind: PersistentVolumeClaim
-    name: data-technitium-1
-    namespace: dns
-  csi:
-    driver: rbd.csi.ceph.com
-    fsType: ext4
-    nodeStageSecretRef:
-      name: csi-rbd-secret
-      namespace: ceph-csi
-    controllerExpandSecretRef:
-      name: csi-rbd-secret
-      namespace: ceph-csi
-    volumeAttributes:
-      clusterID: 4de37616-ef82-4295-8ff0-7309d4b34812
-      imageFeatures: layering
-      imageName: csi-vol-ba25c344-cf5c-4bf7-a0e3-f2036a7947ca
-      journalPool: k8s-ceph
-      pool: k8s-ceph
-      staticVolume: "true"
-    volumeHandle: csi-vol-ba25c344-cf5c-4bf7-a0e3-f2036a7947ca
-  mountOptions:
-    - discard
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: ceph-rbd
-  volumeMode: Filesystem
+# data-technitium-1 static PV REMOVED 2026-06-18: its RBD image
+# (csi-vol-ba25c344-…) wedged — a hung krbd client on k8s-w2 left a stale
+# exclusive-lock and the rbd map/mount then hung on every node (incident H39
+# follow-on; see session-log). technitium-1 is a disposable replica (its own
+# PVC; zone records come from git via the dns-sync CronJob; server config from
+# the ConfigMap/Secret), so it was RE-PROVISIONED onto a fresh dynamically-
+# provisioned ceph-rbd PVC rather than recovering the bad image. The old image
+# is retained in Ceph (PV reclaim=Retain was deleted, image not purged) for
+# offline forensics (`rbd map` + `e2fsck -n`); purge with `rbd rm
+# k8s-ceph/csi-vol-ba25c344-…` once no longer needed. No static PV here anymore:
+# a future rebuild just lets the StatefulSet dynamically provision -1 fresh.
