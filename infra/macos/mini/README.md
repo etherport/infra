@@ -84,9 +84,79 @@ tmux attach -t infra      # or cue / personal-web   (detach: Ctrl-b d)
   (and re-arms anything like the infra session's `/loop`). To auto-resume at
   login, wire it to a `RunAtLoad` LaunchAgent like `net.wind.mount-nas`.
 
-## Coming next (M79)
-- `osxphotos` export script + its `launchd` timer: sparsebundle attach (at
-  `/Volumes/Personal-Drive/Photos/PhotosLibrary.sparsebundle`) → export originals
-  + XMP sidecars to `/Volumes/Personal-Drive/Photos/export/` → new S3-sync share
-  (Glacier Instant Retrieval). Preflight calls `mount-nas.sh` first. Tracked as
-  M79 in `docs/planning/outstanding-work.md`.
+## M79 — iCloud Photos backup (`create-photos-sparsebundle.sh`, `photos-export.sh`, `net.wind.photos-export`)
+
+Backs up the **iCloud Photos** library as **individual files + XMP sidecars** (albums,
+keywords, faces, GPS, captions) to the NAS, where the existing offsite pipeline ships
+them to S3.
+
+**Data flow:**
+```
+iCloud ─(Download Originals)→ Photos library in APFS sparsebundle on the NAS
+        /Volumes/Personal-Drive/Photos/PhotosLibrary.sparsebundle  (attaches as /Volumes/PhotosLib)
+   │
+   │  osxphotos export --update --sidecar XMP   (read-only re: Photos/iCloud)
+   ▼
+/Volumes/Backups/Graham/iCloud/Photos          (individual files + .xmp sidecars)
+   │
+   │  k8s CronJob  s3-sync-backups  (01:00 PT) reads /var/nfs/shared/Backups over NFS
+   ▼
+s3://archive.wind.etherport.net/objects/backups/...   (Glacier Deep Archive)
+```
+
+**Design note — no dedicated bucket/share.** The export target is a subtree of the
+**`Backups`** NAS share, which the existing `s3-sync-backups` CronJob already syncs to
+the **`archive`** bucket (Glacier **Deep Archive**). So photos ride that existing
+pipeline — *no* new S3 bucket, IAM, NFS export, or s3-sync share. (This supersedes the
+earlier plan for a separate Glacier-Instant-Retrieval `photos` bucket — owner accepted
+Deep Archive's ~12 h retrieval for photos, 2026-06-18.)
+
+**Why the sparsebundle:** `osxphotos` reads a *local* Photos library, but the mini has
+only ~11–40 GB free — nowhere near a full "Download Originals" library. The library
+lives in an APFS **sparsebundle on the NAS** (bands allocated on demand, bits on the
+NAS, mounts as a *local* APFS volume). The sparsebundle itself is the working library
+and is **never** uploaded (it's not in the export dir) — only the exported files are.
+
+### Files
+- **`create-photos-sparsebundle.sh`** — one-time: creates the 2 TB (sparse) APFS
+  sparsebundle. Idempotent; refuses to clobber. **Already run** (bundle exists).
+- **`photos-export.sh`** — the nightly job: `mount-nas.sh` → `hdiutil attach` the
+  sparsebundle → `osxphotos export --update --sidecar XMP --cleanup` → the Backups
+  share. Exits **0 with a "not ready" message** until a `*.photoslibrary` exists in the
+  attached volume, so it's safe to schedule before the owner finishes setup.
+- **`net.wind.photos-export.plist`** — LaunchAgent, daily **22:00 PT** (before the
+  01:00 PT s3-sync so each night's export ships same-day). **Not loaded yet** — enable
+  after the one-time owner setup below.
+
+### Owner one-time setup (interactive, via VNC) — the long pole
+The backup **cannot delete or modify** your photos: `osxphotos` is read-only toward
+Photos/iCloud; `--cleanup` only prunes the NAS *export copy*; `aws s3 sync --delete`
+only affects the *S3 copy*. iCloud holds the masters, so the sparsebundle is just a
+disposable mirror. Steps:
+
+1. **Safety gate:** in Photos with your *current* library, Settings → iCloud → confirm
+   photos are **uploaded / nothing pending**. Only proceed once iCloud holds every master.
+2. Attach the bundle (the export job does this too, but for setup):
+   `hdiutil attach /Volumes/Personal-Drive/Photos/PhotosLibrary.sparsebundle`
+3. **Option-launch Photos** (hold ⌥, click Photos) → "Choose Library…" → **Create
+   New…** → save it *inside* `/Volumes/PhotosLib/`. Photos opens an empty library.
+4. Settings → General → **"Use as System Photo Library."**
+5. Settings → iCloud → **enable iCloud Photos** → **Download Originals to this Mac**
+   (not Optimize). iCloud repopulates the new library — into the NAS sparsebundle, so
+   the mini's free space isn't the limit. Multi-day; sleep is already disabled (`pmset
+   sleep 0` / `SleepDisabled`). Your **old library stays untouched** as a fallback.
+6. When the download is complete, **enable the nightly timer:**
+   ```bash
+   ln -sf /Users/grahamsmith/code/infra/infra/macos/mini/net.wind.photos-export.plist ~/Library/LaunchAgents/net.wind.photos-export.plist
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.wind.photos-export.plist
+   ```
+   Then run once to seed the first export: `./photos-export.sh` (or `launchctl kickstart
+   gui/$(id -u)/net.wind.photos-export`). Logs: `~/Library/Logs/photos-export.log` +
+   per-run reports in `~/Library/Logs/photos-export/`.
+
+### Caveats
+- **Apple 2FA** sessions expire (weeks→months) → periodic interactive re-auth via VNC.
+- **Sparsebundle-over-network corruption** if the link drops mid-write (Time-Machine
+  risk model). Acceptable: the library is a cache of iCloud → corruption = recreate +
+  re-download, no master-data loss. Robust alt: external APFS SSD on the mini.
+- **FileVault** (see the mount-nas caveat) gates the whole pipeline after a reboot.

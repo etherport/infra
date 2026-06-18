@@ -97,6 +97,57 @@ w2 node-agent ↔ S3/kopia path (possible Cilium-WireGuard/MTU angle — M66 als
 
 ---
 
+## 2026-06-18 — M79 iCloud Photos backup built + owner setup started (on the mini)
+
+**Goal:** stand up the iCloud Photos → NAS → S3 backup (M79) on the mini (macOS-only;
+needs Photos.app + iCloud). Picked up from the prior session's kickoff.
+
+**Done (autonomous, on the mini):**
+- **`osxphotos` 0.76.1 installed** — NOT in Homebrew core (it's a Python tool); installed
+  via **pipx** (`~/.local/bin/osxphotos`). Works under the mini's Python 3.14.
+- **Sparsebundle created** — `infra/macos/mini/create-photos-sparsebundle.sh` (idempotent,
+  refuses to clobber) → `/Volumes/Personal-Drive/Photos/PhotosLibrary.sparsebundle` (2 TB
+  sparse, ~34 MB initial; attaches as `/Volumes/PhotosLib`).
+- **Export job authored** — `infra/macos/mini/photos-export.sh`: `mount-nas.sh` →
+  `hdiutil attach` → `osxphotos export --update --sidecar XMP --cleanup` →
+  `/Volumes/Backups/Graham/iCloud/Photos`. **Exits 0 with a "not ready" message** until a
+  `*.photoslibrary` exists in the attached volume — verified by running it (it attached the
+  bundle and no-op'd cleanly). `net.wind.photos-export.plist` LaunchAgent (daily 22:00 PT)
+  authored but **deliberately NOT loaded** (per owner) until the download completes.
+
+**Key decisions (the code alone won't tell you):**
+- **No new S3 bucket/share** (owner call, mid-session, simplifying the tracker's plan).
+  The export lands under the **`Backups`** NAS share, which the **existing
+  `s3-sync-backups` CronJob already syncs** to `archive.wind.etherport.net` (Glacier
+  **Deep Archive**). Owner accepted Deep Archive's ~12 h retrieval for photos →
+  **dropped** the separate Glacier-Instant-Retrieval `photos` bucket. So: no TF bucket/IAM,
+  no new NFS export (Backups is already exported to the k8s node IPs), no new s3-sync share.
+  NB: `Backups`' `excludes-share.txt` has no `Graham` exclude, so it picks up the subtree
+  for free. (Earlier in-session I'd started authoring the bucket/share — backed out.)
+- **Sparsebundle stays at `…/Photos/…`** (owner: the location I created is fine), even
+  though the library dir convention elsewhere is `Pictures`. Export dir moved to the
+  **Backups** share per owner (was `Personal-Drive/Photos/export` in the old plan).
+- **Zero-deletion-risk setup path:** create a *new empty* library in the sparsebundle and
+  let iCloud repopulate it — do **not** migrate/copy the old one. osxphotos is read-only re:
+  Photos/iCloud; `--cleanup` prunes only the NAS export copy; `s3 sync --delete` only the S3
+  copy. iCloud holds the masters → the sparsebundle is a disposable mirror.
+
+**State at end:** owner did the interactive setup mid-session — **new System Photo Library
+`Photos Library (NAS).photoslibrary` created inside the sparsebundle**, iCloud "Download
+Originals" **actively downloading** (sparsebundle grew 34 MB → 433 MB+; `cloudphotod`
+initial-download assertion live). Sleep confirmed disabled (`SleepDisabled`/`sleep 0`).
+Old `~/Pictures/Photos Library.photoslibrary` untouched as fallback.
+
+**Next steps:**
+- Wait for the iCloud download to finish (days). Confirm in Photos that the open library is
+  "Photos Library (NAS)" and it's the System Photo Library with iCloud Photos on.
+- Then **enable the timer** + seed the first export (commands in `infra/macos/mini/README.md`
+  → "M79"): symlink + `launchctl bootstrap net.wind.photos-export`, run `./photos-export.sh`.
+- Verify the nightly `s3-sync-backups` CronJob picks up `Graham/iCloud/Photos`.
+- M80 (Drive/Contacts/Messages) is the natural follow-on, same Backups-share → Deep-Archive path.
+
+---
+
 ## 2026-06-18 — Claude Code dev sessions migrated mini → devbox (M81), reboot-validated
 
 **Goal:** move the three persistent Claude Code dev sessions (`infra`, `cue`,
