@@ -66,6 +66,35 @@ on tailnet + LAN; Claude Code v2.1.154+ fixed Linux remote control.
   (created on the mini) aren't in git, so they didn't migrate. Copy mini → devbox.
 - **Cilium H3 audit `/loop`** (was running in the infra chat) is stopped — re-home it off
   the interactive thread (devbox systemd timer is the natural host; it has kubectl).
+---
+
+## 2026-06-18 — RC session-UUID collision (mini⇄devbox) + M79 photo-backup kickoff
+
+(Migration mechanics + the non-executable-script fix are in the M81 entry above.)
+
+**RC collision (gotcha — now in memory `reference_rc_session_uuid_collision.md`):** the
+infra thread was migrated by *copying* its transcript `e7e39822-…jsonl` to devbox and
+resuming it. That left BOTH the mini and devbox running session **`e7e39822` under the
+same transplanted OAuth token** → Remote Control (one channel per session-UUID+account)
+had them fighting; the mini "took over" devbox's RC. **Resolution:** devbox keeps
+`e7e39822` (the main infra thread); the **mini starts a fresh `claude` session** (new UUID)
+for mini-only tasks — never `--continue`/`--resume` e7e39822 on the mini again.
+
+**M79 iCloud Photos backup — kickoff (next frontier on the mini):** plumbing all settled
+(see tracker M79). Current state from a clean reboot: both NAS shares mounted
+(`/Volumes/Personal-Drive` 24 TB free, `/Volumes/Backups`); **nothing built yet** —
+`osxphotos` NOT installed (brew present at `/opt/homebrew`), no `Photos/` dir on the share,
+mini has only ~41 GB local free (hence the sparsebundle-on-NAS plan). The s3-sync system
+is **k8s CronJobs in the `backups` ns** reading the NAS over **NFS** (`sequoia.wind.etherport.net:/var/nfs/shared/<Share>`, e.g. `/var/nfs/shared/Graham`) → data bucket
+`archive.wind.etherport.net` (Deep-Archive). For photos we need a **separate** Glacier-
+Instant-Retrieval bucket + a new `shares/photos/` (DEST_BUCKET=photos.wind…, NFS path =
+the export dir under Personal-Drive). **Build order (next session):** (1) `brew install
+osxphotos`; (2) `hdiutil create` the APFS sparsebundle at
+`/Volumes/Personal-Drive/Photos/PhotosLibrary.sparsebundle` (size ~1 TB, sparse) + attach;
+(3) owner: Photos.app (Option-launch) → create library *inside* the mounted image → sign
+into iCloud → **Download Originals** (long pole, days); (4) export script (`mount-nas` →
+`hdiutil attach` → `osxphotos export --update` w/ XMP sidecars → `/Volumes/Personal-Drive/Photos/export/`) + launchd timer; (5) TF for the photos bucket + scoped IAM (add ARNs to
+the `kubernetes-s3-backup` production policy); (6) `shares/photos/` s3-sync manifests.
 
 ---
 
