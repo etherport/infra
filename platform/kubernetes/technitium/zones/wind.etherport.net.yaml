@@ -126,6 +126,11 @@ records:
     value: 10.10.209.10
     comment: Sequoia NAS/storage
 
+  - name: devbox
+    type: A
+    value: 10.10.201.45
+    comment: Dev VM (Claude Code sessions + kubectl); ansible playbooks/devbox.yml
+
   # =============================================================================
   # Infrastructure - VPN
   # =============================================================================
