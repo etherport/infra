@@ -117,6 +117,23 @@
   ],
 
   //----------------------------------------------------------------
+  // nodeAttrs: per-user / per-device feature flags
+  //----------------------------------------------------------------
+  // Mullvad exit nodes (Tailscale ↔ Mullvad add-on). The add-on is billed
+  // per-device and managed externally, so devices CANNOT be enabled from the
+  // admin console — access is granted here in the ACL by giving the "mullvad"
+  // attribute. Scoped to autogroup:member, so the owner's devices (iPhone,
+  // MacBook Pro, Surface, etc.) can see + select Mullvad exit nodes in the
+  // Tailscale app. Each device that actually connects consumes one of the
+  // purchased Mullvad slots. Added 2026-06-18 per owner request.
+  "nodeAttrs": [
+    {
+      "target": ["autogroup:member"],
+      "attr":   ["mullvad"],
+    },
+  ],
+
+  //----------------------------------------------------------------
   // (Optional — not currently used) Future blocks to consider:
   //----------------------------------------------------------------
   //
