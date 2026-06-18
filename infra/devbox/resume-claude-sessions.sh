@@ -19,7 +19,12 @@
 #    personal-web were primed that way during the mini->devbox migration.
 set -uo pipefail
 
-SESSIONS=(cue personal-web infra)   # infra migrated off the mini 2026-06-18
+# One tmux session per repo (each is a SEPARATE session/window, not a combined name).
+SESSIONS=(
+  cue
+  personal-web
+  infra        # migrated off the mini 2026-06-18
+)
 CODE="${HOME}/code"
 GH="git@github.com:sparked-diamond"
 
