@@ -13,6 +13,62 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-18 — Claude Code dev sessions migrated mini → devbox (M81), reboot-validated
+
+**Goal:** move the three persistent Claude Code dev sessions (`infra`, `cue`,
+`personal-web`) off the reboot-prone, FileVault-gated Mac mini onto the always-on
+Linux **devbox** (`10.10.201.45`, tailnet `100.74.216.102`), so sessions survive
+reboots unattended and stay remote-controllable from claude.ai. The mini is retained
+**only** for macOS-only work (iCloud Photos/Drive backups — M79/M80).
+
+**Why devbox:** no FileVault unlock-on-reboot gate → genuinely unattended auto-resume;
+system `node`/`claude`/`tmux`/`git` in `/usr/bin` → work under systemd's minimal env;
+on tailnet + LAN; Claude Code v2.1.154+ fixed Linux remote control.
+
+**Done:**
+- **All 3 sessions migrated with full history.** Transcripts copied
+  `~/.claude/projects/-Users-grahamsmith-code-<repo>/` → `-home-ubuntu-code-<repo>/`.
+  Each primed once via `claude --resume` (picker) — `--continue` keys off
+  `lastSessionId`, which a freshly-copied transcript lacks; after one `--resume` it follows.
+- **Reboot persistence** via `infra/devbox/{resume-claude-sessions.sh,claude-sessions.service}`:
+  a systemd **user** unit (oneshot, `WantedBy=default.target`, `KillMode=none`) +
+  `loginctl enable-linger ubuntu` (so the user manager runs at boot without login). The
+  script self-heals (auto-clones a missing repo) and `cd`s explicitly before `claude --continue`.
+- **Reboot test PASSED (2026-06-18 18:52).** Post-reboot, all three tmux sessions
+  auto-resumed ~8s after boot, each in the **correct** repo cwd (`/home/ubuntu/code/{cue,personal-web,infra}`)
+  running `claude --continue`. Service `enabled` + `active`, `Linger=yes`.
+
+**Key decisions / lessons (the code alone won't tell you):**
+- **`tmux new-session -c <dir>` silently falls back to `$HOME` if `<dir>` doesn't exist** —
+  this bit us when a background-task race deleted the `personal-web` clone, so claude opened
+  the wrong project (`-home-ubuntu`). Fix: ensure the dir exists (auto-clone) **and** `cd`
+  explicitly in the launched command, not just rely on `-c`.
+- **The resume script was committed non-executable** (`100644`) — it only ran because the
+  live copy had been hand-`chmod +x`'d at setup; a `git restore` strips that and breaks
+  systemd `ExecStart` on the next boot. Marked all three operator shell scripts `0755`
+  in git (`4b49e54`). Also discovered devbox had a **stale local edit** to the script
+  silently blocking every `git pull` from updating it.
+- **Claude OAuth login is broken on headless Linux** (GitHub #47152 "Missing redirect_uri",
+  unpatched). Worked around by transplanting the mini's full-scope token (Keychain →
+  devbox `~/.claude/.credentials.json`) + setting `hasCompletedOnboarding: true` in
+  `~/.claude.json` (else the setup wizard re-runs). Real fix = Anthropic patching #47152.
+
+**State at end:** all 3 sessions live + reboot-durable on devbox; repo clean at `4b49e54`.
+
+**Next steps / known gaps (→ M81 follow-ups):**
+- **devbox.yml drift:** the live box has `kubectl` (v1.36.2, cluster-admin) + the
+  `claude-sessions` systemd unit + linger that are **not codified** in `playbooks/devbox.yml`
+  (which still ships the superseded single-session `claude-dev` launcher). Codify for reproducibility.
+- **devbox toolchain gaps (by design, for now):** no `terraform`, no `~/.aws` profiles, no
+  browser. So Terraform plan/apply + headless-Chrome verification can't run on devbox as-is —
+  route those through CI or the mini, or install + configure them on devbox later.
+- **`~/.claude/.../memory/` is empty on devbox** — the user's Claude Code memory files
+  (created on the mini) aren't in git, so they didn't migrate. Copy mini → devbox.
+- **Cilium H3 audit `/loop`** (was running in the infra chat) is stopped — re-home it off
+  the interactive thread (devbox systemd timer is the natural host; it has kubectl).
+
+---
+
 ## 2026-06-17 — M65 terraform consistency (+ M53/M54/M71 tracker housekeeping)
 
 **Goal:** the zero-risk terraform cleanup. Picked because it's provably zero plan-diff.

@@ -41,8 +41,11 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
 ## 3. Operating model (how change actually ships)
 
 - **GitOps, branch = `main`.** Flux watches `main` → `clusters/wind`. Editing a
-  manifest does nothing until committed + pushed + reconciled. The headless mini
-  auto-pushes to `main` (no branch protection — single-owner repo, accepted risk L20).
+  manifest does nothing until committed + pushed + reconciled. The headless agent
+  hosts auto-push to `main` (no branch protection — single-owner repo, accepted risk
+  L20). **As of 2026-06-18 the Claude Code dev sessions run on the `devbox`** (not the
+  mini — M81); the mini is kept for macOS-only iCloud work. Renovate also auto-merges
+  to `main`, so a push can be rejected → `git pull --rebase origin main` then re-push.
 - **Validate before commit:** `kubectl kustomize <dir>` (there is **no standalone
   `kustomize` binary** — use `kubectl kustomize`). For new CRDs, `kubectl apply
   --dry-run=server -f` validates against live CRDs.
@@ -64,16 +67,31 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
 
 ## 4. Secrets & access (this matters — read before touching secrets)
 
-- **SOPS + age.** Private key on the mini at `~/.config/sops/age/keys.txt`. The
-  agent-readable bundle is **`infra/ansible/playbooks/secrets/homelab-ops.sops.yaml`**
-  (`sops -d` it for aws/udm/cloudflare/etc. creds headlessly). Other `*.sops.yaml`
-  files are scattered per-component. A pre-commit gate blocks plaintext secrets.
+- **SOPS + age.** Primary age private key at `~/.config/sops/age/keys.txt` on **both
+  the mini and the devbox** (devbox copy deployed by `devbox.yml` so dev-session agents
+  can `sops -d` headlessly — confirmed working). NB: this makes devbox disk a **4th
+  holder** of the primary key (was 3 per H33: mini disk, GH `SOPS_AGE_KEY`, Flux
+  `sops-age`) — factor into blast-radius/rotation. The agent-readable bundle is
+  **`infra/ansible/playbooks/secrets/homelab-ops.sops.yaml`** (`sops -d` it for
+  aws/udm/cloudflare/etc. creds headlessly). Other `*.sops.yaml` files are scattered
+  per-component. A pre-commit gate blocks plaintext secrets.
 - **`op` (1Password CLI) does NOT work from agent bash** — it only authorizes the
   user's interactive/VNC terminal. To get a 1P secret the bundle lacks: ask the user
   to dump it to a file in their VNC terminal (mini-local) and read it there, or have
   them add it to the SOPS bundle. Don't burn cycles retrying `op` from your shell.
+- **devbox** (`10.10.201.45`, tailnet `100.74.216.102`, Ubuntu, user `ubuntu`) =
+  always-on Linux host where the **Claude Code dev sessions live** (M81, since
+  2026-06-18). No FileVault gate → sessions auto-resume on reboot (systemd user unit
+  `claude-sessions.service` + `loginctl enable-linger`; per-repo tmux running
+  `claude --continue`, see `infra/devbox/`). **Has:** `kubectl` (cluster-admin),
+  `sops`+age, `git`, `claude`. **Lacks (by design):** `terraform`, `~/.aws` profiles,
+  any browser — so TF plan/apply + headless-Chrome verification must run on the mini or
+  via CI, not here. Auth: Claude OAuth is broken on headless Linux (GitHub #47152) →
+  token transplanted from the mini's Keychain into `~/.claude/.credentials.json`.
+  Provisioning: `infra/ansible/playbooks/devbox.yml` (+ `infra/devbox/README.md`).
 - **Mac mini** (`10.10.202.101`, tailnet `100.79.165.113`) = always-on headless
-  ops/RC host: full kubectl/terraform/sops/ansible, **no 1P at runtime**. Procedure:
+  ops/RC host: full kubectl/terraform/sops/ansible, **no 1P at runtime**. Retained for
+  macOS-only iCloud backups (M79/M80) + as the TF/AWS-capable ops box. Procedure:
   `docs/setup/headless-ops-host.md`.
 - **Appliances:** UDM Pro `10.10.200.1` (Network v2 API via `udm_api_key` `X-API-KEY`,
   or `udm_tfadmin_*` login). UniFi Protect = **`Windprotect` `10.10.212.10`** (SSH via

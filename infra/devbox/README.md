@@ -49,12 +49,17 @@ Verify / test:
 ```bash
 systemctl --user is-enabled claude-sessions.service     # enabled
 loginctl show-user ubuntu | grep Linger                 # Linger=yes
-sudo reboot                                             # then: tmux ls  (cue, personal-web)
+sudo reboot                                             # then: tmux ls  (cue, personal-web, infra)
 ```
+**Reboot test PASSED 2026-06-18:** all three sessions auto-resumed ~8s after boot, each
+in the correct repo cwd. ⚠️ The scripts **must stay executable in git** (`0755`) — they
+were once committed `0644` and only ran from a hand-`chmod`'d live copy, a latent
+`ExecStart` failure a `git restore` would expose (fixed in `4b49e54`).
 
 ## TODO
-- Add `infra` to `SESSIONS=(...)` once that thread is migrated off the mini.
-- Codify all of the above (kubectl install, ssh-config, authorized_keys, this unit)
-  into `infra/ansible/playbooks/devbox.yml` for full reproducibility.
+- Codify the live-but-undocumented bits into `infra/ansible/playbooks/devbox.yml`:
+  `kubectl` (v1.36.2) install + kubeconfig, and **this** `claude-sessions` systemd unit +
+  linger. (devbox.yml currently ships the superseded single-session `claude-dev` launcher.)
+- Copy the user's `~/.claude/.../memory/` files mini → devbox (not in git, didn't migrate).
 - Migrate the cilium-audit `/loop` here as a systemd timer (see memory:
   project_devbox_cilium_audit_job).
