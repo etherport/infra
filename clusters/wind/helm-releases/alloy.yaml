@@ -125,6 +125,25 @@ spec:
             stage.cri { }
           }
 
+          // ---------- Cilium Hubble AUDIT-verdict flows (H3 NetPol observation) ----------
+          // Cilium policy-audit-mode logs would-be-denied flows as AUDIT and
+          // exports them (allowlist={"verdict":["AUDIT"]}) to a per-node file.
+          // We tail it → Loki under job=hubble-audit; the loki-ruler alerts on
+          // new src→dst:port tuples (see 06-loki-rules-cilium-audit). This
+          // replaces the interactive audit-report /loop. Each node ships its own
+          // flows; the JSON is parsed at query time with LogQL `| json`.
+          local.file_match "hubble_audit" {
+            path_targets = [{
+              __path__ = "/var/run/cilium/hubble/audit-events.json",
+              job      = "hubble-audit",
+            }]
+          }
+
+          loki.source.file "hubble_audit" {
+            targets    = local.file_match.hubble_audit.targets
+            forward_to = [loki.write.default.receiver]
+          }
+
           // ---------- Syslog receiver (UDP+TCP 514) ----------
           // RFC3164 (BSD) — what UDM-Pro, USW, USG, most home gear
           // emit by default. RFC5424 is newer but few SOHO devices
@@ -279,6 +298,12 @@ spec:
       mounts:
         varlog: true
         dockercontainers: true
+        # Read Cilium's per-node Hubble AUDIT export file (root:root; Alloy
+        # runs as root, see securityContext below). Read-only.
+        extra:
+          - name: cilium-hubble-export
+            mountPath: /var/run/cilium/hubble
+            readOnly: true
       # Required for syslog receiver to bind :514 — privileged port.
       # NET_BIND_SERVICE is the minimal capability; we don't need root.
       securityContext:
@@ -313,6 +338,16 @@ spec:
     # DaemonSet controller mode — one pod per node.
     controller:
       type: daemonset
+      # Host volume backing the Hubble AUDIT export mount above. Cilium writes
+      # /var/run/cilium/hubble/audit-events.json on each node (created lazily on
+      # the first AUDIT flow); DirectoryOrCreate so Alloy mounts cleanly even on
+      # nodes that haven't emitted an AUDIT flow yet.
+      volumes:
+        extra:
+          - name: cilium-hubble-export
+            hostPath:
+              path: /var/run/cilium/hubble
+              type: DirectoryOrCreate
       tolerations:
         # Run on control-plane nodes too so their logs ship.
         - key: node-role.kubernetes.io/control-plane

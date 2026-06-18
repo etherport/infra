@@ -10,6 +10,7 @@ resources:
   - 03-alertmanager-config.yaml
   - 04-ipmi-alerts.yaml
   - 05-loki-rules-ipmi.yaml
+  - 06-loki-rules-cilium-audit.yaml
   - 06-backup-alerts.yaml
   - 07-flux-monitoring.yaml
   - comprehensive-alerts.yaml

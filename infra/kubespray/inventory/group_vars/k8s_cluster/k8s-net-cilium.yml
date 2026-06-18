@@ -232,7 +232,22 @@ cilium_hubble_metrics:
 ##  cilium_config_extra_vars:
 ##    var1: "value1"
 ##    var2: "value2"
-# cilium_config_extra_vars: {}
+#
+# Hubble static flow export, filtered to AUDIT verdicts only (H3 NetworkPolicy
+# observation). While policy-audit-mode is ON, traffic a CNP WOULD deny is logged
+# as an AUDIT verdict but allowed through; this exports those would-be-drops to a
+# per-node file. Grafana Alloy tails it into Loki (job="hubble-audit") and the
+# loki-ruler alerts on new src→dst:port tuples — replacing the interactive
+# audit-report /loop. See platform/kubernetes/monitoring/06-loki-rules-cilium-audit.yaml
+# + clusters/wind/helm-releases/alloy.yaml. Tiny volume (AUDIT-only). Applied live
+# 2026-06-18 via `kubectl patch cm cilium-config` + `rollout restart ds/cilium`
+# (Cilium is Helm-managed; this inventory is the durable source — keep in sync).
+# Retire the export keys once policy-audit-mode is turned off (H3 enforcement).
+cilium_config_extra_vars:
+  hubble-export-file-path: "/var/run/cilium/hubble/audit-events.json"
+  hubble-export-file-max-size-mb: "10"
+  hubble-export-file-max-backups: "3"
+  hubble-export-allowlist: '{"verdict":["AUDIT"]}'
 
 # For adding and mounting extra volumes to the cilium operator
 # cilium_operator_extra_volumes: []
