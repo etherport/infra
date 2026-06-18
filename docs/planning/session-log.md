@@ -13,6 +13,47 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-18 — Cilium policy-audit observation moved into Loki/alerts (retire the /loop)
+
+**Goal:** stop running the H3 NetworkPolicy audit observation as an interactive
+`audit-report.py` `/loop` in a chat thread; surface it through the **existing**
+logging/alert stack instead (owner: "build it into Loki, don't create anything new").
+
+**Built (all reusing what's already running — `c269ebb`):**
+- **Cilium → file:** enabled Hubble **static flow export filtered to `verdict=AUDIT`**
+  (`hubble-export-allowlist={"verdict":["AUDIT"]}`) to a per-node file
+  `/var/run/cilium/hubble/audit-events.json`. Tiny volume (AUDIT-only). Applied live
+  via `kubectl patch cm cilium-config` + `rollout restart ds/cilium` (Helm path — **no
+  helm on devbox**, and this is the policy-audit-mode pattern; **canary'd one pod first**
+  to prove the config parses before rolling all 8). Durable in the kubespray inventory
+  via `cilium_config_extra_vars`.
+- **Alloy → Loki:** added a read-only hostPath mount + a `loki.source.file` tailing that
+  file → Loki as `{job="hubble-audit"}` (`clusters/wind/helm-releases/alloy.yaml`).
+- **loki-ruler → Alertmanager:** new `CiliumNetpolAuditFlow` LogQL alert
+  (`platform/kubernetes/monitoring/06-loki-rules-cilium-audit.yaml`, label `loki_rule:"1"`)
+  that fires on AUDIT flows **excluding already-triaged known-good sources** (postgres
+  replication, cnpg-system) → only NEW/notable `src→dst:port` tuples page; full detail
+  queryable in Grafana. Routes through the existing advisor too (advisory-only).
+
+**Verified end-to-end:** canary cilium pod healthy (config parsed: "Building the Hubble
+static exporter … ExportAllowlist:{\"verdict\":[\"AUDIT\"]}"), all 8 rolled; AUDIT flows
+captured on postgres nodes (`postgres→postgres:5432` replication); Loki has the
+`job="hubble-audit"` stream with real flow JSON; the rule file landed in the ruler dir
+(`/var/loki/rules-temp/fake/cilium-audit.yaml`) alongside the working `pve-ipmi.yaml`.
+The `src_ns!~"postgres|cnpg-system"` exclusion keeps it quiet on the known replication.
+
+**Why this shape:** a cloud `/schedule` can't reach the homelab cluster (no tailnet/LAN/
+kubectl from Anthropic's cloud); a devbox systemd timer would be net-new. Loki+ruler+Alloy
++Alertmanager already exist and already alert — this just adds a source + a rule.
+
+**Op note:** as a flow gets added to a CNP allowlist it stops being AUDIT (CNP forwards
+it) → drops out of the export automatically. As a new tier is enforced its AUDIT flows
+appear here with no rule change. Update the rule's `src_ns` exclusion only when a *new*
+source becomes known-good-but-not-yet-allowlisted. Retire the export keys when
+policy-audit-mode is turned off at H3 enforcement.
+
+---
+
 ## 2026-06-18 — Velero fs-backup incident (H39) + AI-advisor email-flood / cost-cap
 
 **Trigger:** owner reported a flood of AI-advisor emails + the advisor hitting its

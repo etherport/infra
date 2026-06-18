@@ -60,9 +60,12 @@ The per-tier allowlists (`1x-tier-*.yaml`) beyond postgres are **intentionally a
    — `netpol.wind/enforced: "true"` (e.g. `platform/kubernetes/cnpg/00-namespace.yaml` for
    postgres). **Do NOT `kubectl label`** a Flux-managed namespace — Flux's server-side apply
    strips out-of-band labels on the next reconcile. Commit + reconcile → durable.
-4. Observe ≥1–2 weeks: `python3 scripts/cilium/audit-report.py` (cluster-wide AUDIT flows
-   via the hubble relay) — be sure to cover CronJobs/backups. Every AUDIT flow = a would-be
-   drop on enforcement.
+4. Observe ≥1–2 weeks. AUDIT flows are now **continuously shipped to Loki** and alerted on
+   (since 2026-06-18): Cilium exports `verdict=AUDIT` flows → Alloy → Loki `{job="hubble-audit"}`
+   → the loki-ruler `CiliumNetpolAuditFlow` alert (fires on new tuples only; known-good
+   sources excluded). Triage via the alert + Grafana Explore (`{job="hubble-audit"} | json`);
+   `python3 scripts/cilium/audit-report.py` remains as an ad-hoc one-shot. Cover CronJobs/backups.
+   Every AUDIT flow = a would-be drop on enforcement.
 5. Add legit flows to the relevant per-tier CNP; write `1x-tier-*.yaml` for new tiers from
    the audit data.
 6. **Enforce:** once all target namespaces' allowlists are verified, disable global audit
