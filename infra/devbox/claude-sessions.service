@@ -1,0 +1,15 @@
+[Unit]
+Description=Resume Claude Code tmux sessions (cue, personal-web, ...)
+# Need the network up for the self-heal auto-clone + claude's RC connection.
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/home/ubuntu/code/infra/infra/devbox/resume-claude-sessions.sh
+# tmux server must outlive this oneshot unit.
+KillMode=none
+
+[Install]
+WantedBy=default.target
