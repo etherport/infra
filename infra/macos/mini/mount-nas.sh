@@ -1,45 +1,39 @@
 #!/bin/bash
-# Mount the NAS "Personal-Drive" SMB share at ~/NAS on the mini.
+# Ensure the NAS "Personal-Drive" SMB share is mounted at /Volumes/Personal-Drive
+# (the standard macOS path — same as a Finder "Connect to Server"). Idempotent.
 #
-# Runs as the `graham` user via the net.wind.mount-nas LaunchAgent (fires when
-# the Aqua/login session starts — i.e. at auto-login). Idempotent + retries
-# while the network/NAS comes up. The SMB password is resolved NON-interactively
-# from the login keychain (the entry Finder created when you connected with
-# "Remember this password in my keychain"), so nothing secret lives in this repo.
+# Uses `open smb://` rather than `mount_smbfs` to a custom path: macOS auto-mounts
+# SMB shares under /Volumes/<share>, and mounting the *same* share a second time at
+# a different path fails with "File exists" (EEXIST). `open` mounts to the standard
+# /Volumes path the system already uses, so it never conflicts. The password is
+# resolved non-interactively from the login keychain (nothing secret committed).
 #
-# Part of the iCloud Photos backup pipeline (M79): the Photos library lives in
-# an APFS sparsebundle under ~/NAS/Photos/. The osxphotos export job re-runs this
-# (idempotently) in its preflight, so a dropped mount self-heals. See README.md.
+# Part of the iCloud Photos backup pipeline (M79): the Photos library lives in an
+# APFS sparsebundle at /Volumes/Personal-Drive/Photos/. The osxphotos export job
+# re-runs this in its preflight, so a dropped mount self-heals. See README.md.
 set -uo pipefail
 
-SERVER="sequoia.wind.etherport.net"
-SHARE="Personal-Drive"
-SMB_USER="graham"
-MOUNTPOINT="${HOME}/NAS"
-RETRIES=12          # ~1 min of attempts per launchd invocation
-SLEEP_SECS=5
+VOL="/Volumes/Personal-Drive"
+URL="smb://graham@sequoia.wind.etherport.net/Personal-Drive"
 
 log() { echo "$(date '+%Y-%m-%dT%H:%M:%S') mount-nas: $*"; }
 
-mkdir -p "$MOUNTPOINT"
-
-# Already mounted? (macOS `mount` prints "...//graham@server/Share on /Users/grahamsmith/NAS (smbfs...")
-if /sbin/mount | grep -qF " on ${MOUNTPOINT} "; then
-  log "already mounted at ${MOUNTPOINT}; nothing to do"
+if mount | grep -qF " on ${VOL} "; then
+  log "already mounted at ${VOL}; nothing to do"
   exit 0
 fi
 
-i=0
-while [ "$i" -lt "$RETRIES" ]; do
-  i=$((i + 1))
-  # //user@server/share — mount_smbfs pulls the password from the login keychain.
-  if out=$(/sbin/mount_smbfs "//${SMB_USER}@${SERVER}/${SHARE}" "$MOUNTPOINT" 2>&1); then
-    log "mounted //${SERVER}/${SHARE} at ${MOUNTPOINT} (attempt ${i})"
+log "mounting ${URL} via open (keychain password)"
+open "$URL"
+
+# `open` is async — poll for the volume to appear (~40s).
+for i in $(seq 1 20); do
+  sleep 2
+  if mount | grep -qF " on ${VOL} "; then
+    log "mounted at ${VOL} (after $((i * 2))s)"
     exit 0
   fi
-  log "attempt ${i}/${RETRIES} failed (${out}); retrying in ${SLEEP_SECS}s — network/NAS may not be up yet"
-  sleep "$SLEEP_SECS"
 done
 
-log "ERROR: could not mount //${SERVER}/${SHARE} after ${RETRIES} attempts"
+log "ERROR: ${VOL} not mounted after ~40s (NAS down? keychain entry missing?)"
 exit 1
