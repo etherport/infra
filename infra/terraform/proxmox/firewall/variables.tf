@@ -56,3 +56,13 @@ variable "mgmt_admin_cidrs" {
     "192.168.3.0/24",
   ]
 }
+
+# Dedicated Ceph storage VLAN (vmbr0.210). The host runs the Ceph mon+OSDs here
+# (10.10.210.41) and the K8s nodes are RBD clients on the same /24. The host
+# firewall must allow this VLAN to the Ceph daemon ports or NEW rbd map/create
+# from K8s is dropped under the Stage-2 DROP policy (H37 oversight fixed 2026-06-18).
+variable "ceph_storage_cidr" {
+  description = "Dedicated Ceph storage VLAN CIDR allowed to reach the host's Ceph mon/OSD ports"
+  type        = string
+  default     = "10.10.210.0/24"
+}

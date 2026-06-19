@@ -107,13 +107,43 @@ resource "proxmox_virtual_environment_cluster_firewall_security_group" "pve_mgmt
   }
 }
 
-# --- Attach the security group to the node (host) ----------------------------
+# --- Security group: allow Ceph storage traffic from the storage VLAN --------
+# H37 OVERSIGHT FIX (2026-06-18). The host runs the Ceph mon + OSDs on the
+# dedicated storage VLAN interface vmbr0.210 (10.10.210.41); the K8s nodes are
+# Ceph RBD CLIENTS on that same VLAN (10.10.210.0/24). When input_policy flipped
+# to DROP (Stage 2, 2026-06-17) there was NO rule permitting Ceph, so every NEW
+# rbd map/create from K8s was dropped. Existing connections survived via
+# conntrack (mounted volumes kept working) so it stayed LATENT until a fresh map
+# — which wedged technitium-1 and blocked all dynamic provisioning ~30h later.
+# This restores Ceph client access. Scoped to the dedicated storage VLAN only
+# (not a general open-up). See docs/planning/session-log.md 2026-06-18.
+resource "proxmox_virtual_environment_cluster_firewall_security_group" "pve_ceph" {
+  name    = "pve-ceph"
+  comment = "H37: Ceph mon/OSD access from the storage VLAN (K8s RBD clients)"
+
+  rule {
+    type    = "in"
+    action  = "ACCEPT"
+    source  = var.ceph_storage_cidr
+    proto   = "tcp"
+    dport   = "3300,6789,6800:7300"
+    log     = "nolog"
+    comment = "Ceph mon (3300/6789) + OSD/MGR/MDS (6800-7300) from storage VLAN"
+  }
+}
+
+# --- Attach the security groups to the node (host) ---------------------------
 resource "proxmox_virtual_environment_firewall_rules" "pve_node" {
   node_name = var.node_name
 
   rule {
     security_group = proxmox_virtual_environment_cluster_firewall_security_group.pve_mgmt.name
     comment        = "H37: PVE host management plane (see pve-mgmt security group)"
+  }
+
+  rule {
+    security_group = proxmox_virtual_environment_cluster_firewall_security_group.pve_ceph.name
+    comment        = "H37 fix: Ceph storage plane (see pve-ceph security group)"
   }
 
   depends_on = [proxmox_node_firewall.pve]
