@@ -206,4 +206,15 @@ disposable mirror. Steps:
   whenever `<DEST>/.osxphotos_export.db` is missing, or cleanup may delete+re-download
   already-exported files. The nightly `photos-export.sh` keeps `--cleanup` (DB is healthy
   in steady state).
+- **`photos-export-resume.sh` defaults to a pure-LOCAL export; `--download-missing` is
+  opt-in** (`DOWNLOAD_MISSING=1`). `--download-missing --use-photokit` drives PhotoKit,
+  which needs Photos.app + a live CoreData/XPC link to the library daemon — and on the
+  SMB-backed library that link is **fragile**: any SMB blip makes Photos.app quit (the
+  "library moved or corrupt" dialog) and **wedges** osxphotos on `CoreData: XPC: failed
+  after N attempts` (0 progress until the watchdog kills it). So do the bulk fill in
+  **local mode** (reads the library files directly — no PhotoKit, no Photos.app, no
+  dialogs; exports everything already downloaded, reports the rest as "missing"), then a
+  short **`DOWNLOAD_MISSING=1`** pass for just the genuinely-not-local originals. The
+  nightly `photos-export.sh` still uses `--download-missing` (steady state = few/no
+  missing, so the XPC exposure is minimal).
 - **FileVault** (see the mount-nas caveat) gates the whole pipeline after a reboot.

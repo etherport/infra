@@ -34,6 +34,15 @@ STALL_TICKS="${STALL_TICKS:-4}"    # 4 × 120s = 8 min of zero file growth ⇒ w
 # misjudge already-exported files and delete+re-download them. Set CLEANUP=1 once the DB
 # is healthy and you want deletions mirrored. Default: off (pure additive, safe).
 CLEANUP="${CLEANUP:-}"
+# --download-missing --use-photokit fetches not-yet-local originals on demand, but it drives
+# PhotoKit, which needs Photos.app + a live CoreData/XPC link to the library daemon. On the
+# SMB-backed library that link is FRAGILE: any SMB blip makes Photos.app quit ("library moved
+# or corrupt" dialog) and wedges osxphotos on "CoreData: XPC: failed after N attempts" (0
+# progress). So this is OPT-IN (DOWNLOAD_MISSING=1). Default OFF = a robust pure-LOCAL export
+# (reads the library files directly, no PhotoKit/Photos.app) — exports everything already
+# downloaded and just reports anything still not-local as "missing". Use the local pass for
+# the bulk fill, then a short DOWNLOAD_MISSING=1 pass for the few genuinely-missing originals.
+DOWNLOAD_MISSING="${DOWNLOAD_MISSING:-}"
 mkdir -p "$RDIR"
 
 log(){ echo "$(date '+%F %T') resume: $*"; }
@@ -52,17 +61,18 @@ attach_lib(){
 for a in $(seq 1 "$MAX_ATTEMPTS"); do
   "${HERE}/mount-nas.sh" >/dev/null 2>&1 || true
   attach_lib || { log "attempt ${a}: cannot attach library; retry in 15s"; sleep 15; continue; }
-  open -ga Photos 2>/dev/null || true   # -g: launch/keep running without stealing foreground
+  # Only run (and depend on) Photos.app when actually downloading missing originals.
+  [ -n "$DOWNLOAD_MISSING" ] && { open -ga Photos 2>/dev/null || true; }
   sleep 5
   if [ ! -d "$DEST" ]; then log "attempt ${a}: DEST not present after remount; retry in 15s"; sleep 15; continue; fi
 
   out="${RDIR}/resume-run-${a}.out"
-  cleanup_flag=(); [ -n "$CLEANUP" ] && cleanup_flag=(--cleanup)
-  log "attempt ${a}: starting export (have $(count) files; cleanup=${CLEANUP:-off})"
-  # ${arr[@]+"${arr[@]}"} guards against bash 3.2 treating an empty array as unbound (set -u)
+  flags=(--update --sidecar XMP --retry 3)
+  [ -n "$DOWNLOAD_MISSING" ] && flags+=(--download-missing --use-photokit)
+  [ -n "$CLEANUP" ] && flags+=(--cleanup)
+  log "attempt ${a}: starting export (have $(count) files; mode=$([ -n "$DOWNLOAD_MISSING" ] && echo photokit || echo local); cleanup=${CLEANUP:-off})"
   "$OSXPHOTOS" export "$DEST" --library "$LIB" \
-    --update --download-missing --use-photokit --sidecar XMP \
-    ${cleanup_flag[@]+"${cleanup_flag[@]}"} --retry 3 \
+    "${flags[@]}" \
     --report "${RDIR}/resume-${a}.csv" >"$out" 2>&1 &
   pid=$!
 
