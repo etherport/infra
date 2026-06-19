@@ -13,6 +13,36 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-19 — Grafana admin password (real, not default) + GPU dcgm-exporter wedge (gpu1 reboot)
+
+Two follow-ups after the storage incident, both owner-reported:
+
+**Grafana login.** Owner couldn't log in. Root cause: the `grafana-admin-credentials` SOPS
+secret had shipped the **placeholder `ChangeMe123!`** since the original SOPS-encryption
+commit (git shows no value change; no 1P→SOPS sync for it) — the real 1Password password was
+never wired in. Not "reset today" (Grafana had 13d uptime). Owner updated
+`grafana-admin-secret.sops.yaml` (VSCode SOPS extension) and pushed (`a0ffbc6`); Flux applied
+it; I `rollout restart deploy/monitoring-grafana` so it re-read `GF_SECURITY_ADMIN_PASSWORD`.
+**Verified:** new password → HTTP 200, `ChangeMe123!` → 401. (Side note: owner's laptop git
+push failed on commit-signing — stale `/tmp/gs-session-keys/homelab` key; unblocked with
+`git -c commit.gpgsign=false commit`.)
+
+**GPU dashboard empty.** `nvidia-dcgm-exporter` on `k8s-gpu1` was wedged — `/metrics` timing
+out (`TargetDown`), and crucially **`nvidia-smi` itself hung (D-state) → GPU driver/DCGM wedged
+at the kernel level**. A pod restart couldn't fix it (old container stuck Terminating, new one
+Pending; a fresh exporter just re-hangs on the wedged driver). **Fix = reboot gpu1 (Proxmox
+VM 120)** via `qm shutdown --timeout 60 --forceStop 1 && qm start` (graceful-then-force, so the
+Ceph volumes unmounted cleanly → no stale-EIO on ollama/plex). Post-reboot: operator-validator
+1/1, dcgm-exporter serves metrics again (`DCGM_FI_DEV_GPU_UTIL` live in Prometheus, target
+`up`), ollama+plex rescheduled back to gpu1 clean. **GPU *compute* was never affected** — only
+the monitoring layer. Runbook written: [`../runbooks/gpu-dcgm-exporter-wedge.md`](../runbooks/gpu-dcgm-exporter-wedge.md).
+**Durability:** the `TargetDown` alert (→ advisor) is the early-warning; the gpu-operator
+`ClusterPolicy.dcgmExporter` exposes no `livenessProbe`, so self-restart-on-hang isn't
+configurable via IaC (and couldn't kill a D-state container anyway) — runbook + alert is the
+mitigation. Tracked as M83.
+
+---
+
 ## 2026-06-19 — Storage incident: H37 firewall blocked Ceph; technitium-1 re-provisioned + made disposable
 
 **Trigger:** a full cluster/service health-check (owner request) found **technitium-1

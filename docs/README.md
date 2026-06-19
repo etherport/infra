@@ -42,6 +42,7 @@ docs/
 | [kubernetes-upgrade.md](runbooks/kubernetes-upgrade.md) | Kubernetes version upgrade procedures |
 | [disaster-recovery.md](runbooks/disaster-recovery.md) | Recovery procedures for failure scenarios |
 | [dns-resolution-issues.md](runbooks/dns-resolution-issues.md) | DNS troubleshooting |
+| [gpu-dcgm-exporter-wedge.md](runbooks/gpu-dcgm-exporter-wedge.md) | Empty GPU dashboard / `TargetDown` dcgm — driver wedge on gpu1, reboot VM 120 |
 | [vlan-interfaces-netplan.md](runbooks/vlan-interfaces-netplan.md) | VLAN interface configuration |
 | [cert-manager-wildcard.md](runbooks/cert-manager-wildcard.md) | Wildcard cert issuance + Traefik TLSStore |
 | [cilium-cni-dir-owner.md](runbooks/cilium-cni-dir-owner.md) | Cilium CrashLoop after a kubespray run (/opt/cni/bin owner) + the real kubespray run path |
