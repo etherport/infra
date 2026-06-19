@@ -22,27 +22,47 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEST="/Volumes/Backups/Graham/iCloud/Photos"
+SPARSEBUNDLE="/Volumes/Personal-Drive/Photos/PhotosLibrary.sparsebundle"
+ATTACH_VOL="/Volumes/PhotosLib"
 LIB="/Volumes/PhotosLib/Photos Library (NAS).photoslibrary"
 OSXPHOTOS="${HOME}/.local/bin/osxphotos"
 RDIR="${HOME}/Library/Logs/photos-export"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-60}"
 STALL_TICKS="${STALL_TICKS:-4}"    # 4 × 120s = 8 min of zero file growth ⇒ wedged
+# --cleanup deletes DEST files no longer in the library. SKIP it (CLEANUP unset) when the
+# export DB (<DEST>/.osxphotos_export.db) is missing — without that ledger, cleanup can
+# misjudge already-exported files and delete+re-download them. Set CLEANUP=1 once the DB
+# is healthy and you want deletions mirrored. Default: off (pure additive, safe).
+CLEANUP="${CLEANUP:-}"
 mkdir -p "$RDIR"
 
 log(){ echo "$(date '+%F %T') resume: $*"; }
 count(){ find "$DEST" -type f ! -name '.osxphotos_export.db' ! -name '*.DS_Store' 2>/dev/null | wc -l | tr -d ' '; }
 mounted(){ mount | grep -qF " on /Volumes/Backups "; }
+# Attach the library sparsebundle if it isn't already a mounted volume. Nothing else
+# attaches it after a reboot, so without this the export (and Photos.app) can't find the
+# library — exactly the "PhotosLib cannot be found" failure seen 2026-06-19.
+attach_lib(){
+  [ -d "$ATTACH_VOL" ] && return 0
+  [ -e "$SPARSEBUNDLE" ] || { log "sparsebundle missing at $SPARSEBUNDLE"; return 1; }
+  log "attaching sparsebundle → $ATTACH_VOL"
+  hdiutil attach "$SPARSEBUNDLE" -mountpoint "$ATTACH_VOL" >/dev/null 2>&1
+}
 
 for a in $(seq 1 "$MAX_ATTEMPTS"); do
   "${HERE}/mount-nas.sh" >/dev/null 2>&1 || true
+  attach_lib || { log "attempt ${a}: cannot attach library; retry in 15s"; sleep 15; continue; }
   open -ga Photos 2>/dev/null || true   # -g: launch/keep running without stealing foreground
   sleep 5
   if [ ! -d "$DEST" ]; then log "attempt ${a}: DEST not present after remount; retry in 15s"; sleep 15; continue; fi
 
   out="${RDIR}/resume-run-${a}.out"
-  log "attempt ${a}: starting export (have $(count) files)"
+  cleanup_flag=(); [ -n "$CLEANUP" ] && cleanup_flag=(--cleanup)
+  log "attempt ${a}: starting export (have $(count) files; cleanup=${CLEANUP:-off})"
+  # ${arr[@]+"${arr[@]}"} guards against bash 3.2 treating an empty array as unbound (set -u)
   "$OSXPHOTOS" export "$DEST" --library "$LIB" \
-    --update --download-missing --use-photokit --sidecar XMP --cleanup --retry 3 \
+    --update --download-missing --use-photokit --sidecar XMP \
+    ${cleanup_flag[@]+"${cleanup_flag[@]}"} --retry 3 \
     --report "${RDIR}/resume-${a}.csv" >"$out" 2>&1 &
   pid=$!
 

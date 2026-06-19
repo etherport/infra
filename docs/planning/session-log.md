@@ -35,6 +35,60 @@ once-per-day cap bounds any stale-partial email until tonight's clean nightly su
 
 ---
 
+## 2026-06-19 — M79 SMB instability root-caused & fixed (multichannel); library recovered; export resumed
+
+Picked up M79 after the owner VNC'd in to find Photos had force-quit ("quit to prevent
+corruption from the library") and, post-reboot, errored **"PhotosLib cannot be found."**
+Two questions: why did it corrupt, and why didn't the drive come back.
+
+**Root cause (found live, not guessed).** While diagnosing I watched **`Personal-Drive`
+drop on its own *while idle*** — that rules out write-load/sleep/bandwidth (link is 10G
+wired, sleep already disabled). There was **no `nsmb.conf` at all** → macOS SMB
+**multichannel** was ON, the textbook cause of spontaneous idle SMB session resets
+against a NAS over a fast NIC. A reset mid-write to the sparsebundle (which backs the
+Photos library as a "local" APFS volume over SMB) is what force-quit Photos and left the
+APFS journal dirty.
+
+**Why the drive didn't come back.** Two gaps: (1) nothing attaches the sparsebundle at
+login — `hdiutil attach` only ran inside the export job — so after reboot the shares
+remounted but `/Volumes/PhotosLib` never existed; (2) the volume was *dirty* (failed a
+read-only mount = unreplayed journal). Photos remembered the path but the volume wasn't
+there.
+
+**Fixes (all in git, sudo-free, self-healing on rebuild):**
+- **`infra/macos/mini/nsmb.conf`** — `mc_on=no` (multichannel off) + `protocol_vers_map=6`
+  (no SMB1) + `notify_off=yes`. Installed to `~/Library/Preferences/nsmb.conf`.
+- **`mount-nas.sh`** now (a) installs/refreshes `nsmb.conf` *before* mounting (only new
+  mounts pick it up) and (b) **attaches the sparsebundle after mounting** → PhotosLib is
+  present at login. Both idempotent.
+- **`photos-export-resume.sh`** — auto-attaches the bundle, and `--cleanup` is now opt-in
+  (`CLEANUP=1`, default OFF) because the `.osxphotos_export.db` ledger was lost in the
+  corruption; cleanup without it could delete+re-download already-exported files.
+
+**Recovery + validation.** Read-write attach replayed the journal (PhotosLib mounted).
+The library DB had a **14 GB un-checkpointed WAL** (the in-flight downloads at force-quit)
++ a 34 MB base — so a standalone `integrity_check` of the base "failed" (expected: pages
+live in the WAL). Ran `PRAGMA wal_checkpoint(TRUNCATE)` — which doubled as a **14 GB
+sustained network-write soak test of the SMB fix**: WAL 14 GB→0, **0 mount drops, 0 SMB
+reconnects** throughout, then `integrity_check` = **`ok`**, **14,267 photos** readable.
+So: library healthy (not corrupted), and the multichannel-off fix proven under real load.
+
+**State at end.** Remounted clean (verified live session: SMB 3.1.1, single-channel, 0
+reconnects). Re-launched `photos-export-resume.sh` (CLEANUP off) — osxphotos skips the
+10,203 already-exported and downloads+exports the remaining ~4k via PhotoKit, rebuilding
+the DB. Persistent monitor watching progress/drops/completion.
+
+**Next steps:** (1) let the ~4k tail finish (monitor will report); (2) verify ~14.3k
+files on `Backups`; (3) one-off `CLEANUP=1` run (or the nightly `photos-export.sh`, which
+keeps `--cleanup`) once the DB is healthy to re-establish deletion mirroring; (4) enable
+the `net.wind.photos-export` LaunchAgent; (5) confirm `s3-sync-backups` ships
+`Graham/iCloud/Photos`. **Lesson:** sparsebundle-on-SMB is viable but *requires* SMB
+multichannel disabled; deeper insurance (sudo-only) = system-wide `/etc/nsmb.conf` +
+raised `net.smb.fs.kern_*_deadtimer` so a server stall pauses I/O instead of erroring up
+into APFS.
+
+---
+
 ## 2026-06-19 (overnight, autonomous) — Velero nightly close-out + M84 (dataPathConcurrency)
 
 Owner asleep, asked to "resolve autonomously." Outcome of the velero close-out:

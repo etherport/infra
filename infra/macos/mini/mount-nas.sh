@@ -15,11 +15,25 @@
 # self-heals. See README.md.
 set -uo pipefail
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER="sequoia.wind.etherport.net"
 SMB_USER="graham"
 SHARES=(Personal-Drive Backups)
+# The Photos library sparsebundle lives on Personal-Drive; attach it after mounting so
+# /Volumes/PhotosLib is present at login (without this, Photos/osxphotos can't find the
+# library after a reboot — the "PhotosLib cannot be found" failure, 2026-06-19).
+SPARSEBUNDLE="/Volumes/Personal-Drive/Photos/PhotosLibrary.sparsebundle"
+ATTACH_VOL="/Volumes/PhotosLib"
 
 log() { echo "$(date '+%Y-%m-%dT%H:%M:%S') mount-nas: $*"; }
+
+# Ensure the SMB-hardening config is in place BEFORE mounting (it only affects new
+# mounts). Disables SMB multichannel etc. — without it, the mounts drop spontaneously
+# on this 10G link and corrupt the sparsebundle. Kept in git so a rebuild self-heals.
+if [ -f "${HERE}/nsmb.conf" ] && ! cmp -s "${HERE}/nsmb.conf" "${HOME}/Library/Preferences/nsmb.conf" 2>/dev/null; then
+  cp "${HERE}/nsmb.conf" "${HOME}/Library/Preferences/nsmb.conf" && \
+    log "installed/updated ~/Library/Preferences/nsmb.conf (SMB hardening)"
+fi
 
 rc=0
 for share in "${SHARES[@]}"; do
@@ -46,5 +60,18 @@ for share in "${SHARES[@]}"; do
     rc=1
   fi
 done
+
+# Attach the Photos library sparsebundle (idempotent) so /Volumes/PhotosLib exists.
+if [ -d "${ATTACH_VOL}" ]; then
+  log "✓ sparsebundle already attached at ${ATTACH_VOL}"
+elif [ -e "${SPARSEBUNDLE}" ]; then
+  if hdiutil attach "${SPARSEBUNDLE}" -mountpoint "${ATTACH_VOL}" >/dev/null 2>&1; then
+    log "▶ attached sparsebundle at ${ATTACH_VOL}"
+  else
+    log "✗ failed to attach sparsebundle ${SPARSEBUNDLE}"; rc=1
+  fi
+else
+  log "… sparsebundle not present at ${SPARSEBUNDLE} (owner setup incomplete?) — skipping attach"
+fi
 
 exit "$rc"

@@ -185,7 +185,25 @@ disposable mirror. Steps:
 
 ### Caveats
 - **Apple 2FA** sessions expire (weeks→months) → periodic interactive re-auth via VNC.
-- **Sparsebundle-over-network corruption** if the link drops mid-write (Time-Machine
-  risk model). Acceptable: the library is a cache of iCloud → corruption = recreate +
-  re-download, no master-data loss. Robust alt: external APFS SSD on the mini.
+- **Sparsebundle-over-network corruption** if the SMB link drops mid-write (Time-Machine
+  risk model). Hit hard 2026-06-19: the mounts dropped repeatedly — including
+  `Personal-Drive` dropping *while idle* on the 10G link — force-quitting Photos ("quit to
+  prevent corruption") and leaving a dirty APFS journal. **Root cause: macOS SMB
+  *multichannel* was on** (no `nsmb.conf` existed); it's the classic cause of spontaneous
+  idle SMB resets against a NAS on a fast NIC (not write-load/sleep/bandwidth). **Fix:
+  [`nsmb.conf`](nsmb.conf)** (`mc_on=no` + SMB1 off + `notify_off`), installed to
+  `~/Library/Preferences/nsmb.conf` by `mount-nas.sh` before it mounts. Validated by a
+  14 GB sustained network-write soak with **0 drops / 0 SMB reconnects**. The library was
+  **not** actually corrupted (recovered via journal replay + `wal_checkpoint`;
+  `integrity_check` = ok). If it ever recurs, deeper insurance (needs sudo, run in VNC):
+  system-wide `/etc/nsmb.conf` + raise `net.smb.fs.kern_*_deadtimer` (so a server stall
+  *pauses* I/O instead of erroring up into APFS), or move the library to an external APFS
+  SSD on the mini.
+- **`mount-nas.sh` now attaches the sparsebundle at login** (installs `nsmb.conf`, mounts
+  the shares, then `hdiutil attach`es the bundle) — before this, nothing attached it after
+  a reboot, so Photos errored "PhotosLib cannot be found" until the export job ran.
+- **`photos-export-resume.sh` `--cleanup` is opt-in** (`CLEANUP=1`): skip it (default)
+  whenever `<DEST>/.osxphotos_export.db` is missing, or cleanup may delete+re-download
+  already-exported files. The nightly `photos-export.sh` keeps `--cleanup` (DB is healthy
+  in steady state).
 - **FileVault** (see the mount-nas caveat) gates the whole pipeline after a reboot.
