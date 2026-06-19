@@ -966,6 +966,32 @@ data:
             logger.warning(f"Prometheus query failed: {e}")
         return 0
 
+    def _alert_still_firing(alert):
+        """True if this alert is STILL firing right now (per Prometheus ALERTS).
+        Used to suppress diagnosis+email for TRANSIENT alerts that already
+        resolved by the time the advisor gets to them — e.g. a DaemonSet rollout
+        that finished, a pod that recovered, a node that came back. No point
+        emailing a diagnosis of something that's already gone. (Owner ask
+        2026-06-19.) Fail-OPEN: if the check itself fails, return True so we never
+        silently drop a real alert because Prometheus was briefly unreachable."""
+        labels = alert.get('labels', {}) or {}
+        alertname = labels.get('alertname', '')
+        if not alertname:
+            return True
+        sel = f'alertname="{alertname}",alertstate="firing"'
+        ns = labels.get('namespace')
+        if ns:
+            sel += f',namespace="{ns}"'
+        try:
+            q = f'ALERTS{{{sel}}}'
+            url = f"{PROMETHEUS_URL}/api/v1/query?query={urllib.parse.quote(q)}"
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                data = json.loads(resp.read())
+            return len(data.get('data', {}).get('result', [])) > 0
+        except Exception as e:
+            logger.warning(f"still-firing check failed for {alertname}: {e}")
+            return True
+
     def _past_actions_for_alert(alertname, days=7):
         """Query Loki for the advisor's past actions on this alertname,
         and any verification outcomes that followed. Returns a compact
@@ -2269,6 +2295,16 @@ data:
             _audit('skipped_noisy', alertname=alert_name)
             return
         if is_cooldown_active(alert_name):
+            return
+        # Transient-suppression (owner ask 2026-06-19): if the alert has already
+        # RESOLVED by the time we get here — a rollout that finished, a pod that
+        # recovered, a node that came back — there's nothing to diagnose. Skip the
+        # Claude call + email entirely. This is why the night of the dcgm reboot /
+        # postgres-6 churn produced ~6 diagnosis emails for issues that were gone by
+        # the time they landed. Fail-open (see _alert_still_firing). NOT cooldowned:
+        # a genuine re-fire still active next time will be diagnosed.
+        if not _alert_still_firing(alert):
+            _audit('skipped_resolved', alertname=alert_name)
             return
         if _cap_reached():
             _audit('cap_reached', alertname=alert_name, daily_usd_spent=_cost_tracker['usd_spent'])
