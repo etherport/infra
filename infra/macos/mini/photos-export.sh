@@ -36,6 +36,11 @@ ATTACH_VOL="/Volumes/PhotosLib"                       # APFS volname from create
 DEST="/Volumes/Backups/Graham/iCloud/Photos"          # export target (on the NFS-exported Backups share)
 OSXPHOTOS="${HOME}/.local/bin/osxphotos"              # pipx install location
 REPORT_DIR="${HOME}/Library/Logs/photos-export"
+# Export DB on LOCAL disk (not in DEST on SMB): osxphotos writes it as the final step of
+# every run, and on the blip-prone SMB share that write fails (interrupted by reconnects)
+# → rc=1, no clean completion. Local + --ramdb makes it reliable; only photo files go over
+# SMB. Rebuildable ledger, so keeping it off the NAS/S3 is fine. (M79, 2026-06-19.)
+EXPORTDB="${EXPORTDB:-${HOME}/Library/Application Support/osxphotos/graham-icloud-photos.db}"
 
 log() { echo "$(date '+%Y-%m-%dT%H:%M:%S') photos-export: $*"; }
 
@@ -66,7 +71,7 @@ fi
 log "library: ${LIBRARY}"
 
 # --- 3. export ---
-mkdir -p "${DEST}" "${REPORT_DIR}"
+mkdir -p "${DEST}" "${REPORT_DIR}" "$(dirname "${EXPORTDB}")"
 REPORT="${REPORT_DIR}/export-$(date '+%Y%m%d-%H%M%S').csv"
 
 log "exporting → ${DEST} (report: ${REPORT})"
@@ -89,6 +94,8 @@ log "exporting → ${DEST} (report: ${REPORT})"
 "${OSXPHOTOS}" export "${DEST}" \
   --library "${LIBRARY}" \
   --update \
+  --exportdb "${EXPORTDB}" \
+  --ramdb \
   --download-missing \
   --use-photokit \
   --sidecar XMP \

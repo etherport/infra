@@ -43,7 +43,14 @@ CLEANUP="${CLEANUP:-}"
 # downloaded and just reports anything still not-local as "missing". Use the local pass for
 # the bulk fill, then a short DOWNLOAD_MISSING=1 pass for the few genuinely-missing originals.
 DOWNLOAD_MISSING="${DOWNLOAD_MISSING:-}"
-mkdir -p "$RDIR"
+# Keep the export DB on LOCAL disk, not in DEST on the SMB share. osxphotos writes the DB
+# as the final step of every run; when it lived on the (blip-prone) Backups share, that
+# write kept getting interrupted by SMB reconnects → osxphotos exited rc=1 with no clean
+# "Processed" line → the wrapper retried forever (saw 18 cycles 2026-06-19) even though the
+# files were all exported. Local DB + --ramdb makes that final write reliable; only the
+# photo files go over SMB. The DB is just a rebuildable ledger, so local (not in S3) is fine.
+EXPORTDB="${EXPORTDB:-${HOME}/Library/Application Support/osxphotos/graham-icloud-photos.db}"
+mkdir -p "$RDIR" "$(dirname "$EXPORTDB")"
 
 log(){ echo "$(date '+%F %T') resume: $*"; }
 count(){ find "$DEST" -type f ! -name '.osxphotos_export.db' ! -name '*.DS_Store' 2>/dev/null | wc -l | tr -d ' '; }
@@ -67,7 +74,7 @@ for a in $(seq 1 "$MAX_ATTEMPTS"); do
   if [ ! -d "$DEST" ]; then log "attempt ${a}: DEST not present after remount; retry in 15s"; sleep 15; continue; fi
 
   out="${RDIR}/resume-run-${a}.out"
-  flags=(--update --sidecar XMP --retry 3)
+  flags=(--update --sidecar XMP --retry 3 --exportdb "$EXPORTDB" --ramdb)
   [ -n "$DOWNLOAD_MISSING" ] && flags+=(--download-missing --use-photokit)
   [ -n "$CLEANUP" ] && flags+=(--cleanup)
   log "attempt ${a}: starting export (have $(count) files; mode=$([ -n "$DOWNLOAD_MISSING" ] && echo photokit || echo local); cleanup=${CLEANUP:-off})"
