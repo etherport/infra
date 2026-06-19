@@ -65,10 +65,12 @@ for forensics). That exposed **two bootstrap gaps** a fresh replica hit — now 
 blocklist window, **not** a persistent wedge — verified with a throwaway ceph-rbd test pod
 (mounted in ~10s), so **no reboot needed**; uncordoned.
 
-**Open / next:** (a) **DNS-rotation window on replica rebuild** — a fresh replica is `Ready`
-(empty) briefly before dns-sync populates it; a readiness gate on zone-presence would close
-it (hardening). (b) Consider re-homing TF off devbox for ZT (or accept it). (c) Old wedged
-RBD image `csi-vol-ba25c344` still in Ceph (Retain) — `rbd rm` once forensics aren't needed.
+**Open / next:** (a) ✅ **DONE (`4434719`):** DNS-rotation window closed — readinessProbe
+gates `.5` on local zone-presence (`dig +norecurse SOA`) + `technitium-headless`
+`publishNotReadyAddresses: true` so dns-sync can still bootstrap a not-ready fresh replica
+(no deadlock). (b) Consider re-homing TF off devbox for ZT (or accept it) — tracked as M82.
+(c) ✅ **DONE:** old wedged RBD image `csi-vol-ba25c344` deleted from Ceph (`rbd rm`) — root
+cause was the firewall, data was disposable, no fsck needed.
 
 ---
 
