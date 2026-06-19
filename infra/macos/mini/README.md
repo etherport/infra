@@ -140,9 +140,17 @@ and is **never** uploaded (it's not in the export dir) — only the exported fil
     prompt). If a future macOS/permissions reset breaks it, grant the controlling
     process (Terminal, or whatever runs `launchd` jobs) those TCC permissions via
     System Settings → Privacy & Security, then re-run.
+- **`photos-export-resume.sh`** — **self-healing wrapper for the INITIAL bulk pull** (and
+  any future full re-pull). The first export of ~14k photos is long enough that an SMB
+  drop or an osxphotos PhotoKit-XPC wedge is likely (both hit 2026-06-19 — see the
+  session-log). It loops: remount NAS → ensure Photos.app up → `osxphotos export --update`
+  (resumes from `<DEST>/.osxphotos_export.db`) under a watchdog that kills + retries the
+  run if the `Backups` mount disappears or file progress flatlines (zero growth for 8 min
+  = wedged). Use this — not bare `photos-export.sh` — to do the first fill. Steady-state
+  nightly runs use the plain script via the LaunchAgent.
 - **`net.wind.photos-export.plist`** — LaunchAgent, daily **22:00 PT** (before the
   01:00 PT s3-sync so each night's export ships same-day). **Not loaded yet** — enable
-  after the one-time owner setup below.
+  after the initial bulk pull is complete and the mount has proven stable.
 
 ### Owner one-time setup (interactive, via VNC) — the long pole
 The backup **cannot delete or modify** your photos: `osxphotos` is read-only toward

@@ -232,6 +232,53 @@ w2 node-agent ↔ S3/kopia path (possible Cilium-WireGuard/MTU angle — M66 als
 
 ---
 
+## 2026-06-19 — M79 bulk export run to 71%, then NAS SMB mount went unstable (PAUSED)
+
+**Goal:** run the first full `osxphotos` export of all ~14.3k photos (the slow initial
+pull via `--download-missing --use-photokit`), monitored.
+
+**What happened:**
+- Export ran cleanly from ~20:49 to ~00:18, reaching **10,201 / 14,343 (~71%)** — steady
+  ~80–100 photos/min, files + XMP sidecars landing in `/Volumes/Backups/Graham/iCloud/Photos`,
+  library originals growing in lockstep (PhotoKit on-demand download working as designed).
+- **Then the `Backups` SMB mount dropped mid-run.** osxphotos didn't exit — it **wedged**
+  spewing `CoreData: XPC: sendMessage: failed` with zero progress (its PhotoKit XPC
+  connection died and a single process can't reconnect). Killed it.
+- Remounts succeeded (2 s) but **`Backups` then dropped within ~30 s even when idle** (the
+  `find` hang before the first idle-probe reading = classic smbfs dead-session). `Personal-Drive`
+  (same NAS) stayed up; NAS pinged 0.4 ms; **445 open**; no kernel SMB errors → a **wedged
+  server-side SMB session for the Backups share**, not network/load.
+- Tried a workaround — mounting `Backups` via the **NAS IP** (`10.10.209.10`) to force a
+  fresh session. That popped a **NetAuthAgent credential dialog** (no keychain entry for the
+  IP) and appears to have knocked out `Personal-Drive` too; subsequent `mount-nas.sh` **hung**.
+  Stopped all SMB poking to avoid leaving hung mounts.
+
+**State at end (PAUSED, nothing lost):** **10,201 files safely on the NAS disk** (SMB is just
+transport; data is intact server-side). No SMB shares mounted on the mini; a credential
+dialog is likely waiting in the VNC GUI. osxphotos not running. Repo: added
+`infra/macos/mini/photos-export-resume.sh` (self-healing wrapper — see below).
+
+**Resume procedure (owner, in VNC):**
+1. **Cancel** the stuck SMB login dialog (NetAuthAgent).
+2. Clear the wedge **on the NAS**: restart SMB / toggle the `Backups` share off-on on the
+   UNAS, or reboot the NAS (server-side session is stuck; `Personal-Drive` working proves
+   the box itself is fine).
+3. Re-mount (`infra/macos/mini/mount-nas.sh`) and confirm both shares **hold** for a few min.
+4. Resume with **`infra/macos/mini/photos-export-resume.sh`** — loops remount → ensure
+   Photos.app up → `osxphotos export --update` (resumes from `<DEST>/.osxphotos_export.db`,
+   so it continues from ~71% — **no re-download** of the 10.2k) under a watchdog that kills +
+   retries on mount-loss or a wedged (zero-progress) run. **No re-export, no re-download.**
+
+**Lessons (durable):**
+- The initial bulk pull is long enough that an SMB drop / PhotoKit wedge is *likely* → use
+  the resume wrapper, not a bare `photos-export.sh`, for the first fill.
+- **Do NOT mount the same NAS by IP when it's already mounted by hostname** — the second
+  auth context destabilized the existing (working) session and spawned a blocking dialog.
+- osxphotos wedges (doesn't exit) when its PhotoKit XPC dies → a watchdog must detect
+  *zero file-count growth*, not just process exit.
+
+---
+
 ## 2026-06-18 — M79 iCloud Photos backup built + owner setup started (on the mini)
 
 **Goal:** stand up the iCloud Photos → NAS → S3 backup (M79) on the mini (macOS-only;
