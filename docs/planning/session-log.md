@@ -13,6 +13,39 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-19 (overnight, autonomous) — Velero nightly close-out + M84 (dataPathConcurrency)
+
+Owner asleep, asked to "resolve autonomously." Outcome of the velero close-out:
+
+**Firewall fix proven (the headline):** the 06-19 nightly had clean completions —
+traefik/plex/cue + a 6.8 GB infra PVB — so Ceph fs-backup works post-H37-fix.
+
+**M84 surfaced as the real residual:** velero node-agent runs default
+**`dataPathConcurrency=1`** (no `node-agent-config` CM), so under the nightly burst
+multi-volume backups stall (PVBs sit `Prepared`, never start the data path) and block
+the serialized queue. Tonight: critical-apps + infrastructure (and earlier postgres,
+which was *my* fault — recreating -6 mid-window) ended Failed/PartiallyFailed; I had to
+`rollout restart deploy/velero` twice to finalize wedged backups + unblock the queue.
+
+**What I did NOT do (deliberately):** apply the dataPathConcurrency fix. It needs the
+velero chart's node-agent extra-args wiring, which I **can't verify without `helm`**
+(not on devbox) — and per the close-out guardrail I won't guess at backup-system config
+while unattended. Documented precisely in **M84** for the owner to apply (with helm to
+confirm the chart key) + verify.
+
+**Silence kept (not lifted):** the nightly is genuinely non-clean (the M84 stalls +
+postgres), so lifting would fire those legit-but-known partials. Kept the silence to
+avoid overnight noise; it **auto-expires 2026-06-19T19:22Z**. The once-per-day advisor
+cap-fix means even if it fires it's ≤1 email (no flood). Lift manually after applying
+M84 + a clean run: `kubectl -n monitoring exec alertmanager-monitoring-kube-prometheus-alertmanager-0 -c alertmanager -- wget -qO- --method=DELETE http://localhost:9093/api/v2/silence/4fe8a806-57fb-4671-85f6-e3e16be390bd`.
+
+**Core cluster health (final sweep): all green** — 8/8 nodes Ready, zero unhealthy pods,
+Flux 100%, all PVCs Bound, only benign alerts (InfoInhibitor/CPUThrottling/Watchdog).
+postgres data safe regardless (CNPG continuous archiving healthy). GPU dcgm + grafana
+(earlier today) remain resolved. **Owner action:** apply M84, then a clean velero run + lift the silence.
+
+---
+
 ## 2026-06-19 — Grafana admin password (real, not default) + GPU dcgm-exporter wedge (gpu1 reboot)
 
 Two follow-ups after the storage incident, both owner-reported:
