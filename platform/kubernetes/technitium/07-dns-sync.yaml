@@ -57,6 +57,25 @@ data:
             print(f"✗ Failed to authenticate to {base_url}: {e}")
             return 0
 
+        # Ensure the zone exists before syncing records. A freshly-provisioned /
+        # rebuilt replica has NO zones, and the record-sync below only ADDS
+        # records — it never creates the zone — so without this a fresh server
+        # serves empty answers and can't be populated. Create it as Primary if
+        # missing (idempotent: skip when already present). This is what makes a
+        # Technitium replica disposable: blow away the PVC, the StatefulSet +
+        # DNS_SERVER_ADMIN_PASSWORD + this zone-create + the record-sync rebuild
+        # it from code. (2026-06-18; see session-log.)
+        try:
+            zlist = api_request(base_url, "zones/list", token)
+            have = any(z.get("name") == zone
+                       for z in zlist.get("response", {}).get("zones", []))
+            if not have:
+                api_request(base_url, "zones/create", token,
+                            {"zone": zone, "type": "Primary"})
+                print(f"  + created missing Primary zone {zone}")
+        except Exception as e:
+            print(f"  ⚠ zone ensure failed on {base_url}: {e}")
+
         # Get current records
         try:
             current_data = api_request(base_url, "zones/records/get", token, {
