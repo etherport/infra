@@ -13,6 +13,28 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-19 (morning) — M84 fixed (dataPathConcurrency=2) + advisor overnight review
+
+**M84 resolved** (owner back; the deferral was only about not guessing chart-wiring unattended).
+Verified the velero 11.4.0 chart supports `configMaps` + `nodeAgent.extraArgs`, then added a
+`node-agent-config` CM (`loadConcurrency.globalConfig=2`) + `--node-agent-configmap=velero-node-agent-config`
+to `velero.yaml` (`918e101`). node-agent rolled 8/8 clean with the config. **Verified twice** —
+on-demand backups completed **0 stalls**: infrastructure 20/20, postgres 9/9 (postgres had Failed
+overnight from my -6 mess; now has a fresh clean restore point). Tonight's nightly should be fully clean.
+
+**Advisor overnight review** (owner reported "many emails"): **no flood — `cap_reached: 0`**. ~6
+legitimate one-off diagnoses, one per real alert that fired during the night's remediation churn
+(`TargetDown`/`KubeDaemonSetRolloutStuck` from the dcgm reboot, `KubePodCrashLooping` from postgres-6,
+`KubeJobFailed` from the failed velero backups, `KubeClientErrors`, `NodeSystemSaturation`). The
+once-per-day cap-fix held. Quiet now that everything's resolved. **Possible follow-up:** have the
+advisor only diagnose alerts firing > a few min (skip reboot/remediation transients) to cut
+incident-time email noise.
+
+**Silence:** left `4fe8a806` as-is (auto-expires 19:22Z today) — extending it needs owner OK; the
+once-per-day cap bounds any stale-partial email until tonight's clean nightly supersedes them.
+
+---
+
 ## 2026-06-19 (overnight, autonomous) — Velero nightly close-out + M84 (dataPathConcurrency)
 
 Owner asleep, asked to "resolve autonomously." Outcome of the velero close-out:
