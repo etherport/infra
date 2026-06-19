@@ -121,9 +121,25 @@ and is **never** uploaded (it's not in the export dir) — only the exported fil
 - **`create-photos-sparsebundle.sh`** — one-time: creates the 2 TB (sparse) APFS
   sparsebundle. Idempotent; refuses to clobber. **Already run** (bundle exists).
 - **`photos-export.sh`** — the nightly job: `mount-nas.sh` → `hdiutil attach` the
-  sparsebundle → `osxphotos export --update --sidecar XMP --cleanup` → the Backups
-  share. Exits **0 with a "not ready" message** until a `*.photoslibrary` exists in the
-  attached volume, so it's safe to schedule before the owner finishes setup.
+  sparsebundle → `osxphotos export --update --download-missing --use-photokit
+  --sidecar XMP --cleanup` → the Backups share. Exits **0 with a "not ready" message**
+  until a `*.photoslibrary` exists in the attached volume, so it's safe to schedule
+  before the owner finishes setup.
+  - **`--download-missing --use-photokit` is load-bearing.** iCloud's background
+    "Download Originals" **stalls on this headless mini even with Photos open** (observed
+    2026-06-18: stuck at ~192/14,267 originals for hours, `cloudphotod` idle at 0% CPU,
+    no progress; killing/restarting the daemon didn't revive it). So we do **not** rely
+    on the whole library being pre-downloaded — the export fetches each missing original
+    **on demand via PhotoKit** as it exports it. Once fetched, the original stays in the
+    library (we're on "Download Originals to this Mac", so macOS never re-evicts it) →
+    **one-time download per photo, not per run.** Steady state: nothing missing → no
+    downloads, and `--update` skips already-exported files → fast no-op.
+  - **Permissions:** the PhotoKit path needs the runner to have **Photos Library access
+    + Full Disk Access**. Verified working from bash on the mini 2026-06-18 (a forced
+    `--missing --download-missing --use-photokit` run downloaded + exported with no TCC
+    prompt). If a future macOS/permissions reset breaks it, grant the controlling
+    process (Terminal, or whatever runs `launchd` jobs) those TCC permissions via
+    System Settings → Privacy & Security, then re-run.
 - **`net.wind.photos-export.plist`** — LaunchAgent, daily **22:00 PT** (before the
   01:00 PT s3-sync so each night's export ships same-day). **Not loaded yet** — enable
   after the one-time owner setup below.
@@ -142,10 +158,15 @@ disposable mirror. Steps:
    New…** → save it *inside* `/Volumes/PhotosLib/`. Photos opens an empty library.
 4. Settings → General → **"Use as System Photo Library."**
 5. Settings → iCloud → **enable iCloud Photos** → **Download Originals to this Mac**
-   (not Optimize). iCloud repopulates the new library — into the NAS sparsebundle, so
-   the mini's free space isn't the limit. Multi-day; sleep is already disabled (`pmset
-   sleep 0` / `SleepDisabled`). Your **old library stays untouched** as a fallback.
-6. When the download is complete, **enable the nightly timer:**
+   (not Optimize — "Download Originals" mode is what keeps fetched masters from being
+   re-evicted). iCloud repopulates the new library into the NAS sparsebundle. Note: the
+   background download is **unreliable here** (see `--download-missing` above) — you do
+   **not** need to wait for it to finish; the first export run pulls every missing
+   original itself via PhotoKit. Sleep is already disabled (`pmset sleep 0`).
+   Your **old library stays untouched** as a fallback.
+6. **Seed the first export + enable the nightly timer.** The first run downloads all
+   ~14k originals via PhotoKit (slow — hours, but resumable: `--update` records progress
+   in `<DEST>/.osxphotos_export.db`, so a re-run continues where it left off):
    ```bash
    ln -sf /Users/grahamsmith/code/infra/infra/macos/mini/net.wind.photos-export.plist ~/Library/LaunchAgents/net.wind.photos-export.plist
    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.wind.photos-export.plist

@@ -204,17 +204,33 @@ needs Photos.app + iCloud). Picked up from the prior session's kickoff.
   Photos/iCloud; `--cleanup` prunes only the NAS export copy; `s3 sync --delete` only the S3
   copy. iCloud holds the masters → the sparsebundle is a disposable mirror.
 
-**State at end:** owner did the interactive setup mid-session — **new System Photo Library
-`Photos Library (NAS).photoslibrary` created inside the sparsebundle**, iCloud "Download
-Originals" **actively downloading** (sparsebundle grew 34 MB → 433 MB+; `cloudphotod`
-initial-download assertion live). Sleep confirmed disabled (`SleepDisabled`/`sleep 0`).
-Old `~/Pictures/Photos Library.photoslibrary` untouched as fallback.
+**⚠️ Mid-session finding — iCloud "Download Originals" stalls on the headless mini, so
+the export now drives downloads itself.** The new library synced its **catalog**
+(`database/` 13 GB + thumbnails `resources/` 7.8 GB → every photo *appears* in the app)
+but the actual **original masters froze at 192 / 14,267** (~1.3%) for hours: `cloudphotod`
+idle at 0% CPU, no download assertion, byte-identical over a 45 s sample — **even with
+Photos.app open the whole time**. `killall cloudphotod` did not revive it (it didn't even
+relaunch headless). Network/thermal/space all fine. Root cause = iCloud's background
+"Download Originals" is best-effort and parks itself on an idle headless Mac.
+**Fix: switched `photos-export.sh` to `osxphotos export --download-missing --use-photokit`**
+— each missing original is fetched on demand via **PhotoKit at export time**, independent
+of the flaky background queue. Once fetched it stays in the library (we're on "Download
+Originals to this Mac" → no re-eviction) = one-time download per photo. **Validated**: a
+forced `--missing --download-missing --use-photokit` run downloaded + exported with XMP,
+`error: 0`, library originals 192 → 196, **no TCC prompt** (PhotoKit access already
+granted). Scratch test dir cleaned up (was under the S3-synced Backups share).
+
+**State at end:** library + System Photo Library set, iCloud Photos on, catalog synced.
+Export pipeline (incl. on-demand PhotoKit download) **proven working** on a 5-photo +
+2-missing-photo scratch run. Timer still **NOT loaded** (owner's call). Sleep disabled.
+Old `~/Pictures` library untouched as fallback. Repo updated + pushed.
 
 **Next steps:**
-- Wait for the iCloud download to finish (days). Confirm in Photos that the open library is
-  "Photos Library (NAS)" and it's the System Photo Library with iCloud Photos on.
-- Then **enable the timer** + seed the first export (commands in `infra/macos/mini/README.md`
-  → "M79"): symlink + `launchctl bootstrap net.wind.photos-export`, run `./photos-export.sh`.
+- **Seed the first full export** (downloads all ~14k originals via PhotoKit — slow but
+  resumable via the export DB): `./photos-export.sh` (or with a `--limit` to chunk it).
+  No need to wait on iCloud's background download — the export does the pulling.
+- **Enable the nightly timer** once the first export is underway/clean (symlink +
+  `launchctl bootstrap net.wind.photos-export`; commands in `infra/macos/mini/README.md` → M79).
 - Verify the nightly `s3-sync-backups` CronJob picks up `Graham/iCloud/Photos`.
 - M80 (Drive/Contacts/Messages) is the natural follow-on, same Backups-share → Deep-Archive path.
 

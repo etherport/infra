@@ -70,14 +70,27 @@ mkdir -p "${DEST}" "${REPORT_DIR}"
 REPORT="${REPORT_DIR}/export-$(date '+%Y%m%d-%H%M%S').csv"
 
 log "exporting → ${DEST} (report: ${REPORT})"
-# --update     : incremental — only new/changed photos
-# --sidecar XMP: albums/keywords/persons/GPS/captions as sidecars (no originals modified)
-# --cleanup    : delete files in DEST no longer in the library (mirror)
-# --retry      : retry transient export errors
+# --update            : incremental — only new/changed photos (tracked in
+#                       <DEST>/.osxphotos_export.db, so nothing re-exports)
+# --download-missing  : if an original isn't local in the library yet, have Photos
+#                       fetch it on demand AT EXPORT TIME, rather than depending on
+#                       iCloud's flaky background "Download Originals" queue (which
+#                       stalls on this headless mini even with Photos open). Once
+#                       fetched, the original stays in the library (we're on
+#                       "Download Originals to this Mac", so macOS never re-evicts
+#                       it) → it's a one-time download per photo, not per run.
+# --use-photokit      : drive the download via PhotoKit (more reliable than the
+#                       default AppleScript path). REQUIRES one-time TCC grants —
+#                       see README "M79 → --download-missing permissions".
+# --sidecar XMP       : albums/keywords/persons/GPS/captions as sidecars
+# --cleanup           : delete files in DEST no longer in the library (mirror)
+# --retry             : retry transient export errors
 # (edited photos export BOTH original and an _edited copy by osxphotos default)
 "${OSXPHOTOS}" export "${DEST}" \
   --library "${LIBRARY}" \
   --update \
+  --download-missing \
+  --use-photokit \
   --sidecar XMP \
   --cleanup \
   --retry 3 \
