@@ -93,6 +93,14 @@ spec:
         - key: node-role.kubernetes.io/control-plane
           operator: Exists
           effect: NoSchedule
+      # M84 (2026-06-19): raise node-agent data-path concurrency from the default
+      # 1 → 2 per node. With the default 1, a backup's PVBs serialize per node and
+      # under the nightly burst the queued ones stall in `Prepared`/`timeout on
+      # preparing PVB` → PartiallyFailed + a blocked serialized queue (06-19:
+      # critical-apps, infrastructure). Points at the velero-node-agent-config CM
+      # below. See docs/planning/outstanding-work.md M84 + session-log 2026-06-19.
+      extraArgs:
+        - --node-agent-configmap=velero-node-agent-config
     snapshotsEnabled: true
     metrics:
       enabled: true
@@ -108,3 +116,11 @@ spec:
     kubectl:
       image:
         tag: "1.33"
+    # M84: node-agent load-concurrency config, consumed via nodeAgent.extraArgs above.
+    # The chart renders this as ConfigMap "velero-node-agent-config" (release-prefixed).
+    # globalConfig=2 → up to 2 PVB data-paths per node concurrently (default is 1).
+    configMaps:
+      node-agent-config:
+        data:
+          node-agent-config.json: |
+            {"loadConcurrency": {"globalConfig": 2}}
