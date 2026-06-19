@@ -26,12 +26,22 @@ overnight from my -6 mess; now has a fresh clean restore point). Tonight's night
 legitimate one-off diagnoses, one per real alert that fired during the night's remediation churn
 (`TargetDown`/`KubeDaemonSetRolloutStuck` from the dcgm reboot, `KubePodCrashLooping` from postgres-6,
 `KubeJobFailed` from the failed velero backups, `KubeClientErrors`, `NodeSystemSaturation`). The
-once-per-day cap-fix held. Quiet now that everything's resolved. **Possible follow-up:** have the
-advisor only diagnose alerts firing > a few min (skip reboot/remediation transients) to cut
-incident-time email noise.
+once-per-day cap-fix held. Quiet now that everything's resolved.
 
-**Silence:** left `4fe8a806` as-is (auto-expires 19:22Z today) — extending it needs owner OK; the
-once-per-day cap bounds any stale-partial email until tonight's clean nightly supersedes them.
+**Advisor transient-suppression (`ecd37ea`, owner-approved follow-up).** Wired the noise-cut: a new
+`_alert_still_firing(alert)` helper queries Prometheus `ALERTS{alertname,alertstate="firing"}` (matched
+on namespace too when present); `_advise` now skips the Claude call **and** the email — auditing
+`skipped_resolved` — if the alert has already resolved by the time the advisor reaches it (rollout
+finished, pod recovered, node back). That's exactly what produced the ~6 overnight emails. **Fail-open:**
+if the Prometheus check itself errors we do NOT suppress (never silently drop a real alert). NOT
+cooldowned on skip, so a genuine re-fire still active next time is diagnosed. Validated (py_compile +
+kustomize), reconciled, `rollout restart deploy/remediation-controller` — new pod healthy, processing.
+
+**Silence: extended (owner-approved).** Replaced `4fe8a806` (was expiring 19:22Z today) with
+`f7907750` — same matchers (`VeleroBackupPartial|VeleroLastBackupAgeHigh|KubePodNotReady`, ns=velero),
+now **expires 2026-06-20 12:00 UTC** so tonight's now-clean (M84-fixed) nightly supersedes the stale
+06-18/06-19 partials before it lifts. `VeleroBackupFailed` is deliberately NOT in the matcher set — a
+genuine hard failure tonight still pages.
 
 ---
 
