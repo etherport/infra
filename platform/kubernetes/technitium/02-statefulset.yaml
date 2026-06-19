@@ -77,12 +77,23 @@ spec:
               port: 5380
             initialDelaySeconds: 30
             periodSeconds: 10
+          # Readiness gates .5-rotation on LOCAL zone-presence (H40): a freshly
+          # re-provisioned replica stays OUT of the technitium (.5) service until
+          # dns-sync has created the wind.etherport.net zone on it, so it never
+          # serves empty/wrong answers during the bootstrap window. `+norecurse`
+          # so only a locally-authoritative zone counts (not an upstream-recursed
+          # SOA). Liveness stays the plain HTTP check (below) so a zone-less server
+          # is kept out of rotation but NOT restart-looped — dns-sync reaches it
+          # via the headless svc (publishNotReadyAddresses) to bootstrap it.
           readinessProbe:
-            httpGet:
-              path: /
-              port: 5380
+            exec:
+              command:
+                - sh
+                - -c
+                - "dig +norecurse +short +time=2 +tries=1 @127.0.0.1 wind.etherport.net SOA | grep -q ."
             initialDelaySeconds: 10
             periodSeconds: 5
+            timeoutSeconds: 4
   volumeClaimTemplates:
     - metadata:
         name: data
@@ -115,6 +126,12 @@ metadata:
   namespace: dns
 spec:
   clusterIP: None
+  # Publish not-ready pods so dns-sync can reach a freshly re-provisioned replica
+  # (held NotReady by the zone-presence readiness gate above) to bootstrap its
+  # zone — without this the gate deadlocks (NotReady → no headless DNS → dns-sync
+  # can't reach it → zone never created). The .5 LB service stays Ready-only, so
+  # clients never hit a not-ready replica. (H40, 2026-06-19.)
+  publishNotReadyAddresses: true
   selector:
     app: technitium
   ports:
