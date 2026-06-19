@@ -49,12 +49,25 @@ data:
 
     def sync_to_server(base_url, user, password, zone, default_ttl, desired):
         """Sync records to a single Technitium server."""
-        try:
-            data = api_request(base_url, "user/login", params={"user": user, "pass": password})
-            token = data["token"]
-            print(f"✓ Authenticated to {base_url}")
-        except Exception as e:
-            print(f"✗ Failed to authenticate to {base_url}: {e}")
+        # Auth: try the configured user, then fall back to the built-in "admin".
+        # A FRESHLY-PROVISIONED replica has only the "admin" account (its password
+        # is set on first run from DNS_SERVER_ADMIN_PASSWORD = the same secret this
+        # uses), NOT the custom "graham" user that exists on the long-lived servers.
+        # Falling back to admin lets a fresh replica be bootstrapped end-to-end
+        # (zone-create + records below) with no manual user setup — the last piece
+        # of making a Technitium replica disposable. (2026-06-18; see session-log.)
+        token = None
+        _autherr = None
+        for _u in (user, "admin"):
+            try:
+                token = api_request(base_url, "user/login",
+                                    params={"user": _u, "pass": password})["token"]
+                print(f"✓ Authenticated to {base_url} as {_u}")
+                break
+            except Exception as e:
+                _autherr = e
+        if not token:
+            print(f"✗ Failed to authenticate to {base_url} (tried {user}, admin): {_autherr}")
             return 0
 
         # Ensure the zone exists before syncing records. A freshly-provisioned /
