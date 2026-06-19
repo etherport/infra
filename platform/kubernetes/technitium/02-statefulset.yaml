@@ -5,7 +5,15 @@ metadata:
   namespace: dns
 spec:
   serviceName: technitium-headless
-  replicas: 2
+  # TEMPORARILY 1 (2026-06-18). technitium-1's RBD volume was re-provisioned fresh
+  # after a wedge (H39 follow-on); a fresh replica comes up UNBOOTSTRAPPED — no
+  # wind.etherport.net zone (dns-sync only adds records, never creates the zone)
+  # and on default admin creds until DNS_SERVER_ADMIN_PASSWORD takes — so it would
+  # serve empty answers if left in the .5 rotation. Pinned to 1 (healthy -0 +
+  # VM/.6 + AWS fallbacks still serve) until replica self-bootstrap is automated
+  # (zone-create in dns-sync + verified admin password). Restore to 2 after.
+  # See session-log 2026-06-18 + the technitium-disposability tracker item.
+  replicas: 1
   # OrderedReady (not Parallel): image bumps / rolling updates then update ONE
   # replica at a time, keeping the other serving DNS — avoids the brief full-DNS
   # outage that Parallel caused on the 2026-06-02 technitium 15.2.0 bump. This
