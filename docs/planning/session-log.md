@@ -65,6 +65,17 @@ for forensics). That exposed **two bootstrap gaps** a fresh replica hit — now 
 blocklist window, **not** a persistent wedge — verified with a throwaway ceph-rbd test pod
 (mounted in ~10s), so **no reboot needed**; uncordoned.
 
+**Second firewall casualty (found in the follow-up health-check, 2026-06-19):**
+`postgres-cluster-6` (CNPG replica on w2) was CrashLoopBackOff with `chmod
+/var/lib/postgresql/data/pgdata: input/output error` — its ceph-rbd mount went into a
+**stale EIO error-state** when the firewall dropped its Ceph connection mid-I/O. The DB
+stayed healthy (2/3: primary -1 + -8 served throughout). **Fix:** `kubectl delete pod`
+(force) → CNPG recreated it → **fresh NodeStage cleared the EIO mount** → cluster 3/3,
+data intact (no re-clone needed). **General lesson:** a Ceph-RBD pod that was *writing*
+during the firewall block can be left with a stale EIO/hung mount that only surfaces on its
+next restart/write; the fix is a **pod delete to force a remount** (or re-provision if the
+image itself is bad). Only -6 + technitium-1 manifested; watch for others on restart.
+
 **Open / next:** (a) ✅ **DONE (`4434719`):** DNS-rotation window closed — readinessProbe
 gates `.5` on local zone-presence (`dig +norecurse SOA`) + `technitium-headless`
 `publishNotReadyAddresses: true` so dns-sync can still bootstrap a not-ready fresh replica
