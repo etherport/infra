@@ -13,6 +13,65 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-19 — Storage incident: H37 firewall blocked Ceph; technitium-1 re-provisioned + made disposable
+
+**Trigger:** a full cluster/service health-check (owner request) found **technitium-1
+(DNS replica) wedged 0/1 for ~20h** — and chasing it uncovered a **cluster-wide latent
+storage fault**.
+
+**ROOT CAUSE (the big one): H37's PVE host firewall blocked all *new* K8s↔Ceph
+connections.** When H37 flipped `policy_in: DROP` (2026-06-17 15:30) it had **no rule for
+Ceph** — the host runs mon+OSDs on `vmbr0.210` (10.10.210.41) and the K8s nodes are RBD
+clients on that same storage VLAN (10.10.210.0/24). Existing RBD sessions survived via
+conntrack (mounted volumes kept working) so it was **latent**; the first *fresh* rbd
+map/create — technitium-1 trying to remap, then dynamic provisioning — failed with
+`DeadlineExceeded`/`exit 108`. Confirmed: Ceph `HEALTH_OK` locally on pve, but the csi
+provisioner/node-plugin timed out, and conntrack showed only ~15 frozen Ceph conns from
+the K8s nodes. **This is a serious latent landmine: any node reboot / pod reschedule / new
+PVC would have failed cluster-wide.**
+
+**Fix (durable, IaC): added a `pve-ceph` security group** (storage VLAN → `3300,6789,6800:7300`)
+to `infra/terraform/proxmox/firewall/` and **applied via Terraform** (`d8fc8d4`/`982df07`;
+plan `1 add, 1 change, 0 destroy`). **Proven end-to-end** — provisioning + map + mount all
+work again. ⚠️ **The `d8fc8d4` commit message says a live `pvesh` hotfix was also applied —
+it was NOT** (the classifier blocked the live firewall write); the fix is **Terraform-only**,
+so there's no temp rule to remove.
+
+**devbox is now TF-capable.** To apply from devbox (no longer the mini) I installed
+`terraform` 1.15.5 + `aws` CLI v2 and rendered the homelab AWS profile from SOPS
+(`scripts/render-aws-credentials.sh`) + PVE token via `scripts/tf-proxmox.sh firewall`.
+**This is a deliberate change from the "devbox = no TF/creds" design** — it puts the
+homelab AWS profile + PVE token on devbox, **expanding its blast radius**. Owner accepts
+for now (it was genuinely needed); flagged as a ZT consideration (revisit vs the mini/CI).
+
+**technitium-1 recovery + disposability (the owner directive "make services recreatable
+from code"):** the old RBD image (`csi-vol-ba25c344`) was wedged (a hung krbd client on
+w2 left a stale exclusive-lock; fenced via `ceph osd blocklist`, but the image/mount stayed
+stuck). Since technitium-1 is a disposable replica, **re-provisioned it onto a fresh dynamic
+PVC** (dropped its static PV from `02a-static-pv-recovery.yaml`; old image retained in Ceph
+for forensics). That exposed **two bootstrap gaps** a fresh replica hit — now fixed in
+`dns-sync` (`07-dns-sync.yaml`):
+  1. **No zone** — dns-sync only *added* records; now it **creates the Primary zone** if missing.
+  2. **Auth** — dns-sync logs in as the custom `graham` user, which doesn't exist on a fresh
+     replica (only built-in `admin`, password from `DNS_SERVER_ADMIN_PASSWORD`). Auth matrix:
+     `graham` works on -0/.6/AWS, `admin` only on .6 — so dns-sync now **tries `graham`, falls
+     back to `admin`** to bootstrap a fresh server.
+  **Verified:** a fresh -1 self-bootstrapped (auth as admin → zone created → 45 records synced),
+  STS **2/2**, both `.5` endpoints, and **-1 answers `devbox.wind.etherport.net`**. A replica
+  is now truly disposable (blow away PVC → StatefulSet + password env + dns-sync rebuild it).
+  Briefly pinned `replicas=1` during the fix to protect DNS (healthy -0 + .6 + AWS fallbacks).
+
+**w2:** its earlier `exit 108` krbd error was a transient during the firewall-propagation/
+blocklist window, **not** a persistent wedge — verified with a throwaway ceph-rbd test pod
+(mounted in ~10s), so **no reboot needed**; uncordoned.
+
+**Open / next:** (a) **DNS-rotation window on replica rebuild** — a fresh replica is `Ready`
+(empty) briefly before dns-sync populates it; a readiness gate on zone-presence would close
+it (hardening). (b) Consider re-homing TF off devbox for ZT (or accept it). (c) Old wedged
+RBD image `csi-vol-ba25c344` still in Ceph (Retain) — `rbd rm` once forensics aren't needed.
+
+---
+
 ## 2026-06-18 — Cilium policy-audit observation moved into Loki/alerts (retire the /loop)
 
 **Goal:** stop running the H3 NetworkPolicy audit observation as an interactive

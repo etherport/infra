@@ -84,11 +84,16 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   2026-06-18). No FileVault gate → sessions auto-resume on reboot (systemd user unit
   `claude-sessions.service` + `loginctl enable-linger`; per-repo tmux running
   `claude --continue`, see `infra/devbox/`). **Has:** `kubectl` (cluster-admin),
-  `sops`+age, `git`, `claude`. **Lacks (by design):** `terraform`, `~/.aws` profiles,
-  any browser — so TF plan/apply + headless-Chrome verification must run on the mini or
-  via CI, not here. Auth: Claude OAuth is broken on headless Linux (GitHub #47152) →
-  token transplanted from the mini's Keychain into `~/.claude/.credentials.json`.
-  Provisioning: `infra/ansible/playbooks/devbox.yml` (+ `infra/devbox/README.md`).
+  `sops`+age, `git`, `claude`, **and (since 2026-06-19) `terraform` 1.15.5 + `aws` CLI** —
+  TF runs headlessly here: `scripts/render-aws-credentials.sh` writes the `~/.aws`
+  `[homelab]` profile from SOPS (S3 backend) + `scripts/tf-proxmox.sh <stack> <args>`
+  injects the PVE token. ⚠️ **This put the homelab AWS profile + PVE token on devbox — a ZT
+  blast-radius expansion from the original "no TF/creds" design; accepted for now, revisit
+  (re-home to mini/CI or keep).** **Still lacks:** a browser (headless-Chrome verification →
+  mini/CI) and `gh` CLI (can't dispatch GH Actions from here). Auth: Claude OAuth is broken
+  on headless Linux (GitHub #47152) → token transplanted from the mini's Keychain into
+  `~/.claude/.credentials.json`. Provisioning: `infra/ansible/playbooks/devbox.yml`
+  (+ `infra/devbox/README.md`).
 - **Mac mini** (`10.10.202.101`, tailnet `100.79.165.113`) = always-on headless
   ops/RC host: full kubectl/terraform/sops/ansible, **no 1P at runtime**. Retained for
   macOS-only iCloud backups (M79/M80) + as the TF/AWS-capable ops box. Procedure:
@@ -140,6 +145,18 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   --reuse-values --set …` (+ `rollout restart ds/cilium`), **not** a kubespray run
   (cni-owner landmine). Verify: `kubectl -n kube-system exec ds/cilium -c cilium-agent --
   cilium-dbg encrypt status`. Reverse: `--set encryption.enabled=false` + rollout restart.
+- **The PVE host firewall (H37) MUST allow the Ceph storage VLAN → mon/OSD.** All K8s
+  storage is **external Ceph on the `pve` host** (mon `10.10.210.41`, pool `k8s-ceph`),
+  reached by the nodes over the dedicated **storage VLAN `10.10.210.0/24`** (`vmbr0.210`).
+  H37's `policy_in: DROP` once shipped with **no Ceph rule** (2026-06-17) → existing RBD
+  sessions survived via conntrack but every **new rbd map/create** from K8s was dropped —
+  a *latent* break that only bit on a fresh map (node reboot / pod reschedule / new PVC)
+  ~30h later (wedged technitium-1 + blocked provisioning). Fixed by the **`pve-ceph`
+  security group** in `infra/terraform/proxmox/firewall/` (storage VLAN → `3300,6789,6800:7300`).
+  **Never tighten the PVE host firewall without keeping that Ceph allow** or you silently
+  break all future Ceph volume operations. Symptom: csi `DeadlineExceeded` / `exit 108`
+  while `ceph -s` is `HEALTH_OK` locally on pve. Diagnose from pve: `ceph -s`, `rbd status
+  k8s-ceph/<img>` (stale watchers), `ceph osd blocklist ls`.
 
 ## 6. Maintenance rules (keep this memory alive)
 
