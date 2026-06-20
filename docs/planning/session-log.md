@@ -36,8 +36,14 @@ reboots the plan STILL showed all 8 drifting and the VM configs had **no watchdo
 **Resolution (owner chose "do it right").** (a) `lifecycle.ignore_changes=[watchdog]` on the 3 VM
 resources → plan now "No changes" (`0e80782`); (b) attached the device to all 8 configs via the PVE API
 `qm set --watchdog` (the working path; `current=[model=i6300esb,action=reset]`); (c) guest daemon
-already deployed+enabled on all 8 (ansible `k8s-node-fixes.yml` check `changed=0`). **Activation is
-per-node on next (natural/kured) reboot** — no forced reboots needed. See CLAUDE.md §5 gotcha.
+already deployed+enabled on all 8.
+**CORRECTION (same session):** verifying e2e on w4 (cold-rebooted to present the device) revealed the
+watchdog **still doesn't work — `i6300esb.ko` is ABSENT from the node kernel** (only softdog/wdat_wdt;
+linux-modules-extra lacks it). So `/dev/watchdog0` never appears + the daemon is inert; the hardware
+watchdog has never armed. Tried a `modprobe i6300esb` ansible task → FATAL (module not found) →
+reverted (`2642aa4`). **Watchdog BLOCKED pending the kernel module (M91)**; drift stays clean
+(ignore_changes), device attached + harmless. Cost of the saga: ~7 node reboots + 3 incidents for a
+feature that can't work without the module — lesson logged in CLAUDE.md §5.
 
 ---
 

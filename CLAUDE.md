@@ -168,12 +168,17 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   `terraform apply` "succeeds" + may reboot the VM, but the i6300esb device never lands in the config —
   so the `watchdog.action: none→reset` shows as a **perpetual, unresolvable plan diff** (don't chase it
   with apply+reboots — they do nothing; verify the live VM config, not just "apply succeeded"). The
-  k8s-vms VMs carry `lifecycle { ignore_changes = [watchdog] }` to suppress it. The watchdog is set the
-  working way: **`qm set <vmid> --watchdog model=i6300esb,action=reset`** (host-side, PVE API/pvesh —
-  config-only, **activates on the VM's next COLD start**, not a soft reboot) + the guest `watchdog`
-  daemon (ansible `k8s-node-fixes.yml`). Also: a **VM graceful shutdown HANGS** if an un-drainable
-  single-instance CNPG pod (PDB minAvailable=1, e.g. `cue-db`) sits on it (RBD won't unmount) — drain
-  evicts what it can, then `kubectl delete pod` the PDB-blocked ones before any node reboot.
+  k8s-vms VMs carry `lifecycle { ignore_changes = [watchdog] }` to suppress it. The device is now
+  attached host-side via `qm set <vmid> --watchdog model=i6300esb,action=reset` (PVE API; surfaces in
+  the guest as a PCI device on the VM's next COLD start) — **BUT the watchdog still does NOT work: the
+  `i6300esb` kernel module is ABSENT from the node kernel** (`6.8.0-124-generic` has only `softdog` +
+  `wdat_wdt`; even `linux-modules-extra` lacks it), so `/dev/watchdog0` never appears and the guest
+  daemon is inert. **The hardware watchdog has never armed; it's BLOCKED pending the module** (M91). Do
+  NOT add a `modprobe i6300esb` task — it FATALs the k8s-node-fixes playbook. **Verify a kernel module
+  exists before attaching watchdog devices + rebooting nodes** (this lesson cost ~7 reboots + 3
+  incidents). Also: a **VM graceful shutdown HANGS** if an un-drainable single-instance CNPG pod (PDB
+  minAvailable=1, e.g. `cue-db`) sits on it (RBD won't unmount) — drain evicts what it can, then
+  `kubectl delete pod` the PDB-blocked ones before any node reboot.
 
 ## 6. Maintenance rules (keep this memory alive)
 
