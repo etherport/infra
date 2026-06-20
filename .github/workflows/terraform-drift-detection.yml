@@ -1,18 +1,23 @@
 name: Terraform Drift Detection
 
-# Daily scheduled `terraform plan -detailed-exitcode` across ALL TF stacks. If any
-# stack's plan shows changes (exit code 2), opens or refreshes a single GitHub
-# Issue (label `tf-drift`) listing the offending stacks. Manual dispatch supported.
+# Daily scheduled `terraform plan -detailed-exitcode` across ALL persistent TF
+# stacks (22). Manual dispatch supported.
 #
 # Two plan jobs feed one report:
-#   - `plan`          AWS modules on ubuntu-latest (OIDC, us-west-2/per-module).
-#   - `plan-internal` cloudflare / unifi / proxmox on the self-hosted lifecycle
-#                     runner (cluster-internal reach to PVE/UDM + their GH-secret
-#                     creds). Added 2026-06-20 (was deferred pending self-hosted
-#                     runner stability — now proven by the per-stack workflows).
+#   - `plan`          AWS modules on ubuntu-latest (OIDC). incl. ai-advisor-iam,
+#                     twilio-webhook, github-oidc.
+#   - `plan-internal` cloudflare / unifi / proxmox ×4 / google (GCP WIF) / twilio
+#                     on the self-hosted lifecycle runner (cluster-internal reach
+#                     + their GH-secret creds).
+#
+# NOTIFICATION (no console-watching needed): on drift the `report` job opens/
+# refreshes a `tf-drift` GitHub Issue with the offending stacks AND calls
+# core.setFailed → the scheduled run goes RED → GitHub emails the failed run to
+# the repo owner. Clean runs stay green/silent.
+#
 # Corrections are applied via each stack's own workflow_dispatch `apply` (OIDC),
-# never from a workstation. aws-regional-vpn is excluded (deploy-on-demand, no
-# persistent state).
+# never from a workstation. Excluded: aws-regional-vpn (deploy-on-demand, no
+# persistent state); aws/iam-policies (JSON policy docs, not a TF stack).
 
 on:
   schedule:
@@ -49,6 +54,9 @@ jobs:
           - { name: external-monitoring, dir: infra/terraform/aws/external-monitoring,  region: us-west-2 }
           - { name: homeassistant-alexa, dir: infra/terraform/aws/homeassistant-alexa,  region: us-east-1, needs_sops: false }
           - { name: aws-us-east-1,       dir: infra/terraform/aws-us-east-1,            region: us-east-1, needs_sops: true  }
+          - { name: ai-advisor-iam,      dir: infra/terraform/aws/ai-advisor-iam,       region: us-west-2 }
+          - { name: twilio-webhook,      dir: infra/terraform/aws/twilio-webhook,       region: us-west-2 }
+          - { name: github-oidc,         dir: infra/terraform/aws/github-oidc,          region: us-west-2 }
           # aws-regional-vpn is deploy-on-demand (travel VPN); requires
           # `-var=region=X -var=region_short=Y -var=wg0_tunnel_ip=Z` and has no
           # persistent state to drift-check. Exclude.
@@ -141,6 +149,8 @@ jobs:
           - { name: proxmox-sdn,            dir: infra/terraform/proxmox/sdn }
           - { name: proxmox-standalone-vms, dir: infra/terraform/proxmox/standalone-vms }
           - { name: proxmox-k8s-vms,        dir: infra/terraform/proxmox/k8s-vms }
+          - { name: google,                 dir: infra/terraform/google, gcp: true }
+          - { name: twilio,                 dir: infra/terraform/twilio }
     defaults:
       run:
         working-directory: ${{ matrix.module.dir }}
@@ -154,6 +164,10 @@ jobs:
       TF_VAR_cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
       TF_VAR_unifi_username: ${{ secrets.UNIFI_USERNAME }}
       TF_VAR_unifi_password: ${{ secrets.UNIFI_PASSWORD }}
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_API_KEY: ${{ secrets.TWILIO_API_KEY }}
+      TWILIO_API_SECRET: ${{ secrets.TWILIO_API_SECRET }}
+      TF_VAR_gcp_project_id: ${{ secrets.GCP_PROJECT_ID }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
@@ -174,6 +188,15 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::830881980142:role/gh-actions-terraform
           aws-region: us-west-2
+
+      # google stack only — GCP provider auth via WIF (S3 backend still uses the
+      # AWS creds above). Mirrors terraform-google.yml.
+      - name: Configure GCP credentials (WIF)
+        if: matrix.module.gcp
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: projects/909531984469/locations/global/workloadIdentityPools/github/providers/github
+          service_account: gh-actions-terraform@homelab-infra-497414.iam.gserviceaccount.com
 
       - name: terraform init
         run: terraform init -backend-config="profile=" -reconfigure -input=false
@@ -288,3 +311,7 @@ jobs:
               });
               core.info(`Opened issue #${created.data.number}`);
             }
+            // Fail the run so GitHub emails the scheduled-workflow failure to the
+            // repo owner — drift is surfaced by EMAIL (+ the tf-drift issue),
+            // no need to watch the Actions console. Clean runs stay green.
+            core.setFailed(`Terraform drift detected: ${{ steps.compose.outputs.drifted }}`);
