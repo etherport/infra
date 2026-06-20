@@ -43,6 +43,12 @@ devbox): built but **NOT registered in clusters/wind** + secret omitted, so noth
 deploys half-built. Activation: user runs `rclone config` on a browser machine → hands
 over the `[onedrive]` block → seal `04-secret.sops.yaml` + uncomment in kustomization +
 register the dir. See the component README + `04-secret.sops.yaml.template`.
+**Activated same day (`a893c00`):** owner ran `rclone config` on the laptop (chose the
+"OneDrive (personal)" drive `F4E003FF4BAE9ABD`), sealed the `[onedrive]` block into
+`04-secret.sops.yaml` and pushed (`--no-gpg-sign` to dodge the laptop SSH-signing-key
+gap). I uncommented the secret + registered the component; Flux decrypted it cleanly and
+deployed `onedrive-sync`. First sync verified — rclone authed and copied files into
+`/backup/Graham/OneDrive/` (Documents/Pictures/WSP), no errors. M88 ✅.
 
 ---
 

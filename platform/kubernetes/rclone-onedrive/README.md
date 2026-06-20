@@ -10,21 +10,21 @@ Account: a **personal** Microsoft account (an M365 Personal/Family subscription
 just adds storage — it's still OneDrive Personal, `drive_type = personal`, not
 OneDrive for Business).
 
-## Status: staged, awaiting the OAuth token
-This component is built but **not yet registered** in
-`clusters/wind/kustomization.yaml`, because rclone's OneDrive backend needs an
-**interactive OAuth login** that can't run headless on the devbox.
+## Status: live (2026-06-20)
+Deployed and verified — `onedrive-sync` CronJob runs nightly; the first sync
+authenticated and copied files into `/backup/Graham/OneDrive/`.
 
-### Activation steps
-1. On a machine **with a browser**, run `rclone config` and create a remote named
-   `onedrive` (storage `onedrive`, blank client id/secret, region Global, log into
-   the personal MS account, choose OneDrive Personal). See
-   [`04-secret.sops.yaml.template`](04-secret.sops.yaml.template) for the click-path.
-2. `rclone config show onedrive` and hand the `[onedrive]` block over.
-3. I create `04-secret.sops.yaml` (`sops --encrypt`), uncomment it in
-   `kustomization.yaml`, and register this dir in `clusters/wind/kustomization.yaml`.
-4. Flux deploys it; a manual run verifies the first sync (the initial full pull
-   may be large/slow — OneDrive throttles, hence `--tpslimit 10`).
+### Re-auth / token rotation
+rclone's OneDrive backend needs an **interactive OAuth login** (can't run headless
+on the devbox), so if the token is ever revoked or you need to re-auth:
+1. On a machine **with a browser**, `rclone config` → create/refresh the `onedrive`
+   remote (storage `onedrive`, blank client id/secret, region Global, personal MS
+   account, OneDrive Personal). See [`04-secret.sops.yaml.template`](04-secret.sops.yaml.template).
+2. `cp 04-secret.sops.yaml.template 04-secret.sops.yaml`, paste the new `token =`
+   line from `rclone config show onedrive`, then `sops --encrypt --in-place
+   04-secret.sops.yaml` and commit (use `git commit --no-gpg-sign` if the SSH
+   signing key isn't loaded). The refresh token auto-renews the access token, so
+   this is only needed if the refresh token itself is invalidated.
 
 ## Files
 | File | What |
