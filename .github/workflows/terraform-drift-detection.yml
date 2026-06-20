@@ -105,7 +105,7 @@ jobs:
         run: |
           set +e
           terraform plan -input=false -no-color -lock=false -detailed-exitcode \
-            $( [ -f variables.tf ] && grep -q '"aws_profile"' variables.tf && echo '-var=aws_profile=' ) \
+            $( grep -qs '"aws_profile"' *.tf && echo '-var=aws_profile=' ) \
             > plan.txt 2>&1
           rc=$?
           set -e
@@ -211,7 +211,7 @@ jobs:
         run: |
           set +e
           terraform plan -input=false -no-color -lock=false -detailed-exitcode \
-            $( [ -f variables.tf ] && grep -q '"aws_profile"' variables.tf && echo '-var=aws_profile=' ) \
+            $( grep -qs '"aws_profile"' *.tf && echo '-var=aws_profile=' ) \
             > plan.txt 2>&1
           rc=$?
           set -e
