@@ -351,6 +351,16 @@
         content: "i6300esb\n"
       notify: Restart watchdog
 
+    - name: Install linux-modules-extra (ships the i6300esb watchdog module)
+      # The stock node kernel (linux-image) does NOT include i6300esb.ko — it's in
+      # the -extra package. Without this, modprobe i6300esb fails "Module not found"
+      # (the real reason /dev/watchdog0 never appeared). Matches the running kernel.
+      apt:
+        name: "linux-modules-extra-{{ ansible_kernel }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
     - name: Load i6300esb watchdog kernel module now
       # No-op-ish on nodes whose VM hasn't been cold-started since the device was
       # attached (module loads but no PCI device yet → arms on next reboot).
