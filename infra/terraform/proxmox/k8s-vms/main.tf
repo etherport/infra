@@ -194,6 +194,16 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
     action = "reset"
   }
 
+  # NB: bpg/proxmox 0.106 does NOT actually apply this watchdog block — the device
+  # never lands in the VM config (a perpetual no-op `action: none -> reset` diff that
+  # apply can't resolve; confirmed 2026-06-20 after 5 futile apply+reboots). The
+  # watchdog is instead attached host-side via `qm set <vmid> --watchdog` + the guest
+  # daemon (ansible k8s-node-fixes.yml). Ignore it here so TF stops reporting
+  # unresolvable drift / triggering pointless reboots. (M91.)
+  lifecycle {
+    ignore_changes = [watchdog]
+  }
+
   started = true
   on_boot = true
 }
@@ -306,6 +316,16 @@ resource "proxmox_virtual_environment_vm" "workers" {
   watchdog {
     model  = "i6300esb"
     action = "reset"
+  }
+
+  # NB: bpg/proxmox 0.106 does NOT actually apply this watchdog block — the device
+  # never lands in the VM config (a perpetual no-op `action: none -> reset` diff that
+  # apply can't resolve; confirmed 2026-06-20 after 5 futile apply+reboots). The
+  # watchdog is instead attached host-side via `qm set <vmid> --watchdog` + the guest
+  # daemon (ansible k8s-node-fixes.yml). Ignore it here so TF stops reporting
+  # unresolvable drift / triggering pointless reboots. (M91.)
+  lifecycle {
+    ignore_changes = [watchdog]
   }
 
   started = true
@@ -444,6 +464,16 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
   watchdog {
     model  = "i6300esb"
     action = "reset"
+  }
+
+  # NB: bpg/proxmox 0.106 does NOT actually apply this watchdog block — the device
+  # never lands in the VM config (a perpetual no-op `action: none -> reset` diff that
+  # apply can't resolve; confirmed 2026-06-20 after 5 futile apply+reboots). The
+  # watchdog is instead attached host-side via `qm set <vmid> --watchdog` + the guest
+  # daemon (ansible k8s-node-fixes.yml). Ignore it here so TF stops reporting
+  # unresolvable drift / triggering pointless reboots. (M91.)
+  lifecycle {
+    ignore_changes = [watchdog]
   }
 
   started = true
