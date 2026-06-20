@@ -19,6 +19,42 @@ into `~/.claude/.credentials.json` (mini stores it in the macOS Keychain, servic
 breaks (token refresh issues), re-transplant from the mini; the real fix is Anthropic
 patching #47152 so a normal `claude /login` works.
 
+## GitHub workflow dispatch (drift sweeps / CI applies) — NOT yet set up
+The devbox can **push** (git remote is SSH: `git@github.com:…`) but **cannot call
+the GitHub REST API**: no `gh` CLI, no `GH_TOKEN`/`GITHUB_TOKEN`, no `~/.config/gh`.
+So an agent here **cannot `workflow_dispatch`** (run the drift sweep, trigger a
+`terraform … apply`, etc.) — those are API-only. The laptop/mini could because
+`gh` was authed there.
+
+**To enable it (mirror the laptop/mini):** create a **fine-grained PAT** scoped to
+**only `sparked-diamond/infra`** with **Repository permissions → Actions: Read and
+write** (+ Contents: Read; Metadata: Read is automatic). That's the minimum to list
++ dispatch workflows. (A classic PAT with `repo`+`workflow` also works but is far
+broader — avoid.)
+
+> ⚠️ NOT the ARC-runner token. `platform/kubernetes/github-actions-runner/secret.sops.yaml`
+> holds a `github_pat_…` (fine-grained) PAT for **runner registration only** — it
+> does not have Actions:write and must not be repurposed for dispatch.
+
+**Where to put it so headless agents can use it:** add it to the SOPS ops bundle
+`infra/ansible/playbooks/secrets/homelab-ops.sops.yaml` under a key like
+`github_dispatch_pat`. Then an agent dispatches via the API:
+```sh
+TOK=$(SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops -d \
+  infra/ansible/playbooks/secrets/homelab-ops.sops.yaml | yq -r .github_dispatch_pat)
+# run the daily drift sweep on demand:
+curl -fsS -X POST -H "Authorization: Bearer $TOK" -H "Accept: application/vnd.github+json" \
+  https://api.github.com/repos/sparked-diamond/infra/actions/workflows/terraform-drift-detection.yml/dispatches \
+  -d '{"ref":"main"}'
+# apply ONE k8s VM (rolling — see outstanding-work M91):
+curl -fsS -X POST -H "Authorization: Bearer $TOK" -H "Accept: application/vnd.github+json" \
+  https://api.github.com/repos/sparked-diamond/infra/actions/workflows/terraform-proxmox-k8s-vms.yml/dispatches \
+  -d '{"ref":"main","inputs":{"action":"apply","target":"proxmox_virtual_environment_vm.workers[\"k8s-w4\"]"}}'
+```
+**ZT note:** this lets the devbox agent **trigger CI applies = mutate all infra** —
+another blast-radius step on top of the age key + AWS profile + PVE token already
+here (M82). Accept deliberately or keep dispatch on the laptop/mini only.
+
 ## Session migration (mini → devbox)
 Transcripts copied from `~/.claude/projects/-Users-grahamsmith-code-<repo>/` →
 `-home-ubuntu-code-<repo>/`. Gotchas:
