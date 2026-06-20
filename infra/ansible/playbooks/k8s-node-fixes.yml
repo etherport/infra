@@ -338,37 +338,15 @@
           max-load-1          = 0
       notify: Restart watchdog
 
-    # The Proxmox i6300esb PCI device only surfaces as /dev/watchdog0 once the
-    # `i6300esb` kernel module is loaded. WITHOUT this the daemon runs but has no
-    # device to pet — i.e. the watchdog was never actually armed (gap found
-    # 2026-06-20: PCI device present in-guest, module absent, no /dev/watchdog0).
-    - name: Persist i6300esb watchdog kernel module (autoload at boot)
-      copy:
-        dest: /etc/modules-load.d/i6300esb.conf
-        owner: root
-        group: root
-        mode: "0644"
-        content: "i6300esb\n"
-      notify: Restart watchdog
-
-    - name: Install linux-modules-extra (ships the i6300esb watchdog module)
-      # The stock node kernel (linux-image) does NOT include i6300esb.ko — it's in
-      # the -extra package. Without this, modprobe i6300esb fails "Module not found"
-      # (the real reason /dev/watchdog0 never appeared). Matches the running kernel.
-      apt:
-        name: "linux-modules-extra-{{ ansible_kernel }}"
-        state: present
-        update_cache: true
-        cache_valid_time: 3600
-
-    - name: Load i6300esb watchdog kernel module now
-      # No-op-ish on nodes whose VM hasn't been cold-started since the device was
-      # attached (module loads but no PCI device yet → arms on next reboot).
-      ansible.builtin.modprobe:
-        name: i6300esb
-        state: present
-      notify: Restart watchdog
-
+    # NB (2026-06-20): a TRUE hardware watchdog (i6300esb, attached to the VMs via
+    # `qm set --watchdog`) is NOT enableable here yet — `i6300esb.ko` is ABSENT from
+    # the node kernel (6.8.0-124-generic ships only softdog + wdat_wdt; even
+    # linux-modules-extra-<kernel> does not provide it). So /dev/watchdog0 never
+    # appears and the daemon below has no device to pet (it runs but is inert — the
+    # watchdog has never actually armed). Blocked pending the module: find the right
+    # package / build i6300esb / or accept softdog (guest-only, can't catch a hung
+    # kernel). DO NOT re-add a `modprobe i6300esb` task until the module exists — it
+    # FATALs the whole playbook. See docs/planning/outstanding-work.md M91.
     - name: Enable + start watchdog daemon
       systemd:
         name: watchdog
