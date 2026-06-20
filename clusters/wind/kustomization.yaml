@@ -104,6 +104,8 @@ resources:
   - ../../platform/kubernetes/unifi-backup
   # UNAS software-RAID (md) degradation alerting (cache/array member drop)
   - ../../platform/kubernetes/unas-health
+  # OneDrive -> NAS backup (rclone; rides the NAS->S3 sync)
+  - ../../platform/kubernetes/rclone-onedrive
 
 # Pod Security Standards labels — applied as patches at the top of the
 # kustomize build graph so they target Namespaces created by any nested
