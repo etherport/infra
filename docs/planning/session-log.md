@@ -13,6 +13,34 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-20 (cont. 3) — devbox CI dispatch (PAT) + k8s-vms watchdog saga ([[M91]],[[M92]])
+
+**Dispatch enabled ([[M92]] ✅).** Owner created a fine-grained PAT (Actions:rw + Contents:r on the
+repo), sealed into `homelab-ops.sops.yaml` as `github_dispatch_pat`. devbox can now `workflow_dispatch`
+via the REST API (verified). Also: fixed a `.gitignore` leak (`!**/*.sops.yaml` was un-ignoring
+`.decrypted~*.sops.yaml` plaintext SOPS tempfiles → hard re-ignore appended, `c8e952f`). Extended the
+CI drift sweep to ALL 22 stacks + email-on-drift (red run, `c42a367`/`812cb58`); first runs exposed +
+fixed a self-hosted bug (install unzip BEFORE setup-terraform, `39dc18a`).
+
+**The watchdog dead-end ([[M91]]).** Goal: enable the i6300esb hardware watchdog (hang auto-reset) on
+the 8 k8s VMs — the standing `terraform plan` drift. Dispatched the per-stack apply node-by-node
+(authorized, rolling): w4 (canary) → w3 → w2 → w1 → gpu1. Two incidents en route, both recovered via
+the PVE API: **(1)** w3's graceful shutdown HUNG on un-drainable single-instance `cue-db-1` (PDB on 1
+replica → RBD wouldn't unmount) — force-stopped+started it; **(2)** a bug in my hang-detector
+(`[ "$ns" != "Ready" ]` counted `Ready,SchedulingDisabled` cordoned nodes as down) force-stopped a
+HEALTHY w2 — restarted it; fixed the detector to `grep "^Ready"`. **Then the gut-punch:** after 5
+reboots the plan STILL showed all 8 drifting and the VM configs had **no watchdog** — **bpg/proxmox
+0.106 silently NO-OPs the `watchdog {}` block.** The 5 reboots achieved nothing toward the watchdog
+(cluster fine throughout). Stopped before the control planes.
+
+**Resolution (owner chose "do it right").** (a) `lifecycle.ignore_changes=[watchdog]` on the 3 VM
+resources → plan now "No changes" (`0e80782`); (b) attached the device to all 8 configs via the PVE API
+`qm set --watchdog` (the working path; `current=[model=i6300esb,action=reset]`); (c) guest daemon
+already deployed+enabled on all 8 (ansible `k8s-node-fixes.yml` check `changed=0`). **Activation is
+per-node on next (natural/kured) reboot** — no forced reboots needed. See CLAUDE.md §5 gotcha.
+
+---
+
 ## 2026-06-20 (cont. 2) — Config-drift / docs review; CI-native drift for all TF stacks
 
 **Docs drift fixed (`bb227a5`):** gdrive/onedrive READMEs daily/nightly→hourly, root README reframed (devbox is the dev-session host, not the mini) + OneDrive/unas-health added to backups table & component list, two dead `docs/README.md` links removed, M78→superseded-by-M88. (Agent-assisted.)

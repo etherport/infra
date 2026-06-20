@@ -164,6 +164,16 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   Ceph (storage VLAN → mon/OSD), IPMI (`:9290` from the Servers/K8s VLAN); keep all three
   on any change.** Tell: a dropped allow gives connect **timeout** (SYN dropped), a dead
   service gives **refused** — use that to tell firewall-vs-process.
+- **The bpg/proxmox provider (0.106) silently NO-OPs the VM `watchdog {}` block** (M91, 2026-06-20):
+  `terraform apply` "succeeds" + may reboot the VM, but the i6300esb device never lands in the config —
+  so the `watchdog.action: none→reset` shows as a **perpetual, unresolvable plan diff** (don't chase it
+  with apply+reboots — they do nothing; verify the live VM config, not just "apply succeeded"). The
+  k8s-vms VMs carry `lifecycle { ignore_changes = [watchdog] }` to suppress it. The watchdog is set the
+  working way: **`qm set <vmid> --watchdog model=i6300esb,action=reset`** (host-side, PVE API/pvesh —
+  config-only, **activates on the VM's next COLD start**, not a soft reboot) + the guest `watchdog`
+  daemon (ansible `k8s-node-fixes.yml`). Also: a **VM graceful shutdown HANGS** if an un-drainable
+  single-instance CNPG pod (PDB minAvailable=1, e.g. `cue-db`) sits on it (RBD won't unmount) — drain
+  evicts what it can, then `kubectl delete pod` the PDB-blocked ones before any node reboot.
 
 ## 6. Maintenance rules (keep this memory alive)
 
