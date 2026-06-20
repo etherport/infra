@@ -13,6 +13,16 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-20 (cont. 2) — Config-drift / docs review; CI-native drift for all TF stacks
+
+**Docs drift fixed (`bb227a5`):** gdrive/onedrive READMEs daily/nightly→hourly, root README reframed (devbox is the dev-session host, not the mini) + OneDrive/unas-health added to backups table & component list, two dead `docs/README.md` links removed, M78→superseded-by-M88. (Agent-assisted.)
+
+**Live config drift:** git clean; Flux all reconciled; TF proxmox **firewall/sdn/standalone-vms** = No changes. **k8s-vms = 0 add, 8 change** ([[M91]]) — the deliberate i6300esb **hardware watchdog** (action=reset, hang-recovery; relevant to the GPU wedge) + gpu1 floating-mem 8192→0 were authored but never applied. NOT manual drift. Resolve via a **rolling** CI apply (`terraform-proxmox-k8s-vms` apply with `target`, node-by-node — attaching the watchdog device likely restarts the VM). External-provider stacks not checked from devbox (no GH token there → can't dispatch CI).
+
+**CI-native drift for everything ([[M90]], `2f85c28`).** Per owner "everything should wind up as CI": extended `terraform-drift-detection.yml` (was AWS-only) with a self-hosted `plan-internal` matrix (cloudflare, unifi, proxmox ×4) feeding the same daily `tf-drift` issue. Corrections stay per-stack `workflow_dispatch` apply (OIDC). OneDrive sync still running its initial full pull (8k+ files, double-run cleaned up). sdn lock file gained a linux hash from devbox init (`607759d`).
+
+---
+
 ## 2026-06-20 (cont.) — Hourly syncs + unified sync observability + pve-ipmi firewall fix + cloudwatch baked-image cutover
 
 **Syncs → hourly + unified observability.** gdrive `0 * * * *` / onedrive `30 * * * *`
