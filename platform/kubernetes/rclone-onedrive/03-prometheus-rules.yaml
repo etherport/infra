@@ -1,0 +1,56 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rclone-onedrive-alerts
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+  - name: rclone-onedrive-sync
+    interval: 5m
+    rules:
+    - alert: RcloneOneDriveSyncFailed
+      expr: rclone_sync_success{source="onedrive",destination="nfs"} == 0
+      for: 5m
+      labels:
+        severity: critical
+        component: backup
+        namespace: rclone
+      annotations:
+        summary: "OneDrive sync failed"
+        description: "Rclone OneDrive sync job has failed. Last sync status: {{ $value }}"
+
+    - alert: RcloneOneDriveSyncNotRunning
+      expr: (time() - rclone_sync_last_run_timestamp{source="onedrive",destination="nfs"}) > 90000
+      for: 10m
+      labels:
+        severity: warning
+        component: backup
+        namespace: rclone
+      annotations:
+        summary: "OneDrive sync hasn't run in 25+ hours"
+        description: "Rclone OneDrive sync hasn't completed successfully in over 25 hours. Last run: {{ $value | humanizeDuration }} ago"
+
+    - alert: RcloneOneDriveSyncErrors
+      expr: rclone_sync_errors_total{source="onedrive",destination="nfs"} > 0
+      for: 5m
+      labels:
+        severity: warning
+        component: backup
+        namespace: rclone
+      annotations:
+        summary: "OneDrive sync completed with errors"
+        description: "Rclone OneDrive sync completed but encountered {{ $value }} errors (often OneDrive 429 throttling). Check logs."
+
+    - alert: RcloneOneDriveSyncSlow
+      expr: rclone_sync_duration_seconds{source="onedrive",destination="nfs"} > 3600
+      for: 5m
+      labels:
+        severity: info
+        component: backup
+        namespace: rclone
+      annotations:
+        summary: "OneDrive sync taking longer than expected"
+        description: "Rclone OneDrive sync took {{ $value | humanizeDuration }} (>1h). May indicate OneDrive throttling, network issues, or a large delta."

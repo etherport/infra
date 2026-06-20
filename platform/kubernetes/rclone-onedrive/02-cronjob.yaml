@@ -1,0 +1,75 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: onedrive-sync
+  namespace: rclone
+spec:
+  # 23:00 Pacific — before the 00:00 gdrive-sync and the 01:00 NAS->S3 sync, so
+  # the day's OneDrive pull is on the NAS in time to ride that night's S3 backup.
+  # (A huge first sync may overrun the window; it catches up the next night.)
+  schedule: "0 23 * * *"
+  timeZone: "America/Los_Angeles"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 90000  # 25h — matches gdrive-sync
+      template:
+        metadata:
+          labels:
+            app: onedrive-sync
+          annotations:
+            # Never let Velero FS-backup the Backups NFS share or the rclone
+            # working config into the kopia repo (same rationale as gdrive-sync).
+            backup.velero.io/backup-volumes-excludes: backup-nfs,rclone-config-writable
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: rclone
+            image: rclone/rclone:1.74.3 # {"$imagepolicy": "flux-system:rclone"}
+            command:
+            - /bin/sh
+            - /scripts/sync-and-report.sh
+            # Conservative hardening (mirror gdrive M63): drop caps + block
+            # privilege escalation. rclone writes its working config into the
+            # /config/rclone emptyDir, so not readOnlyRootFilesystem.
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: [ALL]
+              seccompProfile:
+                type: RuntimeDefault
+            volumeMounts:
+            - name: rclone-config
+              mountPath: /config/rclone-secret
+              readOnly: true
+            - name: rclone-config-writable
+              mountPath: /config/rclone
+            - name: backup-nfs
+              mountPath: /backup
+            - name: sync-script
+              mountPath: /scripts
+              readOnly: true
+            resources:
+              requests:
+                memory: 256Mi
+                cpu: 100m
+              limits:
+                memory: 1Gi
+                cpu: 1000m
+          volumes:
+          - name: rclone-config
+            secret:
+              secretName: rclone-onedrive-config
+          - name: rclone-config-writable
+            emptyDir: {}
+          - name: backup-nfs
+            nfs:
+              server: sequoia.wind.etherport.net
+              path: /var/nfs/shared/Backups
+          - name: sync-script
+            configMap:
+              name: rclone-onedrive-sync-script
+              defaultMode: 0755

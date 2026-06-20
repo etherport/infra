@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rclone-onedrive-sync-script
+  namespace: rclone
+data:
+  # Mirror of the gdrive sync (rclone-gdrive/01-sync-script-configmap.yaml):
+  # pulls a OneDrive account down to the NAS "Backups" share, which then rides
+  # the existing nightly NAS->S3 sync. Read-only on OneDrive (rclone sync only
+  # writes to the local dest). Metrics pushed to Pushgateway, labelled
+  # source="onedrive".
+  sync-and-report.sh: |
+    #!/bin/sh
+    set -e
+
+    PUSHGATEWAY="pushgateway.monitoring.svc.cluster.local:9091"
+    JOB_NAME="rclone_onedrive_sync"
+    INSTANCE="onedrive"
+
+    # Copy config from the read-only secret mount to a writable location so
+    # rclone can refresh the OAuth token in-place without erroring.
+    cp /config/rclone-secret/rclone.conf /config/rclone/rclone.conf
+
+    START_TIME=$(date +%s)
+    OUTPUT_FILE="/tmp/rclone-output.txt"
+
+    # --tpslimit 10: OneDrive throttles (HTTP 429) more aggressively than GDrive;
+    # cap transactions/sec to stay under its limits. rclone retries 429s anyway.
+    if rclone sync "onedrive:" "/backup/Graham/OneDrive/" \
+        --config=/config/rclone/rclone.conf \
+        --bind 0.0.0.0 \
+        --tpslimit 10 \
+        --stats=1m \
+        --stats-log-level=INFO \
+        --log-level=INFO \
+        --exclude=.DS_Store \
+        --exclude=Thumbs.db \
+        --exclude=desktop.ini \
+        2>&1 | tee "$OUTPUT_FILE"; then
+      EXIT_CODE=0
+      STATUS="success"
+    else
+      EXIT_CODE=$?
+      STATUS="failure"
+    fi
+
+    END_TIME=$(date +%s)
+    DURATION=$((END_TIME - START_TIME))
+
+    # Parse metrics from rclone output (BusyBox-compatible); default 0 to avoid
+    # Pushgateway 400s on empty values.
+    TRANSFERRED_FILES=$(grep "Transferred:" "$OUTPUT_FILE" | tail -1 | awk '{print $2}' | sed 's/[^0-9]//g' || true)
+    TRANSFERRED_FILES="${TRANSFERRED_FILES:-0}"
+    TOTAL_FILES=$(grep "Transferred:" "$OUTPUT_FILE" | tail -1 | awk -F'/' '{print $2}' | awk '{print $1}' || true)
+    TOTAL_FILES="${TOTAL_FILES:-0}"
+    CHECKED_FILES=$(grep "Checks:" "$OUTPUT_FILE" | tail -1 | awk '{print $2}' | sed 's/[^0-9]//g' || true)
+    CHECKED_FILES="${CHECKED_FILES:-0}"
+    TRANSFERRED_BYTES=$(grep "Transferred:" "$OUTPUT_FILE" | grep -E 'KiB|MiB|GiB|B' | head -1 | awk '{
+      val=$2; unit=$3;
+      if (unit=="KiB") printf "%.0f", val*1024;
+      else if (unit=="MiB") printf "%.0f", val*1024*1024;
+      else if (unit=="GiB") printf "%.0f", val*1024*1024*1024;
+      else if (unit=="B") printf "%.0f", val;
+      else print 0;
+    }' || true)
+    TRANSFERRED_BYTES="${TRANSFERRED_BYTES:-0}"
+    ERROR_COUNT=$(grep -c "ERROR" "$OUTPUT_FILE" || true)
+    ERROR_COUNT="${ERROR_COUNT:-0}"
+    NOTICE_COUNT=$(grep -c "NOTICE" "$OUTPUT_FILE" || true)
+    NOTICE_COUNT="${NOTICE_COUNT:-0}"
+
+    METRICS_FILE="/tmp/metrics.txt"
+    [ "$STATUS" = "success" ] && SUCCESS_VAL=1 || SUCCESS_VAL=0
+
+    printf '%s\n' \
+      "rclone_sync_success{source=\"onedrive\",destination=\"nfs\"} ${SUCCESS_VAL}" \
+      "rclone_sync_duration_seconds{source=\"onedrive\",destination=\"nfs\"} ${DURATION}" \
+      "rclone_sync_files_transferred{source=\"onedrive\",destination=\"nfs\"} ${TRANSFERRED_FILES}" \
+      "rclone_sync_files_total{source=\"onedrive\",destination=\"nfs\"} ${TOTAL_FILES}" \
+      "rclone_sync_files_checked{source=\"onedrive\",destination=\"nfs\"} ${CHECKED_FILES}" \
+      "rclone_sync_bytes_transferred{source=\"onedrive\",destination=\"nfs\"} ${TRANSFERRED_BYTES}" \
+      "rclone_sync_errors_total{source=\"onedrive\",destination=\"nfs\"} ${ERROR_COUNT}" \
+      "rclone_sync_notices_total{source=\"onedrive\",destination=\"nfs\"} ${NOTICE_COUNT}" \
+      "rclone_sync_last_run_timestamp{source=\"onedrive\",destination=\"nfs\"} ${END_TIME}" \
+      > "$METRICS_FILE"
+
+    if ! wget --post-file="$METRICS_FILE" -O- -q "http://${PUSHGATEWAY}/metrics/job/${JOB_NAME}/instance/${INSTANCE}"; then
+      echo "Warning: Failed to push metrics to Pushgateway" >&2
+    fi
+
+    exit $EXIT_CODE
