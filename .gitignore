@@ -72,3 +72,10 @@ platform/kubernetes/cloudflare-ddns/base/secret.yaml
 **/lambda/handler.zip
 **/twilio-webhook/handler.zip
 **/handler.zip
+
+# HARD re-ignore (must be LAST — last match wins): SOPS decrypt tempfiles.
+# `sops`/the VSCode SOPS extension write `.decrypted~<name>` plaintext while
+# editing; for `.decrypted~*.sops.yaml` the `!**/*.sops.yaml` force-include
+# above would otherwise re-track them = a plaintext-secret LEAK. Confirmed
+# 2026-06-20 (git status showed `?? .decrypted~homelab-ops.sops.yaml`).
+**/.decrypted~*
