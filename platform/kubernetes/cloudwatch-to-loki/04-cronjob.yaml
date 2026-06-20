@@ -13,7 +13,11 @@ spec:
   failedJobsHistoryLimit: 5
   jobTemplate:
     spec:
-      backoffLimit: 0
+      # 3 (was 0): a transient pip/network/AWS blip used to fail the job
+      # instantly (BackoffLimitExceeded) and page — 2026-06-20 overnight. With
+      # retries the next attempt almost always succeeds within the 5-min window.
+      # (The runtime pip install is being baked into an image — see image/.)
+      backoffLimit: 3
       ttlSecondsAfterFinished: 90000   # 25h — matches sibling backup CronJobs
       template:
         spec:
@@ -33,7 +37,7 @@ spec:
                   # explicitly via client_configuration. Every API call
                   # went out as system:anonymous and got 403'd. 30.x
                   # is the last known-good major.
-                  pip install --quiet boto3 'kubernetes>=30,<31'
+                  pip install --quiet --retries 5 --timeout 30 boto3 'kubernetes>=30,<31'
                   python /scripts/forward.py
               env:
                 - name: LOG_GROUP_PREFIXES
