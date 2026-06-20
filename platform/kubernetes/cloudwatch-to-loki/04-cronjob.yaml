@@ -25,20 +25,16 @@ spec:
           restartPolicy: Never
           containers:
             - name: forward
-              image: python:3.14-slim # {"$imagepolicy": "flux-system:python-slim"}
-              command:
-                - /bin/bash
-                - -c
-                - |
-                  # kubernetes==30.* — pinned because v31+ broke the
-                  # in-cluster auth chain on python 3.14: the bearer
-                  # token loaded by load_incluster_config wasn't being
-                  # attached to ApiClient requests, even when passed
-                  # explicitly via client_configuration. Every API call
-                  # went out as system:anonymous and got 403'd. 30.x
-                  # is the last known-good major.
-                  pip install --quiet --retries 5 --timeout 30 boto3 'kubernetes>=30,<31'
-                  python /scripts/forward.py
+              # Baked image (boto3 + kubernetes>=30,<31 pre-installed) — no more
+              # per-run `pip install` (the runtime install + backoffLimit:0 caused
+              # an overnight BackoffLimitExceeded, 2026-06-20). Built by
+              # .github/workflows/cloudwatch-to-loki-image.yml; the kubernetes pin
+              # rationale lives in image/Dockerfile. :main is mutable, so
+              # imagePullPolicy: Always picks up new builds (same scheme as
+              # cloudflare-ddns / aws-s3-sync). Script still mounted from the CM.
+              image: ghcr.io/sparked-diamond/cloudwatch-to-loki:main
+              imagePullPolicy: Always
+              command: ["python", "/scripts/forward.py"]
               env:
                 - name: LOG_GROUP_PREFIXES
                   value: "/aws/lambda,/aws/ec2,CloudWatchAgent"
