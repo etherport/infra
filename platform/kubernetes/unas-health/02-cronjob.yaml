@@ -1,0 +1,58 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: unas-health
+  namespace: backups
+spec:
+  # Every 15 min — md degradation is rare but we want a low detection latency
+  # (the 2026-06-19 nvme0 drop ran degraded for hours, unalerted). Cheap: one
+  # SSH login + a /proc/mdstat read.
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: check
+              # Same image the unifi-backup CronJob uses (already cached on
+              # nodes; ships curl, apk for openssh-client). Keeps the
+              # appliance-SSH bundle consistent across CronJobs.
+              image: alpine/k8s:1.31.13
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/bash", "/config/check.sh"]
+              env:
+                - name: PUSHGATEWAY_URL
+                  value: "http://pushgateway.monitoring.svc.cluster.local:9091"
+                - name: UNAS_SSH_TARGET
+                  value: "root@10.10.209.10"
+              volumeMounts:
+                - name: ssh-key
+                  mountPath: /ssh
+                  readOnly: true
+                - name: script
+                  mountPath: /config
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 48Mi
+                limits:
+                  memory: 128Mi
+          volumes:
+            # Reuses the unifi-backup SSH key — the same unifi-cert-sync@homelab
+            # key already authorized in the UNAS /root/.ssh/authorized_keys.
+            - name: ssh-key
+              secret:
+                secretName: unifi-backup-ssh
+                defaultMode: 0600
+            - name: script
+              configMap:
+                name: unas-health-script
+                defaultMode: 0755

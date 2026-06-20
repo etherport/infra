@@ -1,0 +1,69 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: unas-health
+  namespace: backups
+  labels:
+    app: unas-health
+    # Prometheus operator picks up PrometheusRules with this label.
+    release: monitoring
+spec:
+  groups:
+    - name: unas-storage
+      rules:
+        - alert: UnasMdArrayDegraded
+          # active < total members on any UNAS md array. This is the alert that
+          # was MISSING on 2026-06-19 when nvme0 fell off the bus and md4 ran
+          # degraded for hours (and the UI still showed both SSDs "healthy").
+          expr: unas_md_array_degraded > 0
+          for: 15m
+          labels:
+            severity: warning
+            namespace: backups
+            component: storage
+          annotations:
+            summary: "UNAS md array {{ $labels.array }} is degraded"
+            description: |
+              Linux md array {{ $labels.array }} on the UNAS (10.10.209.10) has
+              fewer active members than total — a member has failed/dropped, or
+              the array is rebuilding. md4 = SSD read-write cache (RAID1); md3 =
+              RAID6 data array; md0 = small system mirror. A REBUILD also trips
+              this and auto-resolves on completion; a PERSISTENT degrade means a
+              failed/missing member (NB: a member can drop off the PCIe bus while
+              SMART still reads "healthy" — see the runbook).
+              Diagnose: ssh root@10.10.209.10 'cat /proc/mdstat; dmesg | tail -40'.
+              Runbook: docs/runbooks/unas-nvme-cache-apst-hang.md
+
+        - alert: UnasMdHealthCheckFailing
+          # The probe ran but couldn't SSH / read /proc/mdstat.
+          expr: unas_md_health_check_status > 0
+          for: 1h
+          labels:
+            severity: warning
+            namespace: backups
+            component: storage
+          annotations:
+            summary: "UNAS md-health check can't reach the NAS (>1h)"
+            description: |
+              The unas-health CronJob can't SSH to the UNAS / read /proc/mdstat
+              for >1h — NAS down, SSH disabled (e.g. after a firmware update), or
+              key/host-key drift. Storage redundancy is currently UNMONITORED.
+              Check: kubectl -n backups logs -l job-name --tail=50 -c check ;
+              and that SSH is enabled on the UNAS.
+
+        - alert: UnasMdHealthStale
+          # The CronJob itself stopped pushing (suspended / crashloop / no runs).
+          expr: (time() - unas_md_health_last_run_timestamp) > 3600
+          for: 30m
+          labels:
+            severity: warning
+            namespace: backups
+            component: storage
+          annotations:
+            summary: "UNAS md-health CronJob hasn't reported in >1h"
+            description: |
+              No fresh unas_md_health metric for >1h — the unas-health CronJob
+              (every 15m) may be suspended or crashlooping, so storage-redundancy
+              monitoring is blind. Check:
+              kubectl -n backups get cronjob unas-health ;
+              kubectl -n backups get jobs -l app=unas-health

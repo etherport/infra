@@ -102,6 +102,8 @@ resources:
   - ../../platform/kubernetes/unifi-cert-sync
   # UDM / Protect controller-DB + core-config nightly backup to S3
   - ../../platform/kubernetes/unifi-backup
+  # UNAS software-RAID (md) degradation alerting (cache/array member drop)
+  - ../../platform/kubernetes/unas-health
 
 # Pod Security Standards labels — applied as patches at the top of the
 # kustomize build graph so they target Namespaces created by any nested

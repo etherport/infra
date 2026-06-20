@@ -13,6 +13,47 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-19 (evening) — UNAS SSD-cache member drop (NVMe APST hang) + md-degradation alerting
+
+**Incident.** Owner saw the UNAS UI flag **Storage Pool "At Risk" + SSD cache
+"Transferring"** while every drive showed "Optimal"; separately the mini photo-backup
+agent reported **SMB hanging within ~1 min** after ~5 h stable. The two were the same
+event. SSH'd into the UNAS (`10.10.209.10`, key from `unifi-backup/01-secret-ssh.sops.yaml`)
+and found the smoking gun in `/proc/mdstat` + dmesg: **`nvme0` (one of the two SSD-cache
+RAID1 members, `md4`) fell off the PCIe bus** at ~11:04 (`nvme nvme0: controller is down;
+CSTS=0xffffffff`, `/dev/nvme0` gone) — a textbook **NVMe deep-power-state (APST) hang**,
+hours into runtime. `md` kicked it; `md4` ran **degraded `[2/1]`**. `smbd`/`kcopyd`/`btrfs`
+were stuck in **D-state** on the dead device → that was the SMB hang. RAID6 data array
+(`md3`) `[8/8]` healthy throughout; cache survivor `nvme1` SMART pristine → **no data risk**.
+
+**Why the UI lied:** SMART ≠ bus presence. A drive that *vanishes* can't report bad
+SMART, so the per-drive widget showed last-known-good "healthy"; only the pool status
+(reading live `md`) reflected it.
+
+**Fix.** Corrected my earlier "don't reboot mid-Transferring" advice — that assumes a
+non-redundant cache; this cache is **RAID1**, so the survivor holds all data across a
+reboot, making a reboot both safe and necessary (box was wedged on D-state I/O). Owner
+rebooted from the UI; `nvme0` re-probed clean and `md4` auto-rebuilt to **`[2/2] [UU]`**
+(~90 min). (Also confirmed: SSH comes up late in boot — port 22 closed while UI:443/SMB:445
+already open; not a NAS-down.)
+
+**Root cause = the firmware update (prime suspect).** Box updated to `UNASPRO v5.1.19`
+(build 260613) this morning, rebooted 06:17, stable ~5 h, then the controller hung on a
+power-state transition. `default_ps_max_latency_us=100000` permits deep APST; the
+appliance kernel cmdline is fixed so we **can't persist `...=0`**. Not provable vs. a
+marginal M.2 — **recurrence is the tell**.
+
+**Durability shipped.** (1) New runbook
+[`docs/runbooks/unas-nvme-cache-apst-hang.md`](../runbooks/unas-nvme-cache-apst-hang.md).
+(2) New IaC component **`platform/kubernetes/unas-health/`** ([[M86]]): CronJob SSHes the
+UNAS every 15 min, parses `/proc/mdstat`, pushes degraded/active/total gauges to
+Pushgateway → **`UnasMdArrayDegraded`** (+ check-failing/stale watchdogs). Closes the gap
+where the array ran degraded for hours unalerted. Reuses `unifi-backup-ssh` (already
+authorized on the UNAS); host-key pinned. Validated (kustomize + parser unit-tested).
+**Recurrence watch:** a self-scheduled quiet check will ping only if `nvme0` drops again.
+
+---
+
 ## 2026-06-19 (morning) — M84 fixed (dataPathConcurrency=2) + advisor overnight review
 
 **M84 resolved** (owner back; the deferral was only about not guessing chart-wiring unattended).
