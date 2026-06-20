@@ -132,6 +132,30 @@ resource "proxmox_virtual_environment_cluster_firewall_security_group" "pve_ceph
   }
 }
 
+# --- Security group: allow the IPMI exporter scrape from the K8s subnet -------
+# H37 OVERSIGHT FIX (2026-06-20). The host runs the in-band ipmi_exporter on
+# :9290 (deployed by infra/ansible/playbooks/ipmi-monitoring.yml); Prometheus in
+# the K8s cluster scrapes it. When input_policy flipped to DROP (Stage 2) there
+# was NO rule permitting :9290, so the scrape was dropped -> `up{job="pve-ipmi"}`
+# went 0 -> TargetDown (2026-06-20T13:16Z). SAME latent-firewall class as
+# pve-ceph (a needed allow missing from the default-deny). Pod->host scrape
+# traffic is Cilium-masqueraded to the node IP, so the source is the Servers/K8s
+# VLAN. Scoped to that /24 + the single port only.
+resource "proxmox_virtual_environment_cluster_firewall_security_group" "pve_ipmi" {
+  name    = "pve-ipmi"
+  comment = "H37: IPMI exporter scrape (:9290) from the K8s/Servers VLAN"
+
+  rule {
+    type    = "in"
+    action  = "ACCEPT"
+    source  = var.ipmi_scrape_cidr
+    proto   = "tcp"
+    dport   = "9290"
+    log     = "nolog"
+    comment = "Prometheus ipmi_exporter scrape (:9290) from K8s nodes"
+  }
+}
+
 # --- Attach the security groups to the node (host) ---------------------------
 resource "proxmox_virtual_environment_firewall_rules" "pve_node" {
   node_name = var.node_name
@@ -144,6 +168,11 @@ resource "proxmox_virtual_environment_firewall_rules" "pve_node" {
   rule {
     security_group = proxmox_virtual_environment_cluster_firewall_security_group.pve_ceph.name
     comment        = "H37 fix: Ceph storage plane (see pve-ceph security group)"
+  }
+
+  rule {
+    security_group = proxmox_virtual_environment_cluster_firewall_security_group.pve_ipmi.name
+    comment        = "H37 fix: IPMI exporter scrape (see pve-ipmi security group)"
   }
 
   depends_on = [proxmox_node_firewall.pve]

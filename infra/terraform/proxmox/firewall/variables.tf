@@ -66,3 +66,13 @@ variable "ceph_storage_cidr" {
   type        = string
   default     = "10.10.210.0/24"
 }
+
+# Source allowed to scrape the host's in-band ipmi_exporter (:9290). Prometheus
+# runs in K8s; pod->host traffic is Cilium-masqueraded to the node IP, so the
+# source is the Servers/K8s VLAN. Without this the Stage-2 DROP policy drops the
+# scrape -> TargetDown 'pve-ipmi' (H37 oversight fixed 2026-06-20).
+variable "ipmi_scrape_cidr" {
+  description = "CIDR (K8s/Servers VLAN) allowed to scrape the host's ipmi_exporter :9290"
+  type        = string
+  default     = "10.10.201.0/24"
+}
