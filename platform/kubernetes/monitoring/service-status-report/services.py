@@ -57,6 +57,8 @@ SERVICES = [
 
     # Backup
     ("Backup", "Velero", "deployment", "velero",  "velero"),
+    ("Backup", "Google Drive sync", "cronjob", "rclone", "gdrive-sync"),
+    ("Backup", "OneDrive sync",     "cronjob", "rclone", "onedrive-sync"),
 
     # Apps
     ("Apps", "Home Assistant", "deployment", "home-automation", "home-assistant"),

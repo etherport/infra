@@ -87,7 +87,7 @@ data:
           "pluginVersion": "9.0.0",
           "targets": [
             {
-              "expr": "rclone_sync_success{source=\"gdrive\",destination=\"nfs\"}",
+              "expr": "rclone_sync_success{source=~\"$source\",destination=\"nfs\"}",
               "refId": "A"
             }
           ],
@@ -136,7 +136,7 @@ data:
           "pluginVersion": "9.0.0",
           "targets": [
             {
-              "expr": "rclone_sync_last_run_timestamp{source=\"gdrive\",destination=\"nfs\"} * 1000",
+              "expr": "rclone_sync_last_run_timestamp{source=~\"$source\",destination=\"nfs\"} * 1000",
               "refId": "A"
             }
           ],
@@ -193,7 +193,7 @@ data:
           "pluginVersion": "9.0.0",
           "targets": [
             {
-              "expr": "rclone_sync_duration_seconds{source=\"gdrive\",destination=\"nfs\"}",
+              "expr": "rclone_sync_duration_seconds{source=~\"$source\",destination=\"nfs\"}",
               "refId": "A"
             }
           ],
@@ -250,7 +250,7 @@ data:
           "pluginVersion": "9.0.0",
           "targets": [
             {
-              "expr": "rclone_sync_errors_total{source=\"gdrive\",destination=\"nfs\"}",
+              "expr": "rclone_sync_errors_total{source=~\"$source\",destination=\"nfs\"}",
               "refId": "A"
             }
           ],
@@ -303,7 +303,7 @@ data:
           "pluginVersion": "9.0.0",
           "targets": [
             {
-              "expr": "rclone_sync_notices_total{source=\"gdrive\",destination=\"nfs\"}",
+              "expr": "rclone_sync_notices_total{source=~\"$source\",destination=\"nfs\"}",
               "refId": "A"
             }
           ],
@@ -377,13 +377,13 @@ data:
           },
           "targets": [
             {
-              "expr": "rclone_sync_files_transferred{source=\"gdrive\",destination=\"nfs\"}",
-              "legendFormat": "Files Transferred",
+              "expr": "rclone_sync_files_transferred{source=~\"$source\",destination=\"nfs\"}",
+              "legendFormat": "Files Transferred — {{source}}",
               "refId": "A"
             },
             {
-              "expr": "rclone_sync_files_checked{source=\"gdrive\",destination=\"nfs\"}",
-              "legendFormat": "Files Checked",
+              "expr": "rclone_sync_files_checked{source=~\"$source\",destination=\"nfs\"}",
+              "legendFormat": "Files Checked — {{source}}",
               "refId": "B"
             }
           ],
@@ -457,8 +457,8 @@ data:
           },
           "targets": [
             {
-              "expr": "rclone_sync_bytes_transferred{source=\"gdrive\",destination=\"nfs\"}",
-              "legendFormat": "Bytes Transferred",
+              "expr": "rclone_sync_bytes_transferred{source=~\"$source\",destination=\"nfs\"}",
+              "legendFormat": "Bytes Transferred — {{source}}",
               "refId": "A"
             }
           ],
@@ -540,8 +540,8 @@ data:
           },
           "targets": [
             {
-              "expr": "rclone_sync_duration_seconds{source=\"gdrive\",destination=\"nfs\"}",
-              "legendFormat": "Sync Duration",
+              "expr": "rclone_sync_duration_seconds{source=~\"$source\",destination=\"nfs\"}",
+              "legendFormat": "Sync Duration — {{source}}",
               "refId": "A"
             }
           ],
@@ -551,9 +551,22 @@ data:
       ],
       "schemaVersion": 36,
       "style": "dark",
-      "tags": ["rclone", "backup", "gdrive"],
+      "tags": ["rclone", "backup", "gdrive", "onedrive"],
       "templating": {
-        "list": []
+        "list": [
+          {
+            "name": "source",
+            "label": "Sync source",
+            "type": "query",
+            "datasource": "Prometheus",
+            "query": "label_values(rclone_sync_success, source)",
+            "refresh": 2,
+            "includeAll": true,
+            "multi": true,
+            "current": { "text": "All", "value": "$__all", "selected": false },
+            "sort": 1
+          }
+        ]
       },
       "time": {
         "from": "now-7d",
@@ -561,7 +574,7 @@ data:
       },
       "timepicker": {},
       "timezone": "America/Los_Angeles",
-      "title": "Rclone Google Drive Sync",
+      "title": "Rclone Sync (Google Drive / OneDrive)",
       "uid": "rclone-gdrive-sync",
       "version": 1,
       "weekStart": ""

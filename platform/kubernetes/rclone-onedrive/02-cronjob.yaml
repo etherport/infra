@@ -4,10 +4,11 @@ metadata:
   name: onedrive-sync
   namespace: rclone
 spec:
-  # 23:00 Pacific — before the 00:00 gdrive-sync and the 01:00 NAS->S3 sync, so
-  # the day's OneDrive pull is on the NAS in time to ride that night's S3 backup.
-  # (A huge first sync may overrun the window; it catches up the next night.)
-  schedule: "0 23 * * *"
+  # Hourly at :30 — staggered from gdrive-sync (:00) so the two rclone pods don't
+  # compete for NAS/network at once. concurrencyPolicy:Forbid skips a tick if a
+  # run exceeds 1h (the first full pull will; it catches up). The daily NAS->S3
+  # sync ships the freshest local copy offsite.
+  schedule: "30 * * * *"
   timeZone: "America/Los_Angeles"
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3

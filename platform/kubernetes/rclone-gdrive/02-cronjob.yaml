@@ -4,7 +4,9 @@ metadata:
   name: gdrive-sync
   namespace: rclone
 spec:
-  schedule: "0 0 * * *" # Daily at midnight Pacific time
+  schedule: "0 * * * *" # Hourly, on the hour. concurrencyPolicy:Forbid means a
+                        # run that exceeds 1h just skips the next tick. The daily
+                        # NAS->S3 sync still ships the freshest local copy offsite.
   timeZone: "America/Los_Angeles" # Automatically handles PST/PDT
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
