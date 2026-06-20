@@ -138,6 +138,33 @@ multichannel disabled; deeper insurance (sudo-only) = system-wide `/etc/nsmb.con
 raised `net.smb.fs.kern_*_deadtimer` so a server stall pauses I/O instead of erroring up
 into APFS.
 
+**UPDATE (same day, evening) — the deeper root cause was NAS HARDWARE, and completion.**
+After resuming, the SMB degraded *progressively* (fine → flaky → EIO → hang) over the
+afternoon, eventually hanging even on a freshly-rebuilt mount. **Owner SSH'd the UNAS and
+nailed it: an NVMe SSD-cache drive (`nvme0`) fell off the PCIe bus (~11:04), `md` kicked it
+from the cache RAID1, and `smbd`/`btrfs`/`kcopyd` went D-state on the dead device** — exactly
+the "reads work ~10 s then hang" symptom, and the "stable ~5 h then degraded" timing
+(NAS booted 06:17 from the update, SSD dropped ~5 h later). Data array (RAID6) healthy → no
+data risk. So `mc_on=no` was a genuine improvement but the real instability was the dying SSD,
+not the client. **Owner rebooted the UNAS; `nvme0` re-probed clean → SMB stably healthy.**
+Lesson: progressive SMB degradation ⇒ suspect NAS storage/SMB health, not just client tuning;
+diagnose with a **timeout-guarded** read (a plain cp/dd just hangs on D-state).
+- Built `~/Library/Logs/photos-export/auto-resume.sh` (uncommitted one-off): waits for 3
+  consecutive timeout-guarded reads off `/Volumes/PhotosLib`, then auto-runs the resume.
+  Fired at 16:24 on recovery.
+- **`--exportdb <LOCAL path>` + `--ramdb`** was the fix that let it finally complete: osxphotos
+  writes the export DB as the final step, and on the SMB share that write kept failing
+  (rc=1 → wrapper retried **~18×** even though files were exported). DB now local (rebuildable
+  ledger; correct to keep off NAS/S3). First clean `rc=0` at 22:08 (5h41m local run).
+- **Clean completion revealed two issues:** `Processed: 14343, exported: 10420, missing: 11538`
+  → ~11,538 versions' originals were never downloaded (PhotoKit run dropped at 71% before
+  reaching them = NOT yet backed up); and **heavy duplication** (55,745 files, 41,295 with
+  `(N)` suffixes for ~14k photos) from the ~20 DB-less retries each re-assigning `(N)` names.
+- **In progress:** `DOWNLOAD_MISSING=1` pass (PhotoKit) fetching the 11,538 not-local originals
+  + exporting them (local DB makes it convergent now); then `CLEANUP=1` (dry-run first) to
+  remove the ~17k+ orphan duplicates. Then enable the nightly timer + verify S3. Final
+  exported-count-vs-14,267 + timer status to report on completion.
+
 ---
 
 ## 2026-06-19 (overnight, autonomous) — Velero nightly close-out + M84 (dataPathConcurrency)
