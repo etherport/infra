@@ -150,9 +150,7 @@ captured yet.
 | [udm-audit-2026-05-23.md](planning/udm-audit-2026-05-23.md) | UDM / UniFi config audit (M25) |
 | [udm-config-drift-2026-05-17.md](planning/archive/udm-config-drift-2026-05-17.md) | UDM config drift snapshot |
 | [ubiquiti-config-as-code-2026-05-16.md](planning/archive/ubiquiti-config-as-code-2026-05-16.md) | UniFi config-as-code design (terraform-unifi) |
-| [public-web-infrastructure.md](planning/public-web-infrastructure.md) | Status of public-facing web hosting |
 | [VERSIONING-STRATEGY.md](planning/VERSIONING-STRATEGY.md) | Container image versioning approach |
-| [sops-vs-ansible-vault.md](planning/sops-vs-ansible-vault.md) | SOPS vs Ansible-Vault comparison |
 
 Older completed/superseded planning docs (kept for historical
 context only) live in [docs/planning/archive/](planning/archive/).

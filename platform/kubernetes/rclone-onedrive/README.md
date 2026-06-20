@@ -1,6 +1,6 @@
 # rclone-onedrive — OneDrive → NAS backup
 
-Pulls a personal OneDrive account down to the NAS "Backups" share nightly, which
+Pulls a personal OneDrive account down to the NAS "Backups" share hourly, which
 then rides the existing **NAS → S3** sync (`backups/s3-sync-backups`). Direct
 mirror of [`rclone-gdrive`](../rclone-gdrive/) — same image, NFS mount, metrics,
 and alert shape, just `onedrive:` → `/backup/Graham/OneDrive/`. Read-only on
@@ -11,7 +11,7 @@ just adds storage — it's still OneDrive Personal, `drive_type = personal`, not
 OneDrive for Business).
 
 ## Status: live (2026-06-20)
-Deployed and verified — `onedrive-sync` CronJob runs nightly; the first sync
+Deployed and verified — `onedrive-sync` CronJob runs hourly (at :30); the first sync
 authenticated and copied files into `/backup/Graham/OneDrive/`.
 
 ### Re-auth / token rotation
@@ -30,7 +30,7 @@ on the devbox), so if the token is ever revoked or you need to re-auth:
 | File | What |
 |---|---|
 | `01-sync-script-configmap.yaml` | `rclone sync onedrive: → /backup/Graham/OneDrive/` + Pushgateway metrics |
-| `02-cronjob.yaml` | Daily 23:00 PT (before the 00:00 gdrive + 01:00 NAS→S3) |
+| `02-cronjob.yaml` | Hourly at :30 (staggered from gdrive's :00) |
 | `03-prometheus-rules.yaml` | Failed / stale / errors / slow alerts (`source="onedrive"`) |
 | `04-secret.sops.yaml(.template)` | The `[onedrive]` rclone config (OAuth token) |
 

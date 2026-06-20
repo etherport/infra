@@ -59,15 +59,23 @@ scripts/             Ad-hoc helpers (safety-check, service-status inventory drif
    └───────────────────────────────────────────────────────┘
 ```
 
-## Headless ops host (Mac mini)
+## Headless dev + ops hosts
 
-An always-on Mac mini (`10.10.202.101`, tailnet `100.79.165.113`) runs Claude
-Code in **Remote Control** mode as the headless ops box — full
-kubectl/terraform/sops/ansible with **no 1Password at runtime** (age key +
-on-disk SSH keys; AWS creds rendered from SOPS via `scripts/render-aws-credentials.sh`).
-It's a trusted admin client on Clients/202 with a scoped UDM allow into the
-Management zone (`trusted-admin-clients → Management` in `udm-firewall.yml`).
-Setup + design + migration plan: [`docs/setup/headless-ops-host.md`](docs/setup/headless-ops-host.md).
+The **Claude Code dev sessions** run on the **devbox** (`10.10.201.45`, tailnet
+`100.74.216.102`) — an always-on Linux host that auto-resumes per-repo `claude
+--continue` tmux sessions across reboots. It's TF-capable (terraform 1.15.5 +
+`aws` CLI) plus `kubectl`/`sops`+age/`git`, so it can run Terraform and reconcile
+the cluster headlessly. Provisioned by `infra/ansible/playbooks/devbox.yml`
+(+ `infra/devbox/README.md`).
+
+An always-on **Mac mini** (`10.10.202.101`, tailnet `100.79.165.113`) is the
+secondary, macOS-only ops host — full kubectl/terraform/sops/ansible with **no
+1Password at runtime** (age key + on-disk SSH keys; AWS creds rendered from SOPS
+via `scripts/render-aws-credentials.sh`). It's retained for macOS-only iCloud
+backups and as the browser/`gh`-capable TF/AWS ops box. It's a trusted admin
+client on Clients/202 with a scoped UDM allow into the Management zone
+(`trusted-admin-clients → Management` in `udm-firewall.yml`). Setup + design:
+[`docs/setup/headless-ops-host.md`](docs/setup/headless-ops-host.md).
 
 ## Flux-managed components
 
@@ -85,7 +93,7 @@ github-actions-runner.
 **Kustomization-only** (no Helm): metallb · technitium · ceph-csi ·
 auto-remediation (+ auto-remediation-rbac) · cloudflared · blackbox-exporter ·
 cloudwatch-to-loki · policy-baseline · cnpg (Cluster CR) ·
-home-automation · plex · rclone-gdrive · wikijs · ollama ·
+home-automation · plex · rclone-gdrive · rclone-onedrive · unas-health · wikijs · ollama ·
 cue-api + cue-db (CNPG) · unifi-poller ·
 tailscale (subnet router) · wireguard · cloudflare-ddns · unifi-backup ·
 unifi-cert-sync · monitoring (alerts, dashboards, status report) ·
@@ -179,7 +187,8 @@ via `docs/runbooks/grafana-admin-password.md`).
 | etcd | systemd timer per CP + Velero `kube-system-daily` ships `/var/lib/etcd-snapshots` | local + S3 | daily 02:00 PT |
 | UDM controller-db + UDM/Protect core-config | `unifi-backup` CronJob | S3 `infra.wind.etherport.net/unifi/` | daily 04:00 PT |
 | NAS shares (7) | `s3-sync` CronJob per share | per-share S3 buckets | daily 01:00 PT |
-| Google Drive | `rclone gdrive-sync` CronJob | NFS `/mnt/data/gdrive-mirror` | daily 00:00 PT |
+| Google Drive | `rclone gdrive-sync` CronJob | NFS `/mnt/data/gdrive-mirror` | hourly (:00) |
+| OneDrive | `rclone onedrive-sync` CronJob | NAS `Backups/Graham/OneDrive` → S3 | hourly (:30) |
 | Cluster pull-side: long-form repository copies | Kopia | inside K8s, S3-backed | nightly |
 
 Backup alerts in `platform/kubernetes/monitoring/06-backup-alerts.yaml`.

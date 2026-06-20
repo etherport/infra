@@ -1,13 +1,13 @@
 # Rclone Google Drive Sync
 
-Automated daily sync from Google Drive to NFS backup storage using rclone.
+Automated hourly sync from Google Drive to NFS backup storage using rclone.
 
 **Deployment Method**: This application is managed via **Flux GitOps**. Changes are deployed automatically from git commits.
 
 ## Overview
 
 - **Namespace**: `rclone`
-- **Schedule**: Daily at midnight (0:00 UTC)
+- **Schedule**: Hourly, on the hour (timeZone America/Los_Angeles)
 - **Source**: Google Drive (My Drive)
 - **Destination**: `sequoia.wind.etherport.net:/var/nfs/shared/Backups/Graham/Google Drive/`
 - **Method**: One-way sync (Google Drive → NFS)
@@ -24,7 +24,7 @@ Automated daily sync from Google Drive to NFS backup storage using rclone.
                  │ OAuth 2.0 API
                  │
         ┌────────▼────────┐
-        │  CronJob (daily) │
+        │  CronJob (hourly)│
         │  rclone sync     │
         └────────┬────────┘
                  │
@@ -121,13 +121,13 @@ kubectl get secret rclone-config -n rclone
 
 ### Sync Schedule
 
-Default: Daily at midnight UTC (`0 0 * * *`)
+Default: Hourly (`0 * * * *`), timeZone America/Los_Angeles
 
 To change the schedule, edit `02-cronjob.yaml`:
 
 ```yaml
 spec:
-  schedule: "0 0 * * *"  # cron format
+  schedule: "0 * * * *"  # cron format
 ```
 
 Apply changes:

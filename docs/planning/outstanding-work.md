@@ -445,7 +445,7 @@ orphaned. Not service-affecting on its own.
 ### ⏳ M76. SSH to nodes/VMs via short-lived certs (Tailscale SSH / SSH CA)
 - **Source:** zero-trust assessment 2026-06-17. Node/VM SSH uses a **long-lived key** (`id_ed25519_homelab`). **Do:** move to short-lived identity-bound SSH — **Tailscale SSH** (hosts already on the tailnet; gate via ACL + check mode) or an SSH CA (step-ca) issuing minutes-long certs. Pairs with **M71** under one "kill standing creds" theme. Spec in the assessment doc. **Effort:** M.
 
-### ⏳ M78. OneDrive (work) backup → NAS → S3
+### ✅ M78. OneDrive (work) backup → NAS → S3 — superseded by [[M88]] (done 2026-06-20)
 - **Source:** owner 2026-06-17. Mirror the GDrive pattern (`platform/kubernetes/rclone-gdrive/`): an **rclone** CronJob `rclone sync onedrive: /backup/Graham/OneDrive/` into the NAS `Backups` share → auto-S3'd by the existing `aws-s3-sync` `backups` share. New `rclone-onedrive` ns/manifests + a SOPS `rclone-config` secret holding the OneDrive OAuth token. **Auth: personal account** (used for work, not a locked corporate tenant) → standard `rclone authorize "onedrive"` OAuth works, no admin-consent issue. Owner runs that once (browser, on a machine with rclone) → token → SOPS secret → deploy. **Effort:** S (mirrors gdrive).
 
 ### 🟡 M79. iCloud Photos backup (priority) → NAS → S3 — run on the mini
