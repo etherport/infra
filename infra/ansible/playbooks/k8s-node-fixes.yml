@@ -338,6 +338,27 @@
           max-load-1          = 0
       notify: Restart watchdog
 
+    # The Proxmox i6300esb PCI device only surfaces as /dev/watchdog0 once the
+    # `i6300esb` kernel module is loaded. WITHOUT this the daemon runs but has no
+    # device to pet — i.e. the watchdog was never actually armed (gap found
+    # 2026-06-20: PCI device present in-guest, module absent, no /dev/watchdog0).
+    - name: Persist i6300esb watchdog kernel module (autoload at boot)
+      copy:
+        dest: /etc/modules-load.d/i6300esb.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: "i6300esb\n"
+      notify: Restart watchdog
+
+    - name: Load i6300esb watchdog kernel module now
+      # No-op-ish on nodes whose VM hasn't been cold-started since the device was
+      # attached (module loads but no PCI device yet → arms on next reboot).
+      ansible.builtin.modprobe:
+        name: i6300esb
+        state: present
+      notify: Restart watchdog
+
     - name: Enable + start watchdog daemon
       systemd:
         name: watchdog
