@@ -157,6 +157,13 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   break all future Ceph volume operations. Symptom: csi `DeadlineExceeded` / `exit 108`
   while `ceph -s` is `HEALTH_OK` locally on pve. Diagnose from pve: `ceph -s`, `rbd status
   k8s-ceph/<img>` (stale watchers), `ceph osd blocklist ls`.
+  **The same gotcha bit the IPMI exporter** (M89, 2026-06-20): the H37 default-deny had no
+  allow for the in-band `ipmi_exporter` `:9290`, so Prometheus's scrape was dropped →
+  `TargetDown pve-ipmi`. Fixed by the **`pve-ipmi`** security group (`10.10.201.0/24` →
+  `9290`). **The PVE host firewall now has THREE required allows — mgmt (`22,3128,8006`),
+  Ceph (storage VLAN → mon/OSD), IPMI (`:9290` from the Servers/K8s VLAN); keep all three
+  on any change.** Tell: a dropped allow gives connect **timeout** (SYN dropped), a dead
+  service gives **refused** — use that to tell firewall-vs-process.
 
 ## 6. Maintenance rules (keep this memory alive)
 

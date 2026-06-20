@@ -13,6 +13,35 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-20 (cont.) — Hourly syncs + unified sync observability + pve-ipmi firewall fix + cloudwatch baked-image cutover
+
+**Syncs → hourly + unified observability.** gdrive `0 * * * *` / onedrive `30 * * * *`
+(staggered; Forbid skips a tick if a run >1h). Made the rclone Grafana dashboard
+**source-templated** (`$source` var, per-source legends, retitled "Rclone Sync (Google
+Drive / OneDrive)") so it covers both + future sources. Added `gdrive-sync` + `onedrive-sync`
+to `service-status-report/services.py` (the shared source-of-truth for the daily status
+email AND the generated service dashboard). AI advisor already gets both syncs' alerts via
+the alertmanager catch-all webhook (`continue:true`) — no routing change needed. Note re
+"resolve autonomously": hourly cadence IS the natural retry now, so explicit force-rerun
+remediation is largely redundant (offered, not built). (`65ad0ab`)
+
+**pve-ipmi TargetDown ([[M89]], `96318e3` applied).** `up{job="pve-ipmi"}=0` since 13:16Z.
+Root-caused from the repo (no SSH — the PVE-SSH was classifier-blocked, only an alert was
+forwarded): the H37 default-deny host firewall had **no allow for the ipmi_exporter `:9290`**
+→ scrape dropped (timeout, not refused; host up + `:22` open). Same latent class as the
+Ceph oversight. Fixed with a `pve-ipmi` security group (`10.10.201.0/24` → `9290`) in the
+proxmox firewall TF; `terraform apply` (1 add, 1 change, 0 destroy, owner-authorized).
+Verified `up=1` + 12 temp sensors. **CLAUDE.md §5 updated: the PVE firewall now has THREE
+required allows (mgmt / Ceph / IPMI).**
+
+**cloudwatch-to-loki baked-image cutover ([[M87]] done, `dd29537`).** GH Actions built the
+image (tags `main`+`sha-734fe3f`); owner flipped the ghcr package Public. Cut the CronJob to
+`ghcr.io/sparked-diamond/cloudwatch-to-loki:main` + `imagePullPolicy: Always`, dropped the
+runtime `pip install` → `command: ["python","/scripts/forward.py"]`. Verified a run: no pip,
+auth ok, events pushed. Runtime-pip failure class eliminated.
+
+---
+
 ## 2026-06-20 — Full health sweep + cloudwatch-to-loki hardening + OneDrive sync staged
 
 **Health sweep (all clear).** 8/8 nodes Ready, 0 NotReady/CrashLooping pods, Flux +
