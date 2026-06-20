@@ -1,15 +1,18 @@
 name: Terraform Drift Detection
 
-# Daily scheduled `terraform plan` across all AWS modules. If any
-# module's plan shows changes (exit code 2), opens or refreshes a
-# GitHub Issue with the offending modules. Manual dispatch supported
-# for ad-hoc audits.
+# Daily scheduled `terraform plan -detailed-exitcode` across ALL TF stacks. If any
+# stack's plan shows changes (exit code 2), opens or refreshes a single GitHub
+# Issue (label `tf-drift`) listing the offending stacks. Manual dispatch supported.
 #
-# Limited to AWS modules: ubuntu-latest hosts, AWS_ACCESS_KEY_ID +
-# AWS_SECRET_ACCESS_KEY secrets, AWS region us-west-2 or per-module
-# override. PVE/UniFi modules are excluded because their state needs
-# the gh-runner VM (cluster-internal, intermittent SSH); add them
-# later when self-hosted runner stability is fully proven (task #27).
+# Two plan jobs feed one report:
+#   - `plan`          AWS modules on ubuntu-latest (OIDC, us-west-2/per-module).
+#   - `plan-internal` cloudflare / unifi / proxmox on the self-hosted lifecycle
+#                     runner (cluster-internal reach to PVE/UDM + their GH-secret
+#                     creds). Added 2026-06-20 (was deferred pending self-hosted
+#                     runner stability — now proven by the per-stack workflows).
+# Corrections are applied via each stack's own workflow_dispatch `apply` (OIDC),
+# never from a workstation. aws-regional-vpn is excluded (deploy-on-demand, no
+# persistent state).
 
 on:
   schedule:
@@ -121,9 +124,94 @@ jobs:
           path: ${{ matrix.module.dir }}/plan.txt
           retention-days: 14
 
+  # Non-AWS stacks (cloudflare / unifi / proxmox) on the self-hosted lifecycle
+  # runner — needs cluster-internal reach (PVE/UDM APIs) + their GH-secret creds.
+  # (Previously excluded pending self-hosted runner stability; now proven by the
+  # per-stack apply workflows.) Feeds the same `report` job via plan-* artifacts.
+  plan-internal:
+    name: ${{ matrix.module.name }}
+    runs-on: [self-hosted, lifecycle]
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - { name: cloudflare,             dir: infra/terraform/cloudflare }
+          - { name: unifi,                  dir: infra/terraform/unifi }
+          - { name: proxmox-firewall,       dir: infra/terraform/proxmox/firewall }
+          - { name: proxmox-sdn,            dir: infra/terraform/proxmox/sdn }
+          - { name: proxmox-standalone-vms, dir: infra/terraform/proxmox/standalone-vms }
+          - { name: proxmox-k8s-vms,        dir: infra/terraform/proxmox/k8s-vms }
+    defaults:
+      run:
+        working-directory: ${{ matrix.module.dir }}
+    env:
+      # Superset of creds; each stack uses only what it needs (the rest are
+      # harmless unused env). Same GH secrets the per-stack workflows use.
+      TF_VAR_proxmox_token_id: ${{ secrets.PROXMOX_TOKEN_ID }}
+      TF_VAR_proxmox_token_secret: ${{ secrets.PROXMOX_TOKEN_SECRET }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TF_VAR_cloudflare_zone_id: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+      TF_VAR_unifi_username: ${{ secrets.UNIFI_USERNAME }}
+      TF_VAR_unifi_password: ${{ secrets.UNIFI_PASSWORD }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Install unzip
+        run: |
+          if ! command -v unzip >/dev/null; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y unzip
+          fi
+
+      - name: Configure AWS credentials (S3 backend)
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6
+        with:
+          role-to-assume: arn:aws:iam::830881980142:role/gh-actions-terraform
+          aws-region: us-west-2
+
+      - name: terraform init
+        run: terraform init -backend-config="profile=" -reconfigure -input=false
+
+      - name: terraform plan -detailed-exitcode
+        id: plan
+        run: |
+          set +e
+          terraform plan -input=false -no-color -lock=false -detailed-exitcode \
+            $( [ -f variables.tf ] && grep -q '"aws_profile"' variables.tf && echo '-var=aws_profile=' ) \
+            > plan.txt 2>&1
+          rc=$?
+          set -e
+          echo "rc=$rc"
+          {
+            echo "## ${{ matrix.module.name }} (rc=$rc)"
+            echo
+            echo '```'
+            tail -c 8000 plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          case "$rc" in
+            0) echo "drifted=false" >> "$GITHUB_OUTPUT" ;;
+            1) echo "drifted=error" >> "$GITHUB_OUTPUT"; exit 1 ;;
+            2) echo "drifted=true"  >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Upload plan artifact
+        if: steps.plan.outputs.drifted == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: plan-${{ matrix.module.name }}
+          path: ${{ matrix.module.dir }}/plan.txt
+          retention-days: 14
+
   report:
     name: Report drift
-    needs: plan
+    needs: [plan, plan-internal]
     if: always()
     runs-on: ubuntu-latest
     steps:
