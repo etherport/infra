@@ -13,6 +13,39 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-20 — Full health sweep + cloudwatch-to-loki hardening + OneDrive sync staged
+
+**Health sweep (all clear).** 8/8 nodes Ready, 0 NotReady/CrashLooping pods, Flux +
+all HelmReleases reconciled, **no active alerts**. **M84 confirmed fixed**: tonight's
+Velero nightly = all 11 backups `Completed`, 0 errors (prior nights were
+PartiallyFailed/Failed). Postgres 3/3 healthy (incl. recreated `-6`); CNPG barman S3
+backups completed; unifi-backup + rclone gdrive complete; `unas-health` running. GPU
+DCGM metrics flowing again; technitium 2/2. The 4h+ `s3-sync-backups` job was not stuck
+— a legit 45k-file/325 GB iCloud Photos push (resumed photo backup) in its verify phase.
+
+**cloudwatch-to-loki hardening ([[M87]], `734fe3f`).** Root-caused the overnight email: a
+single job failed `BackoffLimitExceeded` because it `pip install`s boto3+kubernetes on
+every 5-min run with **`backoffLimit: 0`** → a transient PyPI/network blip failed it
+instantly + paged. It self-recovered (next run's pip succeeded). **Immediate fix
+(deployed+verified):** `backoffLimit 0→3` + `pip --retries 5 --timeout 30`. **Proper fix
+staged:** `image/Dockerfile` bakes the deps + `.github/workflows/cloudwatch-to-loki-image.yml`
+builds to `ghcr.io/sparked-diamond/cloudwatch-to-loki` (script stays in the ConfigMap).
+**Cutover gated on the one-time "make ghcr package public" step** (GITHUB_TOKEN can't do
+it for user-owned packages — same gotcha as cloudflare-ddns), then switch the CronJob
+`image:` + drop the pip line. Tracked M87.
+
+**OneDrive sync staged ([[M88]], `705e314`).** New `platform/kubernetes/rclone-onedrive/`
+mirrors `rclone-gdrive`: nightly `rclone sync onedrive: → /backup/Graham/OneDrive/` (NAS
+Backups share → rides NAS→S3), 23:00 PT, `--tpslimit 10` for OneDrive throttling, same
+metrics/alert shape. Account = personal MS account w/ M365 sub = **OneDrive Personal**.
+**Blocked on interactive OAuth** (rclone's onedrive backend can't auth headless on
+devbox): built but **NOT registered in clusters/wind** + secret omitted, so nothing
+deploys half-built. Activation: user runs `rclone config` on a browser machine → hands
+over the `[onedrive]` block → seal `04-secret.sops.yaml` + uncomment in kustomization +
+register the dir. See the component README + `04-secret.sops.yaml.template`.
+
+---
+
 ## 2026-06-19 (evening) — UNAS SSD-cache member drop (NVMe APST hang) + md-degradation alerting
 
 **Incident.** Owner saw the UNAS UI flag **Storage Pool "At Risk" + SSD cache
