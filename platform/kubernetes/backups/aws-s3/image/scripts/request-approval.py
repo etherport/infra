@@ -164,55 +164,89 @@ with open(os.path.join(log_dir, "approval-manifest.csv"), "w", newline="") as f:
     for k in del_keys:
         w.writerow([k, size_map.get(k, "")])
 
-# --- HTML email body --------------------------------------------------------
+# --- HTML email body (house style — matches service-status-report.py) -------
+created_str = time.strftime("%a %b %d, %H:%M UTC", time.gmtime(now))
 rows = "".join(
-    "<tr><td>{f}</td><td style='text-align:right'>{c:,}</td><td style='text-align:right'>{b}</td></tr>".format(
-        f=html.escape(r["folder"]), c=r["count"], b=human(r["bytes"])
-    )
+    "<tr><td class='svc-name'>{f}</td><td class='num'>{c:,}</td><td class='num'>{b}</td></tr>".format(
+        f=html.escape(r["folder"]), c=r["count"], b=human(r["bytes"]))
     for r in rollup_list[:10]
 )
 more = len(rollup_list) - 10
-more_html = f"+ {more} more folder(s) — full breakdown on the approval page" if more > 0 else ""
+more_html = (f"<p class='subhead' style='margin:10px 2px 0'>+ {more} more folder(s) — "
+             f"full breakdown on the approval page</p>") if more > 0 else ""
 sample_html = "".join(f"<li>{html.escape(k)}</li>" for k in sample)
 
-TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#222;max-width:760px;margin:0 auto;padding:20px;line-height:1.5}
-.header{background:#b45309;color:#fff;padding:18px 20px;border-radius:8px 8px 0 0;margin:-20px -20px 20px}
-.header h1{margin:0;font-size:21px}
-.pill{display:inline-block;background:#78350f;color:#fff;padding:3px 10px;border-radius:4px;font-size:13px;font-weight:700;margin-top:6px}
-.kv{display:grid;grid-template-columns:150px 1fr;gap:8px;background:#f7f7f7;padding:16px;border-radius:8px;margin:16px 0;font-size:14px}
-.kv .l{color:#666;font-weight:600}
-.kv .v{font-family:'SF Mono',Consolas,monospace}
-table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0}
-th,td{border-bottom:1px solid #e5e5e5;padding:6px 8px;text-align:left}
-th{color:#666}
-.btn{display:inline-block;background:#b45309;color:#fff!important;text-decoration:none;font-weight:700;padding:13px 22px;border-radius:8px;font-size:15px}
-.warn{background:#fff7ed;border-left:4px solid #b45309;padding:12px 14px;border-radius:4px;margin:16px 0;font-size:14px}
-.muted{color:#777;font-size:12px}
-ul.sample{font-family:'SF Mono',Consolas,monospace;font-size:12px;color:#444}
-</style></head><body>
-<div class="header"><h1>&#9888;&#65039; Backup deletion needs approval</h1><div class="pill">HELD &mdash; nothing deleted</div></div>
-<p>The <b>__SHARE__</b> backup sync was about to delete a large number of objects from S3 and was <b>held by the delete-protection guard</b>. No sync or deletion has happened. Review what would be removed and approve only if it is expected.</p>
-<div class="warn"><b>Why it was held:</b> __REASON__</div>
-<div class="kv">
-<div class="l">Share</div><div class="v">__SHARE__</div>
-<div class="l">Would delete</div><div class="v">__COUNT__ objects &middot; __BYTES__</div>
-<div class="l">Current backup</div><div class="v">__DESTCOUNT__ objects</div>
-<div class="l">Run ID</div><div class="v">__RUNID__</div>
-<div class="l">Destination</div><div class="v">__DEST__</div>
-<div class="l">Approval expires</div><div class="v">__EXP__</div>
-</div>
-<h3>Where the deletions fall</h3>
-<table><tr><th>Folder</th><th style="text-align:right">Files</th><th style="text-align:right">Size</th></tr>__ROWS__</table>
-<p class="muted">__MORE__</p>
-<h3>Sample (first __NSAMPLE__)</h3>
-<ul class="sample">__SAMPLE__</ul>
-<p style="margin:24px 0"><a class="btn" href="__URL__">Review &amp; approve deletion &rarr;</a></p>
-<p class="muted">Opens a confirmation page (Cloudflare Access sign-in required) that shows the full list before you confirm. The approval is scoped to this deletion only, is single-use, and expires __EXP__. If this is <b>not</b> expected, do nothing &mdash; investigate the source share; the backup is untouched.</p>
-</body></html>"""
+HOUSE_CSS = """
+  :root{--bg:#f6f7f9;--surface:#fff;--text:#0f172a;--text-muted:#64748b;--border:#e5e7eb;--border-soft:#eef0f3;
+    --ok:#047857;--ok-bg:#ecfdf5;--warn:#b45309;--warn-bg:#fffbeb;--err:#b91c1c;--err-bg:#fef2f2;--muted:#6b7280;--muted-bg:#f3f4f6;--accent:#1f2937;}
+  @media (prefers-color-scheme:dark){:root{--bg:#0b1220;--surface:#131c2e;--text:#e8eaf0;--text-muted:#94a3b8;--border:#243049;--border-soft:#1b2538;
+    --ok:#34d399;--ok-bg:rgba(16,185,129,.12);--warn:#fbbf24;--warn-bg:rgba(217,119,6,.15);--err:#f87171;--err-bg:rgba(220,38,38,.16);--muted:#94a3b8;--muted-bg:rgba(148,163,184,.12);--accent:#f1f5f9;}}
+  body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;}
+  .wrap{max-width:720px;margin:0 auto;padding:36px 20px 56px;}
+  .eyebrow{font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:.12em;text-transform:uppercase;margin:0 0 10px;}
+  h1{font-size:26px;font-weight:700;letter-spacing:-.015em;margin:0 0 6px;color:var(--accent);}
+  .subhead{color:var(--text-muted);font-size:14px;margin:0 0 22px;}
+  .pill{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;font-size:13px;font-weight:500;line-height:1;}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block;}
+  .pill-warn{background:var(--warn-bg);color:var(--warn);} .pill-err{background:var(--err-bg);color:var(--err);} .pill-ok{background:var(--ok-bg);color:var(--ok);}
+  .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:24px 0 8px;}
+  @media (max-width:520px){.summary-grid{grid-template-columns:repeat(2,1fr);}}
+  .metric{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+  .metric-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 6px;}
+  .metric-value{font-size:21px;font-weight:600;line-height:1.15;color:var(--accent);font-variant-numeric:tabular-nums;}
+  .metric.tone-err .metric-value{color:var(--err);} .metric.tone-warn .metric-value{color:var(--warn);}
+  .note{background:var(--warn-bg);border:1px solid var(--border);border-left:3px solid var(--warn);border-radius:8px;padding:12px 14px;margin:18px 0;font-size:14px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin:18px 0;overflow:hidden;}
+  .card-head{font-size:13px;font-weight:600;padding:12px 18px;border-bottom:1px solid var(--border-soft);background:linear-gradient(180deg,var(--surface) 0%,var(--border-soft) 100%);}
+  table{width:100%;border-collapse:collapse;}
+  td,th{padding:10px 18px;border-top:1px solid var(--border-soft);text-align:left;font-size:14px;}
+  th{color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;border-top:none;}
+  tr:first-child td{border-top:none;}
+  .num{text-align:right;font-variant-numeric:tabular-nums;color:var(--text-muted);}
+  .svc-name{font-weight:500;color:var(--text);}
+  ul.sample{margin:0;padding:14px 18px 16px 34px;}
+  ul.sample li{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--text-muted);margin:2px 0;word-break:break-all;}
+  .btn-wrap{margin:26px 0 8px;}
+  .btn{display:inline-block;background:var(--warn);color:#fff!important;text-decoration:none;font-weight:700;padding:14px 24px;border-radius:10px;font-size:15px;}
+  .footer{margin-top:34px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);text-align:center;}
+"""
+
+TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
+<title>Backup deletion held — approval needed</title>
+<style>__CSS__</style></head><body><div class="wrap">
+  <div class="eyebrow">Backups · approval needed</div>
+  <h1>Backup deletion held</h1>
+  <p class="subhead">__SHARE__ · __CREATED__</p>
+  <div class="hero-status"><span class="pill pill-warn"><span class="dot"></span>Held — nothing deleted</span></div>
+  <div class="note"><b>Why it was held:</b> __REASON__ &nbsp;The sync would have mirrored these deletions to S3 via <code>--delete</code>; it was stopped so you can confirm they're intended.</div>
+  <div class="summary-grid">
+    <div class="metric tone-err"><div class="metric-label">Would delete</div><div class="metric-value">__COUNT__</div></div>
+    <div class="metric tone-warn"><div class="metric-label">Size</div><div class="metric-value">__BYTES__</div></div>
+    <div class="metric"><div class="metric-label">Current backup</div><div class="metric-value">__DESTCOUNT__</div></div>
+    <div class="metric"><div class="metric-label">Expires</div><div class="metric-value" style="font-size:15px">__EXP__</div></div>
+  </div>
+  <div class="btn-wrap"><a class="btn" href="__URL__">Review &amp; approve deletion &rarr;</a></div>
+  <div class="card"><div class="card-head">Where the deletions fall</div>
+    <table><tr><th>Folder</th><th class="num">Files</th><th class="num">Size</th></tr>__ROWS__</table>
+  </div>
+  __MORE__
+  <div class="card"><div class="card-head">Sample (first __NSAMPLE__)</div>
+    <ul class="sample">__SAMPLE__</ul>
+  </div>
+  <p class="subhead" style="margin:18px 2px 0">Destination <code>__DEST__</code> · run <code>__RUNID__</code></p>
+  <div class="footer">
+    Opens a confirmation page (Cloudflare Access sign-in) with the full manifest before you confirm.
+    Approval is scoped to this deletion, single-use, and expires __EXP__.
+    If this is <b>not</b> expected, do nothing — investigate the source; the backup is untouched.
+  </div>
+</div></body></html>"""
 
 repl = {
+    "__CSS__": HOUSE_CSS,
     "__SHARE__": html.escape(share),
+    "__CREATED__": created_str,
     "__REASON__": html.escape(trip_reason),
     "__COUNT__": f"{would_delete:,}",
     "__BYTES__": human(total_bytes),

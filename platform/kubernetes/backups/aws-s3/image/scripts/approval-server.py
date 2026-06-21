@@ -45,26 +45,61 @@ if not SECRET:
     print("[approval-server] FATAL: APPROVAL_HMAC_SECRET not set", file=sys.stderr)
     sys.exit(1)
 
-CSS = """<style>
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#222;max-width:820px;margin:0 auto;padding:24px;line-height:1.5}
-.header{padding:18px 20px;border-radius:8px 8px 0 0;margin:-24px -24px 20px;color:#fff}
-.header.warn{background:#b45309}.header.ok{background:#15803d}.header.bad{background:#b91c1c}
-.header h1{margin:0;font-size:21px}
-.kv{display:grid;grid-template-columns:160px 1fr;gap:8px;background:#f7f7f7;padding:16px;border-radius:8px;margin:16px 0;font-size:14px}
-.kv .l{color:#666;font-weight:600}.kv .v{font-family:'SF Mono',Consolas,monospace;word-break:break-all}
-table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0}
-th,td{border-bottom:1px solid #e5e5e5;padding:6px 8px;text-align:left}th{color:#666}
-.btn{display:inline-block;background:#b45309;color:#fff!important;border:0;text-decoration:none;font-weight:700;padding:13px 24px;border-radius:8px;font-size:15px;cursor:pointer}
-.muted{color:#777;font-size:12px}
-ul.sample{font-family:'SF Mono',Consolas,monospace;font-size:12px;color:#444}
-a.dl{font-size:13px}
-</style>"""
+# House style — matches platform/kubernetes/monitoring/service-status-report.py
+HOUSE_CSS = """
+  :root{--bg:#f6f7f9;--surface:#fff;--text:#0f172a;--text-muted:#64748b;--border:#e5e7eb;--border-soft:#eef0f3;
+    --ok:#047857;--ok-bg:#ecfdf5;--warn:#b45309;--warn-bg:#fffbeb;--err:#b91c1c;--err-bg:#fef2f2;--muted:#6b7280;--muted-bg:#f3f4f6;--accent:#1f2937;}
+  @media (prefers-color-scheme:dark){:root{--bg:#0b1220;--surface:#131c2e;--text:#e8eaf0;--text-muted:#94a3b8;--border:#243049;--border-soft:#1b2538;
+    --ok:#34d399;--ok-bg:rgba(16,185,129,.12);--warn:#fbbf24;--warn-bg:rgba(217,119,6,.15);--err:#f87171;--err-bg:rgba(220,38,38,.16);--muted:#94a3b8;--muted-bg:rgba(148,163,184,.12);--accent:#f1f5f9;}}
+  body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:720px;margin:0 auto;padding:36px 20px 56px;}
+  .eyebrow{font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:.12em;text-transform:uppercase;margin:0 0 10px;}
+  h1{font-size:26px;font-weight:700;letter-spacing:-.015em;margin:0 0 6px;color:var(--accent);}
+  .subhead{color:var(--text-muted);font-size:14px;margin:0 0 22px;}
+  .hero-status{margin:8px 0 26px;}
+  .pill{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;font-size:13px;font-weight:500;line-height:1;}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block;}
+  .pill-warn{background:var(--warn-bg);color:var(--warn);} .pill-err{background:var(--err-bg);color:var(--err);} .pill-ok{background:var(--ok-bg);color:var(--ok);} .pill-muted{background:var(--muted-bg);color:var(--muted);}
+  .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:0 0 8px;}
+  @media (max-width:520px){.summary-grid{grid-template-columns:repeat(2,1fr);}}
+  .metric{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+  .metric-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 6px;}
+  .metric-value{font-size:21px;font-weight:600;line-height:1.15;color:var(--accent);font-variant-numeric:tabular-nums;}
+  .metric.tone-err .metric-value{color:var(--err);} .metric.tone-warn .metric-value{color:var(--warn);}
+  .note{background:var(--warn-bg);border:1px solid var(--border);border-left:3px solid var(--warn);border-radius:8px;padding:12px 14px;margin:18px 0;font-size:14px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin:18px 0;overflow:hidden;}
+  .card-head{font-size:13px;font-weight:600;padding:12px 18px;border-bottom:1px solid var(--border-soft);background:linear-gradient(180deg,var(--surface) 0%,var(--border-soft) 100%);}
+  table{width:100%;border-collapse:collapse;}
+  td,th{padding:10px 18px;border-top:1px solid var(--border-soft);text-align:left;font-size:14px;}
+  th{color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;border-top:none;}
+  tr:first-child td{border-top:none;}
+  .num{text-align:right;font-variant-numeric:tabular-nums;color:var(--text-muted);}
+  .svc-name{font-weight:500;color:var(--text);}
+  ul.sample{margin:0;padding:14px 18px 16px 34px;}
+  ul.sample li{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--text-muted);margin:2px 0;word-break:break-all;}
+  .btn-wrap{margin:22px 0;}
+  .btn{display:inline-block;background:var(--warn);color:#fff!important;border:0;text-decoration:none;font-weight:700;padding:14px 26px;border-radius:10px;font-size:15px;cursor:pointer;}
+  a.dl{font-size:13px;color:var(--warn);font-weight:600;text-decoration:none;}
+  .footer{margin-top:34px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);text-align:center;}
+"""
+
+CSS = "<style>" + HOUSE_CSS + "</style>"
+
+# klass -> (pill class, pill text)
+_PILL = {"warn": ("pill-warn", "Held — review"), "ok": ("pill-ok", "Approved"),
+         "bad": ("pill-err", "Can't proceed")}
 
 
 def page(title, klass, body):
-    return ("<!DOCTYPE html><html><head><meta charset='utf-8'><title>" + html.escape(title) + "</title>" +
-            CSS + "</head><body><div class='header " + klass + "'><h1>" + html.escape(title) +
-            "</h1></div>" + body + "</body></html>").encode()
+    pc, pt = _PILL.get(klass, ("pill-muted", ""))
+    return ("<!DOCTYPE html><html><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+            "<meta name='color-scheme' content='light dark'>"
+            "<title>" + html.escape(title) + "</title>" + CSS + "</head><body><div class='wrap'>"
+            "<div class='eyebrow'>Backups · deletion approval</div>"
+            "<h1>" + html.escape(title) + "</h1>"
+            "<div class='hero-status'><span class='pill " + pc + "'><span class='dot'></span>" + html.escape(pt) + "</span></div>"
+            + body + "</div></body></html>").encode()
 
 
 def human(n):
@@ -205,36 +240,46 @@ class Handler(BaseHTTPRequestHandler):
 
         rollup = pend.get("rollup", [])
         rows = "".join(
-            "<tr><td>{f}</td><td style='text-align:right'>{c:,}</td><td style='text-align:right'>{b}</td></tr>".format(
+            "<tr><td class='svc-name'>{f}</td><td class='num'>{c:,}</td><td class='num'>{b}</td></tr>".format(
                 f=html.escape(r.get("folder", "")), c=r.get("count", 0), b=human(r.get("bytes", 0)))
             for r in rollup
         )
         sample = pend.get("sample", [])
         sample_html = "".join("<li>" + html.escape(k) + "</li>" for k in sample)
         exp_str = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(int(payload.get("exp", 0))))
+        tok = html.escape(token)
+
+        # A Confirm form rendered both above and below the (potentially long) list.
+        confirm_form = (
+            "<div class='btn-wrap'><form method='POST' action='/approve' style='margin:0'>"
+            "<input type='hidden' name='t' value='" + tok + "'>"
+            "<button class='btn' type='submit'>Confirm — approve this deletion</button></form></div>"
+        )
         body = (
-            "<p>You are about to <b>approve deleting {cnt:,} object(s)</b> ({bytes}) from the "
-            "<b>{share}</b> backup. After you confirm, the <b>next</b> scheduled sync for this share "
-            "will be allowed to perform this deletion (single use, expires {exp}).</p>".format(
-                cnt=would, bytes=human(pend.get("bytesTotal", 0)), share=html.escape(share), exp=exp_str)
-            + "<div class='kv'>"
-            + "<div class='l'>Share</div><div class='v'>" + html.escape(share) + "</div>"
-            + "<div class='l'>Run ID</div><div class='v'>" + html.escape(pend.get("runId", "")) + "</div>"
-            + "<div class='l'>Destination</div><div class='v'>" + html.escape(pend.get("destination", "")) + "</div>"
-            + "<div class='l'>Current backup</div><div class='v'>" + format(pend.get("destCount", 0), ",") + " objects</div>"
-            + "<div class='l'>Held because</div><div class='v'>" + html.escape(pend.get("tripReason", "")) + "</div>"
-            + "</div>"
-            + "<h3>Where the deletions fall</h3>"
-            + "<table><tr><th>Folder</th><th style='text-align:right'>Files</th><th style='text-align:right'>Size</th></tr>"
-            + rows + "</table>"
-            + "<p><a class='dl' href='/manifest?t=" + html.escape(urllib.parse.quote(token)) + "'>&#11015; Download full list (CSV)</a></p>"
-            + "<h3>Sample (first " + str(len(sample)) + ")</h3><ul class='sample'>" + sample_html + "</ul>"
-            + "<form method='POST' action='/approve' style='margin-top:24px'>"
-            + "<input type='hidden' name='t' value='" + html.escape(token) + "'>"
-            + "<button class='btn' type='submit'>Confirm &mdash; approve this deletion</button></form>"
-            + "<p class='muted'>This only records consent for this specific deletion (up to "
-            + format(would, ",") + " objects). A larger deletion on a later run will be held again. "
-            + "The backup is untouched until the next sync runs.</p>"
+            "<p class='subhead' style='margin-top:-12px'>You're about to approve deleting <b>"
+            + format(would, ",") + " object(s)</b> (" + human(pend.get("bytesTotal", 0)) + ") from the <b>"
+            + html.escape(share) + "</b> backup. On confirm, the <b>next</b> scheduled sync may perform this "
+            "deletion — single use, expires " + exp_str + ".</p>"
+            "<div class='summary-grid'>"
+            "<div class='metric tone-err'><div class='metric-label'>Would delete</div><div class='metric-value'>" + format(would, ",") + "</div></div>"
+            "<div class='metric tone-warn'><div class='metric-label'>Size</div><div class='metric-value'>" + human(pend.get("bytesTotal", 0)) + "</div></div>"
+            "<div class='metric'><div class='metric-label'>Current backup</div><div class='metric-value'>" + format(pend.get("destCount", 0), ",") + "</div></div>"
+            "<div class='metric'><div class='metric-label'>Expires</div><div class='metric-value' style='font-size:15px'>" + exp_str + "</div></div>"
+            "</div>"
+            "<div class='note'><b>Held because:</b> " + html.escape(pend.get("tripReason", "")) + "</div>"
+            + confirm_form  # TOP button
+            + "<div class='card'><div class='card-head'>Where the deletions fall</div>"
+            "<table><tr><th>Folder</th><th class='num'>Files</th><th class='num'>Size</th></tr>"
+            + rows + "</table></div>"
+            "<p style='margin:4px 2px 18px'><a class='dl' href='/manifest?t=" + html.escape(urllib.parse.quote(token))
+            + "'>&#11015; Download full list (CSV)</a></p>"
+            "<div class='card'><div class='card-head'>Sample (first " + str(len(sample)) + ")</div>"
+            "<ul class='sample'>" + sample_html + "</ul></div>"
+            + confirm_form  # BOTTOM button (in case of long content)
+            + "<div class='footer'>Records consent for this specific deletion only (up to "
+            + format(would, ",") + " objects); a larger deletion on a later run is held again. "
+            "Destination <code>" + html.escape(pend.get("destination", "")) + "</code> · run <code>"
+            + html.escape(pend.get("runId", "")) + "</code>. The backup is untouched until the next sync runs.</div>"
         )
         return self._send(200, page("Approve backup deletion", "warn", body))
 

@@ -310,56 +310,59 @@ send_failure_email() {
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; }
-  .header { background: #dc3545; color: white; padding: 20px; border-radius: 8px 8px 0 0; margin: -20px -20px 20px -20px; }
-  .header h1 { margin: 0; font-size: 24px; }
-  .status { display: inline-block; background: #721c24; color: white; padding: 4px 12px; border-radius: 4px; font-size: 14px; font-weight: bold; margin-top: 8px; }
-  .info-grid { display: grid; grid-template-columns: 140px 1fr; gap: 12px; margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; }
-  .info-label { font-weight: 600; color: #666; }
-  .info-value { color: #333; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; }
-  .section { margin: 24px 0; }
-  .section-title { font-size: 16px; font-weight: 600; color: #495057; margin-bottom: 12px; border-bottom: 2px solid #dee2e6; padding-bottom: 8px; }
-  .log-box { background: #2d2d2d; color: #f8f8f2; padding: 16px; border-radius: 6px; overflow-x: auto; font-family: 'SF Mono', Consolas, monospace; font-size: 12px; line-height: 1.5; }
-  .reason-box { background: #f8d7da; border-left: 4px solid #dc3545; padding: 16px; border-radius: 4px; margin: 20px 0; }
-  .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; font-size: 12px; color: #6c757d; }
+  :root{--bg:#f6f7f9;--surface:#fff;--text:#0f172a;--text-muted:#64748b;--border:#e5e7eb;--border-soft:#eef0f3;
+    --err:#b91c1c;--err-bg:#fef2f2;--accent:#1f2937;}
+  @media (prefers-color-scheme:dark){:root{--bg:#0b1220;--surface:#131c2e;--text:#e8eaf0;--text-muted:#94a3b8;--border:#243049;--border-soft:#1b2538;
+    --err:#f87171;--err-bg:rgba(220,38,38,.16);--accent:#f1f5f9;}}
+  body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:720px;margin:0 auto;padding:36px 20px 56px;}
+  .eyebrow{font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:.12em;text-transform:uppercase;margin:0 0 10px;}
+  h1{font-size:26px;font-weight:700;letter-spacing:-.015em;margin:0 0 6px;color:var(--accent);}
+  .subhead{color:var(--text-muted);font-size:14px;margin:0 0 8px;}
+  .hero-status{margin:10px 0 22px;}
+  .pill{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;font-size:13px;font-weight:500;line-height:1;background:var(--err-bg);color:var(--err);}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block;}
+  .note-err{background:var(--err-bg);border:1px solid var(--border);border-left:3px solid var(--err);border-radius:8px;padding:12px 14px;margin:18px 0;font-size:14px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin:18px 0;overflow:hidden;}
+  .card-head{font-size:13px;font-weight:600;padding:12px 18px;border-bottom:1px solid var(--border-soft);background:linear-gradient(180deg,var(--surface) 0%,var(--border-soft) 100%);}
+  table{width:100%;border-collapse:collapse;}
+  td{padding:10px 18px;border-top:1px solid var(--border-soft);text-align:left;font-size:14px;}
+  tr:first-child td{border-top:none;}
+  .kv-l{color:var(--text-muted);width:130px;}
+  .kv-v{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;word-break:break-all;}
+  .logbox{background:#0b1220;color:#e2e8f0;padding:14px 16px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.5;white-space:pre-wrap;overflow-x:auto;}
+  .footer{margin-top:34px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);text-align:center;}
 </style>
 </head>
-<body>
-  <div class="header">
-    <h1>⚠️ Backup Failure</h1>
-    <div class="status">FAILED</div>
+<body><div class="wrap">
+  <div class="eyebrow">Backups · sync failed</div>
+  <h1>Backup failed</h1>
+  <p class="subhead">SHARE_PLACEHOLDER · started START_PLACEHOLDER</p>
+  <div class="hero-status"><span class="pill"><span class="dot"></span>Failed</span></div>
+
+  <div class="note-err"><b>Reason:</b> REASON_PLACEHOLDER</div>
+
+  <div class="card"><div class="card-head">Run details</div>
+    <table>
+      <tr><td class="kv-l">Share</td><td class="kv-v">SHARE_PLACEHOLDER</td></tr>
+      <tr><td class="kv-l">Run ID</td><td class="kv-v">RUN_ID_PLACEHOLDER</td></tr>
+      <tr><td class="kv-l">Started</td><td class="kv-v">START_PLACEHOLDER</td></tr>
+      <tr><td class="kv-l">Duration</td><td class="kv-v">DURATION_PLACEHOLDER</td></tr>
+      <tr><td class="kv-l">Source</td><td class="kv-v">SOURCE_PLACEHOLDER</td></tr>
+      <tr><td class="kv-l">Destination</td><td class="kv-v">DEST_PLACEHOLDER</td></tr>
+    </table>
   </div>
 
-  <div class="reason-box">
-    <strong>Failure Reason:</strong><br>
-    REASON_PLACEHOLDER
-  </div>
+  <div class="card"><div class="card-head">Error output</div><div class="logbox">ERROR_LOG_PLACEHOLDER</div></div>
+  <div class="card"><div class="card-head">Sync output</div><div class="logbox">SYNC_LOG_PLACEHOLDER</div></div>
 
-  <div class="info-grid">
-    <div class="info-label">Share:</div><div class="info-value">SHARE_PLACEHOLDER</div>
-    <div class="info-label">Run ID:</div><div class="info-value">RUN_ID_PLACEHOLDER</div>
-    <div class="info-label">Started:</div><div class="info-value">START_PLACEHOLDER</div>
-    <div class="info-label">Duration:</div><div class="info-value">DURATION_PLACEHOLDER</div>
-    <div class="info-label">Source:</div><div class="info-value">SOURCE_PLACEHOLDER</div>
-    <div class="info-label">Destination:</div><div class="info-value">DEST_PLACEHOLDER</div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Error Output</div>
-    <div class="log-box">ERROR_LOG_PLACEHOLDER</div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Sync Output</div>
-    <div class="log-box">SYNC_LOG_PLACEHOLDER</div>
-  </div>
-
-  <div class="footer">
-    Sequoia NAS → AWS S3 Backup System<br>
-    Report generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-  </div>
-</body>
+  <div class="footer">Sequoia NAS → AWS S3 backup · GENERATED_PLACEHOLDER</div>
+</div></body>
 </html>
 HTML_END
 )
@@ -377,6 +380,7 @@ HTML_END
   html_body="${html_body//DEST_PLACEHOLDER/$DEST_URI}"
   html_body="${html_body//ERROR_LOG_PLACEHOLDER/$error_log}"
   html_body="${html_body//SYNC_LOG_PLACEHOLDER/$sync_log}"
+  html_body="${html_body//GENERATED_PLACEHOLDER/$(date -u +"%Y-%m-%d %H:%M:%S UTC")}"
 
   HTML_BODY="$html_body" EMAIL_SUBJECT="${subject}" EMAIL_FROM_NAME="${EMAIL_FROM_NAME}" EMAIL_FROM="${EMAIL_FROM}" EMAIL_TO="${EMAIL_TO}" "${SEND_EMAIL_SCRIPT}" --html \
       || echo "[email] WARN: failed to send failure email" >&2
