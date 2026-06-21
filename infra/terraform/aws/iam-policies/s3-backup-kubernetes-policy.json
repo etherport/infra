@@ -35,6 +35,7 @@
         "arn:aws:s3:::archive.wind.etherport.net/batch/*",
         "arn:aws:s3:::logs.archive.wind.etherport.net/reports/*",
         "arn:aws:s3:::logs.archive.wind.etherport.net/batch/*",
+        "arn:aws:s3:::logs.archive.wind.etherport.net/approvals/*",
         "arn:aws:s3:::archive-test.wind.etherport.net/objects/*",
         "arn:aws:s3:::archive-test.wind.etherport.net/batch/*",
         "arn:aws:s3:::infra.wind.etherport.net/*"
