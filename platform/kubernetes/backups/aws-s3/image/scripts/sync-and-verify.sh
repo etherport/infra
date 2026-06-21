@@ -641,6 +641,25 @@ check_approval() {
   return 1
 }
 
+# check_rejection <would_delete> : 0 if the operator rejected this (or a larger)
+# deletion and the snooze window is still open — suppresses re-notification.
+check_rejection() {
+  local would_delete="$1"
+  local key="approvals/rejected/${SHARE_NAME}.json"
+  local tmp="${LOG_DIR}/rejection-marker.json"
+  if ! s3_get_object "${METADATA_BUCKET}" "${key}" "${tmp}" 2>/dev/null; then
+    return 1
+  fi
+  local rmax exp now
+  rmax="$(jq -r '.wouldDeleteAtReject // 0' "${tmp}" 2>/dev/null || echo 0)"
+  exp="$(jq -r '.expiresAtEpoch // 0' "${tmp}" 2>/dev/null || echo 0)"
+  now="$(date +%s)"
+  if [[ "${now}" -lt "${exp}" && "${would_delete}" -le "${rmax}" ]]; then
+    return 0
+  fi
+  return 1
+}
+
 # request_approval <would_delete> <dest_count> <reason> : build + upload the
 # pending record, email the approve button, push a metric, and exit (no sync).
 request_approval() {
@@ -648,6 +667,11 @@ request_approval() {
   if ! is_true "${APPROVAL_ENABLED}" || [[ -z "${APPROVAL_BASE_URL}" || -z "${APPROVAL_HMAC_SECRET}" ]]; then
     # Approval flow not configured — fall back to the hard guard abort.
     guard_abort "${reason}"
+  fi
+  if check_rejection "${would_delete}"; then
+    echo "[delete-guard] operator previously REJECTED this deletion (snooze active) — not re-notifying; no deletion performed"
+    pushgateway_emit 0 "$(elapsed_seconds)" 0 0 0 0 "rejected_snoozed"
+    exit 1
   fi
   echo "[delete-guard] deletion exceeds bounds — requesting operator approval"
   local keys_file="${LOG_DIR}/delete-keys.txt"

@@ -20,10 +20,15 @@ for the full design.
 ## Endpoints
 - `GET /healthz` — liveness/readiness.
 - `GET /approve?t=<token>` — verify token → render the pending deletion (rollup,
-  sample, full-manifest CSV link) + a Confirm button.
+  sample, full-manifest CSV link) + **Approve** (green) and **Reject** (red)
+  buttons, top and bottom (advisor-email button style).
 - `GET /manifest?t=<token>` — stream the full delete manifest CSV.
 - `POST /approve` — verify token → write the scoped one-time approval marker
-  `approvals/approved/<share>.json`.
+  `approvals/approved/<share>.json` (next run executes, then consumes it).
+- `POST /reject` — verify token → write `approvals/rejected/<share>.json` with a
+  snooze (`APPROVAL_REJECT_SNOOZE_HOURS`, default 24h). Nothing is deleted; the
+  guard stays in effect and the sync **stops re-notifying** for the window (a
+  larger pending deletion still notifies). Approve always overrides a rejection.
 
 ## Security model
 1. **Cloudflare Access** (edge) restricts who can reach it.

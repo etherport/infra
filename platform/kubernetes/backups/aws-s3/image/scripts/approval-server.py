@@ -36,6 +36,7 @@ AWS_REGION = os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "
 EXPECTED_OWNER = os.environ.get("EXPECTED_BUCKET_OWNER", os.environ.get("AWS_ACCOUNT_ID", ""))
 SECRET = os.environ.get("APPROVAL_HMAC_SECRET", "")
 MARKER_TTL_H = int(os.environ.get("APPROVAL_MARKER_TTL_HOURS", "48"))
+REJECT_SNOOZE_H = int(os.environ.get("APPROVAL_REJECT_SNOOZE_HOURS", "24"))
 TOLERANCE_PCT = int(os.environ.get("APPROVAL_TOLERANCE_PERCENT", "10"))
 PORT = int(os.environ.get("LISTEN_PORT", "8080"))
 REQUIRE_CF_EMAIL = os.environ.get("APPROVAL_REQUIRE_CF_EMAIL", "false").lower() in ("1", "true", "yes")
@@ -48,7 +49,7 @@ if not SECRET:
 # House style — matches platform/kubernetes/monitoring/service-status-report.py
 HOUSE_CSS = """
   :root{--bg:#f6f7f9;--surface:#fff;--text:#0f172a;--text-muted:#64748b;--border:#e5e7eb;--border-soft:#eef0f3;
-    --ok:#047857;--ok-bg:#ecfdf5;--warn:#b45309;--warn-bg:#fffbeb;--err:#b91c1c;--err-bg:#fef2f2;--muted:#6b7280;--muted-bg:#f3f4f6;--accent:#1f2937;}
+    --ok:#047857;--ok-bg:#ecfdf5;--warn:#b45309;--warn-bg:#fffbeb;--err:#b91c1c;--err-bg:#fef2f2;--muted:#6b7280;--muted-bg:#f3f4f6;--accent:#1f2937;--btn-go:#2d8f4d;--btn-no:#8f2d2d;}
   @media (prefers-color-scheme:dark){:root{--bg:#0b1220;--surface:#131c2e;--text:#e8eaf0;--text-muted:#94a3b8;--border:#243049;--border-soft:#1b2538;
     --ok:#34d399;--ok-bg:rgba(16,185,129,.12);--warn:#fbbf24;--warn-bg:rgba(217,119,6,.15);--err:#f87171;--err-bg:rgba(220,38,38,.16);--muted:#94a3b8;--muted-bg:rgba(148,163,184,.12);--accent:#f1f5f9;}}
   body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;}
@@ -77,8 +78,10 @@ HOUSE_CSS = """
   .svc-name{font-weight:500;color:var(--text);}
   ul.sample{margin:0;padding:14px 18px 16px 34px;}
   ul.sample li{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--text-muted);margin:2px 0;word-break:break-all;}
-  .btn-wrap{margin:22px 0;}
-  .btn{display:inline-block;background:var(--err);color:#fff!important;border:0;text-decoration:none;font-weight:700;padding:14px 26px;border-radius:10px;font-size:15px;cursor:pointer;}
+  .btn-row{margin:24px 0 8px;}
+  .btn{display:inline-block;padding:12px 22px;font-weight:600;font-size:14px;border-radius:6px;text-decoration:none;margin-right:10px;line-height:1.2;border:0;cursor:pointer;}
+  .btn-approve{background:var(--btn-go);color:#fff!important;}
+  .btn-reject{background:var(--btn-no);color:#fff!important;}
   a.dl{font-size:13px;color:var(--err);font-weight:600;text-decoration:none;}
   .footer{margin-top:34px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);text-align:center;}
 """
@@ -87,7 +90,7 @@ CSS = "<style>" + HOUSE_CSS + "</style>"
 
 # klass -> (pill class, pill text)
 _PILL = {"warn": ("pill-err", "Held — review"), "ok": ("pill-ok", "Approved"),
-         "bad": ("pill-err", "Can't proceed")}
+         "bad": ("pill-err", "Can't proceed"), "rejected": ("pill-err", "Rejected")}
 
 
 def page(title, klass, body):
@@ -249,11 +252,17 @@ class Handler(BaseHTTPRequestHandler):
         exp_str = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(int(payload.get("exp", 0))))
         tok = html.escape(token)
 
-        # A Confirm form rendered both above and below the (potentially long) list.
-        confirm_form = (
-            "<div class='btn-wrap'><form method='POST' action='/approve' style='margin:0'>"
+        # Approve (green) + Reject (red) buttons, rendered both above and below
+        # the (potentially long) list — matching the AI-advisor email style.
+        action_buttons = (
+            "<div class='btn-row'>"
+            "<form method='POST' action='/approve' style='display:inline'>"
             "<input type='hidden' name='t' value='" + tok + "'>"
-            "<button class='btn' type='submit'>Confirm — approve this deletion</button></form></div>"
+            "<button class='btn btn-approve' type='submit'>Approve deletion</button></form>"
+            "<form method='POST' action='/reject' style='display:inline'>"
+            "<input type='hidden' name='t' value='" + tok + "'>"
+            "<button class='btn btn-reject' type='submit'>Reject</button></form>"
+            "</div>"
         )
         body = (
             "<p class='subhead' style='margin-top:-12px'>You're about to approve deleting <b>"
@@ -267,7 +276,7 @@ class Handler(BaseHTTPRequestHandler):
             "<div class='metric'><div class='metric-label'>Expires</div><div class='metric-value' style='font-size:15px'>" + exp_str + "</div></div>"
             "</div>"
             "<div class='note'><b>Held because:</b> " + html.escape(pend.get("tripReason", "")) + "</div>"
-            + confirm_form  # TOP button
+            + action_buttons  # TOP button
             + "<div class='card'><div class='card-head'>Where the deletions fall</div>"
             "<table><tr><th>Folder</th><th class='num'>Files</th><th class='num'>Size</th></tr>"
             + rows + "</table></div>"
@@ -275,7 +284,7 @@ class Handler(BaseHTTPRequestHandler):
             + "'>&#11015; Download full list (CSV)</a></p>"
             "<div class='card'><div class='card-head'>Sample (first " + str(len(sample)) + ")</div>"
             "<ul class='sample'>" + sample_html + "</ul></div>"
-            + confirm_form  # BOTTOM button (in case of long content)
+            + action_buttons  # BOTTOM button (in case of long content)
             + "<div class='footer'>Records consent for this specific deletion only (up to "
             + format(would, ",") + " objects); a larger deletion on a later run is held again. "
             "Destination <code>" + html.escape(pend.get("destination", "")) + "</code> · run <code>"
@@ -286,7 +295,7 @@ class Handler(BaseHTTPRequestHandler):
     # ----- POST -----
     def do_POST(self):
         u = urllib.parse.urlparse(self.path)
-        if u.path != "/approve":
+        if u.path not in ("/approve", "/reject"):
             return self._send(404, page("Not found", "bad", "<p>Not found.</p>"))
         length = int(self.headers.get("Content-Length", "0") or "0")
         raw = self.rfile.read(length).decode("utf-8", "replace") if length else ""
@@ -294,20 +303,39 @@ class Handler(BaseHTTPRequestHandler):
         payload = verify_token(token)
         if not payload or not self._identity_ok():
             return self._send(403, page("Link invalid or expired", "bad",
-                                        "<p>This approval link is invalid, expired, or you are not "
+                                        "<p>This link is invalid, expired, or you are not "
                                         "authorised. No changes were made.</p>"))
 
         share = payload["share"]
         would = int(payload.get("would_delete", 0))
-        approved_max = int(would * (1 + TOLERANCE_PCT / 100.0)) + 5
         now = int(time.time())
+        who = self._cf_email() or "unknown"
+
+        if u.path == "/reject":
+            exp = now + REJECT_SNOOZE_H * 3600
+            marker = {
+                "share": share, "runId": payload.get("run_id", ""),
+                "wouldDeleteAtReject": would, "rejectedAtEpoch": now,
+                "rejectedBy": who, "expiresAtEpoch": exp,
+            }
+            s3_put_text(f"approvals/rejected/{share}.json", json.dumps(marker, indent=2))
+            exp_str = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(exp))
+            body = ("<p><b>Rejected — nothing will be deleted.</b> The delete-guard stays in effect "
+                    "for <b>" + html.escape(share) + "</b>. Re-notification is snoozed until "
+                    + exp_str + " (a larger pending deletion will still notify).</p>"
+                    "<p class='subhead'>Rejected by " + html.escape(who) + ". You can close this page. "
+                    "Changed your mind? Use the Approve link before it expires.</p>")
+            return self._send(200, page("Deletion rejected", "rejected", body))
+
+        # /approve
+        approved_max = int(would * (1 + TOLERANCE_PCT / 100.0)) + 5
         marker = {
             "share": share,
             "runId": payload.get("run_id", ""),
             "approvedMaxDelete": approved_max,
             "wouldDeleteAtApproval": would,
             "approvedAtEpoch": now,
-            "approvedBy": self._cf_email() or "unknown",
+            "approvedBy": who,
             "expiresAtEpoch": now + MARKER_TTL_H * 3600,
         }
         ok = s3_put_text(f"approvals/approved/{share}.json", json.dumps(marker, indent=2))
@@ -318,7 +346,7 @@ class Handler(BaseHTTPRequestHandler):
         body = ("<p><b>Approved.</b> The next scheduled sync for <b>" + html.escape(share) +
                 "</b> may delete up to " + format(approved_max, ",") + " object(s). "
                 "This approval is single-use and expires " + exp_str + ".</p>"
-                "<p class='muted'>Approved by " + html.escape(marker["approvedBy"]) +
+                "<p class='subhead'>Approved by " + html.escape(who) +
                 ". You can close this page.</p>")
         return self._send(200, page("Deletion approved", "ok", body))
 

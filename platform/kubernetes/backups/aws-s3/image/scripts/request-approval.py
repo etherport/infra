@@ -178,7 +178,7 @@ sample_html = "".join(f"<li>{html.escape(k)}</li>" for k in sample)
 
 HOUSE_CSS = """
   :root{--bg:#f6f7f9;--surface:#fff;--text:#0f172a;--text-muted:#64748b;--border:#e5e7eb;--border-soft:#eef0f3;
-    --ok:#047857;--ok-bg:#ecfdf5;--warn:#b45309;--warn-bg:#fffbeb;--err:#b91c1c;--err-bg:#fef2f2;--muted:#6b7280;--muted-bg:#f3f4f6;--accent:#1f2937;}
+    --ok:#047857;--ok-bg:#ecfdf5;--warn:#b45309;--warn-bg:#fffbeb;--err:#b91c1c;--err-bg:#fef2f2;--muted:#6b7280;--muted-bg:#f3f4f6;--accent:#1f2937;--btn-go:#2d8f4d;--btn-no:#8f2d2d;}
   @media (prefers-color-scheme:dark){:root{--bg:#0b1220;--surface:#131c2e;--text:#e8eaf0;--text-muted:#94a3b8;--border:#243049;--border-soft:#1b2538;
     --ok:#34d399;--ok-bg:rgba(16,185,129,.12);--warn:#fbbf24;--warn-bg:rgba(217,119,6,.15);--err:#f87171;--err-bg:rgba(220,38,38,.16);--muted:#94a3b8;--muted-bg:rgba(148,163,184,.12);--accent:#f1f5f9;}}
   body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;}
@@ -206,8 +206,9 @@ HOUSE_CSS = """
   .svc-name{font-weight:500;color:var(--text);}
   ul.sample{margin:0;padding:14px 18px 16px 34px;}
   ul.sample li{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--text-muted);margin:2px 0;word-break:break-all;}
-  .btn-wrap{margin:26px 0 8px;}
-  .btn{display:inline-block;background:var(--err);color:#fff!important;text-decoration:none;font-weight:700;padding:14px 24px;border-radius:10px;font-size:15px;}
+  .btn-row{margin:26px 0 8px;}
+  .btn{display:inline-block;padding:12px 22px;font-weight:600;font-size:14px;border-radius:6px;text-decoration:none;margin-right:10px;line-height:1.2;}
+  .btn-approve{background:var(--btn-go);color:#fff!important;}
   .footer{margin-top:34px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);text-align:center;}
 """
 
@@ -227,7 +228,7 @@ TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8">
     <div class="metric"><div class="metric-label">Current backup</div><div class="metric-value">__DESTCOUNT__</div></div>
     <div class="metric"><div class="metric-label">Expires</div><div class="metric-value" style="font-size:15px">__EXP__</div></div>
   </div>
-  <div class="btn-wrap"><a class="btn" href="__URL__">Review &amp; approve deletion &rarr;</a></div>
+  <div class="btn-row"><a class="btn btn-approve" href="__URL__">Review &amp; approve deletion &rarr;</a></div>
   <div class="card"><div class="card-head">Where the deletions fall</div>
     <table><tr><th>Folder</th><th class="num">Files</th><th class="num">Size</th></tr>__ROWS__</table>
   </div>
