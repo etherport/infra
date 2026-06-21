@@ -82,7 +82,7 @@ resource "aws_s3_bucket_public_access_block" "velero" {
 #------------------------------------------------------------------------------
 
 # ⚠️ USE THIS BUCKET ONLY FOR THE s3-sync ARCHIVE TASKS (cold, write-once-read-rarely).
-# Its lifecycle transitions ALL objects to Glacier DEEP_ARCHIVE after 2 days, so
+# Its lifecycle transitions ALL objects to Glacier DEEP_ARCHIVE after 5 days, so
 # retrieval takes ~12 hours. Do NOT default new backup/DR work here — anything that
 # may need timely retrieval (etcd snapshots, DB dumps, app backups) gets its OWN
 # STANDARD-storage bucket (see `etcd_snapshots` below and `postgres_barman`).
@@ -118,8 +118,13 @@ resource "aws_s3_bucket_lifecycle_configuration" "archive" {
 
     filter {}
 
+    # 5-day window (was 2, 2026-06-21): now that the initial full-NAS backup is
+    # done, incremental upload volume is small, so the extra few days in STANDARD
+    # cost little — and the wider window leaves room to spot/correct a bad upload
+    # (e.g. the iCloud Photos dedup) before objects lock into Deep Archive's
+    # 180-day minimum + ~12h retrieval.
     transition {
-      days          = 2
+      days          = 5
       storage_class = "DEEP_ARCHIVE"
     }
   }
