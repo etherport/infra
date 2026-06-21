@@ -4,6 +4,12 @@ metadata:
   name: s3-sync-template
   namespace: backups
 spec:
+  # TEMPORARILY SUSPENDED 2026-06-21: a Mac mini osxphotos export landed ~200GB
+  # of duplicates under Graham/iCloud/Photos in this share (and in S3). The sync
+  # is paused so it does not propagate the in-progress source dedup (which would
+  # create delete markers on governance-locked S3 versions). Re-enable
+  # (suspend: false) after the dupes are purged from S3. See session-log.
+  suspend: true
   jobTemplate:
     spec:
       template:
