@@ -52,6 +52,10 @@ DOWNLOAD_MISSING="${DOWNLOAD_MISSING:-}"
 EXPORTDB="${EXPORTDB:-${HOME}/Library/Application Support/osxphotos/graham-icloud-photos.db}"
 mkdir -p "$RDIR" "$(dirname "$EXPORTDB")"
 
+# shellcheck source=photos-metrics.sh
+source "${HERE}/photos-metrics.sh"   # push_photos_metrics (non-fatal); job=photos_export_resume
+START="$(date +%s)"
+
 log(){ echo "$(date '+%F %T') resume: $*"; }
 
 # Single-run lock (shared with photos-export.sh) — two runs against the same --exportdb race
@@ -81,7 +85,16 @@ for a in $(seq 1 "$MAX_ATTEMPTS"); do
   "${HERE}/mount-nas.sh" >/dev/null 2>&1 || true
   attach_lib || { log "attempt ${a}: cannot attach library; retry in 15s"; sleep 15; continue; }
   # Only run (and depend on) Photos.app when actually downloading missing originals.
-  [ -n "$DOWNLOAD_MISSING" ] && { open -ga Photos 2>/dev/null || true; }
+  # For PhotoKit downloads: restart the Photos daemon stack EACH attempt. photolibraryd
+  # wedges over time on the SMB library (CoreData XPC dies → 0 downloads); a fresh daemon
+  # per attempt is what lets each retry pull another burst before it wedges, so the
+  # watchdog→kill→retry loop actually converges instead of re-wedging on a stale daemon.
+  if [ -n "$DOWNLOAD_MISSING" ]; then
+    osascript -e 'tell application "Photos" to quit' >/dev/null 2>&1; sleep 2
+    pkill -9 -f 'Photos.app/Contents/MacOS/Photos' >/dev/null 2>&1
+    killall -9 photolibraryd photoanalysisd >/dev/null 2>&1; sleep 3
+    open -ga Photos 2>/dev/null || true
+  fi
   sleep 5
   if [ ! -d "$DEST" ]; then log "attempt ${a}: DEST not present after remount; retry in 15s"; sleep 15; continue; fi
 
@@ -111,6 +124,12 @@ for a in $(seq 1 "$MAX_ATTEMPTS"); do
 
   if [ "$rc" -eq 0 ] && grep -q "Processed: [0-9]* photos" "$out" 2>/dev/null; then
     log "✓ completed cleanly on attempt ${a}: $(grep 'Processed:' "$out" | tail -1)"
+    s="$(grep -aE 'Processed: [0-9]+ photos' "$out" | tail -1)"
+    push_photos_metrics 0 "$(( $(date +%s) - START ))" \
+      "$(printf '%s' "$s"|sed -nE 's/.*Processed: ([0-9]+) photos.*/\1/p')" \
+      "$(printf '%s' "$s"|sed -nE 's/.*exported: ([0-9]+).*/\1/p')" \
+      "$(printf '%s' "$s"|sed -nE 's/.*missing: ([0-9]+).*/\1/p')" \
+      "$([ -n "$DOWNLOAD_MISSING" ] && echo photokit || echo local)" photos_export_resume
     echo "RESUME_LOOP_DONE rc=0 files=$(count)"
     exit 0
   fi
@@ -119,5 +138,7 @@ for a in $(seq 1 "$MAX_ATTEMPTS"); do
 done
 
 log "✗ gave up after ${MAX_ATTEMPTS} attempts (have $(count) files)"
+push_photos_metrics 1 "$(( $(date +%s) - START ))" 0 0 0 \
+  "$([ -n "$DOWNLOAD_MISSING" ] && echo photokit || echo local)" photos_export_resume
 echo "RESUME_LOOP_DONE rc=1 files=$(count)"
 exit 1

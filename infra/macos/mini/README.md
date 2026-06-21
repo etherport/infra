@@ -233,3 +233,15 @@ disposable mirror. Steps:
   not the cache, and not fixable from the Mac. (`mc_on=yes`/multichannel is back on; the
   original idle drops were the NVMe cache, not multichannel.)
 - **FileVault** (see the mount-nas caveat) gates the whole pipeline after a reboot.
+
+### Monitoring (Prometheus Pushgateway)
+Both `photos-export.sh` and `photos-export-resume.sh` push run metrics to the cluster
+**Pushgateway** after each run via `photos-metrics.sh` (`push_photos_metrics`) — always
+**non-fatal** (a monitoring outage never blocks a backup). Override the endpoint with
+`PUSHGATEWAY=` (default `http://pushgateway.wind.etherport.net`). Metrics (job
+`photos_export`, resume job `photos_export_resume`, `instance="mini"`):
+`*_last_run_timestamp_seconds`, `*_last_success_timestamp_seconds` (own group so a failed
+run can't wipe it — the staleness alert keys on this), `*_last_rc`, `*_duration_seconds`,
+`*_photos_total`, `*_exported`, `*_missing`, `*_info{mode}`. **Cluster side (expose
+pushgateway via Traefik + PrometheusRule + Grafana) is set up by the infra agent.** Until
+then the pushes just log "push failed" and no-op.

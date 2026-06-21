@@ -42,6 +42,10 @@ REPORT_DIR="${HOME}/Library/Logs/photos-export"
 # SMB. Rebuildable ledger, so keeping it off the NAS/S3 is fine. (M79, 2026-06-19.)
 EXPORTDB="${EXPORTDB:-${HOME}/Library/Application Support/osxphotos/graham-icloud-photos.db}"
 
+# shellcheck source=photos-metrics.sh
+source "${HERE}/photos-metrics.sh"   # provides push_photos_metrics (non-fatal)
+START="$(date +%s)"
+
 log() { echo "$(date '+%Y-%m-%dT%H:%M:%S') photos-export: $*"; }
 
 # Default = robust LOCAL export (no Photos.app/PhotoKit) — exports whatever originals are
@@ -124,12 +128,22 @@ fi
 # /--use-photokit added only when DOWNLOAD_MISSING is set.
 flags=(--update --exportdb "${EXPORTDB}" --ramdb --sidecar XMP --cleanup --retry 3)
 [ -n "${DOWNLOAD_MISSING}" ] && flags+=(--download-missing --use-photokit)
-log "exporting → ${DEST} (mode=$([ -n "${DOWNLOAD_MISSING}" ] && echo photokit/download-missing || echo local); report: ${REPORT})"
-"${OSXPHOTOS}" export "${DEST}" --library "${LIBRARY}" "${flags[@]}" --report "${REPORT}"
-rc=$?
+MODE="$([ -n "${DOWNLOAD_MISSING}" ] && echo photokit || echo local)"
+RUNOUT="${REPORT_DIR}/run-$(date '+%Y%m%d-%H%M%S').out"
+log "exporting → ${DEST} (mode=${MODE}; report: ${REPORT})"
+"${OSXPHOTOS}" export "${DEST}" --library "${LIBRARY}" "${flags[@]}" --report "${REPORT}" 2>&1 | tee "${RUNOUT}"
+rc=${PIPESTATUS[0]}
+
+# Parse osxphotos' summary line ("Processed: N photos, exported: X, ..., missing: Y, ...")
+# for the metrics. -a treats the file as text (the progress bar uses \r).
+summ="$(grep -aE 'Processed: [0-9]+ photos' "${RUNOUT}" 2>/dev/null | tail -1)"
+m_photos="$(printf '%s' "$summ"   | sed -nE 's/.*Processed: ([0-9]+) photos.*/\1/p')"
+m_exported="$(printf '%s' "$summ" | sed -nE 's/.*exported: ([0-9]+).*/\1/p')"
+m_missing="$(printf '%s' "$summ"  | sed -nE 's/.*missing: ([0-9]+).*/\1/p')"
+push_photos_metrics "${rc}" "$(( $(date +%s) - START ))" "${m_photos:-0}" "${m_exported:-0}" "${m_missing:-0}" "${MODE}"
 
 if [ "${rc}" -eq 0 ]; then
-  log "✓ export complete"
+  log "✓ export complete (photos=${m_photos:-?} exported=${m_exported:-?} missing=${m_missing:-?})"
 else
   log "✗ export exited rc=${rc} (see ${REPORT})"
 fi
