@@ -16,6 +16,19 @@
       "Resource": "*"
     },
     {
+      "Sid": "VPCPeeringManagement",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateVpcPeeringConnection",
+        "ec2:AcceptVpcPeeringConnection",
+        "ec2:DeleteVpcPeeringConnection",
+        "ec2:DescribeVpcPeeringConnections",
+        "ec2:ModifyVpcPeeringConnectionOptions",
+        "ec2:RejectVpcPeeringConnection"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "SubnetManagement",
       "Effect": "Allow",
       "Action": [
