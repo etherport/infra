@@ -62,6 +62,29 @@
         "ses:ListIdentityPolicies"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "TEMPPhotosDedupBypass",
+      "Effect": "Allow",
+      "Action": [
+        "s3:BypassGovernanceRetention",
+        "s3:GetObjectVersion",
+        "s3:DeleteObjectVersion"
+      ],
+      "Resource": "arn:aws:s3:::archive.wind.etherport.net/objects/backups/Graham/iCloud/Photos/*"
+    },
+    {
+      "Sid": "TEMPPhotosDedupListVersions",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucketVersions"
+      ],
+      "Resource": "arn:aws:s3:::archive.wind.etherport.net",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": "objects/backups/Graham/iCloud/Photos/*"
+        }
+      }
     }
   ]
 }
