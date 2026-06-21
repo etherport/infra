@@ -74,6 +74,15 @@ log "library: ${LIBRARY}"
 mkdir -p "${DEST}" "${REPORT_DIR}" "$(dirname "${EXPORTDB}")"
 REPORT="${REPORT_DIR}/export-$(date '+%Y%m%d-%H%M%S').csv"
 
+# Restart the Photos daemon stack first. --download-missing --use-photokit drives PhotoKit
+# via photolibraryd, which WEDGES (CoreData XPC dies, 0 downloads) once it's been running a
+# while against the SMB-backed library. A fresh daemon is what lets downloads work (M79
+# 2026-06-20). Harmless when there's nothing to download (daemons just relaunch on demand).
+osascript -e 'tell application "Photos" to quit' >/dev/null 2>&1; sleep 2
+pkill -9 -f 'Photos.app/Contents/MacOS/Photos' >/dev/null 2>&1
+killall -9 photolibraryd photoanalysisd >/dev/null 2>&1; sleep 3
+open -ga Photos >/dev/null 2>&1 || true
+
 log "exporting → ${DEST} (report: ${REPORT})"
 # --update            : incremental — only new/changed photos (tracked in
 #                       <DEST>/.osxphotos_export.db, so nothing re-exports)
