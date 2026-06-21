@@ -195,7 +195,7 @@ HOUSE_CSS = """
   .metric-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin:0 0 6px;}
   .metric-value{font-size:21px;font-weight:600;line-height:1.15;color:var(--accent);font-variant-numeric:tabular-nums;}
   .metric.tone-err .metric-value{color:var(--err);} .metric.tone-warn .metric-value{color:var(--warn);}
-  .note{background:var(--warn-bg);border:1px solid var(--border);border-left:3px solid var(--warn);border-radius:8px;padding:12px 14px;margin:18px 0;font-size:14px;}
+  .note{background:var(--err-bg);border:1px solid var(--border);border-left:3px solid var(--err);border-radius:8px;padding:12px 14px;margin:18px 0;font-size:14px;}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin:18px 0;overflow:hidden;}
   .card-head{font-size:13px;font-weight:600;padding:12px 18px;border-bottom:1px solid var(--border-soft);background:linear-gradient(180deg,var(--surface) 0%,var(--border-soft) 100%);}
   table{width:100%;border-collapse:collapse;}
@@ -207,7 +207,7 @@ HOUSE_CSS = """
   ul.sample{margin:0;padding:14px 18px 16px 34px;}
   ul.sample li{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--text-muted);margin:2px 0;word-break:break-all;}
   .btn-wrap{margin:26px 0 8px;}
-  .btn{display:inline-block;background:var(--warn);color:#fff!important;text-decoration:none;font-weight:700;padding:14px 24px;border-radius:10px;font-size:15px;}
+  .btn{display:inline-block;background:var(--err);color:#fff!important;text-decoration:none;font-weight:700;padding:14px 24px;border-radius:10px;font-size:15px;}
   .footer{margin-top:34px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);text-align:center;}
 """
 
@@ -219,11 +219,11 @@ TEMPLATE = """<!DOCTYPE html><html><head><meta charset="utf-8">
   <div class="eyebrow">Backups · approval needed</div>
   <h1>Backup deletion held</h1>
   <p class="subhead">__SHARE__ · __CREATED__</p>
-  <div class="hero-status"><span class="pill pill-warn"><span class="dot"></span>Held — nothing deleted</span></div>
+  <div class="hero-status"><span class="pill pill-err"><span class="dot"></span>Held — nothing deleted</span></div>
   <div class="note"><b>Why it was held:</b> __REASON__ &nbsp;The sync would have mirrored these deletions to S3 via <code>--delete</code>; it was stopped so you can confirm they're intended.</div>
   <div class="summary-grid">
     <div class="metric tone-err"><div class="metric-label">Would delete</div><div class="metric-value">__COUNT__</div></div>
-    <div class="metric tone-warn"><div class="metric-label">Size</div><div class="metric-value">__BYTES__</div></div>
+    <div class="metric tone-err"><div class="metric-label">Size</div><div class="metric-value">__BYTES__</div></div>
     <div class="metric"><div class="metric-label">Current backup</div><div class="metric-value">__DESTCOUNT__</div></div>
     <div class="metric"><div class="metric-label">Expires</div><div class="metric-value" style="font-size:15px">__EXP__</div></div>
   </div>
