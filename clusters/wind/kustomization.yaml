@@ -89,6 +89,7 @@ resources:
   - ../../platform/kubernetes/backups/aws-s3/shares/media
   - ../../platform/kubernetes/backups/aws-s3/shares/scans  # suspended
   - ../../platform/kubernetes/backups/aws-s3/daily-report
+  - ../../platform/kubernetes/backups/approval-server      # CF-Access delete-approval service
   # Velero backup schedules
   - ../../platform/kubernetes/backups/velero/schedules
   # LLM Services

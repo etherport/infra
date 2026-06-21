@@ -79,3 +79,7 @@ platform/kubernetes/cloudflare-ddns/base/secret.yaml
 # above would otherwise re-track them = a plaintext-secret LEAK. Confirmed
 # 2026-06-20 (git status showed `?? .decrypted~homelab-ops.sops.yaml`).
 **/.decrypted~*
+
+# Python bytecode
+__pycache__/
+*.pyc

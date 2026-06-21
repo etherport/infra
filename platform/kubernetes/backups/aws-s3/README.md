@@ -140,6 +140,91 @@ In `base/cronjob.yaml`:
 - `METADATA_BUCKET`: S3 bucket for operational artifacts (default: `logs.archive.wind.etherport.net`)
 - `WAIT_FOR_BATCH`: Enable direct verification after sync (default: `true`)
 
+### Delete Protection (safety guards)
+
+`aws s3 sync --delete` mirrors source deletions to S3. If the NFS source is
+unmounted, empty, or only partially mounted (NAS reboot, share fails to mount,
+stale handle), the sync would treat the missing files as deletions and **wipe
+the S3 backup**. Two guards in `sync-and-verify.sh` prevent this; legitimate
+small deletions still propagate normally. Defaults live in the script and are
+surfaced in `base/cronjob.yaml` env for per-share override.
+
+- **Guard 1 — source populated** (before the dry-run): aborts if `/src` is
+  missing or has fewer than `DELETE_GUARD_MIN_SOURCE_ENTRIES` top-level entries
+  (default `1`). This catches a downed/unmounted share — the run never reaches
+  `--delete`.
+- **Guard 2 — bounded deletions** (after the dry-run, before the real sync):
+  the dry-run already computed exactly what would be deleted. Aborts if that
+  exceeds `DELETE_GUARD_MAX_ABSOLUTE` (default `1000`, `0`=off) **or**
+  `DELETE_GUARD_MAX_PERCENT` (default `10`) of the current destination object
+  count. The percentage rule applies only when the destination has at least
+  `DELETE_GUARD_MIN_DEST_FOR_PERCENT` objects (default `50`).
+
+When a guard trips: no sync/delete runs, S3 is untouched, and the job exits
+non-zero. What happens next depends on whether the **approval flow** is
+configured (it is, by default — `APPROVAL_ENABLED=true`):
+
+- **Guard 1 (empty source)** is never approvable — an empty source is never a
+  legitimate wipe — so it always hard-aborts with a failure email.
+- **Guard 2 (deletion volume)** writes a pending-deletion record + full manifest
+  to S3 and emails a signed **"Review & approve"** button. The email shows a
+  folder rollup + sample; the link opens a confirmation page (behind Cloudflare
+  Access) with the complete list and a Confirm button. See **Approval flow**
+  below.
+
+If the approval flow isn't configured (no `APPROVAL_BASE_URL` /
+`APPROVAL_HMAC_SECRET`), Guard 2 falls back to a hard abort + failure email. You
+can still override manually for an intended bulk deletion by re-running that
+share once with the cap raised or `DELETE_GUARD_ENABLED=false`:
+
+```bash
+kubectl -n backups create job --from=cronjob/s3-sync-<share> manual-<share> --dry-run=client -o yaml \
+  | yq '.spec.template.spec.containers[0].env += [{"name":"DELETE_GUARD_MAX_ABSOLUTE","value":"99999"}]' \
+  | kubectl apply -f -
+```
+
+Set `DELETE_GUARD_*` per share in `shares/{share}/patch.yaml` if a share has
+higher legitimate churn than the defaults allow.
+
+### Approval flow (Cloudflare Access button)
+
+For large but *legitimate* deletions, Guard 2 lets you approve from an email
+instead of hand-editing env. Flow:
+
+1. Guard 2 trips → the sync writes `approvals/pending/<share>/<run_id>.json`
+   (rollup + sample) and `…/<run_id>.manifest.csv` (every key) to the metadata
+   bucket, mints an HMAC-signed token, and emails the approve button. Then it
+   exits (no deletion).
+2. You click **Review & approve** → `backup-approve.wind.etherport.net` (behind
+   **Cloudflare Access**, restricted to the operator email). The page shows the
+   full manifest + a **Download CSV** link; clicking **Confirm** (a POST, so
+   email link-prefetchers can't trigger it) writes a scoped, one-time, expiring
+   marker `approvals/approved/<share>.json`.
+3. The **next** scheduled run for that share sees the marker, confirms the
+   deletion is within the approved count, proceeds, and **consumes the marker**
+   (single use). A larger deletion than approved trips the guard again.
+
+Components: the `backup-approval` Deployment/Service (`approval-server/`, same
+image, runs `approval-server.py`), the shared `approval-hmac` secret (used by
+both the sync job and the server), and the `cf_tunnel_services` entry in the
+Cloudflare TF (auto-creates the DNS record, tunnel ingress, and Access app +
+email policy). The server can never delete anything itself — it only records
+consent the next guarded run checks. Tunables: `APPROVAL_MARKER_TTL_HOURS` (48),
+`APPROVAL_TOLERANCE_PERCENT` (10), `APPROVAL_TOKEN_TTL_HOURS` (72),
+`APPROVAL_REQUIRE_CF_EMAIL` (off; set on + `APPROVAL_ALLOWED_EMAILS` to also
+reject in-cluster hits that bypass the tunnel).
+
+### Verification status semantics
+
+- A run is only **FAILED** on: a non-zero `aws s3 sync` exit, an actual
+  checksum **mismatch** (data corruption), HEAD verification that produced no
+  successful results at all, or a tripped delete guard.
+- Objects that exist (HEAD 200) but return **no checksum metadata** —
+  typically files rewritten at the source mid-run — are **not** a failure.
+  They get one re-HEAD after a short settle (`CHECKSUM_RETRY_DELAY_SECONDS`,
+  default 15s); any still-missing are logged as a non-fatal warning. (Before
+  2026-06-21 this falsely reported FAILED — see session-log.)
+
 ### Email Notifications
 
 In `daily-report/email.env`:
@@ -468,6 +553,24 @@ kubectl -n backups logs job/{job-name}
 **Issue**: Job pods stuck in ImagePullBackOff
 - **Cause**: Missing GHCR pull secrets
 - **Fix**: Verify `ghcr-creds` secret exists in backups namespace
+
+**Issue**: Run aborted by delete-protection guard (`[delete-guard] ABORT`)
+- **Cause**: Source appeared empty/unmounted (Guard 1) or the run would have
+  deleted an anomalous volume of objects (Guard 2) — usually a NAS share that
+  failed to mount, or a genuine bulk deletion above the cap
+- **Symptoms**: Job exits non-zero with no sync performed, `success=0` metric,
+  "Delete-protection guard tripped" email; **S3 is untouched**
+- **Fix**: Confirm the NFS source is mounted and populated, then re-run. For an
+  intended bulk deletion, re-run that share once with `DELETE_GUARD_MAX_ABSOLUTE`
+  / `DELETE_GUARD_MAX_PERCENT` raised or `DELETE_GUARD_ENABLED=false` (see
+  Configuration → Delete Protection)
+
+**Issue**: `checksumUnavailable > 0` in a report (no mismatches)
+- **Cause**: Objects rewritten at the source during verification (e.g. an
+  rclone import into the same NAS share) — HEAD succeeded but no checksum
+  metadata yet. **Not corruption** and no longer a failure as of 2026-06-21
+- **Fix**: None required; a re-HEAD pass clears most, residuals self-heal next
+  run. To force checksum metadata onto stuck objects, re-upload them
 
 ### View S3 Consolidated Report
 

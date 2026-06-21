@@ -575,6 +575,129 @@ s3_get_object() {
 # Acquire distributed lock to prevent concurrent executions
 acquire_lock
 
+# ============================================================================
+# Destructive-delete safety guard
+# ============================================================================
+# `aws s3 sync --delete` mirrors source deletions to S3. If the NFS source is
+# unmounted, empty, or only partially mounted (NAS reboot, share failed to
+# mount, stale handle), the sync interprets "missing files" as "deleted" and
+# would WIPE the S3 backup. These guards refuse to run a destructive sync when
+# the source doesn't look like a real, populated share — while still allowing
+# legitimate (small) deletions to propagate. Tunable via env; safe defaults.
+DELETE_GUARD_ENABLED="${DELETE_GUARD_ENABLED:-true}"
+DELETE_GUARD_MIN_SOURCE_ENTRIES="${DELETE_GUARD_MIN_SOURCE_ENTRIES:-1}"
+DELETE_GUARD_SENTINEL="${DELETE_GUARD_SENTINEL:-}"          # optional: require this file at SRC_PATH root
+DELETE_GUARD_MAX_PERCENT="${DELETE_GUARD_MAX_PERCENT:-10}"  # abort if > this % of dest objects would be deleted
+DELETE_GUARD_MAX_ABSOLUTE="${DELETE_GUARD_MAX_ABSOLUTE:-1000}"  # abort if > this many objects would be deleted (0=off)
+DELETE_GUARD_MIN_DEST_FOR_PERCENT="${DELETE_GUARD_MIN_DEST_FOR_PERCENT:-50}"  # only apply % rule above this dest size
+
+# Abort the run without performing any destructive operation.
+guard_abort() {
+  local reason="$1"
+  echo "[delete-guard] ABORT: ${reason}" | tee -a "${ERROR_FILE}" >&2
+  send_failure_email "Delete-protection guard tripped: ${reason}"
+  # success=0 so the run is visibly failed and re-runnable once the source is fixed
+  pushgateway_emit 0 "$(elapsed_seconds)" 0 0 0 0 "guard_tripped"
+  exit 1
+}
+
+# --- Approval flow (human-in-the-loop for large deletions via CF Access) ---
+# When Guard 2 would trip, instead of a hard abort we can request operator
+# approval: write a pending-deletion record + full manifest to S3, email a
+# signed "Review & approve" button (rendered by request-approval.py), and exit.
+# Clicking approve (behind Cloudflare Access) drops a scoped, one-time, expiring
+# marker that THIS function checks on the next run. Falls back to guard_abort if
+# the approval flow isn't configured.
+APPROVAL_ENABLED="${APPROVAL_ENABLED:-true}"
+APPROVAL_BASE_URL="${APPROVAL_BASE_URL:-}"            # e.g. https://backup-approve.wind.etherport.net
+APPROVAL_HMAC_SECRET="${APPROVAL_HMAC_SECRET:-}"
+APPROVAL_TOKEN_TTL_HOURS="${APPROVAL_TOKEN_TTL_HOURS:-72}"
+
+# check_approval <would_delete> : 0 if this run's deletion is pre-approved
+# (consumes the one-time marker), else 1.
+check_approval() {
+  local would_delete="$1"
+  local marker_key="approvals/approved/${SHARE_NAME}.json"
+  local tmp="${LOG_DIR}/approval-marker.json"
+  if ! s3_get_object "${METADATA_BUCKET}" "${marker_key}" "${tmp}" 2>/dev/null; then
+    return 1
+  fi
+  local amax exp now
+  amax="$(jq -r '.approvedMaxDelete // 0' "${tmp}" 2>/dev/null || echo 0)"
+  exp="$(jq -r '.expiresAtEpoch // 0' "${tmp}" 2>/dev/null || echo 0)"
+  now="$(date +%s)"
+  if [[ "${now}" -lt "${exp}" && "${would_delete}" -le "${amax}" ]]; then
+    echo "[delete-guard] operator approval found (approvedMaxDelete=${amax}, wouldDelete=${would_delete}) — proceeding and consuming marker"
+    aws_retry 3 aws s3api delete-object --bucket "${METADATA_BUCKET}" --key "${marker_key}" \
+      --region "${AWS_REGION}" --expected-bucket-owner "${EXPECTED_BUCKET_OWNER}" >/dev/null 2>&1 \
+      || record_warning "failed to consume approval marker ${marker_key}"
+    return 0
+  fi
+  echo "[delete-guard] approval marker present but not valid for this run (approvedMaxDelete=${amax}, expiresAtEpoch=${exp}, now=${now}, wouldDelete=${would_delete})"
+  return 1
+}
+
+# request_approval <would_delete> <dest_count> <reason> : build + upload the
+# pending record, email the approve button, push a metric, and exit (no sync).
+request_approval() {
+  local would_delete="$1" dest_count="$2" reason="$3"
+  if ! is_true "${APPROVAL_ENABLED}" || [[ -z "${APPROVAL_BASE_URL}" || -z "${APPROVAL_HMAC_SECRET}" ]]; then
+    # Approval flow not configured — fall back to the hard guard abort.
+    guard_abort "${reason}"
+  fi
+  echo "[delete-guard] deletion exceeds bounds — requesting operator approval"
+  local keys_file="${LOG_DIR}/delete-keys.txt"
+  grep -E '^(\(dryrun\)[[:space:]]+)?delete:' "${DRYRUN_OUT}" 2>/dev/null \
+    | sed -E 's/^(\(dryrun\)[[:space:]]+)?delete:[[:space:]]*//' > "${keys_file}" || : > "${keys_file}"
+
+  local approve_url
+  if ! approve_url="$(
+      SHARE_NAME="${SHARE_NAME}" RUN_ID="${RUN_ID}" DEST_PREFIX="${DEST_PREFIX}" DEST_URI="${DEST_URI}" \
+      SRC_PATH="${SRC_PATH}" WOULD_DELETE="${would_delete}" DEST_COUNT="${dest_count}" \
+      TRIP_REASON="${reason}" APPROVAL_HMAC_SECRET="${APPROVAL_HMAC_SECRET}" \
+      APPROVAL_BASE_URL="${APPROVAL_BASE_URL}" APPROVAL_TOKEN_TTL_HOURS="${APPROVAL_TOKEN_TTL_HOURS}" \
+      LOG_DIR="${LOG_DIR}" DELETE_KEYS_FILE="${keys_file}" DEST_LIST_FILE="${DEST_LIST:-}" \
+      python3 /scripts/request-approval.py
+    )"; then
+    echo "[delete-guard] request-approval.py failed" | tee -a "${ERROR_FILE}" >&2
+    guard_abort "${reason} (approval-request generation failed)"
+  fi
+
+  # Upload the pending record + full manifest so the approval page can show them.
+  s3_put_object "${METADATA_BUCKET}" "approvals/pending/${SHARE_NAME}/${RUN_ID}.json" "${LOG_DIR}/approval-pending.json" \
+    || record_warning "failed to upload pending-approval record"
+  s3_put_object "${METADATA_BUCKET}" "approvals/pending/${SHARE_NAME}/${RUN_ID}.manifest.csv" "${LOG_DIR}/approval-manifest.csv" \
+    || record_warning "failed to upload approval manifest"
+
+  # Email the approve button (HTML body rendered by request-approval.py).
+  if is_true "${EMAIL_ENABLED}" && [[ -n "${EMAIL_FROM}" && -n "${EMAIL_TO}" && -x "${SEND_EMAIL_SCRIPT}" && -s "${LOG_DIR}/approval-email.html" ]]; then
+    HTML_BODY="$(cat "${LOG_DIR}/approval-email.html")" \
+      EMAIL_SUBJECT="${EMAIL_SUBJECT} (APPROVAL NEEDED: ${SHARE_NAME})" \
+      EMAIL_FROM_NAME="${EMAIL_FROM_NAME}" EMAIL_FROM="${EMAIL_FROM}" EMAIL_TO="${EMAIL_TO}" \
+      "${SEND_EMAIL_SCRIPT}" --html || echo "[email] WARN: failed to send approval email" >&2
+  fi
+
+  echo "[delete-guard] approval requested: ${approve_url}"
+  pushgateway_emit 0 "$(elapsed_seconds)" 0 0 0 0 "approval_pending"
+  exit 1
+}
+
+# Guard 1: source must exist and be populated (catches unmounted/empty share)
+if is_true "${DELETE_GUARD_ENABLED}"; then
+  if [[ ! -d "${SRC_PATH}" ]]; then
+    guard_abort "source path ${SRC_PATH} does not exist (NFS not mounted?) — refusing --delete sync against ${DEST_URI}"
+  fi
+  # Count top-level entries only (cheap; no full-tree walk)
+  src_entries="$(ls -A1 "${SRC_PATH}" 2>/dev/null | wc -l | tr -d ' ')" || src_entries=0
+  if [[ "${src_entries}" -lt "${DELETE_GUARD_MIN_SOURCE_ENTRIES}" ]]; then
+    guard_abort "source ${SRC_PATH} has ${src_entries} top-level entries (< ${DELETE_GUARD_MIN_SOURCE_ENTRIES}); appears empty/unmounted — refusing --delete sync that would wipe ${DEST_URI}"
+  fi
+  if [[ -n "${DELETE_GUARD_SENTINEL}" && ! -e "${SRC_PATH}/${DELETE_GUARD_SENTINEL}" ]]; then
+    guard_abort "sentinel ${SRC_PATH}/${DELETE_GUARD_SENTINEL} missing; source not confirmed healthy — refusing --delete sync against ${DEST_URI}"
+  fi
+  echo "[delete-guard] source check OK: ${src_entries} top-level entries present"
+fi
+
 echo "=== [$RUN_ID] Dry-run to detect uploads/updates ==="
 # Dry-run is informational only; we build the manifest from the REAL sync output.
 # Uses retry logic for transient network failures (configured via SYNC_MAX_RETRIES)
@@ -583,6 +706,50 @@ DRYRUN_RC=$?
 
 if [[ ${DRYRUN_RC} -ne 0 ]]; then
   echo "Dry-run failed with exit code ${DRYRUN_RC}" | tee -a "${ERROR_FILE}"
+fi
+
+# Guard 2: bound how much one run is allowed to delete (catches partial mounts /
+# bulk accidental deletions that Guard 1 misses). The dry-run above already
+# computed exactly what the real --delete sync would remove.
+if is_true "${DELETE_GUARD_ENABLED}"; then
+  would_delete="$(grep -cE '^(\(dryrun\)[[:space:]]+)?delete:' "${DRYRUN_OUT}" 2>/dev/null || true)"
+  would_delete="${would_delete:-0}"
+  if [[ "${would_delete}" -gt 0 ]]; then
+    echo "[delete-guard] dry-run would delete ${would_delete} object(s) from ${DEST_URI}"
+
+    # Snapshot the destination once: used for the object count, the %-rule, and
+    # (with sizes) the approval rollup/manifest.
+    DEST_LIST="${LOG_DIR}/dest-listing.txt"
+    aws s3 ls "${DEST_URI}" --recursive > "${DEST_LIST}" 2>/dev/null || : > "${DEST_LIST}"
+    dest_count="$(wc -l < "${DEST_LIST}" 2>/dev/null | tr -d ' ')"; dest_count="${dest_count:-0}"
+
+    guard_tripped=false
+    guard_reason=""
+    if [[ "${DELETE_GUARD_MAX_ABSOLUTE}" -gt 0 && "${would_delete}" -gt "${DELETE_GUARD_MAX_ABSOLUTE}" ]]; then
+      guard_tripped=true
+      guard_reason="would delete ${would_delete} objects (> absolute cap ${DELETE_GUARD_MAX_ABSOLUTE}) from ${DEST_URI}"
+    elif [[ "${dest_count}" -ge "${DELETE_GUARD_MIN_DEST_FOR_PERCENT}" ]]; then
+      del_pct=$(( would_delete * 100 / dest_count ))
+      echo "[delete-guard] deletion ratio: ${would_delete}/${dest_count} = ${del_pct}%"
+      if [[ "${del_pct}" -gt "${DELETE_GUARD_MAX_PERCENT}" ]]; then
+        guard_tripped=true
+        guard_reason="would delete ${would_delete} of ${dest_count} objects (${del_pct}% > ${DELETE_GUARD_MAX_PERCENT}% cap) from ${DEST_URI}"
+      fi
+    else
+      echo "[delete-guard] destination has ${dest_count} object(s) (< ${DELETE_GUARD_MIN_DEST_FOR_PERCENT}); percentage check skipped, absolute cap applies"
+    fi
+
+    if is_true "${guard_tripped}"; then
+      if check_approval "${would_delete}"; then
+        echo "[delete-guard] proceeding under operator approval"
+      else
+        # writes pending record + emails approve button + exits non-zero
+        request_approval "${would_delete}" "${dest_count}" "${guard_reason}"
+      fi
+    else
+      echo "[delete-guard] deletion volume within bounds — proceeding"
+    fi
+  fi
 fi
 
 echo "=== [$RUN_ID] Real sync ==="
@@ -905,7 +1072,43 @@ VERIFY_SCRIPT
   # Combine all result files into single JSONL
   VERIFICATION_RESULTS_JSONL="${VERIFY_WORK_DIR}/verification-results.jsonl"
   cat "${VERIFY_WORK_DIR}/results"/*.json 2>/dev/null > "${VERIFICATION_RESULTS_JSONL}" || touch "${VERIFICATION_RESULTS_JSONL}"
-  
+
+  # Re-HEAD pass: objects whose HEAD succeeded but returned NO checksum are
+  # almost always files that were being rewritten at the source during
+  # verification (e.g. an rclone import into the same NAS share). Give them a
+  # short settle, then re-verify once before counting — this clears the
+  # transient "checksum unavailable" condition that previously produced false
+  # failures. (Re-HEAD only; we do not re-PUT.)
+  CHECKSUM_RETRY_ENABLED="${CHECKSUM_RETRY_ENABLED:-true}"
+  CHECKSUM_RETRY_DELAY_SECONDS="${CHECKSUM_RETRY_DELAY_SECONDS:-15}"
+  if is_true "${CHECKSUM_RETRY_ENABLED}"; then
+    RETRY_TSV="${VERIFY_WORK_DIR}/recheck-checksums.tsv"
+    jq -r 'select(.status=="succeeded" and ((.checksum_sha256 // "")=="")) | [.bucket, .key] | @tsv' \
+      "${VERIFICATION_RESULTS_JSONL}" > "${RETRY_TSV}" 2>/dev/null || : > "${RETRY_TSV}"
+    RETRY_COUNT=$(wc -l < "${RETRY_TSV}" 2>/dev/null | tr -d ' ')
+    RETRY_COUNT="${RETRY_COUNT:-0}"
+    if [[ "${RETRY_COUNT}" -gt 0 ]]; then
+      echo "Re-verifying ${RETRY_COUNT} object(s) with missing checksum after ${CHECKSUM_RETRY_DELAY_SECONDS}s settle..."
+      sleep "${CHECKSUM_RETRY_DELAY_SECONDS}"
+      if command -v parallel >/dev/null 2>&1; then
+        cat "${RETRY_TSV}" | parallel --colsep '\t' -j "${PARALLEL_JOBS}" \
+          "${VERIFY_WORK_DIR}/verify-one.sh" {1} {2} "${VERIFY_WORK_DIR}/results" "${AWS_REGION}"
+      else
+        while IFS=$'\t' read -r RBUCKET RKEY; do
+          "${VERIFY_WORK_DIR}/verify-one.sh" "${RBUCKET}" "${RKEY}" "${VERIFY_WORK_DIR}/results" "${AWS_REGION}"
+        done < "${RETRY_TSV}"
+      fi
+      # Rebuild combined results with the refreshed per-object files
+      cat "${VERIFY_WORK_DIR}/results"/*.json 2>/dev/null > "${VERIFICATION_RESULTS_JSONL}" || touch "${VERIFICATION_RESULTS_JSONL}"
+      STILL_MISSING=$(jq -r 'select(.status=="succeeded" and ((.checksum_sha256 // "")=="")) | .key' "${VERIFICATION_RESULTS_JSONL}" 2>/dev/null | wc -l | tr -d ' ')
+      STILL_MISSING="${STILL_MISSING:-0}"
+      echo "After re-verify: ${STILL_MISSING} object(s) still missing checksum (was ${RETRY_COUNT})"
+      if [[ "${STILL_MISSING}" -gt 0 ]]; then
+        record_warning "${STILL_MISSING} object(s) uploaded but S3 checksum still unavailable after re-verify (likely modified at source mid-run); not treated as a failure"
+      fi
+    fi
+  fi
+
   # Count successes and failures
   VERIFIED_SUCCEEDED=$(jq -r 'select(.status=="succeeded") | .key' "${VERIFICATION_RESULTS_JSONL}" 2>/dev/null | wc -l | tr -d ' ')
   VERIFIED_FAILED=$(jq -r 'select(.status=="failed") | .key' "${VERIFICATION_RESULTS_JSONL}" 2>/dev/null | wc -l | tr -d ' ')
@@ -1237,8 +1440,14 @@ elif files_failed > 0:
 elif checksum_mismatches > 0:
     # CRITICAL: Source and S3 checksums don't match - data corruption detected!
     status = "FAILED"
-elif files_verified == 0 and total_files > 0:
-    # Files were transferred but verification produced no results
+elif files_succeeded == 0 and total_files > 0:
+    # Verification produced no successful HEADs at all — verification truly did
+    # not run / every object was unreachable. NOTE: objects that exist but
+    # merely lack checksum metadata count as succeeded (HEAD returned 200) and
+    # are handled as a non-fatal "checksum unavailable" condition below, not as
+    # a failure. (Previously this branch keyed on files_verified, i.e. objects
+    # WITH a checksum, which falsely FAILED runs where uploads were fine but a
+    # source-side rewrite left some objects without checksum metadata.)
     status = "FAILED"
 else:
     status = "SUCCESS"

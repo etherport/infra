@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backup-approval
+  namespace: backups
+  labels:
+    app: backup-approval
+spec:
+  type: ClusterIP
+  selector:
+    app: backup-approval
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

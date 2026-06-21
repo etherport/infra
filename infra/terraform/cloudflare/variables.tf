@@ -104,6 +104,10 @@ variable "cf_tunnel_services" {
       cluster_service_url = "http://open-webui.ollama.svc.cluster.local:8080"
       access_name         = "Chat (Open-WebUI)"
     }
+    "backup-approve.wind" = {
+      cluster_service_url = "http://backup-approval.backups.svc.cluster.local:8080"
+      access_name         = "Backup Approval Server"
+    }
   }
 }
 

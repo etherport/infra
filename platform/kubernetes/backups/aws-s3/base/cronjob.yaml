@@ -110,6 +110,36 @@ spec:
                 - name: BATCH_MAX_WAIT_SECONDS
                   value: "7200"
 
+                # --- Destructive-delete safety guard ---
+                # aws s3 sync --delete mirrors source deletions to S3. These
+                # guards refuse a destructive run when the source looks
+                # empty/unmounted or when a single run would delete an
+                # anomalous volume of objects (catches a downed NAS share
+                # wiping the backup). Legit small deletions pass through.
+                # Defaults live in sync-and-verify.sh; set here for visibility
+                # and easy per-share override via patches.
+                - name: DELETE_GUARD_ENABLED
+                  value: "true"
+                - name: DELETE_GUARD_MIN_SOURCE_ENTRIES
+                  value: "1"          # abort if /src has fewer top-level entries (empty/unmounted)
+                - name: DELETE_GUARD_MAX_PERCENT
+                  value: "10"         # abort if > this % of dest objects would be deleted
+                - name: DELETE_GUARD_MAX_ABSOLUTE
+                  value: "1000"       # abort if > this many objects would be deleted in one run (0=off)
+                - name: DELETE_GUARD_MIN_DEST_FOR_PERCENT
+                  value: "50"         # only apply the % rule when dest has at least this many objects
+
+                # --- Delete-approval flow (human-in-the-loop via CF Access) ---
+                # When the guard trips, the sync writes a pending-deletion record
+                # + emails a signed "Review & approve" button (backup-approve
+                # hostname, behind CF Access). Approving drops a scoped one-time
+                # marker the next run consumes. APPROVAL_HMAC_SECRET comes from the
+                # approval-hmac secret (envFrom below), shared with the server.
+                - name: APPROVAL_ENABLED
+                  value: "true"
+                - name: APPROVAL_BASE_URL
+                  value: "https://backup-approve.wind.etherport.net"
+
                 # Prometheus Pushgateway
                 - name: PUSHGATEWAY_URL
                   value: "http://pushgateway.monitoring.svc.cluster.local:9091"
@@ -120,6 +150,8 @@ spec:
               envFrom:
                 - secretRef:
                     name: aws-backup-credentials
+                - secretRef:
+                    name: approval-hmac          # APPROVAL_HMAC_SECRET (mint approval tokens)
                 - configMapRef:
                     name: aws-s3-sync-email
               volumeMounts:

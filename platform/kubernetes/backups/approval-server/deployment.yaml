@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backup-approval
+  namespace: backups
+  labels:
+    app: backup-approval
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backup-approval
+  template:
+    metadata:
+      labels:
+        app: backup-approval
+    spec:
+      # Reuse the s3-sync ServiceAccount (proven to pull the shared image). The
+      # approval server needs no k8s RBAC — it only talks to S3.
+      serviceAccountName: s3-sync
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: approval
+          # Same image as the sync job — it already has python3 + aws-cli + jq.
+          image: ghcr.io/sparked-diamond/aws-s3-sync:main
+          imagePullPolicy: Always
+          command: ["python3", "/scripts/approval-server.py"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: METADATA_BUCKET
+              value: "logs.archive.wind.etherport.net"
+            - name: AWS_REGION
+              value: "us-west-2"
+            - name: AWS_DEFAULT_REGION
+              value: "us-west-2"
+            - name: AWS_EC2_METADATA_DISABLED
+              value: "true"
+            - name: AWS_PAGER
+              value: ""
+            - name: LISTEN_PORT
+              value: "8080"
+            - name: APPROVAL_MARKER_TTL_HOURS
+              value: "48"
+            - name: APPROVAL_TOLERANCE_PERCENT
+              value: "10"
+            # CF Access enforces identity at the edge and the HMAC token binds each
+            # request to a real pending deletion. Set REQUIRE_CF_EMAIL=true (+ a
+            # non-empty ALLOWED_EMAILS) to additionally reject any in-cluster direct
+            # hit that bypasses the tunnel (defence in depth).
+            - name: APPROVAL_REQUIRE_CF_EMAIL
+              value: "false"
+            - name: APPROVAL_ALLOWED_EMAILS
+              value: ""
+          envFrom:
+            # AWS keys + AWS_ACCOUNT_ID (used as EXPECTED_BUCKET_OWNER)
+            - secretRef:
+                name: aws-backup-credentials
+            # APPROVAL_HMAC_SECRET — shared with the sync job that mints tokens
+            - secretRef:
+                name: approval-hmac
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "25m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
