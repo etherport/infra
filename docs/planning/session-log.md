@@ -44,6 +44,15 @@ watchdog has never armed. Tried a `modprobe i6300esb` ansible task → FATAL (mo
 reverted (`2642aa4`). **Watchdog BLOCKED pending the kernel module (M91)**; drift stays clean
 (ignore_changes), device attached + harmless. Cost of the saga: ~7 node reboots + 3 incidents for a
 feature that can't work without the module — lesson logged in CLAUDE.md §5.
+**PARKED + investigated 2026-06-21:** the real reason `i6300esb.ko` is absent = `linux-modules-extra-$(uname
+-r)` simply isn't installed on the nodes (the standard package that ships it; my apt task no-op'd). So
+it's resolvable via the production-standard path (install -extra → modprobe → feeder), per-kernel
+durability caveat noted. Left as the M91 follow-up; not pursuing now.
+**"Down" emails were the reboots, not real:** the AI advisor sent **0** diagnosis emails (transient-
+suppression skipped every self-resolving reboot alert ✅); the emails came from Alertmanager's plain
+`email-alerts` receiver firing KubeNodeNotReady/TargetDown on the ~7 rollout reboots (fire+resolve per
+node). All transient, active alerts now clear. (Possible future tidy: dampen email-alerts during
+planned node reboots, or accept it.)
 
 ---
 
