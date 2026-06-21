@@ -1,0 +1,70 @@
+name: IAM Policy Apply
+
+# Apply a manually-managed customer IAM policy from its committed JSON doc in
+# infra/terraform/aws/iam-policies/. These policies are NOT terraform-managed
+# (see infra/terraform/aws/s3/main.tf notes), so updates historically needed an
+# out-of-band `aws iam create-policy-version`. This workflow does that via the
+# gh-actions-terraform OIDC role (which has iam:*PolicyVersion on *), so changes
+# are git-reviewed (the doc must be committed) and apply remotely via dispatch —
+# no claude-admin key, no standing admin credential on the devbox.
+on:
+  workflow_dispatch:
+    inputs:
+      policy_name:
+        description: 'Policy to apply from infra/terraform/aws/iam-policies/<name>.json'
+        required: true
+        type: choice
+        default: s3-backup-kubernetes-policy
+        options:
+          - s3-backup-kubernetes-policy
+          - terraform-storage
+          - terraform-networking
+          - terraform-cloudfront
+
+permissions:
+  contents: read
+  id-token: write   # mint the GitHub OIDC token to assume the AWS role
+
+env:
+  AWS_REGION: us-west-2
+  ACCOUNT_ID: "830881980142"
+
+jobs:
+  apply:
+    name: Apply ${{ github.event.inputs.policy_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6
+        with:
+          role-to-assume: arn:aws:iam::830881980142:role/gh-actions-terraform
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Create + set-default policy version (auto-prune to 5-version cap)
+        run: |
+          set -euo pipefail
+          NAME="${{ github.event.inputs.policy_name }}"
+          DOC="infra/terraform/aws/iam-policies/${NAME}.json"
+          ARN="arn:aws:iam::${ACCOUNT_ID}:policy/${NAME}"
+          test -f "$DOC" || { echo "::error::no policy doc at $DOC"; exit 1; }
+          python3 -c "import json;json.load(open('$DOC'))"  # validate JSON
+
+          echo "Target policy: $ARN"
+          echo "Default version before: $(aws iam get-policy --policy-arn "$ARN" --query 'Policy.DefaultVersionId' --output text)"
+
+          # IAM managed policies allow at most 5 versions — prune oldest
+          # non-default versions until there is room for a new one.
+          while [ "$(aws iam list-policy-versions --policy-arn "$ARN" --query 'length(Versions)' --output text)" -ge 5 ]; do
+            OLD="$(aws iam list-policy-versions --policy-arn "$ARN" \
+              --query 'sort_by(Versions[?IsDefaultVersion==`false`], &CreateDate)[0].VersionId' --output text)"
+            echo "Pruning oldest non-default version: $OLD"
+            aws iam delete-policy-version --policy-arn "$ARN" --version-id "$OLD"
+          done
+
+          aws iam create-policy-version --policy-arn "$ARN" \
+            --policy-document "file://$DOC" --set-as-default >/dev/null
+          echo "Default version after:  $(aws iam get-policy --policy-arn "$ARN" --query 'Policy.DefaultVersionId' --output text)"
+          echo "::notice::Applied $NAME"
