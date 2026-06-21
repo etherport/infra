@@ -14,6 +14,12 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
+      # Bound a hung run (NFS stall, network black-hole, OAuth prompt) to under
+      # the hourly cadence. With concurrencyPolicy: Forbid, a run that hangs
+      # forever would block EVERY future tick until only the 25h staleness alert
+      # caught it; 50min guarantees the slot frees before the next hour. Steady-
+      # state incremental syncs finish in minutes.
+      activeDeadlineSeconds: 3000
       # GC Job records after 25h. Bumped from 1h on 2026-05-23 — 1h
       # was too aggressive when a daily-reporting tool needed to
       # enumerate the last 24h of runs. Failed-job noise is handled

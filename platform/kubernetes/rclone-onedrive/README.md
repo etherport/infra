@@ -26,6 +26,19 @@ on the devbox), so if the token is ever revoked or you need to re-auth:
    signing key isn't loaded). The refresh token auto-renews the access token, so
    this is only needed if the refresh token itself is invalidated.
 
+## Safety / data-loss protection (2026-06-21)
+
+Same hardening as [`rclone-gdrive`](../rclone-gdrive/#safety--data-loss-protection-2026-06-21)
+— `rclone sync` deletes local files absent from the source, so `sync-and-report.sh`:
+
+- **Source-non-empty guard** before syncing (aborts if `onedrive:` lists empty or
+  errors) — especially relevant here, since a re-auth landing on the wrong/empty
+  `drive_id` would otherwise mirror as "delete everything".
+- **`--max-delete 200`** tripwire (tunable via `MAX_DELETE`).
+- **Real exit-code capture** through the `tee` pipe (BusyBox has no `pipefail`).
+- **Fail-safe `success=0` metric** via EXIT trap for pre-sync failures.
+- **`activeDeadlineSeconds: 3000`** on the CronJob to bound hung runs.
+
 ## Files
 | File | What |
 |---|---|

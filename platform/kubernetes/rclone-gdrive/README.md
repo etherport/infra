@@ -13,6 +13,27 @@ Automated hourly sync from Google Drive to NFS backup storage using rclone.
 - **Method**: One-way sync (Google Drive → NFS)
 - **GitOps**: Managed by Flux (see [Flux Overview](../../docs/gitops/flux-overview.md))
 
+## Safety / data-loss protection (2026-06-21)
+
+`rclone sync` makes the destination identical to the source — it **deletes** local
+files absent from the source listing. Hardening in `sync-and-report.sh` guards
+against a transient empty/partial cloud listing (token blip, API hiccup, wrong
+remote) wiping the NAS mirror:
+
+- **Source-non-empty guard** — `rclone lsf <src> --max-depth 1` runs first; if it
+  errors or returns nothing, the run aborts **before** any sync/delete.
+- **`--max-delete 200`** — a run that would delete more than this aborts (tripwire
+  for a garbled listing). Tunable via `MAX_DELETE` in the script; raise it for an
+  intended bulk deletion.
+- **Real exit-code capture** — BusyBox `sh` has no `pipefail`, so `rclone | tee`
+  previously reported *tee's* status (≈ always 0), masking failures; the script
+  now captures rclone's actual rc via a subshell.
+- **Fail-safe metric** — an EXIT trap pushes `rclone_sync_success=0` if the run
+  dies before the normal metrics push (config copy, OOM, source-guard abort), so
+  failures surface immediately instead of only via the 25h staleness alert.
+- **`activeDeadlineSeconds: 3000`** (CronJob) — a hung run is killed at 50 min so
+  it can't block every future hourly tick under `concurrencyPolicy: Forbid`.
+
 ## Architecture
 
 ```

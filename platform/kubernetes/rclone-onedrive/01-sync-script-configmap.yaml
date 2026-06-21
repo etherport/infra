@@ -6,9 +6,8 @@ metadata:
 data:
   # Mirror of the gdrive sync (rclone-gdrive/01-sync-script-configmap.yaml):
   # pulls a OneDrive account down to the NAS "Backups" share, which then rides
-  # the existing nightly NAS->S3 sync. Read-only on OneDrive (rclone sync only
-  # writes to the local dest). Metrics pushed to Pushgateway, labelled
-  # source="onedrive".
+  # the existing NAS->S3 sync. Read-only on OneDrive (rclone sync only writes to
+  # the local dest). Metrics pushed to Pushgateway, labelled source="onedrive".
   sync-and-report.sh: |
     #!/bin/sh
     set -e
@@ -16,33 +15,74 @@ data:
     PUSHGATEWAY="pushgateway.monitoring.svc.cluster.local:9091"
     JOB_NAME="rclone_onedrive_sync"
     INSTANCE="onedrive"
+    SRC="onedrive:"
+    DEST="/backup/Graham/OneDrive/"
+    # Safety cap: abort rather than delete more than this many files in one pass
+    # (tripwire for a partial/garbled source listing). Tunable.
+    MAX_DELETE=200
+
+    METRICS_PUSHED=""
+
+    # Fail-safe: if we exit BEFORE the normal metrics push (config cp failure,
+    # OOM, source-guard abort, etc.), still emit success=0 so the failure is
+    # visible immediately via RcloneOneDriveSyncFailed rather than only after the
+    # 25h staleness alert.
+    emit_failure_if_needed() {
+      rc=$?
+      if [ "$rc" -ne 0 ] && [ -z "$METRICS_PUSHED" ]; then
+        printf '%s\n' \
+          "rclone_sync_success{source=\"onedrive\",destination=\"nfs\"} 0" \
+          "rclone_sync_last_run_timestamp{source=\"onedrive\",destination=\"nfs\"} $(date +%s)" \
+          > /tmp/fail-metrics.txt 2>/dev/null || true
+        wget --post-file=/tmp/fail-metrics.txt -O- -q \
+          "http://${PUSHGATEWAY}/metrics/job/${JOB_NAME}/instance/${INSTANCE}" || true
+      fi
+      exit $rc
+    }
+    trap emit_failure_if_needed EXIT
 
     # Copy config from the read-only secret mount to a writable location so
     # rclone can refresh the OAuth token in-place without erroring.
     cp /config/rclone-secret/rclone.conf /config/rclone/rclone.conf
+
+    # --- Source-non-empty guard ---------------------------------------------
+    # rclone sync DELETES local files absent from the source listing. A transient
+    # empty/partial listing (token blip, Graph 429, or a re-auth landing on the
+    # wrong/empty drive_id) would wipe the NAS mirror. Refuse to sync if the
+    # source listing fails or comes back empty.
+    if ! rclone lsf "$SRC" --config=/config/rclone/rclone.conf --max-depth 1 \
+        > /tmp/src-probe.txt 2>/tmp/src-probe-err.txt; then
+      echo "ERROR: source listing for $SRC failed; aborting before sync (no deletions)" >&2
+      cat /tmp/src-probe-err.txt >&2 || true
+      exit 1
+    fi
+    if [ ! -s /tmp/src-probe.txt ]; then
+      echo "ERROR: source $SRC returned an EMPTY listing; aborting to avoid wiping the local mirror" >&2
+      exit 1
+    fi
 
     START_TIME=$(date +%s)
     OUTPUT_FILE="/tmp/rclone-output.txt"
 
     # --tpslimit 10: OneDrive throttles (HTTP 429) more aggressively than GDrive;
     # cap transactions/sec to stay under its limits. rclone retries 429s anyway.
-    if rclone sync "onedrive:" "/backup/Graham/OneDrive/" \
+    # Capture rclone's REAL exit code through the tee pipe (BusyBox sh has no
+    # pipefail, so a bare `rclone | tee` would report tee's status and mask
+    # failures). The subshell writes rclone's rc to a file.
+    ( rclone sync "$SRC" "$DEST" \
         --config=/config/rclone/rclone.conf \
         --bind 0.0.0.0 \
         --tpslimit 10 \
+        --max-delete ${MAX_DELETE} \
         --stats=1m \
         --stats-log-level=INFO \
         --log-level=INFO \
         --exclude=.DS_Store \
         --exclude=Thumbs.db \
-        --exclude=desktop.ini \
-        2>&1 | tee "$OUTPUT_FILE"; then
-      EXIT_CODE=0
-      STATUS="success"
-    else
-      EXIT_CODE=$?
-      STATUS="failure"
-    fi
+        --exclude=desktop.ini; \
+      echo $? > /tmp/rclone-rc ) 2>&1 | tee "$OUTPUT_FILE"
+    EXIT_CODE=$(cat /tmp/rclone-rc 2>/dev/null || echo 1)
+    if [ "$EXIT_CODE" = "0" ]; then STATUS="success"; else STATUS="failure"; fi
 
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
@@ -87,5 +127,6 @@ data:
     if ! wget --post-file="$METRICS_FILE" -O- -q "http://${PUSHGATEWAY}/metrics/job/${JOB_NAME}/instance/${INSTANCE}"; then
       echo "Warning: Failed to push metrics to Pushgateway" >&2
     fi
+    METRICS_PUSHED=1
 
     exit $EXIT_CODE

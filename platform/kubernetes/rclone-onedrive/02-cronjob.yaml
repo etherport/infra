@@ -16,6 +16,10 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
+      # Bound a hung run to under the hourly cadence — with concurrencyPolicy:
+      # Forbid, a permanently-hung run would block every future tick until the
+      # 25h staleness alert. 50min frees the slot before the next hour.
+      activeDeadlineSeconds: 3000
       ttlSecondsAfterFinished: 90000  # 25h — matches gdrive-sync
       template:
         metadata:
