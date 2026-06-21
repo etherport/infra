@@ -13,6 +13,20 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-21 (cont. 2) — iCloud Photos dedup executed: NAS rm + S3 version-purge ([[M96]])
+
+The mini's osxphotos dedup couldn't bulk-delete over SMB, so the owner supplied a relative-path delete list (30,578 entries, all `Graham/iCloud/Photos/`).
+
+**NAS.** Verified the list against the live NAS (all under Photos; 2,859 already gone from the mini's partial SMB run, clustered at the list head — the named files genuinely absent, same-basename *collisions* like `IMG_0295 (10–15)` correctly NOT in the list). Ran a guarded line-by-line `rm` over SSH (prefix-locked to `Graham/iCloud/Photos/`, rejects `..`/outside, quoted for spaces+parens): **27,719 deleted / 197.5 GB / 0 errors**, Photos `587G→389G` (≈ the ~400 GB real library; 41,727 files left).
+
+**S3.** Dupes were still in S3 (sync suspended = safety net). Granted a temporary Photos-prefix-scoped `BypassGovernanceRetention`+`ListBucketVersions`+`GetObjectVersion` on `terraform-storage` via the [[M98]] `iam-apply` workflow (OIDC — no admin/claude-admin, no standing bypass). Purge: `list-object-versions` (prefix) filtered to the dedup list → batched `delete-objects --bypass-governance-retention`. Two snags fixed: the per-1000 JSON was too big as an inline arg → `--delete file://`; and `workflow_dispatch` right after `git push` checked out the **pre-push** commit (applied a stale policy version) → re-dispatched after a settle. Result: **30,579 versions deleted, 0 errors, 213 GB freed** (S3 also held the 2,859 the NAS no longer had); S3 Photos now 41,727 current objects = NAS exactly, 386 GB. Then **reverted the grant** (terraform-storage v7, TEMP gone) and **re-enabled the backups sync** (`suspend:false`). NAS↔S3 consistent → next sync is a Photos no-op (no guard trip).
+
+**Decisions/why.** Surgical per-list purge (not an S3-vs-NAS diff) since the list is authoritative + exact. Governance-bypass kept temporary + prefix-scoped + applied/reverted via CI (no admin key on devbox). Deleted while still in STANDARD (ahead of the 5-day Deep Archive transition) to avoid the early-deletion penalty. iCloud remains the upstream source of truth, so the temporary S3 gap was acceptable.
+
+**State:** M96 done; the whole backup delete-protection + approval + dedup arc is closed. Photos NAS=389G / S3=386G, both deduped.
+
+---
+
 ## 2026-06-21 (cont.) — ship + test the approval flow: CF apply, iam-apply workflow, split-horizon DNS, house-style emails, onedrive Vault fix ([[M94]],[[M98]],[[M99]])
 
 Picked up the held [[M94]] delete-guard + CF-Access approval flow and shipped it fully.
