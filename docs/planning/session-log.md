@@ -46,6 +46,58 @@ Picked up the held [[M94]] delete-guard + CF-Access approval flow and shipped it
 **IAM reconcile ([[M97]]).** Repo `iam-policies/*.json` had drifted from live (applied manually, not via `terraform apply`). Synced repo→live (terraform-storage/networking; created the missing terraform-cloudfront). Flagged two over-broad live grants (terraform-storage `s3:Delete*` on `*`; terraform-compute `iam:PassRole/AttachRolePolicy` on `*`) → backlogged for a scoped pass.
 
 **State at end.** Delete-guard + approval deployed & healthy (CF apply is the one open step); rclone hardened & live; backups sync suspended pending the Photos purge; lifecycle 5d live; IAM repo matches live. **Next:** (1) dispatch the `terraform-cloudflare` apply; (2) when the mini's dedup completes, run the Photos version-purge ([[M96]]); (3) wire the deferred rclone↔S3 sentinel lock; (4) [[M97]] IAM scoping. Commits this session: `718e908` (suspend), `d5c65c4` (lifecycle 2→5d), `66b8c49` (rclone), `287ef09` (delete-guard+approval + IAM reconcile).
+---
+
+## 2026-06-21 — M79 Photos backup: completion, dedup (30,577 dups), steady-state hardening
+
+Closing out the M79 marathon. Carries on from the 2026-06-19→20 entries (multichannel,
+NVMe cache, local export DB).
+
+**Backup completed.** The 15h39m PhotoKit download pass (2026-06-20, rc=0) covered the
+library: **~15,355 distinct photos backed up**, **293 photos truly unbacked** (originals
+iCloud won't serve) + ~950 Live-Photo `.mov` clips (still image *is* backed up). Missing
+list: `~/Library/Logs/photos-export/MISSING-photos.txt`.
+
+**Dedup of ~30,577 duplicate files (the DB-less-retry mess).** Computed the orphan set
+directly from the export DB (`export_data.filepath` = canonical keepers) with a **survivor
+guard** (never delete a photo's last copy): 41,715 canonical + 10 protected + 30,577 dups =
+72,303. ⚠️ **Near-miss:** the first compute had a path-bug that flagged *all* 72,303 as
+deletable — caught by reconciling `safe+protected==total` *before* deleting. Always verify
+the math before a mass delete.
+
+**The "11s/delete" was NOT the cache — it was contention + single-channel SMB.** Owner
+rightly pushed back (cache had been fine all day). Clean measurement: a **single delete =
+~15 ms**; sustained over SMB = 322–642 ms (NAS serializes btrfs metadata commits, and my
+earlier `mc_on=no` forced everything onto one channel; my "11s" was measured *during* a
+16-way parallel rm fighting that one channel). Re-enabled **multichannel (`mc_on=yes`)** —
+the original idle drops were the NVMe cache, not multichannel, so disabling it was treating
+the wrong thing. Even so, over-SMB bulk delete floored at ~2.5–3 h (NAS-bound). **Owner ran
+the delete NAS-LOCAL over SSH** (local btrfs unlink, no SMB) — fast. **Lesson: bulk
+file-count operations on this NAS belong NAS-local, not over SMB.** Verified after: **41,727
+files**, all sampled dups gone, all sampled canonical keepers present. ✅
+
+**Steady-state hardening (this session):**
+- **Nightly (`photos-export.sh`) now defaults to LOCAL mode** — no Photos.app/PhotoKit, so
+  no TCC dialogs / `photolibraryd` wedges (those caused the 2026-06-20 disruption). It does
+  `--update --exportdb <local> --ramdb --sidecar XMP --cleanup`. `DOWNLOAD_MISSING=1` makes
+  it the (fragile, supervised) PhotoKit download pass + daemon-restart. Timer re-enabled
+  (22:00, local).
+- **Anti-dup guarantee:** the persistent **local** `--exportdb`
+  (`~/Library/Application Support/osxphotos/graham-icloud-photos.db`, 41,715 rows) means
+  `--update` reuses canonical filenames → never re-creates `(N)` dups; `--cleanup` removes
+  any stray orphan. The dup explosion only happened because the DB lived on SMB and got
+  lost. **Rule: never run osxphotos here without `--exportdb` → that file; never delete it.**
+- **Lockfile guard** (`<RDIR>/.run.lock`, atomic mkdir) added to BOTH `photos-export.sh` and
+  `photos-export-resume.sh` — two runs racing the same ledger could re-mint dups; now only
+  one runs at a time.
+
+**In progress at write time:** a supervised `DOWNLOAD_MISSING=1` pass (via the wrapper,
+dup-safe `--exportdb` + lock + `cleanup=off`) attempting the 293/clips. May recover
+transient failures; genuinely-unavailable ones need manual "Download Originals" in Photos.
+
+**Next:** confirm the download pass result (and that DB row count didn't balloon = no new
+dups); then M79 is effectively done bar the permanent-missing tail. S3 dup cleanup is the
+owner's (infra agent) — same `dedup-relative-paths.txt` maps to `objects/backups/<rel>` keys.
 
 ---
 

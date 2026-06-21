@@ -214,7 +214,22 @@ disposable mirror. Steps:
   after N attempts` (0 progress until the watchdog kills it). So do the bulk fill in
   **local mode** (reads the library files directly — no PhotoKit, no Photos.app, no
   dialogs; exports everything already downloaded, reports the rest as "missing"), then a
-  short **`DOWNLOAD_MISSING=1`** pass for just the genuinely-not-local originals. The
-  nightly `photos-export.sh` still uses `--download-missing` (steady state = few/no
-  missing, so the XPC exposure is minimal).
+  short **`DOWNLOAD_MISSING=1`** pass for just the genuinely-not-local originals.
+- **Steady state (since 2026-06-21): the nightly `photos-export.sh` runs LOCAL by default**
+  (no PhotoKit/Photos.app → no TCC dialogs, no `photolibraryd` wedges). `DOWNLOAD_MISSING=1`
+  turns it into the supervised PhotoKit download pass (restarts the daemon stack first). Do
+  downloads supervised, not unattended.
+- **No-new-duplicates guarantee — the rule that matters most.** osxphotos uses `(N)` suffixes
+  for filename collisions; if it runs **without** the persistent export DB it re-assigns those
+  numbers every run and re-exports the same photos under new names (this is what produced
+  ~30k orphan dups). Both scripts now pin **`--exportdb` to a LOCAL file**
+  (`~/Library/Application Support/osxphotos/graham-icloud-photos.db`) so `--update` reuses
+  canonical names, plus `--cleanup` (orphan net) and an atomic **`.run.lock`** (no two runs
+  racing the ledger). **Never run osxphotos against this export dir without `--exportdb` →
+  that file, and never delete it.**
+- **Bulk file-count ops (e.g. deleting tens of thousands of dups) must be done NAS-LOCAL
+  (SSH), not over SMB.** A single delete over SMB is ~15 ms, but *sustained* bulk delete is
+  NAS-metadata-bound (~300–650 ms/file; hours for 30k) and far worse if parallelized — that's
+  not the cache, and not fixable from the Mac. (`mc_on=yes`/multichannel is back on; the
+  original idle drops were the NVMe cache, not multichannel.)
 - **FileVault** (see the mount-nas caveat) gates the whole pipeline after a reboot.

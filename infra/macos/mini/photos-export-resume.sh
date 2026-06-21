@@ -53,6 +53,18 @@ EXPORTDB="${EXPORTDB:-${HOME}/Library/Application Support/osxphotos/graham-iclou
 mkdir -p "$RDIR" "$(dirname "$EXPORTDB")"
 
 log(){ echo "$(date '+%F %T') resume: $*"; }
+
+# Single-run lock (shared with photos-export.sh) — two runs against the same --exportdb race
+# on the ledger and can re-create duplicate (N) names. mkdir is atomic.
+LOCK="${RDIR}/.run.lock"
+if ! mkdir "$LOCK" 2>/dev/null; then
+  opid="$(cat "$LOCK/pid" 2>/dev/null)"
+  if [ -n "$opid" ] && kill -0 "$opid" 2>/dev/null; then
+    log "another photos-export run is active (pid $opid) — exiting to avoid ledger race"; exit 0
+  fi
+  rm -rf "$LOCK"; mkdir "$LOCK"
+fi
+echo "$$" > "$LOCK/pid"; trap 'rm -rf "$LOCK"' EXIT
 count(){ find "$DEST" -type f ! -name '.osxphotos_export.db' ! -name '*.DS_Store' 2>/dev/null | wc -l | tr -d ' '; }
 mounted(){ mount | grep -qF " on /Volumes/Backups "; }
 # Attach the library sparsebundle if it isn't already a mounted volume. Nothing else

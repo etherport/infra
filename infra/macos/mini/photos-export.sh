@@ -44,6 +44,25 @@ EXPORTDB="${EXPORTDB:-${HOME}/Library/Application Support/osxphotos/graham-iclou
 
 log() { echo "$(date '+%Y-%m-%dT%H:%M:%S') photos-export: $*"; }
 
+# Default = robust LOCAL export (no Photos.app/PhotoKit) — exports whatever originals are
+# already downloaded, dedup-safe via the persistent --exportdb. Set DOWNLOAD_MISSING=1 for a
+# *supervised* pass that fetches not-yet-local originals via PhotoKit (fragile: needs TCC,
+# wedges photolibraryd, pops dialogs). The nightly runs LOCAL; downloads are done by hand.
+DOWNLOAD_MISSING="${DOWNLOAD_MISSING:-}"
+
+# Single-run lock. Two osxphotos runs against the same --exportdb (e.g. the nightly firing
+# during a manual download pass) race on the ledger and can re-introduce duplicate (N)
+# names — the exact failure we just cleaned up. mkdir is atomic ⇒ only one run at a time.
+LOCK="${REPORT_DIR}/.run.lock"; mkdir -p "${REPORT_DIR}"
+if ! mkdir "${LOCK}" 2>/dev/null; then
+  opid="$(cat "${LOCK}/pid" 2>/dev/null)"
+  if [ -n "${opid}" ] && kill -0 "${opid}" 2>/dev/null; then
+    log "another photos-export run is active (pid ${opid}) — exiting to avoid ledger race"; exit 0
+  fi
+  rm -rf "${LOCK}"; mkdir "${LOCK}"   # stale lock from a crashed run
+fi
+echo "$$" > "${LOCK}/pid"; trap 'rm -rf "${LOCK}"' EXIT
+
 # --- 1. ensure NAS mounts ---
 log "preflight: ensuring NAS mounts"
 "${HERE}/mount-nas.sh" || { log "✗ NAS mount failed; aborting"; exit 1; }
@@ -74,16 +93,16 @@ log "library: ${LIBRARY}"
 mkdir -p "${DEST}" "${REPORT_DIR}" "$(dirname "${EXPORTDB}")"
 REPORT="${REPORT_DIR}/export-$(date '+%Y%m%d-%H%M%S').csv"
 
-# Restart the Photos daemon stack first. --download-missing --use-photokit drives PhotoKit
-# via photolibraryd, which WEDGES (CoreData XPC dies, 0 downloads) once it's been running a
-# while against the SMB-backed library. A fresh daemon is what lets downloads work (M79
-# 2026-06-20). Harmless when there's nothing to download (daemons just relaunch on demand).
-osascript -e 'tell application "Photos" to quit' >/dev/null 2>&1; sleep 2
-pkill -9 -f 'Photos.app/Contents/MacOS/Photos' >/dev/null 2>&1
-killall -9 photolibraryd photoanalysisd >/dev/null 2>&1; sleep 3
-open -ga Photos >/dev/null 2>&1 || true
+# Only when downloading: restart the Photos daemon stack first (PhotoKit/photolibraryd
+# wedges over time on the SMB library; a fresh daemon is what lets downloads work). Skipped
+# in LOCAL mode — that's why local runs are quiet (no Photos.app, no dialogs, no wedges).
+if [ -n "${DOWNLOAD_MISSING}" ]; then
+  osascript -e 'tell application "Photos" to quit' >/dev/null 2>&1; sleep 2
+  pkill -9 -f 'Photos.app/Contents/MacOS/Photos' >/dev/null 2>&1
+  killall -9 photolibraryd photoanalysisd >/dev/null 2>&1; sleep 3
+  open -ga Photos >/dev/null 2>&1 || true
+fi
 
-log "exporting → ${DEST} (report: ${REPORT})"
 # --update            : incremental — only new/changed photos (tracked in
 #                       <DEST>/.osxphotos_export.db, so nothing re-exports)
 # --download-missing  : if an original isn't local in the library yet, have Photos
@@ -100,17 +119,13 @@ log "exporting → ${DEST} (report: ${REPORT})"
 # --cleanup           : delete files in DEST no longer in the library (mirror)
 # --retry             : retry transient export errors
 # (edited photos export BOTH original and an _edited copy by osxphotos default)
-"${OSXPHOTOS}" export "${DEST}" \
-  --library "${LIBRARY}" \
-  --update \
-  --exportdb "${EXPORTDB}" \
-  --ramdb \
-  --download-missing \
-  --use-photokit \
-  --sidecar XMP \
-  --cleanup \
-  --retry 3 \
-  --report "${REPORT}"
+# --exportdb (LOCAL) + --update = reuse canonical filenames → never re-creates (N) dups.
+# --cleanup removes any stray orphan not in the ledger (dup safety net). --download-missing
+# /--use-photokit added only when DOWNLOAD_MISSING is set.
+flags=(--update --exportdb "${EXPORTDB}" --ramdb --sidecar XMP --cleanup --retry 3)
+[ -n "${DOWNLOAD_MISSING}" ] && flags+=(--download-missing --use-photokit)
+log "exporting → ${DEST} (mode=$([ -n "${DOWNLOAD_MISSING}" ] && echo photokit/download-missing || echo local); report: ${REPORT})"
+"${OSXPHOTOS}" export "${DEST}" --library "${LIBRARY}" "${flags[@]}" --report "${REPORT}"
 rc=$?
 
 if [ "${rc}" -eq 0 ]; then
