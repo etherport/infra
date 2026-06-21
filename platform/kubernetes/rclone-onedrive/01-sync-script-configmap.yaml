@@ -77,6 +77,7 @@ data:
         --stats=1m \
         --stats-log-level=INFO \
         --log-level=INFO \
+        --exclude="/Personal Vault/**" \
         --exclude=.DS_Store \
         --exclude=Thumbs.db \
         --exclude=desktop.ini; \
