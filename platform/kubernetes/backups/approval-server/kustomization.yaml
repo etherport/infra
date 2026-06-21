@@ -7,3 +7,4 @@ resources:
   - 01-hmac-secret.sops.yaml
   - deployment.yaml
   - service.yaml
+  - ingressroute.yaml

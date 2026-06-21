@@ -223,6 +223,11 @@ records:
     value: 10.10.201.70
     comment: AI advisor approval URL (Traefik fallback for the CF Tunnel path at approve.etherport.net)
 
+  - name: backup-approve
+    type: A
+    value: 10.10.201.70
+    comment: Backup deletion approval server — internal via Traefik (HMAC-gated); external via CF Tunnel + Access (Google). Split-horizon so it works on-site/VPN/Tailscale too.
+
   # =============================================================================
   # Devices - Direct Access
   # =============================================================================

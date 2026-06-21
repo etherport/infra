@@ -1,0 +1,22 @@
+# Internal route for the delete-approval server. The hostname is served two ways
+# (split-horizon): externally via the Cloudflare tunnel + Access (Google auth),
+# and internally (on-site / VPN / Tailscale) via Technitium -> Traefik VIP ->
+# this route. The internal path bypasses CF Access (edge-only, like every other
+# *.wind service), so it relies on the HMAC-signed approval token from the email
+# as the gate — consistent with the house pattern. The *.wind.etherport.net
+# wildcard cert covers TLS.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: backup-approval
+  namespace: backups
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`backup-approve.wind.etherport.net`)
+      kind: Rule
+      services:
+        - name: backup-approval
+          port: 8080
+  tls: {}
