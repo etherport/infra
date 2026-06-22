@@ -66,7 +66,7 @@ resource "aws_cloudwatch_metric_alarm" "vpn_high_swap" {
   namespace           = "CWAgent"
   period              = 300
   statistic           = "Average"
-  threshold           = 20
+  threshold           = 50
   treat_missing_data  = "missing"
 
   dimensions = {
@@ -75,9 +75,13 @@ resource "aws_cloudwatch_metric_alarm" "vpn_high_swap" {
     InstanceType = aws_instance.vpn.instance_type
   }
 
+  # Notify only — NO auto-reboot. Baseline swap on this 0.5GB t4g.nano sits
+  # ~15-20% (Linux parks cold pages while mem stays <50%), so the old 20% +
+  # reboot action flap-rebooted the VPN for a non-problem. Genuine memory
+  # pressure is covered by High-Memory-Utilization-VPN (>80%, which keeps its
+  # reboot). Raised 20->50; if it still flaps, drop the swap alarm entirely.
   alarm_actions = [
-    aws_sns_topic.ec2_alerts.arn,
-    "arn:aws:swf:us-west-2:830881980142:action/actions/AWS_EC2.InstanceId.Reboot/1.0"
+    aws_sns_topic.ec2_alerts.arn
   ]
 
   tags = {
@@ -132,7 +136,7 @@ resource "aws_cloudwatch_metric_alarm" "dns_high_swap" {
   namespace           = "CWAgent"
   period              = 300
   statistic           = "Average"
-  threshold           = 30
+  threshold           = 50
   treat_missing_data  = "missing"
 
   dimensions = {
@@ -141,9 +145,11 @@ resource "aws_cloudwatch_metric_alarm" "dns_high_swap" {
     InstanceType = aws_instance.dns.instance_type
   }
 
+  # Notify only — NO auto-reboot (same rationale as the VPN swap alarm). Genuine
+  # pressure is High-Memory-Utilization-DNS (>80%, keeps its reboot). Raised
+  # 30->50 for consistency.
   alarm_actions = [
-    aws_sns_topic.ec2_alerts.arn,
-    "arn:aws:swf:us-west-2:830881980142:action/actions/AWS_EC2.InstanceId.Reboot/1.0"
+    aws_sns_topic.ec2_alerts.arn
   ]
 
   tags = {
