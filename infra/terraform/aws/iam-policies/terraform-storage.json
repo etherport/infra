@@ -86,11 +86,28 @@
         "s3:DeleteObjectVersion"
       ],
       "Resource": [
-        "arn:aws:s3:::archive.wind.etherport.net/*",
         "arn:aws:s3:::velero.wind.etherport.net/*",
         "arn:aws:s3:::postgres-barman.wind.etherport.net/*",
         "arn:aws:s3:::etcd-snapshots.wind.etherport.net/*"
       ]
+    },
+    {
+      "Sid": "TEMPPhotosDedupListVersions20260622",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucketVersions"
+      ],
+      "Resource": "arn:aws:s3:::archive.wind.etherport.net"
+    },
+    {
+      "Sid": "TEMPPhotosDedupPurge20260622",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObjectVersion",
+        "s3:DeleteObjectVersion",
+        "s3:BypassGovernanceRetention"
+      ],
+      "Resource": "arn:aws:s3:::archive.wind.etherport.net/objects/backups/Graham/iCloud/Photos/*"
     }
   ]
 }
