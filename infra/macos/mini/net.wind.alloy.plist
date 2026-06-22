@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>net.wind.alloy</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/alloy</string>
+    <string>run</string>
+    <string>/Users/grahamsmith/code/infra/infra/macos/mini/alloy-config.alloy</string>
+    <string>--storage.path=/Users/grahamsmith/Library/Application Support/alloy</string>
+    <string>--server.http.listen-addr=127.0.0.1:12345</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- Loki push endpoint; the infra agent exposes loki.wind.etherport.net -> svc/loki:3100 -->
+    <key>LOKI_URL</key><string>http://loki.wind.etherport.net/loki/api/v1/push</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ProcessType</key><string>Background</string>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>StandardOutPath</key><string>/Users/grahamsmith/Library/Logs/alloy.log</string>
+  <key>StandardErrorPath</key><string>/Users/grahamsmith/Library/Logs/alloy.log</string>
+</dict>
+</plist>

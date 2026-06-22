@@ -245,3 +245,24 @@ run can't wipe it — the staleness alert keys on this), `*_last_rc`, `*_duratio
 `*_photos_total`, `*_exported`, `*_missing`, `*_info{mode}`. **Cluster side (expose
 pushgateway via Traefik + PrometheusRule + Grafana) is set up by the infra agent.** Until
 then the pushes just log "push failed" and no-op.
+
+## `net.wind.alloy` — ship the mini's logs to Loki (`alloy-config.alloy`)
+Grafana **Alloy** tails the backup-pipeline logs and pushes them to the cluster **Loki** so
+this off-cluster macOS host's logs are searchable in Grafana (and alertable via the Loki
+ruler). Tails `photos-export.log`, `photos-export/*.out|*.log`, `mount-nas.log`, `alloy.log`
+(labels `host="mini"`, `job=`). Buffers to a local WAL and retries, so it's harmless before
+Loki is reachable — nothing lost.
+
+**Loki endpoint** = `LOKI_URL` env in the plist (default
+`http://loki.wind.etherport.net/loki/api/v1/push`) — the infra agent exposes
+`loki.wind.etherport.net → svc/loki:3100` via Traefik + a Technitium A record.
+
+### Install (run on the mini, as graham)
+```bash
+brew install grafana-alloy                                    # binary: /opt/homebrew/bin/alloy
+ln -sf /Users/grahamsmith/code/infra/infra/macos/mini/net.wind.alloy.plist ~/Library/LaunchAgents/net.wind.alloy.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.wind.alloy.plist
+```
+Verify: `launchctl print gui/$(id -u)/net.wind.alloy | grep state` · `tail ~/Library/Logs/alloy.log`.
+Reload after editing: `launchctl bootout gui/$(id -u)/net.wind.alloy` then bootstrap again.
+(`alloy fmt alloy-config.alloy` validates config syntax.)

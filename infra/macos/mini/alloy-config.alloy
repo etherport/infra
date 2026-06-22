@@ -1,0 +1,39 @@
+// Grafana Alloy config — ships the mini's iCloud-backup pipeline logs to the cluster Loki
+// (M79 observability). The mini is an off-cluster macOS host, so cluster logging doesn't see
+// it; Alloy tails the LaunchAgent/job logs and pushes them to Loki's HTTP API.
+//
+// Loki endpoint: exposed by the infra agent at loki.wind.etherport.net -> svc/loki:3100 via
+// Traefik (internal). Until that ingress + Technitium A record exist, Alloy buffers locally
+// (WAL at --storage.path) and retries — nothing is lost, it just can't deliver yet.
+//
+// Override the endpoint without editing this file via the LOKI_URL env (set in the plist).
+
+// Discover the log files (globs are re-evaluated, so rotating run-*.out files are picked up).
+local.file_match "mini_logs" {
+  path_targets = [
+    {__path__ = "/Users/grahamsmith/Library/Logs/photos-export.log",   job = "photos-export"},
+    {__path__ = "/Users/grahamsmith/Library/Logs/photos-export/*.out", job = "photos-export"},
+    {__path__ = "/Users/grahamsmith/Library/Logs/photos-export/*.log", job = "photos-export"},
+    {__path__ = "/Users/grahamsmith/Library/Logs/mount-nas.log",       job = "mount-nas"},
+    {__path__ = "/Users/grahamsmith/Library/Logs/alloy.log",           job = "alloy"},
+  ]
+}
+
+loki.source.file "mini_logs" {
+  targets    = local.file_match.mini_logs.targets
+  forward_to = [loki.process.labels.receiver]
+}
+
+// Tag every stream with host="mini" (the per-target job label flows through automatically).
+loki.process "labels" {
+  stage.static_labels {
+    values = { host = "mini" }
+  }
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = sys.env("LOKI_URL")
+  }
+}
