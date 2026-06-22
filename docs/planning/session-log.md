@@ -13,6 +13,22 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-22 (cont. 8) — H3 tier 5: monitoring OBSERVATION started (audit on, flip ~24h)
+
+Owner: "Take on monitoring. Start with audit as this is wide reaching." monitoring is the widest-fanout ns (Prometheus scrapes every ns + 5 external hosts; Alloy ingests syslog; Alertmanager/ai-advisor egress externally), so audit-first is essential.
+
+**Characterized (Hubble + config).** Egress fanout: scrapes postgres/cue :9187, kube-system :9153, gpu-operator :9400/:8080, flux :8080, blackbox :9115, velero :8085, unifi-poller :9130, cloudflared :2000, + host/remote-node/apiserver (kubelet/kube-proxy/etc.) + **external** `world:9100` (4 node-exporters: 10.10.100.5/10, 10.10.201.6/15) + `world:9290` (pve IPMI 10.10.200.41, from `01-external-scrape-config.yaml`). External notify: SES SMTP (`:587`), ai-advisor→Anthropic (`:443`). Ingress: `world:514` syslog→Alloy, `world:9091` pushgateway (mini), `:3100` Loki, `kube-apiserver`→operator admission webhook (NOT covered by cluster-essentials), + everything in-cluster reaching grafana/prometheus/AM/loki/pushgateway.
+
+**Draft + toggle.** Flipped global audit ON (postgres/cue/dns/traefik → audit-only meanwhile) + labelled monitoring (via `namespace-pss-labels.yaml` patch) + applied `14-tier-monitoring.yaml` (CNP `monitoring-tier`): permissive egress (`cluster` any-port + `world` :80/:443/:587/:465/:25/:9100/:9290) + ingress (`cluster` any-port + `world` :9091/:3100/:514 + `kube-apiserver`). `6574bbc`. **0 audit gaps** on active flows (112 Prometheus targets up, grafana 302).
+
+**Owner chose observe ~24h then flip** (vs flip-now): the periodic external paths (alert email :587, ai-advisor :443, backup reports) are port-covered but hadn't fired to confirm, and a broken alert-email path fails silently. So audit stays ON ~24h to let an alert/advisor/backup cycle exercise them; a **scheduled re-check** (CronCreate) will re-examine the audit log and, if clean, flip audit OFF (re-enforce all 5) + revert the inventory. Until then the 4 prior tiers are audit-only (accepted, allowlists verified). Flip command in the tracker + `networkpolicy-tiers.md`.
+
+**Docs:** added "Adding monitoring for a new service" to `docs/runbooks/networkpolicy-tiers.md` (in-cluster scrape/push/logs just work via the permissive design + `allow-monitoring-scrape`; a new EXTERNAL scrape target/notifier on a non-standard port needs a `world` port added to the monitoring tier). CLAUDE.md §5 TEMP banner (audit on), tracker H3, this entry.
+
+**State:** H3 = tiers 1–4 enforced, tier 5 (monitoring) observing (flip pending). After monitoring flips, all target tiers are enforced — H3 effectively complete (minus the DROP-alerting follow-up).
+
+---
+
 ## 2026-06-22 (cont. 7) — H3 tier 4: traefik ENFORCED via the audit toggle + new-service runbook
 
 First use of the **audit toggle** (per owner request — "ensure we're not cutting off traffic"). Traefik is the ingress controller (high-fanout: routes to every backend + external devices), so a point-in-time Hubble capture misses rarely-accessed routes → observe-first is the safe path.

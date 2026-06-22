@@ -132,8 +132,12 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   `pre-flight.yml` afterward to restore `root:root`. Real run path (venv, `--tags=cilium,download`)
   + full incident: `docs/runbooks/cilium-cni-dir-owner.md`. Cilium is **Helm-managed**
   (release `cilium`/kube-system), **not** Flux.
-- **Cilium `policy-audit-mode` is OFF — policies now ENFORCE** (since 2026-06-22; was the
-  H3 observation phase 06-15→06-22). IaC source of truth = `cilium_policy_audit_mode: false`
+- ⏳ **TEMP (2026-06-22): audit is back ON** to observe **monitoring** (tier 5, widest) —
+  so all 5 labeled tiers are AUDIT-ONLY (non-enforcing) right now; flip-off pending after a
+  ~24h observation (`14-tier-monitoring.yaml`; a scheduled re-check will re-enforce). The
+  normal/target state is enforcing, described next.
+- **Cilium `policy-audit-mode` (normal state) is OFF — policies ENFORCE** (since 2026-06-22;
+  was the H3 observation phase 06-15→06-22). IaC source of truth = `cilium_policy_audit_mode`
   in the kubespray inventory; toggle live via the `cilium-config` ConfigMap + `kubectl
   rollout restart ds/cilium` (read only at startup), NOT a raw kubespray run. H3
   NetworkPolicy manifests in `platform/kubernetes/networkpolicies/`; enforcement is
