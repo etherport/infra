@@ -3,6 +3,11 @@
 #
 # This file mirrors DEFAULT_EXCLUDE_PATTERNS in sync-and-verify.sh
 
+# Cross-job sync lock dir (rclone↔S3 sentinel; transient, never back up)
+.sync-locks
+.sync-locks/*
+*/.sync-locks/*
+
 # macOS / NAS metadata
 .DS_Store
 */.DS_Store

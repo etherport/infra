@@ -17,6 +17,13 @@ data:
     # in one pass (tripwire for a partial/garbled source listing). Tunable.
     MAX_DELETE=200
 
+    # Cross-job lock: signals the NAS->S3 sync (s3-sync-backups) to wait while we
+    # write the shared Backups share, so it never reads files mid-write (the
+    # checksum-flap race). Removed on exit by the trap. Lives OUTSIDE rclone's
+    # DEST subtree, so --delete can't touch it.
+    LOCK_DIR="/backup/.sync-locks"
+    LOCK="${LOCK_DIR}/rclone-gdrive.lock"
+
     METRICS_PUSHED=""
 
     # Fail-safe: if we exit BEFORE the normal metrics push (config cp failure,
@@ -25,6 +32,7 @@ data:
     # 25h staleness alert. (set -e means any unhandled failure lands here.)
     emit_failure_if_needed() {
       rc=$?
+      rm -f "${LOCK:-}" 2>/dev/null || true   # release the cross-job lock
       if [ "$rc" -ne 0 ] && [ -z "$METRICS_PUSHED" ]; then
         printf '%s\n' \
           "rclone_sync_success{source=\"gdrive\",destination=\"nfs\"} 0" \
@@ -59,6 +67,10 @@ data:
 
     START_TIME=$(date +%s)
     OUTPUT_FILE="/tmp/rclone-output.txt"
+
+    # Take the cross-job lock for the duration of the transfer.
+    mkdir -p "${LOCK_DIR}" 2>/dev/null || true
+    echo "$(date +%s) pid=$$ src=gdrive" > "${LOCK}" 2>/dev/null || true
 
     # Capture rclone's REAL exit code through the tee pipe (BusyBox sh has no
     # pipefail, so a bare `rclone | tee` would report tee's status — i.e. always

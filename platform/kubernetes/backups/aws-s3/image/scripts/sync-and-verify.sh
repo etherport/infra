@@ -576,6 +576,45 @@ s3_get_object() {
     >/dev/null
 }
 
+# ============================================================================
+# Cross-job lock: wait while rclone is writing this NAS share
+# ============================================================================
+# The rclone gdrive/onedrive jobs drop a lock file in <source>/.sync-locks while
+# they write the Backups share. Reading/uploading those files mid-write produces
+# the checksum-verification flap (the "526 checksumUnavailable" we saw). Wait
+# (bounded) for any FRESH rclone lock to clear before syncing. Only the `backups`
+# share's source carries these locks; other shares' sources have none → instant.
+# (Stale locks from a crashed rclone pod are ignored after RCLONE_LOCK_STALE_SECONDS.)
+RCLONE_LOCK_DIR="${SRC_PATH}/.sync-locks"
+RCLONE_LOCK_WAIT_SECONDS="${RCLONE_LOCK_WAIT_SECONDS:-900}"     # max wait (15m)
+RCLONE_LOCK_STALE_SECONDS="${RCLONE_LOCK_STALE_SECONDS:-3600}"  # ignore locks older than 1h
+RCLONE_LOCK_POLL_SECONDS="${RCLONE_LOCK_POLL_SECONDS:-30}"
+
+fresh_rclone_lock() {  # echo the path of a fresh lock, or nothing
+  [ -d "${RCLONE_LOCK_DIR}" ] || return 0
+  local now lf mt
+  now="$(date +%s)"
+  for lf in "${RCLONE_LOCK_DIR}"/*.lock; do
+    [ -e "${lf}" ] || continue
+    mt="$(stat -c %Y "${lf}" 2>/dev/null || echo 0)"
+    if [ $((now - mt)) -lt "${RCLONE_LOCK_STALE_SECONDS}" ]; then echo "${lf}"; return 0; fi
+  done
+}
+
+wait_for_rclone() {
+  local waited=0 lk
+  while lk="$(fresh_rclone_lock)"; [ -n "${lk}" ]; do
+    if [ "${waited}" -ge "${RCLONE_LOCK_WAIT_SECONDS}" ]; then
+      echo "[xlock] rclone still active after ${waited}s ($(basename "${lk}")) — proceeding (re-HEAD pass backstops any residual)"
+      return 0
+    fi
+    echo "[xlock] rclone writing the share ($(basename "${lk}")) — waiting ${waited}/${RCLONE_LOCK_WAIT_SECONDS}s..."
+    sleep "${RCLONE_LOCK_POLL_SECONDS}"; waited=$((waited + RCLONE_LOCK_POLL_SECONDS))
+  done
+  [ "${waited}" -gt 0 ] && echo "[xlock] rclone idle — proceeding"
+}
+wait_for_rclone
+
 # Acquire distributed lock to prevent concurrent executions
 acquire_lock
 

@@ -214,6 +214,19 @@ consent the next guarded run checks. Tunables: `APPROVAL_MARKER_TTL_HOURS` (48),
 `APPROVAL_REQUIRE_CF_EMAIL` (off; set on + `APPROVAL_ALLOWED_EMAILS` to also
 reject in-cluster hits that bypass the tunnel).
 
+### Cross-job lock (rclone ↔ S3)
+
+The `rclone-gdrive`/`rclone-onedrive` jobs write into the **same** NAS Backups
+share this sync reads. Reading files mid-write caused checksum-verification flaps
+(the "526 checksumUnavailable"). To prevent the overlap, rclone drops
+`<share>/.sync-locks/rclone-<src>.lock` while transferring (removed on exit), and
+`sync-and-verify.sh` `wait_for_rclone()` waits for any **fresh** lock to clear
+before syncing (bounded by `RCLONE_LOCK_WAIT_SECONDS`, default 900s; locks older
+than `RCLONE_LOCK_STALE_SECONDS`=3600 are treated as stale and ignored). After the
+wait it proceeds regardless — the re-HEAD pass backstops any residual. Only the
+`backups` share's source carries these locks (other shares see none and skip
+instantly); `.sync-locks` is excluded from the sync.
+
 ### Verification status semantics
 
 - A run is only **FAILED** on: a non-zero `aws s3 sync` exit, an actual
