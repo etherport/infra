@@ -132,11 +132,17 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   `pre-flight.yml` afterward to restore `root:root`. Real run path (venv, `--tags=cilium,download`)
   + full incident: `docs/runbooks/cilium-cni-dir-owner.md`. Cilium is **Helm-managed**
   (release `cilium`/kube-system), **not** Flux.
-- **Cilium `policy-audit-mode` is ON** (H3 observation phase). IaC source of truth =
-  `cilium_policy_audit_mode: true` in the kubespray inventory; toggle live via the
-  `cilium-config` ConfigMap + `kubectl rollout restart ds/cilium` (read only at startup),
-  NOT a raw kubespray run. H3 NetworkPolicy manifests in `platform/kubernetes/networkpolicies/`
-  (enforcement is per-namespace opt-in via the `netpol.wind/enforced=true` label).
+- **Cilium `policy-audit-mode` is OFF — policies now ENFORCE** (since 2026-06-22; was the
+  H3 observation phase 06-15→06-22). IaC source of truth = `cilium_policy_audit_mode: false`
+  in the kubespray inventory; toggle live via the `cilium-config` ConfigMap + `kubectl
+  rollout restart ds/cilium` (read only at startup), NOT a raw kubespray run. H3
+  NetworkPolicy manifests in `platform/kubernetes/networkpolicies/`; enforcement is
+  **per-namespace opt-in via the `netpol.wind/enforced=true` label** — only **`postgres`**
+  is labeled/enforced so far (tier 1; allowlist verified to AUDIT nothing over 7d before
+  the flip). **All unlabeled namespaces stay allow-all.** ⚠️ **Audit is a single GLOBAL
+  switch**, so to add a new tier you must briefly flip audit back ON (ConfigMap+rollout),
+  label + observe the new namespace via Loki `{job="hubble-audit"}`, build its allowlist
+  until clean, then flip OFF again. See `platform/kubernetes/networkpolicies/README.md`.
 - **Cilium WireGuard encryption is ON** (M66, 2026-06-17). East-west **pod-to-pod**
   traffic is WireGuard-encrypted (`cilium_wg0`, full mesh, NodeEncryption off); was
   cleartext VXLAN before. IaC source = `cilium_encryption_enabled: true` +

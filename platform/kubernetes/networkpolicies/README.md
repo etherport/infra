@@ -4,21 +4,26 @@ Default-deny + per-tier allowlists for the `wind` cluster. Closes H3 (the larges
 internal-segmentation gap: today Cilium is allow-all, so a compromised pod has
 unrestricted lateral movement). Detailed plan: `docs/planning/hardening-plan-2026-06-10.md` §H3.
 
-> ✅ **WIRED INTO FLUX 2026-06-15** (`clusters/wind/kustomization.yaml`), with Cilium
-> **`policy-audit-mode` ON** (verified runtime `Enabled` on all agents first). Under audit
-> mode these policies **log would-be drops as AUDIT verdicts and enforce nothing**, so they
-> are safe. They also currently select **no pods** — enforcement is gated on the
-> `netpol.wind/enforced=true` namespace label (none applied yet). Labeling a namespace is
-> what starts its observation. **Never disable audit mode while a namespace is labeled until
-> its allowlist is verified** (that would turn audit logs into real drops).
+> ✅ **ENFORCING since 2026-06-22.** Cilium `policy-audit-mode` is now **OFF** — these
+> policies enforce (real drops). **`postgres` is the first (and so far only) enforced tier**
+> (labeled `netpol.wind/enforced=true`; its allowlist was verified to AUDIT nothing over 7d
+> before the flip — see `10-tier-postgres.yaml`). **All unlabeled namespaces remain
+> allow-all.** Observation phase ran 06-15→06-22 under audit mode.
+>
+> ⚠️ **Audit is a single GLOBAL switch.** To add the NEXT tier you must briefly flip audit
+> back ON, observe + build that namespace's allowlist, then flip OFF again — see "Adding a
+> tier" below. **Never label a namespace while audit is OFF** unless its allowlist is already
+> verified (it would enforce instantly = real drops).
 
 ## The one rule that matters
 
 In Cilium an endpoint becomes **default-deny** for a direction the instant *any* policy
 with rules in that direction selects it. So an "allow DNS egress" policy on a pod denies
-*all that pod's other egress*. **Audit mode must be ON before any of these apply.** Under
-audit mode Cilium logs would-be drops as `AUDIT` verdicts and enforces nothing — that's
-the safe observation window to build allowlists from real traffic.
+*all that pod's other egress*. This is why **audit mode must be ON before you label a NEW
+namespace** (it would otherwise enforce instantly): under audit mode Cilium logs would-be
+drops as `AUDIT` verdicts and enforces nothing — the safe observation window to build that
+namespace's allowlist from real traffic before flipping back to enforce. See "Adding the
+next tier" below.
 
 ## Phasing model — opt-in per namespace via a label
 
@@ -55,25 +60,36 @@ that order). `kube-system`, `flux-system`, `wireguard` (hostNetwork → node ide
 The per-tier allowlists (`1x-tier-*.yaml`) beyond postgres are **intentionally absent**
 — they get written from Phase-1 audit data, not guessed.
 
-## Rollout procedure
+## Current state (2026-06-22)
 
-1. **Audit mode is ON** (`cilium_policy_audit_mode: true`, runtime `Enabled` on all agents).
-2. This dir is wired into `clusters/wind/kustomization.yaml` (done).
-3. **Opt a namespace into observation by adding the label to its namespace MANIFEST in git**
-   — `netpol.wind/enforced: "true"` (e.g. `platform/kubernetes/cnpg/00-namespace.yaml` for
-   postgres). **Do NOT `kubectl label`** a Flux-managed namespace — Flux's server-side apply
-   strips out-of-band labels on the next reconcile. Commit + reconcile → durable.
-4. Observe ≥1–2 weeks. AUDIT flows are now **continuously shipped to Loki** and alerted on
-   (since 2026-06-18): Cilium exports `verdict=AUDIT` flows → Alloy → Loki `{job="hubble-audit"}`
-   → the loki-ruler `CiliumNetpolAuditFlow` alert (fires on new tuples only; known-good
-   sources excluded). Triage via the alert + Grafana Explore (`{job="hubble-audit"} | json`);
-   `python3 scripts/cilium/audit-report.py` remains as an ad-hoc one-shot. Cover CronJobs/backups.
-   Every AUDIT flow = a would-be drop on enforcement.
-5. Add legit flows to the relevant per-tier CNP; write `1x-tier-*.yaml` for new tiers from
-   the audit data.
-6. **Enforce:** once all target namespaces' allowlists are verified, disable global audit
-   (`cilium_policy_audit_mode: false` → ConfigMap + `rollout restart ds/cilium`). Audit is
-   cluster-wide, so enforce all observed tiers together once they're all clean.
+Enforcing. `cilium_policy_audit_mode: false`. **`postgres`** is labeled + enforced
+(allowlist `10-tier-postgres.yaml`, verified 0 AUDIT over 7d before the flip). All other
+namespaces are unlabeled = allow-all. Verified post-flip: 0 postgres DROPs, CNPG cluster
+healthy, wikijs app path OK, all 3 postgres exporters scraping.
+
+## Adding the next tier (the toggle workflow)
+
+Because audit is a **single global switch**, you can't observe a new namespace while the
+rest enforce. So:
+
+1. **Flip audit back ON** (live, no kubespray): `kubectl -n kube-system patch cm cilium-config
+   --type merge -p '{"data":{"policy-audit-mode":"true"}}'` + `kubectl -n kube-system rollout
+   restart ds/cilium`. Set `cilium_policy_audit_mode: true` in the kubespray inventory too
+   (durability). While ON, the already-enforced tiers (postgres) revert to audit-only — fine,
+   their allowlists are verified.
+2. **Label the new namespace** by editing its namespace MANIFEST in git —
+   `netpol.wind/enforced: "true"` (e.g. `platform/kubernetes/cnpg/00-namespace.yaml`). **Do
+   NOT `kubectl label`** a Flux-managed namespace — Flux strips out-of-band labels on
+   reconcile. Commit + reconcile → durable.
+3. **Observe** (days). AUDIT flows ship to Loki: `{job="hubble-audit"}` → the loki-ruler
+   `CiliumNetpolAuditFlow` alert (new tuples only). Triage via the alert + Grafana Explore
+   (`{job="hubble-audit"} | json`); `python3 scripts/cilium/audit-report.py` is an ad-hoc
+   one-shot. Cover CronJobs/backups. Every AUDIT flow = a would-be drop on enforcement.
+4. **Write `1x-tier-<ns>.yaml`** from the audit data (both directions — see the postgres tier
+   for the pattern: intra-ns egress, external `:443`, operator ports, etc.) until the
+   namespace AUDITs nothing.
+5. **Flip audit back OFF** (reverse of step 1; inventory back to `false`) → the new tier
+   enforces alongside postgres. Re-verify (0 DROPs, app healthy).
 
 ## Rollback
 

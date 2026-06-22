@@ -13,6 +13,20 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-22 (cont. 4) — H3: postgres tier ENFORCED (first NetworkPolicy enforcement)
+
+Picked up H3 (NetworkPolicy enforcement). Outlined the phased plan, then executed tier 1.
+
+**Refined the postgres allowlist from audit data.** Pulled the Phase-1 audit flows from Loki `{job="hubble-audit"}` (24h sample + a 7d LogQL aggregation to catch rare/weekly flows). postgres — the only `netpol.wind/enforced=true` namespace — had exactly **3** would-be-drops, all the "known-good excluded" tuples: postgres→postgres `:5432` egress (CNPG replication, 22.4k/7d), cnpg-system→postgres `:8000` ingress (operator→instance-manager, 19.4k/7d), postgres→world `:443` egress (barman→S3, 278/7d). The old `postgres-ingress` CNP was **ingress-only**, so all three were unhandled. Replaced it with `postgres-tier` (ingress+egress): added `:8000` ingress, `:5432` intra egress, `:443` world egress. Server-side validated; after apply postgres **AUDITed nothing** (verified clean over both a live window and the 7d aggregation). `c4f2235`.
+
+**Enforced (owner chose "enforce postgres now").** Flipped the GLOBAL switch: `cilium_policy_audit_mode`→false in the kubespray inventory (durability) + live `kubectl patch cm cilium-config policy-audit-mode=false` + `rollout restart ds/cilium`. **Clean 8/8 roll** (no cni-dir-owner crashloop — dir root-owned, not a kubespray run). **Verified post-flip:** runtime `PolicyAuditMode: Disabled` on agents; **0 postgres DROPs** on all 3 postgres nodes (hubble); CNPG cluster healthy 3/3 no restarts; wikijs app path intact; all 3 postgres exporters up. postgres is now truly default-deny + allowlist; **all unlabeled namespaces remain allow-all** (the CCNPs select only enforced-labeled ns).
+
+**Key operating note (documented):** audit is a SINGLE GLOBAL switch, so adding the next tier requires the toggle workflow — flip audit back ON, label + observe the new ns via Loki, build its `1x-tier-*.yaml` until clean, flip OFF. Remaining tiers: cue → dns → traefik → monitoring. Docs updated: `networkpolicies/README.md` (state + "Adding the next tier"), **CLAUDE.md §5 invariant** (audit now OFF/enforcing, postgres only), tracker H3, this entry.
+
+**Rollback if ever needed:** `kubectl patch cm cilium-config policy-audit-mode=true` + `rollout restart ds/cilium` (back to non-enforcing audit) — reversible in ~1 roll.
+
+---
+
 ## 2026-06-22 (cont. 3) — iCloud-backups dashboard (Contacts/Calendars, templated) + H39 residual closed
 
 **iCloud backups board ([[M80]]).** The mini agent started Contacts + Calendars syncs (emit `contacts_backup_*`/`calendars_backup_*`, same schema as photos). Built a **templated** "Mac mini — iCloud backups" dashboard (`dashboards/icloud-backups.yaml`): a `cat` variable = `label_values({__name__=~".+_backup_last_rc"}, job)` drives a per-category **repeating row** (last-success age / rc / items / duration), so future `messages_backup`/`drive_backup` appear automatically. The regex cleanly selects only the mini's iCloud categories (homelab/unifi/velero use different field names; PromQL `=~` is fully anchored). Photos keeps its own richer board (different `photos_export_*` schema). Authored matching alerts (`10-icloud-backups-alerts.yaml`: `ICloudBackup{Stale,Failed,Empty}`, one rule each via metric-regex + `by(job)`, with `label_replace` to strip the `_lastsuccess` job suffix → all current/future categories covered without per-category rules; validated against live Prometheus). **Held the alerts** (commented out of `monitoring/kustomization.yaml`, file committed) — owner chose "dashboard now, hold alerts" because contacts+calendars are mid-dev (both `rc=1`, `items=0`) so Failed/Empty would fire immediately; one-line to enable once green. Severity = warning across the board (incl. Stale) since these are secondary metadata backups vs the photo library. Dashboard verified live (cm in monitoring, sidecar loads it); alert rule correctly ABSENT from the build. `9a45f30`.

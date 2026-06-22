@@ -155,14 +155,21 @@ cilium_encryption_type: "wireguard"
 
 ### Host Firewall and Policy Audit Mode
 # cilium_enable_host_firewall: false
-# H3 (2026-06-15): audit mode ON — default-deny/allow CNPs log would-be drops as
-# AUDIT verdicts without enforcing (observation phase). This var is the IaC source
-# of truth so the setting SURVIVES a kubespray run. Flip to false (+ re-apply) only
-# AFTER Phase-2 per-tier enforcement is complete & stable.
+# H3: audit mode was the observation phase (2026-06-15 → 2026-06-22). Now OFF —
+# CNPs ENFORCE (real drops). The `postgres` namespace (labelled netpol.wind/enforced=true)
+# is the first enforced tier; its allowlist was verified to AUDIT nothing over 7d
+# before this flip (2026-06-22). All UNLABELLED namespaces remain allow-all.
+# This var is the IaC source of truth so the setting SURVIVES a kubespray run.
+# TO ADD A NEW TIER SAFELY: audit is a single global switch, so temporarily set this
+#   back to true (live: `kubectl -n kube-system patch cm cilium-config --type merge
+#   -p '{"data":{"policy-audit-mode":"true"}}'` + `kubectl -n kube-system rollout
+#   restart ds/cilium`), label the new namespace, observe its AUDIT flows in Loki
+#   {job="hubble-audit"}, build its 1x-tier-*.yaml allowlist until clean, then flip
+#   back to false. (The live toggle is the ConfigMap+rollout; this var keeps it durable.)
 # IMPORTANT: a kubespray cluster.yml/--tags=cilium run re-chowns /opt/cni/bin to
 # kube_owner and breaks Cilium — the kubespray.sh wrapper now auto-runs pre-flight.yml
 # afterward to restore root ownership. See docs/runbooks/cilium-cni-dir-owner.md.
-cilium_policy_audit_mode: true
+cilium_policy_audit_mode: false
 
 # Backstop so Cilium tolerates a kube-owned /opt/cni/bin even without the pre-flight
 # fix (mount-cgroup runs root+drop:[ALL]; DAC_OVERRIDE lets it write regardless of
