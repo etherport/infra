@@ -147,14 +147,38 @@
         "iam:ListInstanceProfiles",
         "iam:ListAttachedRolePolicies",
         "iam:ListRolePolicies",
-        "iam:PassRole",
         "iam:TagRole",
         "iam:UntagRole",
         "iam:TagInstanceProfile",
-        "iam:UntagInstanceProfile",
-        "iam:AttachRolePolicy"
+        "iam:UntagInstanceProfile"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "IAMPassAndAttachScopedToCWAgentRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:PassRole",
+        "iam:AttachRolePolicy"
+      ],
+      "Resource": "arn:aws:iam::830881980142:role/ec2-cloudwatch-agent"
+    },
+    {
+      "Sid": "DenyPrivilegeEscalationViaAdminPolicyAttach",
+      "Effect": "Deny",
+      "Action": [
+        "iam:AttachRolePolicy"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnEquals": {
+          "iam:PolicyARN": [
+            "arn:aws:iam::aws:policy/AdministratorAccess",
+            "arn:aws:iam::aws:policy/IAMFullAccess",
+            "arn:aws:iam::aws:policy/PowerUserAccess"
+          ]
+        }
+      }
     }
   ]
 }

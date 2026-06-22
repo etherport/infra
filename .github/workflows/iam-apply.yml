@@ -20,6 +20,7 @@ on:
           - terraform-storage
           - terraform-networking
           - terraform-cloudfront
+          - terraform-compute
 
 permissions:
   contents: read
