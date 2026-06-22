@@ -13,6 +13,20 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-22 — rclone Grafana dashboard: de-dup + clarify; pushgateway pod-label + cm-orphan fixes
+
+Owner flagged the "Rclone Sync (Google Drive / OneDrive)" dashboard: top-row stat tiles didn't say WHICH job each value belonged to; the charts showed ~3 `gdrive` series; and there was no at-a-glance way to see *unresolved* errors (an error one run that's fixed the next should read OK).
+
+**Root cause of the dupes — two independent bugs (see memory `grafana-pushgateway-dashboard-dupes`):**
+1. **Pushgateway `pod`-label churn.** Prometheus's ServiceMonitor attaches the SD `pod` target label to scraped pushgateway samples; every pushgateway pod restart mints a new `pod` value → a fresh series per pushed metric per dead pod (3 pod incarnations in the 7d window = 3 `source="gdrive"` series). `honorLabels: true` only protects labels in the pushed exposition (job/instance), not `pod`. **Fix:** `serviceMonitor.metricRelabelings: labeldrop pod` on the pushgateway HelmRelease (singleton aggregator — pod identity is meaningless). Verified live on the ServiceMonitor.
+2. **Dashboard cm namespace orphan.** `rclone-gdrive/kustomization.yaml` forces `namespace: rclone`, but the cm's `metadata.namespace` said `monitoring` — so a past raw `kubectl apply -f` had created a SECOND copy in `monitoring` that Flux never managed (manager `kubectl-client-side-apply`, rv stuck at 19894). Both carry `grafana_dashboard:"1"` + the same uid, and the Grafana sidecar is cluster-wide → the two flapped and the **stale** copy rendered (that's why my v1→v2 edit "wasn't applying"). **Fix:** deleted the monitoring orphan live; set the file's `metadata.namespace: rclone` to match kustomize so a stray manual apply can't recreate it.
+
+**Dashboard redesign (`05-grafana-dashboard.yaml` v1→v2, 7→8 panels):** every query now `max by (source)(…)` (collapses any residual pod churn + the stale series still in the window); top-row tiles labelled per source (`value_and_name` + `{{source}}`); reframed "Errors (Last Sync)" → **"Unresolved Errors (latest run)"** (background-colored red>0) with a description explaining the per-run-gauge semantics (errors_total is overwritten each run, so a value that drops to 0 = the prior run's failures resolved); added an **"Errors & Notices Over Time (per run)"** stepped timeseries (errors forced red) so you can watch a spike return to 0.
+
+**Commits:** `ec8410a` (dashboard + pushgateway relabel), `bbfd2cf` (cm namespace align). **Verified:** only one cm copy left (rclone ns, v2); sidecar log shows the flap → orphan removal → single re-write; Grafana API serves the 8-panel v2. No tracker item (ad-hoc polish). Docs-as-code: memory saved; this entry.
+
+---
+
 ## 2026-06-21 (cont. 2) — iCloud Photos dedup executed: NAS rm + S3 version-purge ([[M96]])
 
 The mini's osxphotos dedup couldn't bulk-delete over SMB, so the owner supplied a relative-path delete list (30,578 entries, all `Graham/iCloud/Photos/`).
