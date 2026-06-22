@@ -81,9 +81,13 @@ data:
     # Capture rclone's REAL exit code through the tee pipe (BusyBox sh has no
     # pipefail, so a bare `rclone | tee` would report tee's status and mask
     # failures). The subshell writes rclone's rc to a file.
+    # --fast-list: one recursive listing instead of a per-directory walk (see the
+    # gdrive script for the rationale). Buffers the listing in RAM (well under the
+    # 1Gi limit at this object count); cuts API round-trips on the tree walk.
     ( rclone sync "$SRC" "$DEST" \
         --config=/config/rclone/rclone.conf \
         --bind 0.0.0.0 \
+        --fast-list \
         --tpslimit 10 \
         --max-delete ${MAX_DELETE} \
         --stats=1m \
@@ -108,7 +112,10 @@ data:
     TOTAL_FILES="${TOTAL_FILES:-0}"
     CHECKED_FILES=$(grep "Checks:" "$OUTPUT_FILE" | tail -1 | awk '{print $2}' | sed 's/[^0-9]//g' || true)
     CHECKED_FILES="${CHECKED_FILES:-0}"
-    TRANSFERRED_BYTES=$(grep "Transferred:" "$OUTPUT_FILE" | grep -E 'KiB|MiB|GiB|B' | head -1 | awk '{
+    # tail -1, not head -1: head captured the first --stats sample (~0 during the
+    # listing phase), so the byte metric always under-reported (the initial
+    # multi-GB OneDrive sync read 0). The final summary line is the true total.
+    TRANSFERRED_BYTES=$(grep "Transferred:" "$OUTPUT_FILE" | grep -E 'KiB|MiB|GiB|B' | tail -1 | awk '{
       val=$2; unit=$3;
       if (unit=="KiB") printf "%.0f", val*1024;
       else if (unit=="MiB") printf "%.0f", val*1024*1024;
