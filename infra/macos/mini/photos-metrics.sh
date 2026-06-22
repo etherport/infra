@@ -3,21 +3,35 @@
 # headless mini's batch jobs are observable in Prometheus/Grafana/Alertmanager (M79).
 #
 # Sourced by photos-export.sh (nightly) and photos-export-resume.sh (supervised). Pushing is
-# ALWAYS non-fatal — a monitoring outage must never fail or block a backup. Until the infra
-# agent exposes pushgateway behind Traefik (see PUSHGATEWAY default), these pushes just
-# no-op with a logged "push failed".
+# ALWAYS non-fatal — a monitoring outage must never fail or block a backup.
 #
-# PUSHGATEWAY is the base URL of the (Traefik-exposed) pushgateway; override via env.
+# PUSHGATEWAY base URL; override via env. MUST be https:// — the Traefik web:80 entrypoint
+# 301-redirects to 443, which breaks metric POSTs.
 PUSHGATEWAY="${PUSHGATEWAY:-https://pushgateway.wind.etherport.net}"
 
-# push_photos_metrics <rc> <duration_s> <photos> <exported> <missing> <mode> [job]
-#   job defaults to "photos_export" (the nightly). The resume wrapper passes
-#   "photos_export_resume" so the two don't overwrite each other's group.
+# classify_missing <report.csv> — echoes "<unavailable> <resolvable>".
+#   unavailable = structurally un-fetchable (edited Live-Photo motion clips, *_edited*.mov)
+#   resolvable  = genuinely missing originals a DOWNLOAD_MISSING pass could fix (target: 0)
+classify_missing() {
+  local csv="$1"
+  [ -f "$csv" ] || { echo "0 0"; return; }
+  python3 - "$csv" <<'PY' 2>/dev/null || echo "0 0"
+import csv,sys,re
+u=r=0
+for row in csv.DictReader(open(sys.argv[1])):
+    if str(row.get('missing','')).strip().lower() in ('1','true','yes'):
+        if re.search(r'_edited.*\.mov$', row.get('filename','').lower()): u+=1
+        else: r+=1
+print(u, r)
+PY
+}
+
+# push_photos_metrics <rc> <dur_s> <photos> <exported> <missing> <missing_unavail> <missing_resolv> <mode> [job]
+#   job defaults to "photos_export"; the resume wrapper passes "photos_export_resume".
 push_photos_metrics() {
   local rc="${1:-1}" dur="${2:-0}" photos="${3:-0}" exported="${4:-0}" missing="${5:-0}" \
-        mode="${6:-local}" job="${7:-photos_export}" now
+        m_unavail="${6:-0}" m_resolv="${7:-0}" mode="${8:-local}" job="${9:-photos_export}" now
   now="$(date +%s)"
-  # Per-run group (replaced on every push for this job/instance).
   local body="# TYPE ${job}_last_run_timestamp_seconds gauge
 ${job}_last_run_timestamp_seconds ${now}
 # TYPE ${job}_last_rc gauge
@@ -30,17 +44,20 @@ ${job}_photos_total ${photos}
 ${job}_exported ${exported}
 # TYPE ${job}_missing gauge
 ${job}_missing ${missing}
+# TYPE ${job}_missing_unavailable gauge
+${job}_missing_unavailable ${m_unavail}
+# TYPE ${job}_missing_resolvable gauge
+${job}_missing_resolvable ${m_resolv}
 # TYPE ${job}_info gauge
 ${job}_info{mode=\"${mode}\"} 1
 "
   if curl -fsS --max-time 10 --data-binary "${body}" \
        "${PUSHGATEWAY}/metrics/job/${job}/instance/mini" >/dev/null 2>&1; then
-    echo "$(date '+%F %T') metrics: pushed ${job} (rc=${rc} photos=${photos} exported=${exported} missing=${missing})"
+    echo "$(date '+%F %T') metrics: pushed ${job} (rc=${rc} exported=${exported} missing=${missing} unavail=${m_unavail} resolvable=${m_resolv})"
   else
-    echo "$(date '+%F %T') metrics: push failed (non-fatal; is pushgateway exposed at ${PUSHGATEWAY}?)"
+    echo "$(date '+%F %T') metrics: push failed (non-fatal; pushgateway at ${PUSHGATEWAY}?)"
   fi
-  # Last-success timestamp lives in its OWN group so a later FAILED run can't wipe it — this
-  # is what the staleness alert keys on ("no success in >26h" catches both failures + skips).
+  # last-success in its OWN group so a failed run can't wipe it (staleness alert keys on this)
   if [ "${rc}" = "0" ]; then
     curl -fsS --max-time 10 --data-binary \
       "# TYPE ${job}_last_success_timestamp_seconds gauge

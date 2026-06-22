@@ -127,10 +127,12 @@ for a in $(seq 1 "$MAX_ATTEMPTS"); do
   if [ "$rc" -eq 0 ] && grep -q "Processed: [0-9]* photos" "$out" 2>/dev/null; then
     log "✓ completed cleanly on attempt ${a}: $(grep 'Processed:' "$out" | tail -1)"
     s="$(grep -aE 'Processed: [0-9]+ photos' "$out" | tail -1)"
+    read -r mu mr < <(classify_missing "${RDIR}/resume-${a}.csv")
     push_photos_metrics 0 "$(( $(date +%s) - START ))" \
       "$(printf '%s' "$s"|sed -nE 's/.*Processed: ([0-9]+) photos.*/\1/p')" \
       "$(printf '%s' "$s"|sed -nE 's/.*exported: ([0-9]+).*/\1/p')" \
       "$(printf '%s' "$s"|sed -nE 's/.*missing: ([0-9]+).*/\1/p')" \
+      "${mu:-0}" "${mr:-0}" \
       "$([ -n "$DOWNLOAD_MISSING" ] && echo photokit || echo local)" photos_export_resume
     echo "RESUME_LOOP_DONE rc=0 files=$(count)"
     exit 0
@@ -140,7 +142,7 @@ for a in $(seq 1 "$MAX_ATTEMPTS"); do
 done
 
 log "✗ gave up after ${MAX_ATTEMPTS} attempts (have $(count) files)"
-push_photos_metrics 1 "$(( $(date +%s) - START ))" 0 0 0 \
+push_photos_metrics 1 "$(( $(date +%s) - START ))" 0 0 0 0 0 \
   "$([ -n "$DOWNLOAD_MISSING" ] && echo photokit || echo local)" photos_export_resume
 echo "RESUME_LOOP_DONE rc=1 files=$(count)"
 exit 1

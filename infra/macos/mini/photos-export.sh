@@ -132,21 +132,30 @@ flags=(--update --exportdb "${EXPORTDB}" --sidecar XMP --cleanup --retry 3)
 [ -n "${DOWNLOAD_MISSING}" ] && flags+=(--download-missing --use-photokit)
 MODE="$([ -n "${DOWNLOAD_MISSING}" ] && echo photokit || echo local)"
 RUNOUT="${REPORT_DIR}/run-$(date '+%Y%m%d-%H%M%S').out"
-log "exporting → ${DEST} (mode=${MODE}; report: ${REPORT})"
-"${OSXPHOTOS}" export "${DEST}" --library "${LIBRARY}" "${flags[@]}" --report "${REPORT}" 2>&1 | tee "${RUNOUT}"
-rc=${PIPESTATUS[0]}
+# Runtime watchdog: a single transient NAS I/O stall can wedge osxphotos at 0% CPU forever
+# (observed 2026-06-22). Without this the nightly would hang indefinitely holding the lock.
+# A normal run is well under an hour; cap it and let the next night retry.
+MAX_RUNTIME="${MAX_RUNTIME:-5400}"   # 90 min
+log "exporting → ${DEST} (mode=${MODE}; watchdog=${MAX_RUNTIME}s; report: ${REPORT})"
+"${OSXPHOTOS}" export "${DEST}" --library "${LIBRARY}" "${flags[@]}" --report "${REPORT}" > "${RUNOUT}" 2>&1 &
+opid=$!
+( sleep "${MAX_RUNTIME}"; kill -0 "$opid" 2>/dev/null && { echo "$(date '+%F %T') WATCHDOG: exceeded ${MAX_RUNTIME}s — killing osxphotos (likely a wedged NAS I/O)"; kill -9 "$opid" 2>/dev/null; } ) & wpid=$!
+wait "$opid" 2>/dev/null; rc=$?
+kill "$wpid" 2>/dev/null   # cancel watchdog if the run finished on its own
 
-# Parse osxphotos' summary line ("Processed: N photos, exported: X, ..., missing: Y, ...")
-# for the metrics. -a treats the file as text (the progress bar uses \r).
+# Parse osxphotos' summary ("Processed: N photos, exported: X, ..., missing: Y, ...") for
+# metrics (-a: treat as text, the progress bar uses \r), and split missing into structurally-
+# unavailable (edited Live-Photo motion) vs resolvable (genuinely fetchable; target 0).
 summ="$(grep -aE 'Processed: [0-9]+ photos' "${RUNOUT}" 2>/dev/null | tail -1)"
 m_photos="$(printf '%s' "$summ"   | sed -nE 's/.*Processed: ([0-9]+) photos.*/\1/p')"
 m_exported="$(printf '%s' "$summ" | sed -nE 's/.*exported: ([0-9]+).*/\1/p')"
 m_missing="$(printf '%s' "$summ"  | sed -nE 's/.*missing: ([0-9]+).*/\1/p')"
-push_photos_metrics "${rc}" "$(( $(date +%s) - START ))" "${m_photos:-0}" "${m_exported:-0}" "${m_missing:-0}" "${MODE}"
+read -r m_unavail m_resolv < <(classify_missing "${REPORT}")
+push_photos_metrics "${rc}" "$(( $(date +%s) - START ))" "${m_photos:-0}" "${m_exported:-0}" "${m_missing:-0}" "${m_unavail:-0}" "${m_resolv:-0}" "${MODE}"
 
 if [ "${rc}" -eq 0 ]; then
-  log "✓ export complete (photos=${m_photos:-?} exported=${m_exported:-?} missing=${m_missing:-?})"
+  log "✓ export complete (photos=${m_photos:-?} exported=${m_exported:-?} missing=${m_missing:-?}: unavailable=${m_unavail:-?} resolvable=${m_resolv:-?})"
 else
-  log "✗ export exited rc=${rc} (see ${REPORT})"
+  log "✗ export exited rc=${rc} (see ${REPORT} / ${RUNOUT})"
 fi
 exit "${rc}"
