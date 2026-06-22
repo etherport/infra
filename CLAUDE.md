@@ -137,9 +137,12 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   in the kubespray inventory; toggle live via the `cilium-config` ConfigMap + `kubectl
   rollout restart ds/cilium` (read only at startup), NOT a raw kubespray run. H3
   NetworkPolicy manifests in `platform/kubernetes/networkpolicies/`; enforcement is
-  **per-namespace opt-in via the `netpol.wind/enforced=true` label** — only **`postgres`**
-  is labeled/enforced so far (tier 1; allowlist verified to AUDIT nothing over 7d before
-  the flip). **All unlabeled namespaces stay allow-all.** ⚠️ **Audit is a single GLOBAL
+  **per-namespace opt-in via the `netpol.wind/enforced=true` label** — **`postgres`** (tier 1)
+  and **`cue`** (tier 2) are labeled/enforced so far (each allowlist built+verified from
+  Hubble/audit data, 0 drops post-flip). **All unlabeled namespaces stay allow-all.**
+  NB: the audit→Loki pipeline only surfaces `AUDIT` verdicts (observation phase) — once a
+  tier ENFORCES, a wrongly-dropped flow does NOT alert (M-tier follow-up: hubble DROP→Loki→alert).
+  ⚠️ **Audit is a single GLOBAL
   switch**, so to add a new tier you must briefly flip audit back ON (ConfigMap+rollout),
   label + observe the new namespace via Loki `{job="hubble-audit"}`, build its allowlist
   until clean, then flip OFF again. See `platform/kubernetes/networkpolicies/README.md`.

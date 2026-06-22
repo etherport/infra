@@ -13,6 +13,20 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-22 (cont. 5) — H3 tier 2: cue ENFORCED (postgres stayed enforced)
+
+Continued H3 to the next tier (cue) — done WITHOUT the global audit toggle, so postgres stayed enforced throughout.
+
+**Characterized cue from live data.** cue = `cue-api` (Node/Fastify, :3000) + `cue-db` (single-instance CNPG, no replication), Flux-managed here (`cue-api/`, `cue-db/`). Captured live Hubble forwarded flows + read the manifests: ingress to cue-api :3000 from **tailscale** (TS LB/Ingress) + **cloudflared** (CF tunnel); cue-db :5432 from cue-api/cnpg-system/tailscale (cue-db-ts LB); cue-db :8000 from cnpg-system; cue→kube-apiserver:6443 + host probes (covered by cluster-wide allows); cue-db→S3 barman (`postgres-barman` bucket → world:443, daily so not in the live window but added proactively).
+
+**Built + enforced directly (no toggle).** Authored `11-tier-cue.yaml` (CNP `cue-tier`, endpointSelector {}): the ingress/egress above + intra-cue + world:443 (cue-api external HTTPS + barman). Since audit is OFF, a namespaced CNP enforces the instant it applies — and the cluster-wide allows only attach once the ns is labeled — so I committed the CNP + the `netpol.wind/enforced=true` label (`cue-db/00-namespace.yaml`) in ONE commit so Cilium computes the full allowlist together. Rationale for skipping the audit window: cue's flow set is small/stable and enforcement is reversible (remove the label → allow-all in ~1 reconcile). `610e5c9`. **Verified:** 0 cue DROPs (all nodes), cue-api serves through the policy (monitoring→:3000 = HTTP 302 in 7ms), cue-api↔cue-db :5432 flowing, both pods healthy (0 restarts), cue-db CNPG healthy.
+
+**Found a gap (tracked, not fixed):** the audit→Loki pipeline (`CiliumNetpolAuditFlow`) only catches `AUDIT` verdicts, which cease once a tier enforces — so a wrongly-dropped flow on postgres/cue won't alert. Added an H3 follow-up to export `verdict=DROPPED` (enforced ns) → Loki → alert. (CNPG backup failures still covered by `CNPGBackupFailed`.)
+
+**State:** H3 tiers 1–2 (postgres, cue) enforced; all other namespaces allow-all. Remaining: dns → traefik → monitoring (the higher-fanout traefik/monitoring should use the audit toggle, not direct). Docs updated: CLAUDE.md §5, networkpolicies/README.md, tracker H3, this entry. `cf_tunnel_services` grep didn't surface cue but live flows show cloudflared→cue:3000 (allowlisted regardless).
+
+---
+
 ## 2026-06-22 (cont. 4) — H3: postgres tier ENFORCED (first NetworkPolicy enforcement)
 
 Picked up H3 (NetworkPolicy enforcement). Outlined the phased plan, then executed tier 1.

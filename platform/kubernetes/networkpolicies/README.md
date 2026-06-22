@@ -5,10 +5,10 @@ internal-segmentation gap: today Cilium is allow-all, so a compromised pod has
 unrestricted lateral movement). Detailed plan: `docs/planning/hardening-plan-2026-06-10.md` §H3.
 
 > ✅ **ENFORCING since 2026-06-22.** Cilium `policy-audit-mode` is now **OFF** — these
-> policies enforce (real drops). **`postgres` is the first (and so far only) enforced tier**
-> (labeled `netpol.wind/enforced=true`; its allowlist was verified to AUDIT nothing over 7d
-> before the flip — see `10-tier-postgres.yaml`). **All unlabeled namespaces remain
-> allow-all.** Observation phase ran 06-15→06-22 under audit mode.
+> policies enforce (real drops). Enforced tiers (labeled `netpol.wind/enforced=true`):
+> **`postgres`** (tier 1, `10-tier-postgres.yaml`) and **`cue`** (tier 2, `11-tier-cue.yaml`)
+> — each allowlist built+verified from Hubble/audit data (0 drops post-flip). **All
+> unlabeled namespaces remain allow-all.** Observation phase ran 06-15→06-22 under audit mode.
 >
 > ⚠️ **Audit is a single GLOBAL switch.** To add the NEXT tier you must briefly flip audit
 > back ON, observe + build that namespace's allowlist, then flip OFF again — see "Adding a
@@ -62,10 +62,21 @@ The per-tier allowlists (`1x-tier-*.yaml`) beyond postgres are **intentionally a
 
 ## Current state (2026-06-22)
 
-Enforcing. `cilium_policy_audit_mode: false`. **`postgres`** is labeled + enforced
-(allowlist `10-tier-postgres.yaml`, verified 0 AUDIT over 7d before the flip). All other
-namespaces are unlabeled = allow-all. Verified post-flip: 0 postgres DROPs, CNPG cluster
-healthy, wikijs app path OK, all 3 postgres exporters scraping.
+Enforcing. `cilium_policy_audit_mode: false`. Enforced tiers:
+- **`postgres`** (`10-tier-postgres.yaml`) — verified 0 AUDIT over 7d before the flip;
+  post-flip 0 DROPs, CNPG healthy, wikijs path OK, exporters scraping.
+- **`cue`** (`11-tier-cue.yaml`) — cue-api + single-instance cue-db; allowlist from live
+  Hubble flows + architecture; post-flip 0 DROPs, cue-api serves (HTTP 302), cue-api↔cue-db
+  OK, both pods healthy. cloudflared/tailscale ingress + cue-db→S3 barman egress allowlisted.
+
+All other namespaces are unlabeled = allow-all.
+
+> **Monitoring gap:** the audit→Loki pipeline (`CiliumNetpolAuditFlow`) only catches
+> `AUDIT` verdicts, which no longer occur once a tier ENFORCES. A wrongly-dropped flow on an
+> enforced tier therefore does NOT alert — you find it via the app breaking or a manual
+> `hubble observe --verdict DROPPED`. Follow-up (tracked under H3): export `verdict=DROPPED`
+> for enforced namespaces → Loki → alert. (CNPG backup failures are still caught separately
+> by `CNPGBackupFailed`.)
 
 ## Adding the next tier (the toggle workflow)
 
