@@ -53,7 +53,27 @@ push_photos_metrics() {
   local rc="${1:-1}" dur="${2:-0}" photos="${3:-0}" exported="${4:-0}" missing="${5:-0}" \
         m_unavail="${6:-0}" m_resolv="${7:-0}" mode="${8:-local}" job="${9:-photos_export}" now
   now="$(date +%s)"
-  local body="# TYPE ${job}_last_run_timestamp_seconds gauge
+  # Trustworthiness guard (M79 adversarial review): a watchdog-KILLED run (rc!=0) has no clean
+  # summary, so exported/missing parse to 0 — which would FALSELY read as "0 missing / nothing
+  # to back up". And even a clean run (rc=0) whose --report CSV was truncated over SMB makes
+  # classify_missing return "0 0", so resolvable=0 would be pushed while photos are genuinely
+  # missing — AND last_success would be stamped. Both are silent-data-loss masks. So:
+  #   - parsed=1 only if rc==0 AND the run actually processed photos (photos>0).
+  #   - if NOT parsed: push -1 ("unknown") for the count family, never misleading 0s.
+  #   - if parsed: DERIVE resolvable = missing - unavailable (authoritative summary `missing`
+  #     minus the structurally-unfetchable split) so a CSV/classify under-count can't zero it.
+  #   - last_success is gated on parsed (below), so a clean-but-unparsed run can't stamp success.
+  local parsed=0
+  if [ "${rc}" = "0" ] && [ "${photos}" -gt 0 ] 2>/dev/null; then
+    parsed=1
+    [ "${m_unavail}" -ge 0 ] 2>/dev/null || m_unavail=0
+    m_resolv=$(( missing - m_unavail )); [ "${m_resolv}" -lt 0 ] && m_resolv=0
+  else
+    exported=-1; missing=-1; m_unavail=-1; m_resolv=-1
+  fi
+  local body="# TYPE ${job}_summary_parsed gauge
+${job}_summary_parsed ${parsed}
+# TYPE ${job}_last_run_timestamp_seconds gauge
 ${job}_last_run_timestamp_seconds ${now}
 # TYPE ${job}_last_rc gauge
 ${job}_last_rc ${rc}
@@ -84,8 +104,10 @@ ${job}_orphans ${PHOTOS_ORPHANS}
   else
     echo "$(date '+%F %T') metrics: push failed (non-fatal; pushgateway at ${PUSHGATEWAY}?)"
   fi
-  # last-success in its OWN group so a failed run can't wipe it (staleness alert keys on this)
-  if [ "${rc}" = "0" ]; then
+  # last-success in its OWN group so a failed run can't wipe it (staleness alert keys on this).
+  # Gated on `parsed` (not just rc==0) so a clean-but-unparsed run (truncated summary/CSV) can
+  # NOT stamp success and silence the staleness alert while data is actually missing.
+  if [ "${parsed}" = "1" ]; then
     curl -fsS --max-time 10 --data-binary \
       "# TYPE ${job}_last_success_timestamp_seconds gauge
 ${job}_last_success_timestamp_seconds ${now}

@@ -54,10 +54,16 @@ log "vdirsyncer discover+sync → ${STAGING}/{Contacts,Calendars} (watchdog=${MA
 # picked up automatically; then sync (read-only pull from iCloud).
 # NB: `set +o pipefail` inside the subshell is REQUIRED — with pipefail on, `yes | discover`
 # returns 141 (yes gets SIGPIPE when discover closes the pipe), which would falsely fail the
-# pipeline and skip the sync. We don't gate sync on discover's rc; sync surfaces real errors.
+# pipeline. We capture discover's OWN rc via PIPESTATUS and treat only 141 (SIGPIPE, expected)
+# or 0 as OK; a REAL discover failure (auth/network) fails the run so the destructive mirror is
+# never reached on a half-broken pull. The subshell's exit = sync's rc unless discover failed.
 (
   set +o pipefail
   yes | "${VDIRSYNCER}" discover
+  drc=${PIPESTATUS[1]}
+  if [ "${drc}" -ne 0 ] && [ "${drc}" -ne 141 ]; then
+    echo "discover failed rc=${drc}" >&2; exit "${drc}"
+  fi
   "${VDIRSYNCER}" sync
 ) > "${RUNOUT}" 2>&1 &
 vpid=$!
@@ -65,25 +71,51 @@ vpid=$!
 wait "$vpid" 2>/dev/null; rc=$?
 kill "$wpid" 2>/dev/null
 
-# Mirror staging -> Backups master (/Backups/Graham/iCloud/{Contacts,Calendars}). Decoupled
-# from iCloud, so SMB slowness here can't drop the upstream connection. --delete mirrors
-# iCloud deletions; staging is the authoritative local copy.
-log "rsync staging → ${DEST_BASE}/{Contacts,Calendars}"
-rsync -a --delete "${STAGING}/Contacts/"  "${DEST_BASE}/Contacts/"  >> "${RUNOUT}" 2>&1; rc_c=$?
-rsync -a --delete "${STAGING}/Calendars/" "${DEST_BASE}/Calendars/" >> "${RUNOUT}" 2>&1; rc_v=$?
-
-dur="$(( $(date +%s) - START ))"
+# Count staging FIRST (local, fast) — needed to guard the destructive mirror BEFORE it runs.
 contacts_items="$(find "${STAGING}/Contacts" -type f -name '*.vcf' 2>/dev/null | wc -l | tr -d ' ')"
 calendars_items="$(find "${STAGING}/Calendars" -type f -name '*.ics' 2>/dev/null | wc -l | tr -d ' ')"
-# overall rc = vdirsyncer AND both rsyncs
-c_rc=$([ "${rc}" -eq 0 ] && [ "${rc_c}" -eq 0 ] && echo 0 || echo 1)
-v_rc=$([ "${rc}" -eq 0 ] && [ "${rc_v}" -eq 0 ] && echo 0 || echo 1)
+
+# Guarded mirror: staging -> Backups master. `rsync --delete` mirrors iCloud deletions, but an
+# EMPTY or PARTIAL staging + --delete would WIPE the master (the only offsite-bound backup) —
+# the project's signature data-loss mode. So we REFUSE to mirror unless (a) vdirsyncer exited
+# clean AND (b) staging is non-empty, and we cap deletions with --max-delete (half the current
+# master, floor 25) so an unexpected mass-shrink ABORTS (rsync rc=25) instead of completing.
+# Causes that would otherwise wipe: app-password expiry, watchdog kill, iCloud empty-collection,
+# sops failure → all leave staging empty/partial and must NOT propagate as a deletion.
+# args: <svc> <staging-items> <staging-dir> <dest-dir> ; echoes 0 (ok) / 1 (skipped|failed)
+# NB: only the final `echo 0|1` may go to stdout (it's captured via $(...)); all log lines are
+# routed to stderr so they don't pollute the captured rc.
+mirror_service(){
+  local svc="$1" items="$2" src="$3" dst="$4"
+  if [ "${rc}" -ne 0 ]; then
+    log "✗ ${svc}: NOT mirroring — vdirsyncer failed (rc=${rc}); master left intact" >&2; echo 1; return
+  fi
+  if [ "${items}" -eq 0 ]; then
+    log "✗ ${svc}: NOT mirroring — staging EMPTY (would wipe master); master left intact" >&2; echo 1; return
+  fi
+  local have; have="$(find "${dst}" -type f 2>/dev/null | wc -l | tr -d ' ')"
+  local maxdel=$(( have / 2 )); [ "${maxdel}" -lt 25 ] && maxdel=25
+  rsync -a --delete --max-delete="${maxdel}" "${src}/" "${dst}/" >> "${RUNOUT}" 2>&1
+  local r=$?
+  if [ "${r}" -eq 25 ]; then
+    log "✗ ${svc}: rsync hit --max-delete=${maxdel} (master had ${have}, staging ${items}) — ABORTED to protect backup" >&2; echo 1; return
+  fi
+  if [ "${r}" -ne 0 ]; then
+    log "✗ ${svc}: rsync failed rc=${r}" >&2; echo 1; return
+  fi
+  echo 0
+}
+log "rsync staging → ${DEST_BASE}/{Contacts,Calendars} (guarded)"
+c_rc="$(mirror_service contacts  "${contacts_items}"  "${STAGING}/Contacts"  "${DEST_BASE}/Contacts")"
+v_rc="$(mirror_service calendars "${calendars_items}" "${STAGING}/Calendars" "${DEST_BASE}/Calendars")"
+
+dur="$(( $(date +%s) - START ))"
 push_backup_metrics contacts_backup  "${c_rc}" "${dur}" "${contacts_items}"
 push_backup_metrics calendars_backup "${v_rc}" "${dur}" "${calendars_items}"
 
-if [ "${rc}" -eq 0 ] && [ "${rc_c}" -eq 0 ] && [ "${rc_v}" -eq 0 ]; then
+if [ "${c_rc}" -eq 0 ] && [ "${v_rc}" -eq 0 ]; then
   log "✓ sync complete (contacts=${contacts_items} vcf, calendars=${calendars_items} ics)"
   exit 0
 fi
-log "✗ failed (vdirsyncer rc=${rc}, rsync contacts=${rc_c} calendars=${rc_v}; see ${RUNOUT})"
+log "✗ failed (vdirsyncer rc=${rc}, contacts_rc=${c_rc} calendars_rc=${v_rc}; see ${RUNOUT})"
 exit 1
