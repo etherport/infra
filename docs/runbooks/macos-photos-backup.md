@@ -150,9 +150,23 @@ Track `missing_resolvable` for things actually worth fixing (re-run a supervised
 - **Photos "library could not be opened" / corruption dialog:** transient SMB blip during a
   PhotoKit run; the library is a disposable iCloud cache. Recover by re-attaching (read-write
   attach replays the APFS journal); `PRAGMA wal_checkpoint` if a large WAL is outstanding.
-- **`could not get authorization to access Photos library`:** the PhotoKit path
-  (`--use-photokit`) needs Photos + Full Disk Access TCC grants for the runner; LOCAL mode
-  does not (it reads files directly). The nightly is LOCAL for this reason.
+- **Nightly wedges at 0% CPU under launchd (but the same command is CPU-active from a
+  terminal) — TCC / Full Disk Access:** this is the #1 gotcha for the *unattended* nightly.
+  An interactive shell inherits the user's TCC grants; the **launchd LaunchAgent context does
+  not**, so when osxphotos accesses the Photos library it blocks on a TCC prompt that can
+  never appear headlessly → 0% CPU forever (the runtime watchdog now bounds it). **Fix (one
+  time, in the GUI via VNC): System Settings → Privacy & Security → Full Disk Access → `+` →
+  add `/Users/grahamsmith/.local/pipx/venvs/osxphotos/bin/python`** (the osxphotos
+  interpreter; ⌘⇧G to paste the path), toggle it on. If it still wedges, also add `/bin/bash`
+  (the LaunchAgent's launcher). Both LOCAL and PhotoKit modes need this — earlier notes that
+  "local mode doesn't need TCC" were WRONG; local mode reads the library files directly,
+  which is exactly what FDA protects. Verify: `launchctl kickstart -k
+  gui/$(id -u)/net.wind.photos-export` then `ps -o %cpu` on osxphotos should be >5% and the
+  report CSV should grow. (The old `could not get authorization to access Photos library`
+  error was the PhotoKit variant of the same missing grant.)
+- **`--cleanup` wedges at 0% CPU:** it enumerates all ~45k DEST files over SMB before
+  exporting; the NAS's slow metadata makes that hang. It's opt-in (`CLEANUP=1`) for this
+  reason — default off is dup-safe. Remove orphans NAS-local instead.
 - **Duplicate `(N)` files appearing:** something ran osxphotos without `--exportdb` → the
   local DB, or two runs raced. Dedup = compute orphans as files-on-disk not in
   `export_data.filepath` (survivor-guard: only delete if a canonical copy of that photo
