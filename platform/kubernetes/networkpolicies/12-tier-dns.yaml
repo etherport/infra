@@ -45,6 +45,14 @@ spec:
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: dns
+    # ICMP type 3 (Destination/Port Unreachable) from world — benign upstream
+    # replies during UDP recursion; allow to avoid drop noise.
+    - fromEntities:
+        - world
+      icmps:
+        - fields:
+            - type: 3
+              family: IPv4
   egress:
     # Recursion + DoH/DoT to upstream resolvers (external). Covers all upstream
     # query methods Technitium may use.
@@ -61,6 +69,15 @@ spec:
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: dns
+    # ICMP type 3 (Port Unreachable) to world — the pod kernel's courtesy reply to
+    # late upstream UDP packets after a recursion query socket closed. Functionally
+    # unnecessary but allowed to keep the enforced drop log clean.
+    - toEntities:
+        - world
+      icmps:
+        - fields:
+            - type: 3
+              family: IPv4
   # NB: DNS-for-self (:53 to nodelocaldns/kube-dns), kube-apiserver (dns-sync-watcher
   # ConfigMap watch), and host/remote-node comms are provided by the cluster-wide
   # allow-dns / allow-cluster-essentials CCNPs (dns ns is labelled enforced).
