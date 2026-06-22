@@ -56,6 +56,14 @@ log() { echo "$(date '+%Y-%m-%dT%H:%M:%S') photos-export: $*"; }
 # wedges photolibraryd, pops dialogs). The nightly runs LOCAL; downloads are done by hand.
 DOWNLOAD_MISSING="${DOWNLOAD_MISSING:-}"
 
+# --cleanup is OPT-IN (default OFF). It makes osxphotos enumerate ALL ~45k DEST files over SMB
+# before exporting, which WEDGES at 0% CPU on this NAS's slow metadata (observed 2026-06-22 —
+# two runs hung indefinitely). It's NOT needed for dup-safety: the persistent --exportdb +
+# --update already prevent new (N) dups. --cleanup only removes orphans / mirrors library
+# deletions — do that NAS-local (the survivor-guarded list), or set CLEANUP=1 and accept it's
+# slow/wedge-prone over SMB. The runtime watchdog below bounds a wedge either way.
+CLEANUP="${CLEANUP:-}"
+
 # Single-run lock. Two osxphotos runs against the same --exportdb (e.g. the nightly firing
 # during a manual download pass) race on the ledger and can re-introduce duplicate (N)
 # names — the exact failure we just cleaned up. mkdir is atomic ⇒ only one run at a time.
@@ -128,7 +136,8 @@ fi
 # --exportdb (LOCAL) + --update = reuse canonical filenames → never re-creates (N) dups.
 # --cleanup removes any stray orphan not in the ledger (dup safety net). --download-missing
 # /--use-photokit added only when DOWNLOAD_MISSING is set.
-flags=(--update --exportdb "${EXPORTDB}" --sidecar XMP --cleanup --retry 3)
+flags=(--update --exportdb "${EXPORTDB}" --sidecar XMP --retry 3)
+[ -n "${CLEANUP}" ] && flags+=(--cleanup)
 [ -n "${DOWNLOAD_MISSING}" ] && flags+=(--download-missing --use-photokit)
 MODE="$([ -n "${DOWNLOAD_MISSING}" ] && echo photokit || echo local)"
 RUNOUT="${REPORT_DIR}/run-$(date '+%Y%m%d-%H%M%S').out"
