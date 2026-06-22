@@ -13,6 +13,20 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-22 (cont. 7) — H3 tier 4: traefik ENFORCED via the audit toggle + new-service runbook
+
+First use of the **audit toggle** (per owner request — "ensure we're not cutting off traffic"). Traefik is the ingress controller (high-fanout: routes to every backend + external devices), so a point-in-time Hubble capture misses rarely-accessed routes → observe-first is the safe path.
+
+**New-service docs (owner ask).** Wrote `docs/runbooks/networkpolicy-tiers.md` (`a40ec62`): the enforcement model + the **operational tax** — a new service that crosses an enforced namespace boundary must be allowlisted or its traffic is silently dropped (no alert yet). Three cases (workload in an enforced ns / reaching one / a new Traefik external backend), `hubble observe --verdict DROPPED` detection, fix workflow, adding-a-tier, rollback. Indexed + cross-linked from CLAUDE.md §5 and `networkpolicies/README.md`.
+
+**Toggle execution.** Flipped global audit ON (live `cilium-config` patch + rollout; inventory→true) — postgres/cue/dns reverted to audit-only meanwhile (accepted, allowlists verified). Labelled the traefik ns (via `namespace-pss-labels.yaml` strategic-merge patch — Helm-created, no 00-namespace.yaml) + applied `13-tier-traefik.yaml` (CNP `traefik-tier`): **permissive egress** (`toEntities: cluster` any-port + `world` :80/:443/:8006) so no backend route is ever cut now or future; ingress public entrypoints (:80/:443/:8088) from `all` + mgmt (:8080/:8443) in-cluster. `433ba22`.
+
+**Validation (didn't just wait).** Verified egress is provably complete (internal=cluster covers all ports; all external ingressroute backends use only :80/:443/:8006; :8123=internal HA), enumerated entrypoints, then **actively exercised** the riskiest paths under audit — UPS/PDU/Proxmox external routes (303/303/404) + grafana/dns/hubble internal → **0 traefik AUDIT flows** (Loki + live Hubble). Flipped audit OFF (inventory→false) → all 4 tiers enforce. **Post-enforce:** all routes still 200/302/303/404, **0 drops across postgres+cue+dns+traefik**, traefik 2/2 + dns 3/3 + cue-db/postgres healthy, DNS resolution (internal+external) fine.
+
+**State:** H3 = 4 tiers enforced (postgres/cue/dns/traefik). Only `monitoring` remains (highest-fanout → audit toggle + likely permissive egress like traefik). DROP-alerting follow-up still open. Lesson: the toggle works cleanly + actively-exercising the risky routes under audit beats passively waiting for organic traffic. Docs: CLAUDE.md §5, networkpolicies/README.md + kustomization, tracker H3, runbook, this entry.
+
+---
+
 ## 2026-06-22 (cont. 6) — H3 tier 3: dns/Technitium ENFORCED (critical resolver)
 
 Continued H3 to dns — the highest-stakes tier (everything resolves via Technitium). Direct-from-Hubble again (postgres+cue stayed enforced); escape hatch ready (`kubectl patch cm cilium-config policy-audit-mode=true` works without cluster DNS).

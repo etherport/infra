@@ -1,10 +1,11 @@
-# Tier 4 — Traefik (the cluster ingress controller / reverse proxy).
+# Tier 4 — Traefik (the cluster ingress controller / reverse proxy). ENFORCED 2026-06-22.
 #
-# ⚠️ OBSERVATION DRAFT (2026-06-22). Applied while policy-audit-mode is ON, so it
-# ENFORCES NOTHING yet — it logs would-be drops as AUDIT so we can confirm the real
-# flow set in Loki {job="hubble-audit"} before flipping back to enforce. A point-in-time
-# Hubble capture is NOT enough for Traefik: it only routes to a backend when that route
-# is actually accessed, so rarely-used routes won't appear until exercised.
+# Validated via the audit toggle: applied under policy-audit-mode ON, then the external
+# device routes (UPS/PDU/Proxmox via :443/:80/:8006) + internal routes + public ingress
+# were actively exercised → 0 AUDIT (would-be-drop) flows → flipped audit OFF to enforce.
+# A point-in-time Hubble capture alone is NOT enough for Traefik (it only routes to a
+# backend when that route is accessed), which is why the permissive-egress design below
+# matters: it covers backends that weren't exercised too.
 #
 # Design rationale (high-fanout infra): Traefik legitimately talks to EVERY backend, so
 # tight egress would cut routes on the next access + need editing for every new service.

@@ -6,9 +6,9 @@ unrestricted lateral movement). Detailed plan: `docs/planning/hardening-plan-202
 
 > ✅ **ENFORCING since 2026-06-22.** Cilium `policy-audit-mode` is now **OFF** — these
 > policies enforce (real drops). Enforced tiers (labeled `netpol.wind/enforced=true`):
-> **`postgres`** (tier 1), **`cue`** (tier 2), **`dns`/Technitium** (tier 3) — each
+> **`postgres`** (1), **`cue`** (2), **`dns`/Technitium** (3), **`traefik`** (4) — each
 > allowlist built+verified from Hubble/audit data (0 drops post-flip). **All unlabeled
-> namespaces remain allow-all.** Observation phase ran 06-15→06-22 under audit mode.
+> namespaces remain allow-all.** Remaining tier: `monitoring`.
 >
 > ⚠️ **Audit is a single GLOBAL switch.** To add the NEXT tier you must briefly flip audit
 > back ON, observe + build that namespace's allowlist, then flip OFF again — see "Adding a
@@ -74,6 +74,13 @@ Enforcing. `cilium_policy_audit_mode: false`. Enforced tiers:
   type-3 (port-unreachable) to/from world allowed to silence benign recursion drop-noise.
   Verified post-flip: internal + external + cluster DNS resolution all OK, 3 pods healthy,
   0 dns-pod drops.
+- **`traefik`** (`13-tier-traefik.yaml`) — the ingress controller (high-fanout). Done via
+  the **audit toggle**: re-enabled audit, applied a permissive-egress draft (`cluster`
+  any-port + `world` :80/:443/:8006 so no backend route is ever cut), actively exercised
+  the external device routes (UPS/PDU/Proxmox) + internal routes + public ingress → 0 AUDIT
+  → flipped audit OFF. Ingress: public entrypoints (:80/:443/:8088) from `all`, mgmt
+  (:8080/:8443) in-cluster. Verified post-flip: all routes 200/302/303/404 (working), 0
+  drops. (Labelled via `clusters/wind/namespace-pss-labels.yaml` — Helm-created ns.)
 
 All other namespaces are unlabeled = allow-all.
 
