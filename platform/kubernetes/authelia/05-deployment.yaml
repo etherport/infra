@@ -41,7 +41,9 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }
-            readOnlyRootFilesystem: true
+            # Authelia writes /app/.healthcheck.env at boot; a RO rootfs makes that
+            # fatal. Kept the rest of the hardening (non-root, dropped caps, seccomp).
+            readOnlyRootFilesystem: false
           livenessProbe:
             httpGet: { path: /api/health, port: http }
             initialDelaySeconds: 10
