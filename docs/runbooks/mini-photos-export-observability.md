@@ -43,15 +43,25 @@ job/instance labels survive scraping).
 | `PhotosExportStale` | critical | `time() - max(photos_export_last_success_timestamp_seconds) > 93600` (>26h; nightly 22:00 PT) — catches failed **and** skipped runs |
 | `PhotosExportNoMetrics` | warning | `absent(photos_export_last_success_timestamp_seconds)` for 48h — mini stopped pushing / Pushgateway data lost |
 | `PhotosExportFailed` | warning | `max(photos_export_last_rc) > 0` for 30m |
-| `PhotosExportCoverageRegressed` | info | `photos_export_missing > 1600` (residual baseline ≈1,406) |
+| `PhotosExportCoverageRegressed` | warning | `max(photos_export_missing_resolvable) > 0` for 1h — backup coverage of *fetchable* files dropped below 100% |
 
 The success-ts is pushed under its own group (`job="photos_export_lastsuccess"`)
 so a failed run can't wipe the last-success marker.
 
+**`missing` is split** (2026-06-22): `photos_export_missing_resolvable` =
+genuinely-missing originals a re-download (`DOWNLOAD_MISSING=1`) could fix (the
+*actionable* number; 0 = 100% of available files backed up) and
+`photos_export_missing_unavailable` = structurally un-fetchable items (edited
+Live-Photo motion clips / `*_edited*.mov` Apple won't serve; ~9, expected,
+**deliberately un-alerted**). The combined `photos_export_missing` is still
+emitted. `PhotosExportCoverageRegressed` fires only on the *resolvable* count.
+
 ## Dashboard
 "Mac mini — Photos backup" (`dashboards/photos-export.yaml`, uid `photos-export`):
-last-success age, last rc, exported vs missing, run duration, and a Loki panel for
-`{host="mini"}`.
+**Coverage — available files** (`100·(1 − missing_resolvable/photos_total)`),
+last-success age, last rc, exported, **Missing (resolvable)**, **Unavailable
+(edited Live-Photo clips)**; an exported / resolvable / unavailable timeseries,
+run duration, and a Loki panel for `{host="mini"}`.
 
 ## Verify
 Cluster side (done):

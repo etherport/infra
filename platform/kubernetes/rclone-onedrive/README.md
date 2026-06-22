@@ -38,6 +38,24 @@ Same hardening as [`rclone-gdrive`](../rclone-gdrive/#safety--data-loss-protecti
 - **Real exit-code capture** through the `tee` pipe (BusyBox has no `pipefail`).
 - **Fail-safe `success=0` metric** via EXIT trap for pre-sync failures.
 - **`activeDeadlineSeconds: 3000`** on the CronJob to bound hung runs.
+- **`--exclude "/Personal Vault/**"`** — the locked Personal Vault can't be listed
+  (`ObjectHandle is Invalid`) and would fail the run; it's excluded from sync.
+
+## Performance (`--fast-list` + `--onedrive-delta`)
+
+OneDrive's cost is **Microsoft Graph per-request latency + 429 throttling** (the
+reason for `--tpslimit 10`), not the directory walk — so `--fast-list` alone only
+got it from ~7m to ~4m45s/run (it still made thousands of list calls for ~21k
+items). The real lever is **`--onedrive-delta`**: it lists via Graph's flat
+delta/changes feed (~1000 items/page → a handful of paginated calls), bringing a
+no-change run to **~34s**. It lists the *whole* drive regardless of sync path —
+fine here, since the source is the drive root (`onedrive:`) — and **requires
+`--fast-list`** (both are set in `01-sync-script-configmap.yaml`). Contrast
+gdrive, where `--fast-list` alone suffices (Drive's cost is the per-directory
+walk, not per-request latency).
+
+> Byte-transfer metric note: same `tail -1` (final summary line) fix as gdrive —
+> see [`rclone-gdrive`](../rclone-gdrive/#performance---fast-list).
 
 ## Files
 | File | What |

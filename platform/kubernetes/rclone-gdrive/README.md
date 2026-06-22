@@ -164,7 +164,23 @@ The following file patterns are excluded from sync:
 - `Thumbs.db` (Windows thumbnails)
 - `desktop.ini` (Windows folder settings)
 
-To add more exclusions, edit the `--exclude` arguments in `02-cronjob.yaml`.
+To add more exclusions, edit the `--exclude` arguments in the rclone command in
+`01-sync-script-configmap.yaml`.
+
+### Performance (`--fast-list`)
+
+The sync uses **`--fast-list`** (in `01-sync-script-configmap.yaml`). Google Drive
+charges one API call per directory page; without it, rclone walks the ~36k-object
+tree one directory at a time under `--tpslimit 10`, which took **~23 min/run even
+with zero changes**. `--fast-list` does a single recursive listing (buffered in
+RAM — tens of MB, well under the 1Gi limit), cutting that to **~25s/run**. The
+work is almost entirely Drive API listing, not NAS I/O (the local "Checks" are
+metadata-only `stat()`, no `--checksum`), so this is safe for the NAS.
+
+> The byte-transfer metric parses the **final** `Transferred:` summary line
+> (`tail -1`), not the first per-`--stats` sample — an earlier `head -1` bug read
+> the listing-phase sample (~0) and under-reported bytes. See the "Common Log
+> Patterns" section for the line format.
 
 ## Testing
 
