@@ -1,18 +1,27 @@
-# Tier 1 (lowest blast radius). The shared postgres cluster's only consumers are
-# the CNPG operator (cnpg-system) + wikijs (verified in the H3 plan; cue-api uses
-# its OWN cue-db in ns `cue`, NOT this cluster). monitoring scrapes the
-# postgres-exporter on :9187. Intra-namespace allow covers CNPG instance↔instance
-# replication. This CNP is the allowlist; full enforcement also needs the postgres
-# namespace labelled netpol.wind/enforced=true (for egress default-deny + DNS/api).
+# Tier 1 (lowest blast radius). The shared postgres (CNPG) cluster.
+#
+# Allowlist refined 2026-06-22 from Phase-1 audit data (Loki {job="hubble-audit"},
+# ~24h): the only would-be-drops once postgres is enforced are
+#   - postgres -> postgres :5432 EGRESS  (CNPG instance<->instance replication)
+#   - cnpg-system -> postgres :8000 INGRESS (operator -> instance-manager status API)
+#   - postgres -> WORLD :443 EGRESS (barman WAL/base backups to S3)
+# DNS (:53), kube-apiserver, and host/remote-node comms are covered by the
+# cluster-wide allow-dns / allow-cluster-essentials CCNPs; monitoring ingress is
+# covered by allow-monitoring-scrape (all ports from the monitoring namespace).
+#
+# This CNP is the postgres tier allowlist. Full enforcement also requires the
+# postgres namespace labelled netpol.wind/enforced=true (done) — which makes its
+# pods default-deny both directions under the cluster-wide allows.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
-  name: postgres-ingress
+  name: postgres-tier
   namespace: postgres
 spec:
-  description: "Restrict postgres :5432 to cnpg-system + wikijs (+ intra-cluster); :9187 to monitoring."
+  description: "postgres allowlist: ingress :5432 (cnpg-system/wikijs/intra) + :8000 (cnpg-system instance-mgr) + :9187 (monitoring); egress :5432 (intra replication) + :443 world (S3 barman backups)."
   endpointSelector: {}
   ingress:
+    # App consumers + intra-cluster replication peers reach postgres on :5432.
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: cnpg-system
@@ -23,9 +32,35 @@ spec:
       toPorts:
         - ports:
             - { port: "5432", protocol: TCP }
+    # CNPG operator polls each instance's instance-manager status API on :8000.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cnpg-system
+      toPorts:
+        - ports:
+            - { port: "8000", protocol: TCP }
+    # Prometheus scrapes the postgres-exporter on :9187 (also covered broadly by
+    # allow-monitoring-scrape; kept explicit for clarity).
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: monitoring
       toPorts:
         - ports:
             - { port: "9187", protocol: TCP }
+  egress:
+    # CNPG instance<->instance streaming replication / failover (the dominant
+    # audit flow: replicas connect out to the primary on :5432).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: postgres
+      toPorts:
+        - ports:
+            - { port: "5432", protocol: TCP }
+    # barman-cloud WAL archiving + base backups to S3 (archive/postgres-barman
+    # bucket) over HTTPS. `world` = external; could be tightened to S3 CIDRs or
+    # toFQDNs later, but world:443 matches the observed backup egress.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }

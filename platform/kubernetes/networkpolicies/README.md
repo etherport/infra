@@ -45,9 +45,12 @@ that order). `kube-system`, `flux-system`, `wireguard` (hostNetwork → node ide
   health comms; ingress from host/remote-node (kubelet probes).
 - `03-allow-monitoring-scrape.yaml` — CCNP: ingress from the `monitoring` namespace AND
   from host/remote-node entities (node-exporter/Prometheus pods are hostNetwork here).
-- `10-tier-postgres.yaml` — first concrete tier (Phase 2 lead): only `cnpg-system`
-  (operator) + `wikijs` + `monitoring` may reach the shared postgres `:5432`/`:9187`.
-  cue-api uses its **own** `cue-db` in ns `cue`, NOT this cluster.
+- `10-tier-postgres.yaml` — first concrete tier (Phase 2 lead), CNP `postgres-tier`.
+  **Allowlist refined 2026-06-22 from audit data** so it covers every observed flow
+  (postgres now AUDITs nothing): ingress `:5432` from `cnpg-system`/`wikijs`/intra +
+  `:8000` from `cnpg-system` (operator→instance-manager) + `:9187` from `monitoring`;
+  egress `:5432` intra (CNPG replication) + `:443` to `world` (barman backups to S3).
+  cue-api uses its **own** `cue-db` in ns `cue`, NOT this cluster. **Enforce-ready.**
 
 The per-tier allowlists (`1x-tier-*.yaml`) beyond postgres are **intentionally absent**
 — they get written from Phase-1 audit data, not guessed.
