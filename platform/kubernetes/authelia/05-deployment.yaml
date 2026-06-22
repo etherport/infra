@@ -17,6 +17,10 @@ spec:
       labels:
         app.kubernetes.io/name: authelia
     spec:
+      # Stop k8s injecting AUTHELIA_SERVICE_*/AUTHELIA_PORT_* env vars (the Service
+      # is named "authelia"); Authelia parses any AUTHELIA_* as config and they
+      # collide with server.address → fatal "can't configure both" on boot.
+      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
