@@ -1,0 +1,66 @@
+# Tier 3 — Technitium DNS (the cluster's split-horizon resolver) + dns-sync-watcher.
+#
+# CRITICAL infra: everything resolves *.wind.etherport.net via Technitium (VIP
+# 10.10.201.5 / .6), and it recurses to upstreams for the rest. So the QUERY ports
+# must stay reachable by everyone — using `all`/`world` entities on :53/:853/:53443
+# makes it structurally impossible to blackhole a client or an upstream. The
+# segmentation value is on EGRESS: a compromised Technitium can reach upstream DNS
+# + intra-dns, but NOT other internal namespaces.
+#
+# Built 2026-06-22 from live Hubble flows + the StatefulSet (ports 53 udp/tcp, 5380,
+# 53443 DoH, 853 DoT; liveness probe on :5380 = host ingress via cluster-essentials)
+# + the admin ingressroute (Traefik -> technitium :5380, in-cluster).
+# Reply/conntrack traffic (the ephemeral high ports seen in Hubble) is auto-allowed.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: dns-tier
+  namespace: dns
+spec:
+  description: "Technitium: query ports (:53 udp/tcp, :853, :53443) open to all; :5380 admin in-cluster only; egress to world for recursion/DoH/DoT + intra-dns."
+  endpointSelector: {}
+  ingress:
+    # DNS query services — must be reachable by every client (cluster pods, nodes,
+    # and external LAN clients via the MetalLB VIP, which appear as `world`).
+    - fromEntities:
+        - all
+      toPorts:
+        - ports:
+            - { port: "53", protocol: UDP }
+            - { port: "53", protocol: TCP }
+            - { port: "853", protocol: TCP }
+            - { port: "53443", protocol: TCP }
+    # Admin/API (:5380): in-cluster only — the Traefik admin ingressroute, the
+    # dns-sync-watcher, and intra-dns. Kubelet liveness probes (host) are covered by
+    # allow-cluster-essentials. Deliberately NOT exposed to `world` (was reachable
+    # via the VIP :5380 before; closing that is a security improvement — admin is
+    # via https://dns.wind.etherport.net through Traefik).
+    - fromEntities:
+        - cluster
+      toPorts:
+        - ports:
+            - { port: "5380", protocol: TCP }
+    # Intra-namespace (technitium-0 <-> technitium-1 zone transfer / catalog-cluster
+    # sync, dns-sync-watcher -> Technitium API) on any port.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: dns
+  egress:
+    # Recursion + DoH/DoT to upstream resolvers (external). Covers all upstream
+    # query methods Technitium may use.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - { port: "53", protocol: UDP }
+            - { port: "53", protocol: TCP }
+            - { port: "443", protocol: TCP }
+            - { port: "853", protocol: TCP }
+            - { port: "53443", protocol: TCP }
+    # Intra-namespace (zone transfer / cluster sync between the replicas + watcher).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: dns
+  # NB: DNS-for-self (:53 to nodelocaldns/kube-dns), kube-apiserver (dns-sync-watcher
+  # ConfigMap watch), and host/remote-node comms are provided by the cluster-wide
+  # allow-dns / allow-cluster-essentials CCNPs (dns ns is labelled enforced).

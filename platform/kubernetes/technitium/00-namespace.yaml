@@ -4,3 +4,8 @@ metadata:
   name: dns
   labels:
     app.kubernetes.io/name: technitium
+    # H3 (2026-06-22): opt into NetworkPolicy enforcement (tier 3). With audit mode
+    # OFF this makes dns pods default-deny + the cluster-wide allows + the dns-tier
+    # allowlist (12-tier-dns.yaml). Query ports stay open to `all`; egress limited to
+    # upstream recursion + intra-dns.
+    netpol.wind/enforced: "true"

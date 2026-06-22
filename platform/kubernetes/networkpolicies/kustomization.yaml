@@ -18,3 +18,4 @@ resources:
   - 03-allow-monitoring-scrape.yaml
   - 10-tier-postgres.yaml
   - 11-tier-cue.yaml
+  - 12-tier-dns.yaml
