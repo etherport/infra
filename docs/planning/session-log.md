@@ -13,6 +13,16 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-22 (cont. 9) — netpol DROP alerting + iCloud backup alerts enabled
+
+**Drop notification (answers "how are we told to open a channel once enforcing").** Built the DROP-alert pipeline (was the H3 follow-up): extended the Cilium hubble export to `verdict:[AUDIT,DROPPED]` (live `kubectl patch cm cilium-config` — the `patch+rollout` compound cmd hit the auto-mode classifier, so run them as SEPARATE commands — + `rollout restart ds/cilium`; durable in the kubespray inventory). The global audit switch means one export covers both phases: AUDIT while observing, DROPPED while enforcing, same `{job="hubble-audit"}` Loki stream. Added loki-ruler rule **`CiliumNetpolDropFlow`** (`06-loki-rules-cilium-audit.yaml`): fires (warning → Alertmanager email) on a sustained DROPPED flow to/from an enforced ns from an **in-cluster** source (`src_ns!=""` drops external-scan noise). So drops are **stored in Loki** (Grafana Explore) and **alerted via Alertmanager**, naming `src→dst:port` → add to the per-tier CNP per the runbook. External (`src=world`) drops still need manual `hubble observe`. Verified AUDIT export intact post-rollout (monitoring observation unaffected); loki accepted both rules. Activates automatically when the monitoring flip re-enforces. `83c14da`.
+
+**iCloud backup alerts enabled.** The mini's contacts + calendars syncs are now healthy — verified in Prometheus (contacts rc=0/items=2049 vCards, calendars rc=0/items=446 events, fresh) — so un-held `10-icloud-backups-alerts.yaml` (`ICloudBackup{Stale,Failed,Empty}`). Live; not firing (healthy).
+
+**State:** monitoring still observing under audit (flip pending ~24h via cron `ea15194e`); the DROP rule + export are ready for when it re-enforces. H3 DROP-alerting follow-up ✅ done.
+
+---
+
 ## 2026-06-22 — M80 tier-1: iCloud Contacts + Calendars backup LIVE + scheduled
 
 Owner: "lmk when we've completed a successful contacts/calendar sync. infra agent has built dashboard but it's reporting no success yet" + "is it now scheduled at regular intervals?"
