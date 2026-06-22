@@ -8,3 +8,7 @@ metadata:
     app.kubernetes.io/managed-by: cnpg
     # Namespace is intended to also host the Cue app Deployment later
     # (reads the cue-db-app Secret); the DB lives here for now.
+    # H3 (2026-06-22): opt into NetworkPolicy enforcement (tier 2). With audit
+    # mode OFF this makes cue pods default-deny + the cluster-wide allows
+    # (DNS/apiserver/host/monitoring) + the cue-tier allowlist (11-tier-cue.yaml).
+    netpol.wind/enforced: "true"

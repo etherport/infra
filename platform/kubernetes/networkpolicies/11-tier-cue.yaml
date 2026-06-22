@@ -1,0 +1,70 @@
+# Tier 2 — the cue app stack (cue-api Node/Fastify + cue-db single-instance CNPG).
+#
+# Built 2026-06-22 from live Hubble forwarded-flow data + architecture (NOT a long
+# audit window — cue's flow set is small and well-understood, and enforcement is
+# reversible by removing the netpol.wind/enforced label). Distinct flows beyond the
+# cluster-wide allows (DNS / kube-apiserver / host / monitoring-scrape):
+#   ingress  cue-api :3000  <- tailscale (TS LB+Ingress) + cloudflared (CF tunnel)
+#   ingress  cue-db  :5432  <- cue (cue-api) + cnpg-system (operator) + tailscale (cue-db-ts LB)
+#   ingress  cue-db  :8000  <- cnpg-system (operator -> instance-manager status API)
+#   egress   intra-cue (cue-api <-> cue-db, any port)
+#   egress   world :443     (cue-api external HTTPS APIs + cue-db barman backups to
+#                            s3://postgres-barman.wind.etherport.net)
+# cue-db is SINGLE-instance, so there is no instance<->instance replication.
+# monitoring -> :9187 (and any port) is covered by allow-monitoring-scrape.
+#
+# One CNP with endpointSelector {} (all cue pods). cue-api ignores the :5432/:8000
+# ingress (nothing listens there) and cue-db ignores :3000 — harmless within the ns.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cue-tier
+  namespace: cue
+spec:
+  description: "cue allowlist: ingress :3000 (tailscale/cloudflared) + :5432 (cue/cnpg-system/tailscale) + :8000 (cnpg-system) + intra; egress intra + :443 world (external APIs + barman S3)."
+  endpointSelector: {}
+  ingress:
+    # cue-api HTTP — reached via the Tailscale LB/Ingress and the Cloudflare tunnel.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: tailscale
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cloudflared
+      toPorts:
+        - ports:
+            - { port: "3000", protocol: TCP }
+    # cue-db :5432 — cue-api (intra), the CNPG operator, and the cue-db-ts TS LB.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cue
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cnpg-system
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: tailscale
+      toPorts:
+        - ports:
+            - { port: "5432", protocol: TCP }
+    # CNPG operator polls cue-db's instance-manager status API on :8000.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cnpg-system
+      toPorts:
+        - ports:
+            - { port: "8000", protocol: TCP }
+    # Intra-namespace (cue-api <-> cue-db on any port, incl. CNPG internal).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cue
+  egress:
+    # Intra-namespace (cue-api -> cue-db :5432 + any CNPG internal ports).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cue
+    # External HTTPS: cue-api outbound API calls + cue-db barman backups to S3.
+    # `world` is broad; could tighten to S3 CIDRs/toFQDNs later, but :443 matches
+    # the app's external needs and the backup path.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }
