@@ -2,7 +2,12 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: grafana-dashboard-rclone-gdrive
-  namespace: monitoring
+  # NB: the kustomization sets `namespace: rclone`, which overrides this for the
+  # Flux-managed copy. Keep this in sync (rclone, not monitoring) so a stray
+  # `kubectl apply -f` of this file can't recreate a stale orphan in another
+  # namespace that collides on the dashboard uid (which is what happened once —
+  # the Grafana sidecar is cluster-wide and loads dashboards from ANY namespace).
+  namespace: rclone
   labels:
     grafana_dashboard: "1"
 data:
