@@ -69,6 +69,28 @@ spec:
               run failed. Logs: Loki {host="mini",job="photos-export"} (look for
               "✗ export exited").
 
+        - alert: PhotosExportNotParsed
+          # photos_export_summary_parsed=0 means a run FINISHED but its summary/report
+          # couldn't be trusted (watchdog-killed mid-run, or a truncated --report CSV over
+          # SMB), so the count metrics carry -1 "unknown" sentinels and last_success was NOT
+          # stamped. Distinct from Failed (rc>0) — catches the silent "completed but counts
+          # are garbage" case that would otherwise read as 0-missing. >1h so a mid-run
+          # snapshot doesn't flap it.
+          expr: max(photos_export_summary_parsed) == 0
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "Mac mini photos export ran but its summary was unparseable (counts untrusted)"
+            description: |
+              photos_export_summary_parsed=0 for >1h — the last run finished but its
+              summary/report could not be parsed (watchdog-kill or truncated CSV), so
+              exported/missing counts are -1 (unknown) and last_success was withheld.
+              Treat coverage as UNKNOWN, not 0. Logs: Loki {host="mini",job="photos-export"};
+              "Mac mini — Photos backup" dashboard.
+
         - alert: PhotosExportCoverageRegressed
           # photos_export_missing is now split: _resolvable (genuinely-missing
           # originals a re-download could fetch — the actionable number) and
