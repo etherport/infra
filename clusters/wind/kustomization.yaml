@@ -66,6 +66,10 @@ resources:
   # Cue API — Node/Fastify app (cue ns). Image from ghcr (private); public via
   # CF tunnel, path-restricted to /health + /telegram/webhook. See dir README.
   - ../../platform/kubernetes/cue-api
+  # H38 — internal forward-auth identity gate (Authelia, local users + TOTP).
+  # Deploying it gates nothing; the per-route middleware ref does (rolled out
+  # to sensitive apps). See platform/kubernetes/authelia/.
+  - ../../platform/kubernetes/authelia
   # Applications
   - ../../platform/kubernetes/home-automation
   - ../../platform/kubernetes/plex

@@ -1,0 +1,16 @@
+# Authelia portal — auth.wind.etherport.net. NOT behind forward-auth (it IS the
+# auth gate). Internal only (Technitium → Traefik VIP 10.10.201.70); no CF tunnel.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: authelia
+  namespace: authelia
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: Host(`auth.wind.etherport.net`)
+      kind: Rule
+      services:
+        - name: authelia
+          port: 9091
+  tls: {}

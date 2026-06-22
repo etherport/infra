@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Secret
+metadata:
+    name: authelia-users
+    namespace: authelia
+type: Opaque
+stringData:
+    users_database.yml: ENC[AES256_GCM,data:BjXYB16vPllZtFDAJ8CqZpeoVBlPyODLiSPEB8CGHo9O/R+ManDLfCp77DDe3TsvK7iidDJ40NeXA5Zi29GeyrPRemteL07H4bBLdN2+o/c1Iob2C64DYwiVdgcDTG6VkA0IM8d9uIXzLUxQoPv5bOVwJq87ohe0brBUPYEtjRNa6vmlWwPyX8ot6oBx8l2Wry8Mb90nOIDAQETKjd8YPerCHKNtkdIhGybJPhg0W6f7SfEjXaEYIld0wsyJaxiAzTN4fWROKQAQJfpXUYJ01tNIOmc/xgTnv4M3vPgGgAU0DgimGCelbNhI,iv:m2keD5vloH9biTmhC5NUa2p+QXDLFTAsNxjYjN8Loog=,tag:2r6fFgsL9zHc8upnhAeKEA==,type:str]
+sops:
+    kms: []
+    gcp_kms: []
+    azure_kv: []
+    hc_vault: []
+    age:
+        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBMOFREOTJFeCs5OUdveUFj
+            dDhTVSt4QjlhREs0VmQ2MHFuVyt0eEd2OGxjCmZnZVN1NjZCSm5jSzA0blNuRUZD
+            WnV0VVg0MmllSFgzUjBJQnZ4Um1nRDQKLS0tIDhzSXpkV0VoaEZhNDFkR0RNN05L
+            aWFIRlR4dy8zeDdsRG9GWk9ndzNIL28KhhcCiV7p3ZuzUQ3Walx1gCr2f8W7XoCz
+            doO5daR2C1v0DhY46YEwd5PzMokVBowS7mgBs7jw4kBxNiDJrYYZTg==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBJUkpJdmh1VXk3U3l5d01a
+            bm9ac1hMdDZkME1ZWDhtcCtab1plVURhekdvCkJtSUZFTkZ2elpmQW5va2grSE1L
+            QUtmdUltYktXWG1TL0QzT2xRd2ZRZ1EKLS0tIG9zV1d2Tk0xdkd0T2FBeEw3Zzhz
+            OHhYdU1PMVlSdzZtSkovRGZ6OC9PdmsKYycGJfMK67B2W9n40+PW8b8w1zhde2T1
+            W6Eoph3GsXW23Sof4ct0ChA/RVEfT1HxCwPheT3gC0IyoAmoTHcWag==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-06-22T22:52:26Z"
+    mac: ENC[AES256_GCM,data:xOVIETVaB6bbGlo7D8gysmiPc35HSRe1NgzkQpX3K1aeKdj4RHnXD3dKnUf0kbgO2eL+Y/qKRRn7nHqgeTfzMPcijvwea5WmkZJt8x6uIQQvhz7jqKOeKBHM3624PsOla7SgPoJo4dzdpd7sqxTn69OAukBa/B4YEwER14jcxnc=,iv:BtGV6pVvirtvHbMVXhXoM766g1pg7La4BcGn1GhqgWY=,tag:TZ1ElM0WPtBUKHyHrwAPyQ==,type:str]
+    pgp: []
+    encrypted_regex: ^(data|stringData)$
+    version: 3.9.4

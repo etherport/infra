@@ -1,0 +1,17 @@
+# Traefik forward-auth middleware → Authelia. Attach PER-ROUTE to protected apps
+# (ref: authelia-authelia-forwardauth@kubernetescrd). Do NOT attach to the auth
+# portal itself, the HMAC webhook/approval routes, or CF-Access-fronted apps.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authelia-forwardauth
+  namespace: authelia
+spec:
+  forwardAuth:
+    address: http://authelia.authelia.svc.cluster.local:9091/api/authz/forward-auth
+    trustForwardHeader: true
+    authResponseHeaders:
+      - Remote-User
+      - Remote-Groups
+      - Remote-Name
+      - Remote-Email

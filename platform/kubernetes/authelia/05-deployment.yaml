@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authelia
+  namespace: authelia
+  labels:
+    app.kubernetes.io/name: authelia
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # single SQLite-backed replica (RWO PVC)
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: authelia
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: authelia
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: authelia
+          image: ghcr.io/authelia/authelia:4.38
+          args: ["--config", "/config/configuration.yml"]
+          env:
+            - { name: AUTHELIA_SESSION_SECRET_FILE, value: /secrets/SESSION_SECRET }
+            - { name: AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE, value: /secrets/STORAGE_ENCRYPTION_KEY }
+            - { name: AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE, value: /secrets/JWT_SECRET }
+          ports:
+            - { name: http, containerPort: 9091 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            readOnlyRootFilesystem: true
+          livenessProbe:
+            httpGet: { path: /api/health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet: { path: /api/health, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          volumeMounts:
+            - { name: config, mountPath: /config/configuration.yml, subPath: configuration.yml, readOnly: true }
+            - { name: users, mountPath: /config/users_database.yml, subPath: users_database.yml, readOnly: true }
+            - { name: secrets, mountPath: /secrets, readOnly: true }
+            - { name: data, mountPath: /data }
+      volumes:
+        - { name: config, configMap: { name: authelia-config } }
+        - { name: users, secret: { secretName: authelia-users } }
+        - { name: secrets, secret: { secretName: authelia-secrets } }
+        - { name: data, persistentVolumeClaim: { claimName: authelia-data } }
