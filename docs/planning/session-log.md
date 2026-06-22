@@ -13,6 +13,16 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-22 (cont. 3) — iCloud-backups dashboard (Contacts/Calendars, templated) + H39 residual closed
+
+**iCloud backups board ([[M80]]).** The mini agent started Contacts + Calendars syncs (emit `contacts_backup_*`/`calendars_backup_*`, same schema as photos). Built a **templated** "Mac mini — iCloud backups" dashboard (`dashboards/icloud-backups.yaml`): a `cat` variable = `label_values({__name__=~".+_backup_last_rc"}, job)` drives a per-category **repeating row** (last-success age / rc / items / duration), so future `messages_backup`/`drive_backup` appear automatically. The regex cleanly selects only the mini's iCloud categories (homelab/unifi/velero use different field names; PromQL `=~` is fully anchored). Photos keeps its own richer board (different `photos_export_*` schema). Authored matching alerts (`10-icloud-backups-alerts.yaml`: `ICloudBackup{Stale,Failed,Empty}`, one rule each via metric-regex + `by(job)`, with `label_replace` to strip the `_lastsuccess` job suffix → all current/future categories covered without per-category rules; validated against live Prometheus). **Held the alerts** (commented out of `monitoring/kustomization.yaml`, file committed) — owner chose "dashboard now, hold alerts" because contacts+calendars are mid-dev (both `rc=1`, `items=0`) so Failed/Empty would fire immediately; one-line to enable once green. Severity = warning across the board (incl. Stale) since these are secondary metadata backups vs the photo library. Dashboard verified live (cm in monitoring, sidecar loads it); alert rule correctly ABSENT from the build. `9a45f30`.
+
+**H39 residual closed.** Owner picked H39 next. The technitium-1/w2 kopia-hang residual is **resolved**: last failed PVBs were all 2026-06-19 (incident day); every backup since (06-20/21/22) Completed 0-errors. technitium-1 rescheduled off w2 → **k8s-gpu1** and its `data` PVC backs up cleanly (8.7 MB done==total in `technitium-daily-20260622030012`); recent w2 PVBs also Complete (w2 path healthy). The temp Alertmanager silence (`4fe8a806`) **expired** — no active silences, so the Velero alert suite is live again. Chased the 75× backup-size gap between the HA replicas (technitium-0 653 MB vs -1 8.7 MB): **benign** — both serve the VIP, both hold the user-facing `wind.etherport.net` zone; technitium-0's bulk is logs (551 M) + stats (154 M), not zones; the `dns-cluster.*`/`cluster-catalog.*` zones missing from -1 are Technitium's internal catalog-cluster control zones (primary-side by design). Marked H39 ✅ in the tracker.
+
+**Next:** owner backlog menu still open (H3 NetworkPolicy enforce, H38 forward-auth, H30/M64 supply-chain pinning); M80 follow-up = enable the held iCloud alerts once contacts/calendars go green + add messages/drive (auto-appear on the dashboard).
+
+---
+
 ## 2026-06-22 (cont. 2) — photos orphan dedup run #2 (NAS+S3, 15.77 GiB) + orphan metric panel/alert
 
 Second mini-supplied dedup list (`photos_export_orphans` = export-dir files not in osxphotos' ledger): **1,058 entries**, all under `Graham/iCloud/Photos/`.
