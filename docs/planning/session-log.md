@@ -13,6 +13,20 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-22 (cont. 6) — H3 tier 3: dns/Technitium ENFORCED (critical resolver)
+
+Continued H3 to dns — the highest-stakes tier (everything resolves via Technitium). Direct-from-Hubble again (postgres+cue stayed enforced); escape hatch ready (`kubectl patch cm cilium-config policy-audit-mode=true` works without cluster DNS).
+
+**Characterized from live Hubble + the StatefulSet.** dns = technitium (2-replica STS) + dns-sync-watcher (in-ns). Listens :53 udp/tcp, :5380 (admin, liveness probe), :53443 (DoH), :853 (DoT). Ingress: :53 from world (LAN clients via the MetalLB VIP) + remote-node + cluster pods; :53443/:5380 from world+cluster; :5380 host = kubelet probes. Egress: world :53 (recursion, dominant) + :53443/:443 (DoH upstreams). High ephemeral-port flows = conntrack replies (auto-allowed).
+
+**Allowlist (`12-tier-dns.yaml`, CNP `dns-tier`).** DNS-appropriate: query ports `:53`/`:853`/`:53443` ingress from `all` (structurally can't blackhole a client — cluster/node/world all covered), `:5380` admin from `cluster` only (**deliberately NOT world — closes the VIP:5380 external exposure, a security win**; admin is via the Traefik ingressroute `dns.wind.etherport.net`), intra-dns; egress `world` `:53`/`:443`/`:853`/`:53443` + intra-dns. DNS-self/apiserver/host via the cluster-wide allows. Segmentation lands on egress (Technitium can't pivot to other internal namespaces). Labelled ns + CNP in one commit. `7408fc9`.
+
+**Verified.** Internal (`traefik.wind.etherport.net`→VIP), external recursion (`github.com`/`cloudflare.com`), and cluster DNS all resolve post-enforcement; 3 pods healthy, 0 restarts. **Drop triage:** post-flip showed ~ICMPv4 type-3 code-3 (Port Unreachable) noise — the pod kernel's courtesy reply to late upstream UDP packets after a recursion socket closed; **benign** (resolution unaffected). Allowed ICMP type-3 to/from world (`744b70e`) to keep the enforced drop log clean (also avoids future DROP-alert noise). Confirmed: fresh 40s window = 0 dns-pod drops. (Lesson: Cilium ICMP rule = `icmps: [{fields: [{type: 3, family: IPv4}]}]`; the stale ring-buffer briefly made it look unfixed.)
+
+**State:** H3 tiers 1–3 (postgres, cue, dns) enforced — the DB + app + DNS tiers, the highest-value segmentation. Remaining: traefik → monitoring (higher-fanout → use the audit toggle, not direct). Docs: CLAUDE.md §5, networkpolicies/README.md, tracker H3, this entry. DROP-alerting follow-up still open.
+
+---
+
 ## 2026-06-22 (cont. 5) — H3 tier 2: cue ENFORCED (postgres stayed enforced)
 
 Continued H3 to the next tier (cue) — done WITHOUT the global audit toggle, so postgres stayed enforced throughout.

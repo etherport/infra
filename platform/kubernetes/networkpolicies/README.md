@@ -6,9 +6,9 @@ unrestricted lateral movement). Detailed plan: `docs/planning/hardening-plan-202
 
 > ✅ **ENFORCING since 2026-06-22.** Cilium `policy-audit-mode` is now **OFF** — these
 > policies enforce (real drops). Enforced tiers (labeled `netpol.wind/enforced=true`):
-> **`postgres`** (tier 1, `10-tier-postgres.yaml`) and **`cue`** (tier 2, `11-tier-cue.yaml`)
-> — each allowlist built+verified from Hubble/audit data (0 drops post-flip). **All
-> unlabeled namespaces remain allow-all.** Observation phase ran 06-15→06-22 under audit mode.
+> **`postgres`** (tier 1), **`cue`** (tier 2), **`dns`/Technitium** (tier 3) — each
+> allowlist built+verified from Hubble/audit data (0 drops post-flip). **All unlabeled
+> namespaces remain allow-all.** Observation phase ran 06-15→06-22 under audit mode.
 >
 > ⚠️ **Audit is a single GLOBAL switch.** To add the NEXT tier you must briefly flip audit
 > back ON, observe + build that namespace's allowlist, then flip OFF again — see "Adding a
@@ -68,6 +68,12 @@ Enforcing. `cilium_policy_audit_mode: false`. Enforced tiers:
 - **`cue`** (`11-tier-cue.yaml`) — cue-api + single-instance cue-db; allowlist from live
   Hubble flows + architecture; post-flip 0 DROPs, cue-api serves (HTTP 302), cue-api↔cue-db
   OK, both pods healthy. cloudflared/tailscale ingress + cue-db→S3 barman egress allowlisted.
+- **`dns`/Technitium** (`12-tier-dns.yaml`) — critical resolver, so query ports
+  (`:53`/`:853`/`:53443`) use `all`, `:5380` admin uses `cluster` only (VIP:5380 from world
+  closed = security improvement), egress `world` for recursion/DoH/DoT + intra-dns. ICMP
+  type-3 (port-unreachable) to/from world allowed to silence benign recursion drop-noise.
+  Verified post-flip: internal + external + cluster DNS resolution all OK, 3 pods healthy,
+  0 dns-pod drops.
 
 All other namespaces are unlabeled = allow-all.
 
