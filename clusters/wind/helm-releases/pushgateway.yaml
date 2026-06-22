@@ -36,6 +36,16 @@ spec:
       # photos-export, etcd-snapshot, backup jobs) instead of overwriting them
       # with the scrape target's labels.
       honorLabels: true
+      # honorLabels only protects labels PRESENT in the pushed exposition
+      # (job/instance). The SD-added `pod` target label is not — so every
+      # pushgateway pod restart mints a fresh `pod` value and Prometheus sees a
+      # NEW series for each pushed metric, multiplying dashboard lines (one stale
+      # `source="gdrive"` series per past pod incarnation). Pushgateway is a
+      # singleton aggregator; the pod identity is meaningless for pushed metrics.
+      # Drop it so a restart can't fork the series.
+      metricRelabelings:
+        - action: labeldrop
+          regex: pod
       additionalLabels:
         release: monitoring
     # Persist pushed metrics to a PVC. Pushgateway keeps metrics in memory, so a

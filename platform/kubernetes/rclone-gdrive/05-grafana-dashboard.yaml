@@ -29,6 +29,7 @@ data:
       "panels": [
         {
           "datasource": "Prometheus",
+          "description": "Outcome of each source's most recent run. One tile per sync source (Google Drive, OneDrive). Reflects the latest push only.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -67,7 +68,7 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 5,
+            "w": 6,
             "x": 0,
             "y": 0
           },
@@ -82,20 +83,22 @@ data:
               "fields": "",
               "values": false
             },
-            "textMode": "value"
+            "textMode": "value_and_name"
           },
           "pluginVersion": "9.0.0",
           "targets": [
             {
-              "expr": "rclone_sync_success{source=~\"$source\",destination=\"nfs\"}",
+              "expr": "max by (source) (rclone_sync_success{source=~\"$source\",destination=\"nfs\"})",
+              "legendFormat": "{{source}}",
               "refId": "A"
             }
           ],
-          "title": "Last Sync Status",
+          "title": "Last Sync Status (per source)",
           "type": "stat"
         },
         {
           "datasource": "Prometheus",
+          "description": "How long ago each source last completed a run. Turns yellow past 25h, red past 49h (jobs run nightly).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -116,8 +119,8 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 5,
-            "x": 5,
+            "w": 6,
+            "x": 6,
             "y": 0
           },
           "id": 2,
@@ -131,20 +134,22 @@ data:
               "fields": "",
               "values": false
             },
-            "textMode": "value"
+            "textMode": "value_and_name"
           },
           "pluginVersion": "9.0.0",
           "targets": [
             {
-              "expr": "rclone_sync_last_run_timestamp{source=~\"$source\",destination=\"nfs\"} * 1000",
+              "expr": "max by (source) (rclone_sync_last_run_timestamp{source=~\"$source\",destination=\"nfs\"}) * 1000",
+              "legendFormat": "{{source}}",
               "refId": "A"
             }
           ],
-          "title": "Last Sync Time",
+          "title": "Last Sync (per source)",
           "type": "stat"
         },
         {
           "datasource": "Prometheus",
+          "description": "Wall-clock duration of each source's most recent run.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -173,8 +178,8 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 5,
-            "x": 10,
+            "w": 6,
+            "x": 12,
             "y": 0
           },
           "id": 3,
@@ -193,15 +198,17 @@ data:
           "pluginVersion": "9.0.0",
           "targets": [
             {
-              "expr": "rclone_sync_duration_seconds{source=~\"$source\",destination=\"nfs\"}",
+              "expr": "max by (source) (rclone_sync_duration_seconds{source=~\"$source\",destination=\"nfs\"})",
+              "legendFormat": "{{source}}",
               "refId": "A"
             }
           ],
-          "title": "Last Sync Duration",
+          "title": "Last Sync Duration (per source)",
           "type": "stat"
         },
         {
           "datasource": "Prometheus",
+          "description": "Errors in each source's MOST RECENT run. This is a per-run gauge (overwritten each sync), so it represents *unresolved* errors only: a file that errored last night but synced clean tonight drops back to 0 here. Non-zero (red) = the latest run still has failing files needing attention. Watch the 'Errors & Notices Over Time' panel below to see a spike resolve.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -216,12 +223,8 @@ data:
                     "value": null
                   },
                   {
-                    "color": "yellow",
-                    "value": 1
-                  },
-                  {
                     "color": "red",
-                    "value": 10
+                    "value": 1
                   }
                 ]
               },
@@ -230,14 +233,14 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 5,
-            "x": 15,
+            "w": 6,
+            "x": 18,
             "y": 0
           },
           "id": 4,
           "options": {
-            "colorMode": "value",
-            "graphMode": "area",
+            "colorMode": "background",
+            "graphMode": "none",
             "justifyMode": "center",
             "orientation": "auto",
             "reduceOptions": {
@@ -250,68 +253,117 @@ data:
           "pluginVersion": "9.0.0",
           "targets": [
             {
-              "expr": "rclone_sync_errors_total{source=~\"$source\",destination=\"nfs\"}",
+              "expr": "max by (source) (rclone_sync_errors_total{source=~\"$source\",destination=\"nfs\"})",
+              "legendFormat": "{{source}}",
               "refId": "A"
             }
           ],
-          "title": "Errors (Last Sync)",
+          "title": "Unresolved Errors (latest run)",
           "type": "stat"
         },
         {
           "datasource": "Prometheus",
+          "description": "Errors and notices per run, per source. Errors here are NOT cumulative — each point is one run, so a line returning to 0 means the previous run's failures resolved on the next sync. A persistent non-zero error line is the thing to act on. (rclone notices are usually benign: skipped/duplicate-name advisories.)",
           "fieldConfig": {
             "defaults": {
               "color": {
-                "mode": "thresholds"
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 15,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 6,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "always",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
               },
               "mappings": [],
+              "min": 0,
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
                   {
                     "color": "green",
                     "value": null
-                  },
-                  {
-                    "color": "blue",
-                    "value": 1
                   }
                 ]
               },
               "unit": "short"
-            }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "/^Errors/"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
           },
           "gridPos": {
-            "h": 4,
-            "w": 4,
-            "x": 20,
-            "y": 0
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 4
           },
-          "id": 8,
+          "id": 9,
           "options": {
-            "colorMode": "value",
-            "graphMode": "area",
-            "justifyMode": "center",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": ["lastNotNull"],
-              "fields": "",
-              "values": false
+            "legend": {
+              "calcs": ["last", "max", "sum"],
+              "displayMode": "table",
+              "placement": "bottom"
             },
-            "textMode": "value_and_name"
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
           },
-          "pluginVersion": "9.0.0",
           "targets": [
             {
-              "expr": "rclone_sync_notices_total{source=~\"$source\",destination=\"nfs\"}",
+              "expr": "max by (source) (rclone_sync_errors_total{source=~\"$source\",destination=\"nfs\"})",
+              "legendFormat": "Errors — {{source}}",
               "refId": "A"
+            },
+            {
+              "expr": "max by (source) (rclone_sync_notices_total{source=~\"$source\",destination=\"nfs\"})",
+              "legendFormat": "Notices — {{source}}",
+              "refId": "B"
             }
           ],
-          "title": "Notices (Last Sync)",
-          "type": "stat"
+          "title": "Errors & Notices Over Time (per run)",
+          "type": "timeseries"
         },
         {
           "datasource": "Prometheus",
+          "description": "Files transferred (changed/new) and checked (compared) per run, per source.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -361,7 +413,7 @@ data:
           "gridPos": {
             "h": 8,
             "w": 12,
-            "x": 0,
+            "x": 12,
             "y": 4
           },
           "id": 5,
@@ -377,12 +429,12 @@ data:
           },
           "targets": [
             {
-              "expr": "rclone_sync_files_transferred{source=~\"$source\",destination=\"nfs\"}",
+              "expr": "max by (source) (rclone_sync_files_transferred{source=~\"$source\",destination=\"nfs\"})",
               "legendFormat": "Files Transferred — {{source}}",
               "refId": "A"
             },
             {
-              "expr": "rclone_sync_files_checked{source=~\"$source\",destination=\"nfs\"}",
+              "expr": "max by (source) (rclone_sync_files_checked{source=~\"$source\",destination=\"nfs\"})",
               "legendFormat": "Files Checked — {{source}}",
               "refId": "B"
             }
@@ -392,6 +444,7 @@ data:
         },
         {
           "datasource": "Prometheus",
+          "description": "Bytes transferred per run, per source.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -441,8 +494,8 @@ data:
           "gridPos": {
             "h": 8,
             "w": 12,
-            "x": 12,
-            "y": 4
+            "x": 0,
+            "y": 12
           },
           "id": 6,
           "options": {
@@ -457,7 +510,7 @@ data:
           },
           "targets": [
             {
-              "expr": "rclone_sync_bytes_transferred{source=~\"$source\",destination=\"nfs\"}",
+              "expr": "max by (source) (rclone_sync_bytes_transferred{source=~\"$source\",destination=\"nfs\"})",
               "legendFormat": "Bytes Transferred — {{source}}",
               "refId": "A"
             }
@@ -467,6 +520,7 @@ data:
         },
         {
           "datasource": "Prometheus",
+          "description": "Wall-clock run duration per source over time.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -523,8 +577,8 @@ data:
           },
           "gridPos": {
             "h": 8,
-            "w": 24,
-            "x": 0,
+            "w": 12,
+            "x": 12,
             "y": 12
           },
           "id": 7,
@@ -540,7 +594,7 @@ data:
           },
           "targets": [
             {
-              "expr": "rclone_sync_duration_seconds{source=~\"$source\",destination=\"nfs\"}",
+              "expr": "max by (source) (rclone_sync_duration_seconds{source=~\"$source\",destination=\"nfs\"})",
               "legendFormat": "Sync Duration — {{source}}",
               "refId": "A"
             }
@@ -576,6 +630,6 @@ data:
       "timezone": "America/Los_Angeles",
       "title": "Rclone Sync (Google Drive / OneDrive)",
       "uid": "rclone-gdrive-sync",
-      "version": 1,
+      "version": 2,
       "weekStart": ""
     }
