@@ -59,6 +59,12 @@ metadata:
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
     pod-security.kubernetes.io/enforce: baseline
+    # H3 tier 4 (2026-06-22): opt into NetworkPolicy OBSERVATION. Applied while
+    # policy-audit-mode is ON, so this logs would-be drops as AUDIT (enforces
+    # nothing) — build/verify 13-tier-traefik.yaml from Loki {job="hubble-audit"},
+    # then flip audit OFF to enforce. (Traefik ns is Helm-created; labelled here
+    # via the PSS strategic-merge patch, not a 00-namespace.yaml.)
+    netpol.wind/enforced: "true"
 ---
 apiVersion: v1
 kind: Namespace

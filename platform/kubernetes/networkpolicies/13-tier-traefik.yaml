@@ -1,0 +1,68 @@
+# Tier 4 — Traefik (the cluster ingress controller / reverse proxy).
+#
+# ⚠️ OBSERVATION DRAFT (2026-06-22). Applied while policy-audit-mode is ON, so it
+# ENFORCES NOTHING yet — it logs would-be drops as AUDIT so we can confirm the real
+# flow set in Loki {job="hubble-audit"} before flipping back to enforce. A point-in-time
+# Hubble capture is NOT enough for Traefik: it only routes to a backend when that route
+# is actually accessed, so rarely-used routes won't appear until exercised.
+#
+# Design rationale (high-fanout infra): Traefik legitimately talks to EVERY backend, so
+# tight egress would cut routes on the next access + need editing for every new service.
+# Egress is therefore deliberately PERMISSIVE — `toEntities: cluster` (all in-cluster
+# backends, any port) + `world` on the external-device ports (PDU :80, IPMI/UPS :443,
+# Proxmox :8006). The segmentation value is on INGRESS (who may reach the proxy) + the
+# internal mgmt/api port. Refine ingress from the audit data, then enforce.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: traefik-tier
+  namespace: traefik
+spec:
+  description: "Traefik: ingress on public entrypoints (:80/:443/:8088) from all + mgmt (:8080/:8443) in-cluster; egress permissive (cluster any-port + world :80/:443/:8006) so backends never cut. OBSERVATION DRAFT (audit on)."
+  endpointSelector: {}
+  ingress:
+    # Public entrypoints — the proxy is meant to be reached by everyone: cluster pods,
+    # the Cloudflare tunnel (cloudflared), LAN clients via the MetalLB VIP (world), and
+    # Protect webhooks on :8088 (IP-literal HTTP from the Protect host = world).
+    - fromEntities:
+        - all
+      toPorts:
+        - ports:
+            - { port: "80", protocol: TCP }
+            - { port: "443", protocol: TCP }
+            - { port: "443", protocol: UDP }
+            - { port: "8088", protocol: TCP }
+    # Internal mgmt/api/ping/metrics (:8080) + secondary entrypoint (:8443) — in-cluster
+    # only (kubelet probes on :8080 are also covered by allow-cluster-essentials host
+    # ingress; monitoring scrape by allow-monitoring-scrape).
+    - fromEntities:
+        - cluster
+      toPorts:
+        - ports:
+            - { port: "8080", protocol: TCP }
+            - { port: "8443", protocol: TCP }
+    # Intra-namespace.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: traefik
+  egress:
+    # Internal backends — Traefik routes to services across many namespaces; allow all
+    # in-cluster destinations/ports so routes never break (incl. future services).
+    - toEntities:
+        - cluster
+    # External backends (the `*-external` ingressroutes): PDU :80, IPMI/UPS :443,
+    # Proxmox :8006 on the management VLAN (10.10.200.x = `world`), plus general
+    # external HTTPS. Extend ports here if a new external backend uses another port.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - { port: "80", protocol: TCP }
+            - { port: "443", protocol: TCP }
+            - { port: "8006", protocol: TCP }
+    # Intra-namespace.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: traefik
+  # DNS / kube-apiserver (Ingress/IngressRoute watch) / host comms via the cluster-wide
+  # allow-dns + allow-cluster-essentials CCNPs (traefik ns is labelled enforced).

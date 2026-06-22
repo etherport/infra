@@ -1,10 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Wired into clusters/wind/kustomization.yaml. ENFORCING since 2026-06-22
-# (policy-audit-mode OFF). Enforced tiers: postgres, cue (namespaces labelled
-# netpol.wind/enforced=true). To add another tier see README.md "Adding the next
-# tier" (must briefly re-enable audit to observe it first).
+# Wired into clusters/wind/kustomization.yaml. Tiers postgres/cue/dns were ENFORCED
+# (policy-audit-mode OFF) 2026-06-22; audit is TEMPORARILY back ON while traefik
+# (tier 4) is observed (so those three are audit-only meanwhile). Flip audit OFF again
+# once 13-tier-traefik.yaml is confirmed clean → all four enforce. See README.md
+# "Adding the next tier".
 
 resources:
   # NOTE: no standalone default-deny object — Cilium's operator rejects an empty-rule
@@ -19,3 +20,4 @@ resources:
   - 10-tier-postgres.yaml
   - 11-tier-cue.yaml
   - 12-tier-dns.yaml
+  - 13-tier-traefik.yaml  # OBSERVATION DRAFT — audit on; enforce after Loki audit confirms
