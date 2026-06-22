@@ -14,7 +14,7 @@
   <key>EnvironmentVariables</key>
   <dict>
     <!-- Loki push endpoint; the infra agent exposes loki.wind.etherport.net -> svc/loki:3100 -->
-    <key>LOKI_URL</key><string>http://loki.wind.etherport.net/loki/api/v1/push</string>
+    <key>LOKI_URL</key><string>https://loki.wind.etherport.net/loki/api/v1/push</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>

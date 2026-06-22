@@ -238,7 +238,7 @@ disposable mirror. Steps:
 Both `photos-export.sh` and `photos-export-resume.sh` push run metrics to the cluster
 **Pushgateway** after each run via `photos-metrics.sh` (`push_photos_metrics`) — always
 **non-fatal** (a monitoring outage never blocks a backup). Override the endpoint with
-`PUSHGATEWAY=` (default `http://pushgateway.wind.etherport.net`). Metrics (job
+`PUSHGATEWAY=` (default `https://pushgateway.wind.etherport.net`). Metrics (job
 `photos_export`, resume job `photos_export_resume`, `instance="mini"`):
 `*_last_run_timestamp_seconds`, `*_last_success_timestamp_seconds` (own group so a failed
 run can't wipe it — the staleness alert keys on this), `*_last_rc`, `*_duration_seconds`,
@@ -254,7 +254,7 @@ ruler). Tails `photos-export.log`, `photos-export/*.out|*.log`, `mount-nas.log`,
 Loki is reachable — nothing lost.
 
 **Loki endpoint** = `LOKI_URL` env in the plist (default
-`http://loki.wind.etherport.net/loki/api/v1/push`) — the infra agent exposes
+`https://loki.wind.etherport.net/loki/api/v1/push`) — the infra agent exposes
 `loki.wind.etherport.net → svc/loki:3100` via Traefik + a Technitium A record.
 
 ### Install (run on the mini, as graham)

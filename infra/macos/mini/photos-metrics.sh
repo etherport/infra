@@ -8,7 +8,7 @@
 # no-op with a logged "push failed".
 #
 # PUSHGATEWAY is the base URL of the (Traefik-exposed) pushgateway; override via env.
-PUSHGATEWAY="${PUSHGATEWAY:-http://pushgateway.wind.etherport.net}"
+PUSHGATEWAY="${PUSHGATEWAY:-https://pushgateway.wind.etherport.net}"
 
 # push_photos_metrics <rc> <duration_s> <photos> <exported> <missing> <mode> [job]
 #   job defaults to "photos_export" (the nightly). The resume wrapper passes
