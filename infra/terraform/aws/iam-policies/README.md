@@ -161,3 +161,26 @@ aws iam put-group-policy \
 |------|-------------|
 | `claude-admin-policy.json` | Administrative policy for Claude Code IAM management |
 | `terraform-*.json` | Policies for terraform-homelab user (matches AWS policy names) |
+
+## Orphan audit (2026-06-22, M97)
+
+Every `*.json` here maps to a **live** managed policy that is **attached to a live
+principal** (verified via `aws iam get-policy` `AttachmentCount ≥ 1`) — so none are
+orphaned. NB: a policy not attached to `terraform-homelab` is **not** an orphan;
+many are attached to *other* principals. (`iam:ListEntitiesForPolicy` is not granted
+to `terraform-homelab`, so exact principal enumeration needs `claude-admin`/console.)
+
+| File(s) | Live principal |
+|---|---|
+| `terraform-{storage,compute,networking,dns,cloudfront,twilio-webhook,state,iam-users,lambda-manage,snapshot-archive,ec2-security-groups,email-forward,eventbridge,external-monitoring,homeassistant-alexa,dns-restrict-ip,ddns-*}` | `terraform-homelab` user (directly and/or via the `terraform-*` groups above) |
+| `gh-actions-terraform-iam` | `gh-actions-terraform` role (this repo's GitHub OIDC) |
+| `gh-actions-personal-web-iam` | the personal-web repo's GitHub OIDC role |
+| `s3-backup-kubernetes-policy` | `kubernetes-s3-backup` user (in-cluster S3 backup sync) |
+| `claude-admin-policy` | `claude-admin` user (deactivated when not in use) |
+| `claude-admin-oneoff-roles` | `claude-admin` user — lets it create `claude-*` roles **only with the boundary below** |
+| `claude-oneoff-boundary` | **Permissions boundary** for `claude-*` one-off roles — referenced via `iam:PermissionsBoundary`, so `AttachmentCount=0` is **by design** (no one-off roles exist at rest). Not an orphan. |
+
+Removed `oneoff-photos-dedup-bypass.json` (2026-06-22): never had a live managed
+policy — it was a draft inline grant for the iCloud Photos S3 purge (M96), which was
+instead done via a temporary, prefix-scoped `terraform-storage` statement (applied +
+reverted via the `iam-apply` workflow). Superseded; the pattern is documented in M96/M97.
