@@ -66,6 +66,32 @@ then bootstrap again. (Re-bootstrapping an already-loaded agent returns a benign
   mount later drops, the **osxphotos export job's preflight** re-runs this script
   (idempotent) and remounts, so the backup self-heals.
 
+## SMB tuning (`/etc/nsmb.conf`) — one-time root install
+
+The SMB client tuning ([`nsmb.conf`](nsmb.conf): `notify_off`, `mc_on`, SMB2/3-only)
+**must** be installed at `/etc/nsmb.conf` — the macOS *kernel* SMB client reads only that
+path for `open smb://` mounts. `~/Library/Preferences/nsmb.conf` is **not** honored for them
+(it was written there for months as a silent no-op — adversarial review C-3). `/etc` needs
+root, so a root **LaunchDaemon** installs it at every boot. **One-time setup (sudo, run in
+the VNC Terminal — agent bash has no sudo):**
+
+```bash
+cd /Users/grahamsmith/code/infra
+sudo cp infra/macos/mini/net.wind.nsmb-install.plist /Library/LaunchDaemons/
+sudo chown root:wheel /Library/LaunchDaemons/net.wind.nsmb-install.plist
+sudo launchctl bootstrap system /Library/LaunchDaemons/net.wind.nsmb-install.plist
+sudo bash infra/macos/mini/install-nsmb-conf.sh          # immediate effect (no reboot)
+# then remount so the new mount negotiates the tuning:
+diskutil unmount force /Volumes/Backups; diskutil unmount force /Volumes/Personal-Drive
+infra/macos/mini/mount-nas.sh
+smbutil statshares -a | grep -E 'SMB_VERSION|SIGN'        # verify
+```
+
+`mount-nas.sh` warns at runtime (`⚠ /etc/nsmb.conf is MISSING or STALE`) until this is done,
+and logs SMB signing state post-mount. Optional latency lever for the small-file/metadata
+path (trusted LAN only, security tradeoff): add `signing_required=no` to `nsmb.conf` if the
+NAS doesn't *require* signing.
+
 ## `resume-claude-sessions.sh` — restore the Claude Code tmux sessions
 
 Re-creates the three Claude Code tmux sessions on the mini after a reboot,
@@ -191,14 +217,12 @@ disposable mirror. Steps:
   prevent corruption") and leaving a dirty APFS journal. **Root cause: macOS SMB
   *multichannel* was on** (no `nsmb.conf` existed); it's the classic cause of spontaneous
   idle SMB resets against a NAS on a fast NIC (not write-load/sleep/bandwidth). **Fix:
-  [`nsmb.conf`](nsmb.conf)** (`mc_on=no` + SMB1 off + `notify_off`), installed to
-  `~/Library/Preferences/nsmb.conf` by `mount-nas.sh` before it mounts. Validated by a
-  14 GB sustained network-write soak with **0 drops / 0 SMB reconnects**. The library was
-  **not** actually corrupted (recovered via journal replay + `wal_checkpoint`;
-  `integrity_check` = ok). If it ever recurs, deeper insurance (needs sudo, run in VNC):
-  system-wide `/etc/nsmb.conf` + raise `net.smb.fs.kern_*_deadtimer` (so a server stall
-  *pauses* I/O instead of erroring up into APFS), or move the library to an external APFS
-  SSD on the mini.
+  [`nsmb.conf`](nsmb.conf)** (`mc_on=yes` — multichannel was later cleared, the real 6-19
+  culprit was a failing NVMe cache SSD — + SMB1 off + `notify_off`). **⚠️ The tuning MUST
+  live at `/etc/nsmb.conf`** — the kernel SMB client (`open smb://`) reads only that path,
+  NOT `~/Library/Preferences/nsmb.conf`. Writing the user file was a **silent no-op**
+  (adversarial review C-3, 2026-06-22: live `smbutil statshares -a` showed defaults). See
+  the **SMB tuning** section below for the (root) install.
 - **`mount-nas.sh` now attaches the sparsebundle at login** (installs `nsmb.conf`, mounts
   the shares, then `hdiutil attach`es the bundle) — before this, nothing attached it after
   a reboot, so Photos errored "PhotosLib cannot be found" until the export job ran.

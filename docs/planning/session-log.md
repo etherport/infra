@@ -23,6 +23,24 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-22 — Adversarial review of all M79/M80 backup code → 4 CRITICAL + HIGH fixed
+
+Owner: "given the bugs and the issues we've had on photo sync, perform an adversarial review of all the code implemented across these two tasks. also has execution success status been pushed to grafana?"
+
+**Grafana:** success status IS in Pushgateway (photos_export/contacts_backup/calendars_backup all rc=0 + last_success). Could NOT verify Prometheus ingest from the mini (the prometheus query API isn't reachable from 10.10.202.101) — cluster-side scrape/dashboard is the infra-agent's to confirm.
+
+**Review:** 3 independent adversarial reviewers over all ~836 lines (photos pipeline / DAV pipeline / infra+scheduling). Found 4 CRITICAL + several HIGH. **Fixed + verified the data-loss ones immediately** (one was scheduled to run that night):
+
+- **C-1 (data loss, `ceb5027`):** `icloud-dav-backup.sh` ran `rsync -a --delete staging→NAS` UNCONDITIONALLY. App-password expiry / watchdog kill / iCloud empty-collection / sops failure → empty staging → `--delete` WIPES the NAS master (the only offsite-bound backup), then s3-sync ships the empty state. Fix: `mirror_service()` refuses to mirror unless vdirsyncer rc==0 AND staging non-empty, counts items BEFORE the rsync, caps deletions with `--max-delete=max(master/2,25)` (mass-shrink → rsync rc=25 abort). Also capture discover rc via PIPESTATUS (fail on real discover error, tolerate SIGPIPE 141).
+- **C-2 (silent masking, `ceb5027`):** `photos-metrics.sh` — a watchdog-killed run pushed `missing=0` (reads as "nothing to back up"); a clean run with a truncated `--report` CSV pushed `missing_resolvable=0` AND stamped `last_success` while photos were missing. Fix: `parsed=1` only if rc==0 && photos>0; push `-1` sentinels when not parsed; DERIVE `resolvable = missing - unavailable` (classify failure can't zero it); add `${job}_summary_parsed`; gate `last_success` on `parsed`.
+- **HIGH (`adbade8`):** new `mini-common.sh` (unit-tested) wired into all 3 scripts — `mini_acquire_lock` (atomic + pid-command liveness check: kills the bare-PID-reuse "silent outage forever" + the `rm -rf;mkdir` double-run-on-one-ledger race), `mini_run_timeout` (portable; bounds count()/rsync/master-find + a DAV post-mount liveness probe so a dead-but-listed SMB mount can't hang forever — H3/L2), `mini_kill_tree` (TERM→TERM→KILL + child reap; fixes orphaned osxphotos/vdirsyncer holding the ledger — H4).
+- **C-3 (`4697f23`):** nsmb.conf hardening was a silent no-op — written to `~/Library/Preferences/` but the kernel reads `/etc/nsmb.conf` (absent; live smbutil showed signing-on/defaults). Added `install-nsmb-conf.sh` + root LaunchDaemon `net.wind.nsmb-install.plist` (survives reboot) + mount-nas.sh detect/warn + post-mount signing verify. **NEEDS a one-time operator sudo** to bootstrap the LaunchDaemon (no passwordless sudo on the mini) — commands in `infra/macos/mini/README.md` → "SMB tuning".
+- **C-4 (`3103ac1`):** the "silent no-run when mini locked/asleep" gap is ALREADY covered cluster-side — `PhotosExportStale` + `ICloudBackupStale` (no success >26h) fire if a job doesn't run (infra-agent enabled icloud-backups-alerts ~the same time, after the syncs went green). Added `PhotosExportNotParsed` (summary_parsed==0) for the new sentinel signal; reconciled live via Flux.
+
+**Residual / handoff:** (a) operator sudo for the nsmb.conf LaunchDaemon; (b) infra-agent: confirm Prometheus actually scrapes pushgateway + that the `-1`/`summary_parsed` sentinels don't trip existing alerts; (c) MEDIUM count_orphans basename-collision undercount + silent -1-disable (photos-metrics.sh H5) — deferred. **Verified:** all 5 scripts syntax-clean; mini-common unit-tested; guarded DAV run clean (2049/446, master intact, rc=0); photos metric logic unit-tested across clean/classify-failed/killed.
+
+---
+
 ## 2026-06-22 — M80 tier-1: iCloud Contacts + Calendars backup LIVE + scheduled
 
 Owner: "lmk when we've completed a successful contacts/calendar sync. infra agent has built dashboard but it's reporting no success yet" + "is it now scheduled at regular intervals?"
