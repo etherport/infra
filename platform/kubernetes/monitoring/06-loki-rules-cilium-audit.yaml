@@ -1,5 +1,9 @@
 ---
-# LogQL alert rules for the loki-ruler — Cilium policy-audit-mode observation (H3).
+# LogQL alert rules for the loki-ruler — Cilium NetworkPolicy observability (H3).
+# Two rules off the same hubble export (job="hubble-audit", verdict AUDIT+DROPPED):
+#   - CiliumNetpolAuditFlow: would-be-drops during a tier's OBSERVATION (audit on)
+#   - CiliumNetpolDropFlow:  real drops to/from an enforced tier (audit off) =
+#     "a channel may need opening" (add to the per-tier CNP allowlist)
 #
 # Cilium runs in policy-audit-mode: traffic a NetworkPolicy WOULD deny is logged
 # as an AUDIT verdict but allowed through. Cilium exports those AUDIT flows to a
@@ -63,4 +67,46 @@ data:
                 leave it to be blocked if it's unwanted lateral movement.
                 Inspect the exact src→dst:port tuples in Grafana (Explore, Loki):
                   {job="hubble-audit"} | json
+                  | line_format "{{`{{.flow_source_namespace}}/{{.flow_source_pod_name}} -> {{.flow_destination_namespace}}/{{.flow_destination_pod_name}}:{{.flow_l4_TCP_destination_port}}`}}"
+
+          # Fires once policies ENFORCE (audit off): a real DROPPED flow involving
+          # an enforced namespace (postgres/cue/dns/traefik/monitoring) from an
+          # in-cluster source (src_ns!="" excludes external scans, which are
+          # correctly-blocked noise). This is the "we may need to open a channel"
+          # signal: an in-cluster pod's traffic to/from a segmented tier was DROPPED
+          # — either a missing allowlist entry (add it to the per-tier CNP) or
+          # unwanted lateral movement (leave blocked). The same hubble export now
+          # carries DROPPED too (cilium-config hubble-export-allowlist verdict
+          # AUDIT+DROPPED). NB: a DROPPED EXTERNAL client (src=world) won't alert
+          # here — find those with `hubble observe --verdict DROPPED` (runbook).
+          - alert: CiliumNetpolDropFlow
+            expr: |
+              sum by (src_ns, dst_ns, dport) (
+                count_over_time(
+                  {job="hubble-audit"}
+                  | json verdict="flow.verdict", src_ns="flow.source.namespace", dst_ns="flow.destination.namespace", dport="flow.l4.TCP.destination_port"
+                  | __error__=""
+                  | verdict="DROPPED"
+                  | src_ns!=""
+                  | src_ns=~"postgres|cue|dns|traefik|monitoring" or dst_ns=~"postgres|cue|dns|traefik|monitoring"
+                  [30m]
+                )
+              ) > 0
+            for: 15m
+            labels:
+              severity: warning
+              component: network
+              source: cilium-hubble
+            annotations:
+              summary: "Cilium DROPPED flow {{ $labels.src_ns }} → {{ $labels.dst_ns }}:{{ $labels.dport }} (enforced — channel may need opening)"
+              description: |
+                A NetworkPolicy-enforced namespace DROPPED an in-cluster flow from
+                "{{ $labels.src_ns }}" to "{{ $labels.dst_ns }}" on port
+                {{ $labels.dport }}, sustained 15m. If this is legitimate (e.g. a
+                newly-added service that needs to reach a segmented tier), add it to
+                the per-tier CNP allowlist in platform/kubernetes/networkpolicies/
+                (see docs/runbooks/networkpolicy-tiers.md "Adding or changing a
+                service"). If it's unwanted lateral movement, leave it blocked.
+                Tuples (Grafana Explore, Loki):
+                  {job="hubble-audit"} | json | flow_verdict="DROPPED"
                   | line_format "{{`{{.flow_source_namespace}}/{{.flow_source_pod_name}} -> {{.flow_destination_namespace}}/{{.flow_destination_pod_name}}:{{.flow_l4_TCP_destination_port}}`}}"

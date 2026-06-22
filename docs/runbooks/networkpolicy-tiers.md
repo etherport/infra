@@ -70,10 +70,27 @@ already covered by its **permissive** design, but check by mechanism:
 > tier.** Always verify with `hubble observe --namespace monitoring --verdict DROPPED` and
 > check the Prometheus `Targets` page after adding a scrape.
 
-## How to detect a policy-caused break
+## How are we notified / where are drops stored?
 
-Enforced drops are **not yet alerted** (the audit→Loki pipeline only catches `AUDIT`
-verdicts; an H3 follow-up will add `verdict=DROPPED` → Loki → alert). Until then:
+**Stored in Loki.** Cilium exports both `AUDIT` and `DROPPED` flows
+(`cilium-config` `hubble-export-allowlist`={verdict:[AUDIT,DROPPED]}) → per-node file →
+Alloy → Loki **`{job="hubble-audit"}`** (query/browse in Grafana Explore; retention =
+Loki's). **Alerted via Alertmanager** by the loki-ruler rule **`CiliumNetpolDropFlow`**
+(`platform/kubernetes/monitoring/06-loki-rules-cilium-audit.yaml`): fires (warning, →
+the normal Alertmanager email/notification path) when a **DROPPED** flow involving an
+enforced namespace from an **in-cluster** source is sustained 15m — i.e. "a channel may
+need opening." The alert names the `src_ns → dst_ns:port`; act on it per "Adding or
+changing a service" above (add to the per-tier CNP allowlist, or leave blocked if it's
+unwanted). During a tier's observation window the sibling `CiliumNetpolAuditFlow` does
+the same for `AUDIT` would-be-drops.
+
+> Caveat: an **external** dropped client (`src=world`, e.g. a new off-cluster pusher on
+> an unallowed port) does NOT trigger `CiliumNetpolDropFlow` (world drops are mostly
+> scans = noise). Find those manually with the `hubble observe` recipe below.
+
+## How to detect a policy-caused break (manual / immediate)
+
+For an immediate look (or external-source drops the alert excludes):
 
 ```bash
 # On the node running the affected pod (find with: kubectl get pod -n <ns> -o wide):
