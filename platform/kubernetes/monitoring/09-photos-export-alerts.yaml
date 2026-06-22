@@ -70,18 +70,27 @@ spec:
               "✗ export exited").
 
         - alert: PhotosExportCoverageRegressed
-          # The set of photos that can't be exported grew beyond the known
-          # residual (~1,406 as of 2026-06). Informational — investigate new
-          # unsupported/corrupt items, not an outage.
-          expr: photos_export_missing > 1600
-          for: 0m
+          # photos_export_missing is now split: _resolvable (genuinely-missing
+          # originals a re-download could fetch — the actionable number) and
+          # _unavailable (structurally un-fetchable edited Live-Photo clips Apple
+          # won't serve, ~9, expected, deliberately NOT alerted). Fire only on
+          # resolvable > 0: i.e. coverage of fetchable files dropped below 100%
+          # and DOWNLOAD_MISSING=1 hasn't yet closed the gap. >1h so a single
+          # mid-run snapshot or a download in progress doesn't flap it.
+          expr: max(photos_export_missing_resolvable) > 0
+          for: 1h
           labels:
-            severity: info
+            severity: warning
             component: backup
             namespace: backups
           annotations:
-            summary: "Photos-export unbackupable residual grew (>1600: {{ $value }})"
+            summary: "Photos-export coverage <100%: {{ $value }} fetchable file(s) missing from backup"
             description: |
-              photos_export_missing={{ $value }} (baseline ≈1,406). The number of
-              library items that can't be exported has increased — investigate
-              newly-unsupported/corrupt items in the source library.
+              photos_export_missing_resolvable={{ $value }} (>0 for >1h) — there
+              are genuinely-missing originals a re-download could fetch, so backup
+              coverage of available files has dropped below 100%. Normally
+              DOWNLOAD_MISSING=1 closes this on the next run; if it persists,
+              investigate (iCloud download failures, source items pending
+              download). Note: _unavailable (edited Live-Photo clips, ~9) is
+              expected and NOT counted here. Logs: Loki {host="mini",job="photos-export"};
+              "Mac mini — Photos backup" dashboard.
