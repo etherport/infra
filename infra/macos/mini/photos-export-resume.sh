@@ -128,6 +128,7 @@ for a in $(seq 1 "$MAX_ATTEMPTS"); do
     log "✓ completed cleanly on attempt ${a}: $(grep 'Processed:' "$out" | tail -1)"
     s="$(grep -aE 'Processed: [0-9]+ photos' "$out" | tail -1)"
     read -r mu mr < <(classify_missing "${RDIR}/resume-${a}.csv")
+    export PHOTOS_ORPHANS="$(count_orphans "$DEST" "$EXPORTDB")"
     push_photos_metrics 0 "$(( $(date +%s) - START ))" \
       "$(printf '%s' "$s"|sed -nE 's/.*Processed: ([0-9]+) photos.*/\1/p')" \
       "$(printf '%s' "$s"|sed -nE 's/.*exported: ([0-9]+).*/\1/p')" \

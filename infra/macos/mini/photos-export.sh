@@ -160,6 +160,9 @@ m_photos="$(printf '%s' "$summ"   | sed -nE 's/.*Processed: ([0-9]+) photos.*/\1
 m_exported="$(printf '%s' "$summ" | sed -nE 's/.*exported: ([0-9]+).*/\1/p')"
 m_missing="$(printf '%s' "$summ"  | sed -nE 's/.*missing: ([0-9]+).*/\1/p')"
 read -r m_unavail m_resolv < <(classify_missing "${REPORT}")
+# Orphan guard metric: files on disk not in the ledger (untracked dups). Should stay flat;
+# growth = something produced new dups. (Walks DEST over SMB — once-nightly is fine.)
+export PHOTOS_ORPHANS="$(count_orphans "${DEST}" "${EXPORTDB}")"
 push_photos_metrics "${rc}" "$(( $(date +%s) - START ))" "${m_photos:-0}" "${m_exported:-0}" "${m_missing:-0}" "${m_unavail:-0}" "${m_resolv:-0}" "${MODE}"
 
 if [ "${rc}" -eq 0 ]; then
