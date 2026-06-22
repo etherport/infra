@@ -1,0 +1,63 @@
+# Tier 5 — monitoring (Prometheus/Grafana/Alertmanager/Loki/Alloy/pushgateway/
+# kube-state-metrics/node-exporter/prometheus-operator). The WIDEST-fanout namespace:
+# Prometheus scrapes EVERY namespace + external hosts; Alloy ingests logs/syslog;
+# Alertmanager + ai-advisor egress externally.
+#
+# ⚠️ OBSERVATION DRAFT (2026-06-22). Applied under policy-audit-mode ON → enforces
+# nothing yet; logs would-be drops as AUDIT in Loki {job="hubble-audit"} so we confirm
+# the full flow set (incl. PERIODIC ones: alert emails, ai-advisor runs, backup reports,
+# external scrapes) before flipping to enforce.
+#
+# Design (high-fanout infra, like traefik): egress is PERMISSIVE so scraping never
+# breaks — `toEntities: cluster` (every in-cluster scrape target, any port) + `world`
+# on the enumerated external ports. Ingress is broad too (everything reaches Grafana/
+# Prometheus/AM/Loki/pushgateway). Segmentation value is modest; the point is to not
+# leave the namespace that can reach everything fully unconstrained.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: monitoring-tier
+  namespace: monitoring
+spec:
+  description: "monitoring: egress cluster any-port (scrape all) + world :80/:443/:587/:465/:25/:9100/:9290 (SES/APIs/external node-exporters/pve-IPMI); ingress cluster any-port + world :9091/:3100/:514 (push/logs/syslog) + kube-apiserver (operator webhook). OBSERVATION DRAFT (audit on)."
+  endpointSelector: {}
+  ingress:
+    # Everything in-cluster reaches the monitoring services (Grafana via traefik,
+    # Prometheus/AM via Grafana, pushgateway/Loki from many pushers, intra-stack).
+    - fromEntities:
+        - cluster
+    # External pushers/receivers (LAN = world): pushgateway pushes (:9091, e.g. the
+    # mini), Loki log push (:3100), and syslog ingest into Alloy (:514 udp/tcp).
+    - fromEntities:
+        - world
+      toPorts:
+        - ports:
+            - { port: "9091", protocol: TCP }
+            - { port: "3100", protocol: TCP }
+            - { port: "514", protocol: TCP }
+            - { port: "514", protocol: UDP }
+    # prometheus-operator admission/conversion webhook is called BY the apiserver.
+    - fromEntities:
+        - kube-apiserver
+  egress:
+    # Scrape + intra: every in-cluster metrics endpoint, on any port.
+    - toEntities:
+        - cluster
+    # External egress: SES SMTP (587/465/25) for alert email, HTTPS (:443) for the
+    # ai-advisor → Anthropic API + Twilio/webhooks + SES API, :80, and external scrape
+    # targets — node-exporters on :9100 (10.10.100.5/10, 10.10.201.6/15) and the pve
+    # in-band IPMI exporter on :9290 (10.10.200.41). Add a port here if a new EXTERNAL
+    # scrape target or notifier uses a different one (see the new-service runbook).
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - { port: "80", protocol: TCP }
+            - { port: "443", protocol: TCP }
+            - { port: "587", protocol: TCP }
+            - { port: "465", protocol: TCP }
+            - { port: "25", protocol: TCP }
+            - { port: "9100", protocol: TCP }
+            - { port: "9290", protocol: TCP }
+  # DNS / kube-apiserver / host & remote-node (kubelet + hostNetwork node-exporter
+  # scrape targets) via the cluster-wide allow-dns + allow-cluster-essentials CCNPs.

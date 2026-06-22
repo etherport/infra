@@ -169,7 +169,7 @@ cilium_encryption_type: "wireguard"
 # IMPORTANT: a kubespray cluster.yml/--tags=cilium run re-chowns /opt/cni/bin to
 # kube_owner and breaks Cilium — the kubespray.sh wrapper now auto-runs pre-flight.yml
 # afterward to restore root ownership. See docs/runbooks/cilium-cni-dir-owner.md.
-cilium_policy_audit_mode: false
+cilium_policy_audit_mode: true  # TEMP 2026-06-22: re-enabled to observe monitoring (tier 5, widest); flip back to false once 14-tier-monitoring.yaml is verified clean → re-enforce all tiers
 
 # Backstop so Cilium tolerates a kube-owned /opt/cni/bin even without the pre-flight
 # fix (mount-cgroup runs root+drop:[ALL]; DAC_OVERRIDE lets it write regardless of

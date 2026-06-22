@@ -39,6 +39,11 @@ metadata:
     # audit/warn only — node-exporter/alloy/grafana need host access. See header.
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
+    # H3 tier 5 (2026-06-22): NetworkPolicy OBSERVATION (audit on). Widest-fanout
+    # namespace (Prometheus scrapes everything). 14-tier-monitoring.yaml enforces
+    # nothing while audit is on — observe Loki {job="hubble-audit"}, refine, then
+    # flip audit OFF to enforce. Helm-created ns; labelled here via the PSS patch.
+    netpol.wind/enforced: "true"
 ---
 apiVersion: v1
 kind: Namespace

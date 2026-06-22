@@ -44,6 +44,32 @@ changing a workload:
 > Rule of thumb: **if the new thing crosses an enforced namespace boundary, update that
 > tier's allowlist in the same change.** Unlabelled-to-unlabelled traffic needs nothing.
 
+## Adding monitoring for a new service (`monitoring` is enforced — open the channel)
+
+`monitoring` is an enforced tier (`14-tier-monitoring.yaml`). Most monitoring paths are
+already covered by its **permissive** design, but check by mechanism:
+
+- **Prometheus scrape (pull, ServiceMonitor/PodMonitor)** of an **in-cluster** service:
+  ✅ no action. monitoring's egress is `toEntities: cluster` (any port), and the target's
+  ingress is covered either by `allow-monitoring-scrape` (if the target ns is enforced —
+  it allows all ports from `monitoring`) or by allow-all (if unenforced).
+- **Prometheus scrape of an EXTERNAL target** (a host/VM/device via
+  `01-external-scrape-config.yaml`): ⚠️ **action** — monitoring egresses to `world` only on
+  the enumerated ports (currently `:9100` node-exporter, `:9290` pve-IPMI, plus
+  80/443/587/465/25). A new external target on a **different** port needs that port added to
+  `14-tier-monitoring.yaml` egress `world`. Symptom: target shows `DOWN` in Prometheus.
+- **Push to pushgateway** (`:9091`): in-cluster pusher ✅ (ingress `cluster`); external
+  pusher (a new host) ✅ (ingress `world:9091`). Only a non-standard port needs work.
+- **Logs to Loki** (`:3100`) / **syslog to Alloy** (`:514`): in-cluster ✅ (`cluster`);
+  external shipper/device ✅ (`world:3100`/`:514`). New receiver port → add to ingress.
+- **New external NOTIFIER egress** (Alertmanager to a new SMTP/webhook host, a new API for
+  the advisor): add its port to `14-tier-monitoring.yaml` egress `world` (have: 443/587/465/25).
+
+> TL;DR for monitoring: **in-cluster scrape/push/logs just work; a new EXTERNAL scrape
+> target or notifier on a non-standard port needs a `world` port added to the monitoring
+> tier.** Always verify with `hubble observe --namespace monitoring --verdict DROPPED` and
+> check the Prometheus `Targets` page after adding a scrape.
+
 ## How to detect a policy-caused break
 
 Enforced drops are **not yet alerted** (the audit→Loki pipeline only catches `AUDIT`
