@@ -246,6 +246,32 @@ run can't wipe it — the staleness alert keys on this), `*_last_rc`, `*_duratio
 pushgateway via Traefik + PrometheusRule + Grafana) is set up by the infra agent.** Until
 then the pushes just log "push failed" and no-op.
 
+## M80 — iCloud Contacts + Calendars (`icloud-dav-backup.sh`, `net.wind.icloud-dav`)
+Backs up iCloud **Contacts** (CardDAV) + **Calendars** (CalDAV) to individual `.vcf` / `.ics`
+files under the consistent master location **`/Volumes/Backups/Graham/iCloud/{Contacts,Calendars}/`**,
+via **`vdirsyncer`** (pipx). The iCloud storages are **`read_only = true`** in `vdirsyncer-config`,
+so it can only ever pull iCloud → NAS — it can **never modify/delete** your real contacts or
+calendars. Per-category metrics (`contacts_backup_*`, `calendars_backup_*`) push to Pushgateway
+via `mini-backup-metrics.sh` (same mechanism as photos); logs ship to Loki via Alloy
+(`job="icloud-dav"`). Run-lock + 30-min watchdog like the photos nightly.
+
+**Credential:** an Apple **app-specific password** (appleid.apple.com), stored in the SOPS
+bundle as `icloud_app_password` and fetched at runtime by `icloud-app-password.sh` (nothing
+secret in the repo).
+
+### One-time setup (run on the mini, as graham)
+```bash
+brew install pipx 2>/dev/null; pipx install vdirsyncer       # vdirsyncer → ~/.local/bin
+# 1. add the app-specific password to SOPS (value never touches the repo):
+sops infra/ansible/playbooks/secrets/homelab-ops.sops.yaml   # add: icloud_app_password: xxxx-xxxx-xxxx-xxxx
+# 2. discover collections (interactive once; re-run if you add an address book/calendar):
+VDIRSYNCER_CONFIG=infra/macos/mini/vdirsyncer-config ~/.local/bin/vdirsyncer discover
+# 3. first sync + load the nightly (21:00) agent:
+infra/macos/mini/icloud-dav-backup.sh
+ln -sf "$PWD/infra/macos/mini/net.wind.icloud-dav.plist" ~/Library/LaunchAgents/net.wind.icloud-dav.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.wind.icloud-dav.plist
+```
+
 ## `net.wind.alloy` — ship the mini's logs to Loki (`alloy-config.alloy`)
 Grafana **Alloy** tails the backup-pipeline logs and pushes them to the cluster **Loki** so
 this off-cluster macOS host's logs are searchable in Grafana (and alertable via the Loki

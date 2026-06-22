@@ -26,6 +26,27 @@ print(u, r)
 PY
 }
 
+# count_orphans <export_dir> <export_db> — echoes the number of files on disk that are NOT in
+# the export ledger (i.e. untracked duplicates/orphans). A clean pipeline keeps this FLAT;
+# a growing value means something produced new dups (ran without --exportdb, a race, etc.).
+# Opens the DB read-only so it's safe to run alongside an export. Walks DEST (slowish over SMB).
+count_orphans() {
+  local dest="$1" db="$2"
+  [ -d "$dest" ] && [ -f "$db" ] || { echo -1; return; }
+  python3 - "$dest" "$db" <<'PY' 2>/dev/null || echo -1
+import os,sqlite3,sys
+dest,db=sys.argv[1],sys.argv[2]
+keep=set(os.path.basename(r[0]) for r in
+         sqlite3.connect(f"file:{db}?mode=ro",uri=True).execute("SELECT filepath FROM export_data"))
+n=0
+for root,_,files in os.walk(dest):
+    for f in files:
+        if f=='.DS_Store' or f.startswith('.osxphotos_export.db'): continue
+        if f not in keep: n+=1
+print(n)
+PY
+}
+
 # push_photos_metrics <rc> <dur_s> <photos> <exported> <missing> <missing_unavail> <missing_resolv> <mode> [job]
 #   job defaults to "photos_export"; the resume wrapper passes "photos_export_resume".
 push_photos_metrics() {
@@ -51,6 +72,12 @@ ${job}_missing_resolvable ${m_resolv}
 # TYPE ${job}_info gauge
 ${job}_info{mode=\"${mode}\"} 1
 "
+  # orphans (untracked files-on-disk) — emitted when the caller set PHOTOS_ORPHANS (>=0)
+  if [ -n "${PHOTOS_ORPHANS:-}" ] && [ "${PHOTOS_ORPHANS}" -ge 0 ] 2>/dev/null; then
+    body="${body}# TYPE ${job}_orphans gauge
+${job}_orphans ${PHOTOS_ORPHANS}
+"
+  fi
   if curl -fsS --max-time 10 --data-binary "${body}" \
        "${PUSHGATEWAY}/metrics/job/${job}/instance/mini" >/dev/null 2>&1; then
     echo "$(date '+%F %T') metrics: pushed ${job} (rc=${rc} exported=${exported} missing=${missing} unavail=${m_unavail} resolvable=${m_resolv})"
