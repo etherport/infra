@@ -84,6 +84,17 @@ All other namespaces are unlabeled = allow-all.
 > for enforced namespaces → Loki → alert. (CNPG backup failures are still caught separately
 > by `CNPGBackupFailed`.)
 
+## ⚠️ Adding or changing a service (operational tax)
+
+Enforcement means **new services that cross an enforced boundary must be allowlisted or
+they silently break.** Three cases: (1) a new workload IN an enforced ns; (2) a new
+workload anywhere that must REACH an enforced ns (e.g. a new app using the shared
+`postgres`); (3) a new EXTERNAL backend for Traefik. Full procedure + how to detect the
+drop (`hubble observe --verdict DROPPED`) + the fix workflow:
+**[`docs/runbooks/networkpolicy-tiers.md`](../../../docs/runbooks/networkpolicy-tiers.md)**.
+Rule of thumb: if the change crosses an enforced namespace boundary, update that tier's
+`1x-tier-<ns>.yaml` in the same change. Unlabelled↔unlabelled needs nothing.
+
 ## Adding the next tier (the toggle workflow)
 
 Because audit is a **single global switch**, you can't observe a new namespace while the

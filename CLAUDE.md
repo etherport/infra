@@ -148,6 +148,11 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   switch**, so to add a new tier you must briefly flip audit back ON (ConfigMap+rollout),
   label + observe the new namespace via Loki `{job="hubble-audit"}`, build its allowlist
   until clean, then flip OFF again. See `platform/kubernetes/networkpolicies/README.md`.
+  🆕 **Operational tax — adding/changing a service:** if a new workload is IN an enforced
+  namespace, or (in any namespace) needs to REACH one (e.g. a new app using the shared
+  `postgres`), you MUST update that tier's `1x-tier-<ns>.yaml` allowlist in the same change
+  or its traffic is silently dropped (no alert yet). Unlabeled↔unlabeled needs nothing.
+  Procedure + `hubble observe --verdict DROPPED` detection: `docs/runbooks/networkpolicy-tiers.md`.
 - **Cilium WireGuard encryption is ON** (M66, 2026-06-17). East-west **pod-to-pod**
   traffic is WireGuard-encrypted (`cilium_wg0`, full mesh, NodeEncryption off); was
   cleartext VXLAN before. IaC source = `cilium_encryption_enabled: true` +
