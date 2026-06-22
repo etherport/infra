@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- ROOT LaunchDaemon (NOT a user LaunchAgent): installs /etc/nsmb.conf at boot so the
+       kernel SMB client picks up the tuning. User agents can't write /etc, hence this runs
+       as root. One-time install (needs sudo):
+         sudo cp infra/macos/mini/net.wind.nsmb-install.plist /Library/LaunchDaemons/
+         sudo chown root:wheel /Library/LaunchDaemons/net.wind.nsmb-install.plist
+         sudo launchctl bootstrap system /Library/LaunchDaemons/net.wind.nsmb-install.plist
+       Then for immediate effect (no reboot): sudo /path/to/install-nsmb-conf.sh + remount. -->
+  <key>Label</key><string>net.wind.nsmb-install</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/grahamsmith/code/infra/infra/macos/mini/install-nsmb-conf.sh</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/var/log/nsmb-install.log</string>
+  <key>StandardErrorPath</key><string>/var/log/nsmb-install.log</string>
+</dict>
+</plist>

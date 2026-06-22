@@ -27,12 +27,19 @@ ATTACH_VOL="/Volumes/PhotosLib"
 
 log() { echo "$(date '+%Y-%m-%dT%H:%M:%S') mount-nas: $*"; }
 
-# Ensure the SMB-hardening config is in place BEFORE mounting (it only affects new
-# mounts). Disables SMB multichannel etc. — without it, the mounts drop spontaneously
-# on this 10G link and corrupt the sparsebundle. Kept in git so a rebuild self-heals.
-if [ -f "${HERE}/nsmb.conf" ] && ! cmp -s "${HERE}/nsmb.conf" "${HOME}/Library/Preferences/nsmb.conf" 2>/dev/null; then
-  cp "${HERE}/nsmb.conf" "${HOME}/Library/Preferences/nsmb.conf" && \
-    log "installed/updated ~/Library/Preferences/nsmb.conf (SMB hardening)"
+# SMB-hardening config check. The KERNEL SMB client (which `open smb://` drives) reads
+# /etc/nsmb.conf — NOT ~/Library/Preferences/nsmb.conf. The old code wrote the user file, so
+# the tuning (notify_off/mc_on/SMB2-3-only) was a SILENT NO-OP (adversarial review C-3). /etc
+# needs root, so it's installed by the net.wind.nsmb-install LaunchDaemon (install-nsmb-conf.sh).
+# Here we can't sudo — so we DETECT and warn loudly if /etc/nsmb.conf is missing or stale, so
+# the gap is visible instead of silently un-applied. See README "SMB tuning (/etc/nsmb.conf)".
+if [ -f "${HERE}/nsmb.conf" ]; then
+  if ! cmp -s "${HERE}/nsmb.conf" /etc/nsmb.conf 2>/dev/null; then
+    log "⚠ /etc/nsmb.conf is MISSING or STALE — SMB tuning is NOT applied to kernel mounts."
+    log "⚠ Install the LaunchDaemon (one-time sudo): see infra/macos/mini/README.md → SMB tuning."
+  else
+    log "✓ /etc/nsmb.conf current"
+  fi
 fi
 
 rc=0
@@ -72,6 +79,14 @@ elif [ -e "${SPARSEBUNDLE}" ]; then
   fi
 else
   log "… sparsebundle not present at ${SPARSEBUNDLE} (owner setup incomplete?) — skipping attach"
+fi
+
+# Post-mount verify (informational): signing still active is a tell that /etc/nsmb.conf tuning
+# isn't in play (kernel on defaults). Closes the "trusted the copy, never checked" gap (C-3).
+if command -v smbutil >/dev/null 2>&1 && mount | grep -qF " on /Volumes/Backups "; then
+  sign="$(smbutil statshares -a 2>/dev/null | awk '/SMB_CURR_SIGN_ALGORITHM/{print $2; exit}')"
+  [ -n "${sign}" ] && [ "${sign}" != "OFF" ] && \
+    log "ℹ SMB signing active (${sign}) — expected if the NAS requires it; if not, consider the signing lever in nsmb.conf"
 fi
 
 exit "$rc"
