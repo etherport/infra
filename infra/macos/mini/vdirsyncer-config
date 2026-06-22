@@ -21,7 +21,10 @@ conflict_resolution = "b wins"
 
 [storage contacts_local]
 type = "filesystem"
-path = "/Volumes/Backups/Graham/iCloud/Contacts/"
+# LOCAL staging (NOT the SMB share): writing many small files straight to SMB stalls the
+# iCloud connection until it drops ("Server disconnected"). icloud-dav-backup.sh rsyncs this
+# staging to the /Backups/Graham/iCloud/Contacts master location afterward.
+path = "~/.local/share/icloud-dav/Contacts/"
 fileext = ".vcf"
 
 [storage contacts_remote]
@@ -40,7 +43,10 @@ conflict_resolution = "b wins"
 
 [storage calendars_local]
 type = "filesystem"
-path = "/Volumes/Backups/Graham/iCloud/Calendars/"
+# LOCAL staging (see contacts_local note); icloud-dav-backup.sh rsyncs this to Backups after.
+# NB: vdirsyncer's INI parser rejects inline `#` comments on a value line — keep comments on
+# their own line above the option, never trailing the value.
+path = "~/.local/share/icloud-dav/Calendars/"
 fileext = ".ics"
 
 [storage calendars_remote]

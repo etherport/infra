@@ -42,27 +42,48 @@ if ! mount | grep -qF " on /Volumes/Backups "; then
   push_backup_metrics calendars_backup 1 "$(( $(date +%s) - START ))" 0 nas-unavailable
   exit 1
 fi
-mkdir -p "${DEST_BASE}/Contacts" "${DEST_BASE}/Calendars"
-
-# Sync (read-only pull) under a runtime watchdog. NOTE: run `vdirsyncer discover` once at
-# setup (interactive) before the first sync; re-run discover if you add an address book/calendar.
+# Sync to LOCAL staging first (vdirsyncer), then rsync staging -> Backups master location.
+# Why: writing many small files straight to the SMB share stalls the iCloud connection until
+# it drops ("Server disconnected"). Staging locally decouples the iCloud fetch from slow SMB.
+STAGING="${HOME}/.local/share/icloud-dav"
+mkdir -p "${STAGING}/Contacts" "${STAGING}/Calendars" "${DEST_BASE}/Contacts" "${DEST_BASE}/Calendars"
 RUNOUT="${LOGDIR}/sync-$(date '+%Y%m%d-%H%M%S').out"
-log "vdirsyncer sync → ${DEST_BASE}/{Contacts,Calendars} (watchdog=${MAX_RUNTIME}s)"
-"${VDIRSYNCER}" sync > "${RUNOUT}" 2>&1 &
+
+log "vdirsyncer discover+sync → ${STAGING}/{Contacts,Calendars} (watchdog=${MAX_RUNTIME}s)"
+# discover auto-confirms new/known collections (yes-piped) so new address books/calendars are
+# picked up automatically; then sync (read-only pull from iCloud).
+# NB: `set +o pipefail` inside the subshell is REQUIRED — with pipefail on, `yes | discover`
+# returns 141 (yes gets SIGPIPE when discover closes the pipe), which would falsely fail the
+# pipeline and skip the sync. We don't gate sync on discover's rc; sync surfaces real errors.
+(
+  set +o pipefail
+  yes | "${VDIRSYNCER}" discover
+  "${VDIRSYNCER}" sync
+) > "${RUNOUT}" 2>&1 &
 vpid=$!
 ( sleep "${MAX_RUNTIME}"; kill -0 "$vpid" 2>/dev/null && { echo "$(date '+%F %T') WATCHDOG: vdirsyncer exceeded ${MAX_RUNTIME}s — killing"; kill -9 "$vpid" 2>/dev/null; } ) & wpid=$!
 wait "$vpid" 2>/dev/null; rc=$?
 kill "$wpid" 2>/dev/null
 
-dur="$(( $(date +%s) - START ))"
-contacts_items="$(find "${DEST_BASE}/Contacts" -type f -name '*.vcf' 2>/dev/null | wc -l | tr -d ' ')"
-calendars_items="$(find "${DEST_BASE}/Calendars" -type f -name '*.ics' 2>/dev/null | wc -l | tr -d ' ')"
-push_backup_metrics contacts_backup  "${rc}" "${dur}" "${contacts_items}"
-push_backup_metrics calendars_backup "${rc}" "${dur}" "${calendars_items}"
+# Mirror staging -> Backups master (/Backups/Graham/iCloud/{Contacts,Calendars}). Decoupled
+# from iCloud, so SMB slowness here can't drop the upstream connection. --delete mirrors
+# iCloud deletions; staging is the authoritative local copy.
+log "rsync staging → ${DEST_BASE}/{Contacts,Calendars}"
+rsync -a --delete "${STAGING}/Contacts/"  "${DEST_BASE}/Contacts/"  >> "${RUNOUT}" 2>&1; rc_c=$?
+rsync -a --delete "${STAGING}/Calendars/" "${DEST_BASE}/Calendars/" >> "${RUNOUT}" 2>&1; rc_v=$?
 
-if [ "${rc}" -eq 0 ]; then
+dur="$(( $(date +%s) - START ))"
+contacts_items="$(find "${STAGING}/Contacts" -type f -name '*.vcf' 2>/dev/null | wc -l | tr -d ' ')"
+calendars_items="$(find "${STAGING}/Calendars" -type f -name '*.ics' 2>/dev/null | wc -l | tr -d ' ')"
+# overall rc = vdirsyncer AND both rsyncs
+c_rc=$([ "${rc}" -eq 0 ] && [ "${rc_c}" -eq 0 ] && echo 0 || echo 1)
+v_rc=$([ "${rc}" -eq 0 ] && [ "${rc_v}" -eq 0 ] && echo 0 || echo 1)
+push_backup_metrics contacts_backup  "${c_rc}" "${dur}" "${contacts_items}"
+push_backup_metrics calendars_backup "${v_rc}" "${dur}" "${calendars_items}"
+
+if [ "${rc}" -eq 0 ] && [ "${rc_c}" -eq 0 ] && [ "${rc_v}" -eq 0 ]; then
   log "✓ sync complete (contacts=${contacts_items} vcf, calendars=${calendars_items} ics)"
-else
-  log "✗ vdirsyncer exited rc=${rc} (see ${RUNOUT})"
+  exit 0
 fi
-exit "${rc}"
+log "✗ failed (vdirsyncer rc=${rc}, rsync contacts=${rc_c} calendars=${rc_v}; see ${RUNOUT})"
+exit 1
