@@ -13,6 +13,24 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-22 — M80 tier-1: iCloud Contacts + Calendars backup LIVE + scheduled
+
+Owner: "lmk when we've completed a successful contacts/calendar sync. infra agent has built dashboard but it's reporting no success yet" + "is it now scheduled at regular intervals?"
+
+**Result: DONE.** 2,049 contacts (`.vcf`) + 446 calendar events (`.ics`) back up cleanly to `/Backups/Graham/iCloud/{Contacts,Calendars}` (rides the existing 01:00 `s3-sync-backups` → S3 offsite). rc=0/item-count/`last_success` metrics push green to Pushgateway (job `contacts_backup`/`calendars_backup`). LaunchAgent `net.wind.icloud-dav` loaded + scheduled **daily 21:00** (before the 01:00 S3 sync → ships same night). Incremental run = **11s** (5s iCloud pull + 6s rsync); first run was ~3 min only for the one-time rsync fill.
+
+**The dashboard "no success" was TWO bugs in the wrapper — not SMB, not iCloud** (commit `9e04e9f`):
+1. `vdirsyncer-config`: an **inline `#` comment trailing the `calendars_local` `path` value** broke vdirsyncer's INI parser ("Extra data: ... char 41") → vdirsyncer never started, empty staging. Comments must be on their own line above the option.
+2. `icloud-dav-backup.sh`: **`set -o pipefail` + `yes | vdirsyncer discover`** returned 141 (`yes` gets SIGPIPE when discover closes the pipe) → the `&&` saw non-zero and **skipped the actual sync**. Fixed by wrapping discover+sync in a subshell with `set +o pipefail`.
+
+**Design (M80, decided earlier this session):** vdirsyncer pulls iCloud → **LOCAL staging** (`~/.local/share/icloud-dav/`), then `rsync -a --delete` staging → NAS. Why: writing thousands of small files **straight to SMB** is slow enough (~100 files/s, metadata-latency-bound) that the iCloud DAV connection times out mid-pull ("Server disconnected"). Staging decouples the iCloud fetch from slow SMB. iCloud storages are `read_only=true` (vdirsyncer can never write back to real contacts/calendars). App-specific password from the SOPS bundle (`icloud_app_password`) via `icloud-app-password.sh`.
+
+**SMB performance investigation (owner: "why is SMB so slow… NAS reporting healthy"):** Benchmarked — NAS is healthy. Sequential write **708 MB/s**, 0.36ms latency, 10GbE, 0 reconnects. The slowness is **per-file metadata round-trips only**: a small dir lists in 0.46s but the **44k-file Photos dir takes 17.3s**, and small-file writes cap ~100/s. Inherent to SMB on a deep flat directory — not NAS ill-health (consistent with "reports healthy"). The earlier catastrophic stalls were the NAS NVMe read-cache controller failure (resolved by reboot; today's benchmarks confirm gone). **Side-finding:** `/etc/nsmb.conf` is MISSING (mount-nas.sh installs it but it didn't stick this boot) so the `mc_on`/`notify_off` tuning isn't active, and SMB signing is ON (`AES_128_GMAC`) — both worth fixing to help the metadata/small-file path (follow-up, not blocking).
+
+**State:** M80 tier-1 (Contacts + Calendars) complete + scheduled + monitored. **Next:** chase the `/etc/nsmb.conf` install gap; remaining M80 tiers (Messages, etc.) per the tier plan.
+
+---
+
 ## 2026-06-22 (cont. 8) — H3 tier 5: monitoring OBSERVATION started (audit on, flip ~24h)
 
 Owner: "Take on monitoring. Start with audit as this is wide reaching." monitoring is the widest-fanout ns (Prometheus scrapes every ns + 5 external hosts; Alloy ingests syslog; Alertmanager/ai-advisor egress externally), so audit-first is essential.
