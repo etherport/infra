@@ -38,8 +38,10 @@ OSXPHOTOS="${HOME}/.local/bin/osxphotos"              # pipx install location
 REPORT_DIR="${HOME}/Library/Logs/photos-export"
 # Export DB on LOCAL disk (not in DEST on SMB): osxphotos writes it as the final step of
 # every run, and on the blip-prone SMB share that write fails (interrupted by reconnects)
-# → rc=1, no clean completion. Local + --ramdb makes it reliable; only photo files go over
-# SMB. Rebuildable ledger, so keeping it off the NAS/S3 is fine. (M79, 2026-06-19.)
+# → rc=1, no clean completion. LOCAL DB makes that write reliable; only photo files go over
+# SMB. Rebuildable ledger, so keeping it off the NAS/S3 is fine. (M79, 2026-06-19.) NOTE: do
+# NOT add --ramdb — with the DB local it's unnecessary, and it only persists on a *clean*
+# finish, so a watchdog-killed run loses its record of what it exported (dup/cleanup risk).
 EXPORTDB="${EXPORTDB:-${HOME}/Library/Application Support/osxphotos/graham-icloud-photos.db}"
 
 # shellcheck source=photos-metrics.sh
@@ -126,7 +128,7 @@ fi
 # --exportdb (LOCAL) + --update = reuse canonical filenames → never re-creates (N) dups.
 # --cleanup removes any stray orphan not in the ledger (dup safety net). --download-missing
 # /--use-photokit added only when DOWNLOAD_MISSING is set.
-flags=(--update --exportdb "${EXPORTDB}" --ramdb --sidecar XMP --cleanup --retry 3)
+flags=(--update --exportdb "${EXPORTDB}" --sidecar XMP --cleanup --retry 3)
 [ -n "${DOWNLOAD_MISSING}" ] && flags+=(--download-missing --use-photokit)
 MODE="$([ -n "${DOWNLOAD_MISSING}" ] && echo photokit || echo local)"
 RUNOUT="${REPORT_DIR}/run-$(date '+%Y%m%d-%H%M%S').out"
