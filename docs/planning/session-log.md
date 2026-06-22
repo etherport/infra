@@ -13,6 +13,22 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-22 (cont. 2) — photos orphan dedup run #2 (NAS+S3, 15.77 GiB) + orphan metric panel/alert
+
+Second mini-supplied dedup list (`photos_export_orphans` = export-dir files not in osxphotos' ledger): **1,058 entries**, all under `Graham/iCloud/Photos/`.
+
+**Verify (NFS pod, read-only).** Mounted the Backups NFS (`sequoia.wind.etherport.net:/var/nfs/shared/Backups`) in a throwaway pod (cleaner than NAS SSH; rclone runs root under baseline PSS so a root pod can delete). All 1,058 present, all within the Photos prefix, 0 escapes, **15.77 GiB**. Composition differs from M96: only 309 have the ` (N)` suffix; 749 are non-suffixed incl. base-named files (`IMG_0308.JPG`). Spot-checked coverage — **every** sampled orphan has many same-stem copies KEPT (e.g. `IMG_0308.JPG` deleted but `(1)/(9)/(10)/(11)…` retained) → no photo lost; iCloud is the upstream source of truth regardless.
+
+**NAS delete.** Suspended `s3-sync-backups` first (so the deletion couldn't trip the delete-guard / propagate mid-op). Guarded line-by-line `rm` in the pod (prefix-locked, no `..`): **1,058 deleted / 0 errors / 15.77 GiB**, Photos 44,895→43,837.
+
+**S3 purge — blocked by my own M97 guardrail.** Backups → `s3://archive.wind.etherport.net/objects/backups/`; the M97 `ProtectBackupObjectsFromDeletion` Deny covers `archive/*`, and **explicit Deny beats the temporary bypass Allow** (so the plain M96 recipe no longer works). Asked the owner → chose "temp exception + purge now". Temp, prefix-scoped change to `terraform-storage.json` (`953d2cc`): lifted the `archive/*` line from the Deny + added `ListBucketVersions` (bucket) and `GetObjectVersion/DeleteObjectVersion/BypassGovernanceRetention` scoped to `objects/backups/Graham/iCloud/Photos/*`. **Blast radius stayed scoped even with the bucket-wide Deny line off**: object-lock GOVERNANCE still protects every other archive object (no bypass granted outside the Photos prefix). Applied via the [[M98]] `iam-apply` OIDC workflow (input is `policy_name`, not `policy`; wait ~15s post-push to avoid the stale-checkout race). boto3 paginated purge (dry-run first): **1,058 versions, 0 delete-markers, 15.77 GiB, 0 errors**; re-verify showed 0 versions remaining. **Reverted immediately** (`add4386`, byte-identical to pre-temp) + re-applied via iam-apply → `list-object-versions` is `AccessDenied` again (guardrail restored). Re-enabled the sync. **NAS = S3 = 43,837 objects** (consistent → next sync no-op).
+
+**Orphan metric panel/alert (mini-agent task).** Added `photos_export_orphans` (export-dir files not in the ledger; baseline ≈1,070, drops after this delete) to the dashboard as **"Orphan dup files"** (area sparkline; reflowed the stat block to 2 rows for 7 stats) + alert **`PhotosExportOrphansGrowing`** — fires on *growth* only (`max_over_time[26h] - min_over_time[26h] > 50` for 1h), never the absolute value (legitimately declines after cleanup). Metric not pushed yet → reads no-data until the mini's next run. `fa56b12`.
+
+**Commits:** `953d2cc` (temp grant), `add4386` (revert), `fa56b12` (orphan panel/alert + runbook). Docs: this entry + memory `s3-backup-version-purge-needs-m97-deny-exception`.
+
+---
+
 ## 2026-06-22 (cont.) — rclone perf+metric fixes (--fast-list, bytes parse); photos missing split
 
 Follow-ups off the cleaned-up rclone dashboard.
