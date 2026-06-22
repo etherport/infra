@@ -17,19 +17,21 @@ MAX_RUNTIME="${MAX_RUNTIME:-1800}"   # 30 min watchdog (a normal DAV sync is a f
 mkdir -p "${LOGDIR}"
 # shellcheck source=mini-backup-metrics.sh
 source "${HERE}/mini-backup-metrics.sh"   # push_backup_metrics (non-fatal)
+# shellcheck source=mini-common.sh
+source "${HERE}/mini-common.sh"           # mini_acquire_lock / mini_run_timeout / mini_kill_tree
 START="$(date +%s)"
 
 log(){ echo "$(date '+%F %T') icloud-dav: $*"; }
 
 # Single-run lock (own lock — independent of the photos pipeline; different data, safe to
-# run concurrently with photos, but not two DAV runs at once).
+# run concurrently with photos, but not two DAV runs at once). mini_acquire_lock verifies the
+# holder is a genuinely-live icloud-dav run (pid + command match) so pid reuse can neither
+# double-run nor wedge us out forever.
 LOCK="${LOGDIR}/.run.lock"
-if ! mkdir "${LOCK}" 2>/dev/null; then
-  opid="$(cat "${LOCK}/pid" 2>/dev/null)"
-  if [ -n "${opid}" ] && kill -0 "${opid}" 2>/dev/null; then log "another run active (pid ${opid}) — exiting"; exit 0; fi
-  rm -rf "${LOCK}"; mkdir "${LOCK}"
+if ! mini_acquire_lock "${LOCK}" "icloud-dav-backup.sh"; then
+  log "another icloud-dav run is active — exiting"; exit 0
 fi
-echo "$$" > "${LOCK}/pid"; trap 'rm -rf "${LOCK}"' EXIT
+trap 'rm -rf "${LOCK}"' EXIT
 
 # Ensure the Backups share is mounted (DAV needs only Backups — not the photos sparsebundle).
 if ! mount | grep -qF " on /Volumes/Backups "; then
@@ -40,6 +42,14 @@ if ! mount | grep -qF " on /Volumes/Backups "; then
   log "✗ Backups not mounted — aborting"
   push_backup_metrics contacts_backup 1 "$(( $(date +%s) - START ))" 0 nas-unavailable
   push_backup_metrics calendars_backup 1 "$(( $(date +%s) - START ))" 0 nas-unavailable
+  exit 1
+fi
+# Liveness probe: a stale/dead SMB mount still appears in `mount` but hangs on I/O. A bounded
+# stat proves the mount actually responds before we touch it (else every later find/rsync hangs).
+if ! mini_run_timeout 15 ls /Volumes/Backups >/dev/null 2>&1; then
+  log "✗ Backups mount is listed but UNRESPONSIVE (stale) — aborting"
+  push_backup_metrics contacts_backup 1 "$(( $(date +%s) - START ))" 0 nas-unresponsive
+  push_backup_metrics calendars_backup 1 "$(( $(date +%s) - START ))" 0 nas-unresponsive
   exit 1
 fi
 # Sync to LOCAL staging first (vdirsyncer), then rsync staging -> Backups master location.
@@ -67,9 +77,9 @@ log "vdirsyncer discover+sync → ${STAGING}/{Contacts,Calendars} (watchdog=${MA
   "${VDIRSYNCER}" sync
 ) > "${RUNOUT}" 2>&1 &
 vpid=$!
-( sleep "${MAX_RUNTIME}"; kill -0 "$vpid" 2>/dev/null && { echo "$(date '+%F %T') WATCHDOG: vdirsyncer exceeded ${MAX_RUNTIME}s — killing"; kill -9 "$vpid" 2>/dev/null; } ) & wpid=$!
+( sleep "${MAX_RUNTIME}"; kill -0 "$vpid" 2>/dev/null && { echo "$(date '+%F %T') WATCHDOG: vdirsyncer exceeded ${MAX_RUNTIME}s — killing"; mini_kill_tree "$vpid"; } ) & wpid=$!
 wait "$vpid" 2>/dev/null; rc=$?
-kill "$wpid" 2>/dev/null
+kill "$wpid" 2>/dev/null; wait "$wpid" 2>/dev/null   # reap the watchdog (avoid orphan sleeper / pid reuse)
 
 # Count staging FIRST (local, fast) — needed to guard the destructive mirror BEFORE it runs.
 contacts_items="$(find "${STAGING}/Contacts" -type f -name '*.vcf' 2>/dev/null | wc -l | tr -d ' ')"
@@ -93,9 +103,11 @@ mirror_service(){
   if [ "${items}" -eq 0 ]; then
     log "✗ ${svc}: NOT mirroring — staging EMPTY (would wipe master); master left intact" >&2; echo 1; return
   fi
-  local have; have="$(find "${dst}" -type f 2>/dev/null | wc -l | tr -d ' ')"
+  # Bound the master-side find AND the rsync with a wall-clock cap — a dead-but-listed SMB mount
+  # would otherwise hang either forever, wedging the run + holding the lock (H2/H3).
+  local have; have="$(mini_run_timeout 60 find "${dst}" -type f 2>/dev/null | wc -l | tr -d ' ')"
   local maxdel=$(( have / 2 )); [ "${maxdel}" -lt 25 ] && maxdel=25
-  rsync -a --delete --max-delete="${maxdel}" "${src}/" "${dst}/" >> "${RUNOUT}" 2>&1
+  mini_run_timeout "${RSYNC_TIMEOUT:-600}" rsync -a --delete --max-delete="${maxdel}" "${src}/" "${dst}/" >> "${RUNOUT}" 2>&1
   local r=$?
   if [ "${r}" -eq 25 ]; then
     log "✗ ${svc}: rsync hit --max-delete=${maxdel} (master had ${have}, staging ${items}) — ABORTED to protect backup" >&2; echo 1; return

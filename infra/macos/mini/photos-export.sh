@@ -46,6 +46,8 @@ EXPORTDB="${EXPORTDB:-${HOME}/Library/Application Support/osxphotos/graham-iclou
 
 # shellcheck source=photos-metrics.sh
 source "${HERE}/photos-metrics.sh"   # provides push_photos_metrics (non-fatal)
+# shellcheck source=mini-common.sh
+source "${HERE}/mini-common.sh"      # mini_acquire_lock / mini_run_timeout / mini_kill_tree
 START="$(date +%s)"
 
 log() { echo "$(date '+%Y-%m-%dT%H:%M:%S') photos-export: $*"; }
@@ -67,15 +69,14 @@ CLEANUP="${CLEANUP:-}"
 # Single-run lock. Two osxphotos runs against the same --exportdb (e.g. the nightly firing
 # during a manual download pass) race on the ledger and can re-introduce duplicate (N)
 # names — the exact failure we just cleaned up. mkdir is atomic ⇒ only one run at a time.
+# Lock is SHARED with photos-export-resume.sh (same path) — they race on the same --exportdb.
+# mini_acquire_lock matches on "photos-export" so EITHER script's live run holds off the other,
+# and a reused pid can't double-run (ledger race → (N) dups) or wedge us out forever.
 LOCK="${REPORT_DIR}/.run.lock"; mkdir -p "${REPORT_DIR}"
-if ! mkdir "${LOCK}" 2>/dev/null; then
-  opid="$(cat "${LOCK}/pid" 2>/dev/null)"
-  if [ -n "${opid}" ] && kill -0 "${opid}" 2>/dev/null; then
-    log "another photos-export run is active (pid ${opid}) — exiting to avoid ledger race"; exit 0
-  fi
-  rm -rf "${LOCK}"; mkdir "${LOCK}"   # stale lock from a crashed run
+if ! mini_acquire_lock "${LOCK}" "photos-export"; then
+  log "another photos-export run is active — exiting to avoid ledger race"; exit 0
 fi
-echo "$$" > "${LOCK}/pid"; trap 'rm -rf "${LOCK}"' EXIT
+trap 'rm -rf "${LOCK}"' EXIT
 
 # --- 1. ensure NAS mounts ---
 log "preflight: ensuring NAS mounts"
@@ -148,9 +149,9 @@ MAX_RUNTIME="${MAX_RUNTIME:-5400}"   # 90 min
 log "exporting → ${DEST} (mode=${MODE}; watchdog=${MAX_RUNTIME}s; report: ${REPORT})"
 "${OSXPHOTOS}" export "${DEST}" --library "${LIBRARY}" "${flags[@]}" --report "${REPORT}" > "${RUNOUT}" 2>&1 &
 opid=$!
-( sleep "${MAX_RUNTIME}"; kill -0 "$opid" 2>/dev/null && { echo "$(date '+%F %T') WATCHDOG: exceeded ${MAX_RUNTIME}s — killing osxphotos (likely a wedged NAS I/O)"; kill -9 "$opid" 2>/dev/null; } ) & wpid=$!
+( sleep "${MAX_RUNTIME}"; kill -0 "$opid" 2>/dev/null && { echo "$(date '+%F %T') WATCHDOG: exceeded ${MAX_RUNTIME}s — killing osxphotos (likely a wedged NAS I/O)"; mini_kill_tree "$opid"; } ) & wpid=$!
 wait "$opid" 2>/dev/null; rc=$?
-kill "$wpid" 2>/dev/null   # cancel watchdog if the run finished on its own
+kill "$wpid" 2>/dev/null; wait "$wpid" 2>/dev/null   # cancel+reap watchdog (no orphan sleeper / pid reuse)
 
 # Parse osxphotos' summary ("Processed: N photos, exported: X, ..., missing: Y, ...") for
 # metrics (-a: treat as text, the progress bar uses \r), and split missing into structurally-

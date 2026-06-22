@@ -56,6 +56,8 @@ mkdir -p "$RDIR" "$(dirname "$EXPORTDB")"
 
 # shellcheck source=photos-metrics.sh
 source "${HERE}/photos-metrics.sh"   # push_photos_metrics (non-fatal); job=photos_export_resume
+# shellcheck source=mini-common.sh
+source "${HERE}/mini-common.sh"      # mini_acquire_lock / mini_run_timeout / mini_kill_tree
 START="$(date +%s)"
 
 log(){ echo "$(date '+%F %T') resume: $*"; }
@@ -63,15 +65,20 @@ log(){ echo "$(date '+%F %T') resume: $*"; }
 # Single-run lock (shared with photos-export.sh) — two runs against the same --exportdb race
 # on the ledger and can re-create duplicate (N) names. mkdir is atomic.
 LOCK="${RDIR}/.run.lock"
-if ! mkdir "$LOCK" 2>/dev/null; then
-  opid="$(cat "$LOCK/pid" 2>/dev/null)"
-  if [ -n "$opid" ] && kill -0 "$opid" 2>/dev/null; then
-    log "another photos-export run is active (pid $opid) — exiting to avoid ledger race"; exit 0
-  fi
-  rm -rf "$LOCK"; mkdir "$LOCK"
+if ! mini_acquire_lock "$LOCK" "photos-export"; then
+  log "another photos-export run is active — exiting to avoid ledger race"; exit 0
 fi
-echo "$$" > "$LOCK/pid"; trap 'rm -rf "$LOCK"' EXIT
-count(){ find "$DEST" -type f ! -name '.osxphotos_export.db' ! -name '*.DS_Store' 2>/dev/null | wc -l | tr -d ' '; }
+trap 'rm -rf "$LOCK"' EXIT
+# count() walks DEST over the blip-prone SMB mount. It is called by the stall watchdog every
+# 120s, so if a dead-but-listed mount makes `find` hang, the watchdog loop would block INSIDE
+# count() forever — defeating the very stall detection it exists for (H3). Bound it; on timeout
+# echo -1 so the caller treats it as a lost mount and kills the attempt.
+count(){
+  local out rc
+  out="$(mini_run_timeout 45 find "$DEST" -type f ! -name '.osxphotos_export.db' ! -name '*.DS_Store' 2>/dev/null)"; rc=$?
+  [ "$rc" -ne 0 ] && { echo -1; return; }   # find timed out ⇒ mount unresponsive
+  printf '%s' "$out" | grep -c . | tr -d ' '
+}
 mounted(){ mount | grep -qF " on /Volumes/Backups "; }
 # Attach the library sparsebundle if it isn't already a mounted volume. Nothing else
 # attaches it after a reboot, so without this the export (and Photos.app) can't find the
@@ -113,13 +120,14 @@ for a in $(seq 1 "$MAX_ATTEMPTS"); do
   last=-1; stall=0
   while kill -0 "$pid" 2>/dev/null; do
     sleep 120
-    if ! mounted; then log "Backups mount lost — killing run ${a}"; kill "$pid" 2>/dev/null; break; fi
+    if ! mounted; then log "Backups mount lost — killing run ${a}"; mini_kill_tree "$pid"; break; fi
     n=$(count)
+    if [ "$n" -lt 0 ]; then log "count timed out (mount unresponsive) — killing run ${a}"; mini_kill_tree "$pid"; break; fi
     if [ "$n" -le "$last" ]; then stall=$((stall+1)); else stall=0; fi
     last="$n"
     if [ "$stall" -ge "$STALL_TICKS" ]; then
       log "no progress ${STALL_TICKS}×120s (stuck at ${n}) — killing wedged run ${a}"
-      kill "$pid" 2>/dev/null; break
+      mini_kill_tree "$pid"; break
     fi
   done
   wait "$pid" 2>/dev/null; rc=$?
