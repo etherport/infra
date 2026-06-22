@@ -8,3 +8,4 @@ resources:
   - blackbox-appliances.yaml
   - hubble-flows.yaml
   - photos-export.yaml
+  - icloud-backups.yaml

@@ -1,0 +1,84 @@
+# Alerts for the Mac mini's off-cluster iCloud category backups (Contacts,
+# Calendars, and future categories like Messages/Drive). The mini pushes
+# <category>_backup_* metrics to the cluster Pushgateway after each run
+# (instance="mini"); *_last_success_timestamp_seconds is pushed under its own
+# group (job="<category>_backup_lastsuccess") so a failed run can't wipe the
+# last-success marker.
+#
+# Templated by metric-name regex (.+_backup_*) + `by (job)`, so EVERY current and
+# future *_backup category is covered automatically — no per-category rules. The
+# richer photos pipeline (photos_export_* schema) has its own alerts in
+# 09-photos-export-alerts.yaml and is intentionally not matched here.
+#
+# Severity note: these secondary metadata backups use `warning` (incl. Stale),
+# unlike photos where Stale is `critical` — the photo LIBRARY is the higher-stakes
+# dataset. Adjust if a category later warrants paging.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: icloud-backups-alerts
+  namespace: monitoring
+  labels:
+    # kube-prometheus-stack ruleSelector matches release=monitoring
+    release: monitoring
+spec:
+  groups:
+    - name: icloud-backups
+      rules:
+        - alert: ICloudBackupStale
+          # No SUCCESSFUL run in >26h (nightly ~21:00 PT). label_replace strips the
+          # "_lastsuccess" job-group suffix so the alert is labelled with the real
+          # category (e.g. contacts_backup). max by (job) → one alert per category.
+          expr: |
+            time() - max by (job) (
+              label_replace(
+                {__name__=~".+_backup_last_success_timestamp_seconds", instance="mini"},
+                "job", "$1", "job", "(.+)_lastsuccess"
+              )
+            ) > 93600
+          for: 15m
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "iCloud backup {{ $labels.job }} hasn't succeeded in >26h"
+            description: |
+              No successful {{ $labels.job }} run on the mini (10.10.202.101) in
+              >26h (nightly ~21:00 PT) — a failed or skipped run. Check the
+              "Mac mini — iCloud backups" Grafana dashboard and Loki
+              {host="mini"}.
+
+        - alert: ICloudBackupFailed
+          # Last run returned non-zero (rc persists in Pushgateway until the next
+          # push). One alert per category via by (job).
+          expr: max by (job) ({__name__=~".+_backup_last_rc", instance="mini"}) > 0
+          for: 30m
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "iCloud backup {{ $labels.job }} last run failed (rc={{ $value }})"
+            description: |
+              {{ $labels.job }}_last_rc={{ $value }} (>0) for >30m — the last run
+              failed. Logs: Loki {host="mini"}; "Mac mini — iCloud backups"
+              dashboard.
+
+        - alert: ICloudBackupEmpty
+          # Last run backed up 0 items — usually a broken sync (auth/permissions,
+          # empty source listing) even when rc=0. Held 1h so a transient mid-run
+          # snapshot doesn't flap it.
+          expr: max by (job) ({__name__=~".+_backup_items", instance="mini"}) == 0
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "iCloud backup {{ $labels.job }} backed up 0 items"
+            description: |
+              {{ $labels.job }}_items=0 for >1h — the last run captured nothing
+              (likely a broken sync: auth/permission failure or an empty source
+              listing), even if the return code looked clean. Investigate on the
+              mini. Logs: Loki {host="mini"}; "Mac mini — iCloud backups" dashboard.

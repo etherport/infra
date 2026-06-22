@@ -1,0 +1,113 @@
+# Grafana dashboard — Mac mini off-cluster iCloud backups (Contacts, Calendars,
+# and future categories). Metrics: <category>_backup_* pushed to Pushgateway by
+# the mini after each run (instance="mini"); *_last_success_timestamp_seconds is
+# pushed under its own job group (<category>_backup_lastsuccess).
+#
+# Templated: the `cat` variable = label_values({__name__=~".+_backup_last_rc"}, job),
+# and the per-category row REPEATS over it — so new categories (messages_backup,
+# drive_backup, …) appear automatically once the mini starts pushing them. The
+# richer photos pipeline keeps its own "Mac mini — Photos backup" board (it uses
+# the photos_export_* schema, not <x>_backup_*, so it is intentionally excluded).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: icloud-backups-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  icloud-backups.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "graphTooltip": 1,
+      "title": "Mac mini — iCloud backups (Contacts / Calendars / …)",
+      "uid": "icloud-backups",
+      "tags": ["backup", "mini", "icloud"],
+      "time": { "from": "now-7d", "to": "now" },
+      "schemaVersion": 39,
+      "templating": { "list": [
+        {
+          "name": "cat",
+          "label": "Category",
+          "type": "query",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "query": "label_values({__name__=~\".+_backup_last_rc\"}, job)",
+          "refresh": 2,
+          "includeAll": true,
+          "multi": true,
+          "current": { "text": "All", "value": "$__all", "selected": false },
+          "sort": 1
+        }
+      ] },
+      "panels": [
+        {
+          "type": "row",
+          "title": "${cat}",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "id": 1,
+          "collapsed": false,
+          "repeat": "cat",
+          "repeatDirection": "v",
+          "panels": []
+        },
+        {
+          "type": "stat",
+          "title": "Last success (age)",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "How long ago this category last completed a SUCCESSFUL run (nightly ~21:00 PT). Yellow past 22h, red past 26h.",
+          "fieldConfig": { "defaults": {
+            "unit": "s",
+            "thresholds": { "mode": "absolute", "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 79200 },
+              { "color": "red", "value": 93600 }
+            ] } }, "overrides": [] },
+          "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "time() - max(${cat}_last_success_timestamp_seconds)" } ]
+        },
+        {
+          "type": "stat",
+          "title": "Last run rc",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Return code of the most recent run. 0 = success (green), non-zero = failure (red).",
+          "fieldConfig": { "defaults": {
+            "thresholds": { "mode": "absolute", "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ] } }, "overrides": [] },
+          "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "max(${cat}_last_rc)" } ]
+        },
+        {
+          "type": "stat",
+          "title": "Items (last run)",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Count of items backed up on the last run (vCards for contacts, events for calendars). 0 (red) usually means a broken sync — see ICloudBackupEmpty.",
+          "fieldConfig": { "defaults": {
+            "unit": "short",
+            "thresholds": { "mode": "absolute", "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ] } }, "overrides": [] },
+          "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "max(${cat}_items)" } ]
+        },
+        {
+          "type": "stat",
+          "title": "Duration (last run)",
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
+          "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "max(${cat}_duration_seconds)" } ]
+        }
+      ]
+    }

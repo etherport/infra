@@ -15,6 +15,11 @@ resources:
   - 07-flux-monitoring.yaml
   - 08-mini-backup-ingressroutes.yaml
   - 09-photos-export-alerts.yaml
+  # HELD (2026-06-22): contacts/calendars syncs are still in development (rc=1,
+  # items=0), so ICloudBackupFailed/Empty would fire immediately. The rules file
+  # is committed and validated — uncomment this line to enable once the mini's
+  # category syncs produce a healthy run. (Dashboard is already live.)
+  # - 10-icloud-backups-alerts.yaml
   - comprehensive-alerts.yaml
   - dns-health-alerts.yaml
   - grafana-admin-secret.sops.yaml
