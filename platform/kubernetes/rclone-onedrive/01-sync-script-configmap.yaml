@@ -81,13 +81,19 @@ data:
     # Capture rclone's REAL exit code through the tee pipe (BusyBox sh has no
     # pipefail, so a bare `rclone | tee` would report tee's status and mask
     # failures). The subshell writes rclone's rc to a file.
-    # --fast-list: one recursive listing instead of a per-directory walk (see the
-    # gdrive script for the rationale). Buffers the listing in RAM (well under the
-    # 1Gi limit at this object count); cuts API round-trips on the tree walk.
+    # --fast-list + --onedrive-delta: fast-list alone only got OneDrive from ~7m
+    # to ~4.75m/run — unlike Google Drive (23s), OneDrive's cost is Microsoft
+    # Graph per-request latency + 429 throttling (hence --tpslimit 10), not the
+    # directory walk, so it still made thousands of list calls for ~21k items.
+    # --onedrive-delta switches listing to Graph's flat delta/changes feed
+    # (~1000 items/page → a handful of paginated calls instead of per-folder),
+    # which is the real win here. It always lists the WHOLE drive regardless of
+    # path — fine, since SRC is the drive root anyway. Requires --fast-list.
     ( rclone sync "$SRC" "$DEST" \
         --config=/config/rclone/rclone.conf \
         --bind 0.0.0.0 \
         --fast-list \
+        --onedrive-delta \
         --tpslimit 10 \
         --max-delete ${MAX_DELETE} \
         --stats=1m \
