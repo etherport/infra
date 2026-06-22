@@ -24,7 +24,7 @@ data:
         {
           "type": "stat",
           "title": "Coverage — available files",
-          "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Share of FETCHABLE originals that are backed up. 100% = every file a re-download (DOWNLOAD_MISSING=1) could retrieve is present (photos_export_missing_resolvable = 0). Structurally-unavailable items (edited Live-Photo clips Apple won't serve) are excluded from the denominator concept and shown separately.",
           "fieldConfig": { "defaults": {
@@ -41,7 +41,7 @@ data:
         {
           "type": "stat",
           "title": "Last success (age)",
-          "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": { "defaults": {
             "unit": "s",
@@ -57,7 +57,7 @@ data:
         {
           "type": "stat",
           "title": "Last run rc",
-          "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": { "defaults": {
             "thresholds": { "mode": "absolute", "steps": [
@@ -71,7 +71,7 @@ data:
         {
           "type": "stat",
           "title": "Exported (last run)",
-          "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "green" } }, "overrides": [] },
           "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
@@ -81,7 +81,7 @@ data:
         {
           "type": "stat",
           "title": "Missing (resolvable)",
-          "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+          "gridPos": { "h": 4, "w": 8, "x": 0, "y": 4 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Genuinely-missing originals a re-download could fix (the ACTIONABLE number). 0 = nothing to do. Any value >0 means files are missing from the backup that DOWNLOAD_MISSING=1 should recover — this is what PhotosExportCoverageRegressed alerts on.",
           "fieldConfig": { "defaults": {
@@ -97,7 +97,7 @@ data:
         {
           "type": "stat",
           "title": "Unavailable (edited Live-Photo clips)",
-          "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+          "gridPos": { "h": 4, "w": 8, "x": 8, "y": 4 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "description": "Structurally un-fetchable items (edited Live-Photo motion parts / *_edited*.mov that Apple won't serve). Expected non-zero (~9) and NOT actionable — informational only, deliberately un-alerted.",
           "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "blue" } }, "overrides": [] },
@@ -106,9 +106,20 @@ data:
             "expr": "max(photos_export_missing_unavailable)" } ]
         },
         {
+          "type": "stat",
+          "title": "Orphan dup files",
+          "gridPos": { "h": 4, "w": 8, "x": 16, "y": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Files present in the export dir but NOT in osxphotos' ledger (untracked duplicates). Should stay FLAT or trend down (a NAS-local delete drops it toward 0). GROWTH means new dups are being produced (a run without --exportdb, a race, etc.) — that is what PhotosExportOrphansGrowing alerts on, NOT the absolute value (which legitimately drops after cleanup). Sparkline shows the trend.",
+          "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "blue" } }, "overrides": [] },
+          "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "max(photos_export_orphans)" } ]
+        },
+        {
           "type": "timeseries",
           "title": "Exported / missing (resolvable vs unavailable)",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": {
             "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10 } },
@@ -128,7 +139,7 @@ data:
         {
           "type": "timeseries",
           "title": "Run duration",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "bars", "fillOpacity": 40 } }, "overrides": [] },
           "targets": [
@@ -138,7 +149,7 @@ data:
         {
           "type": "logs",
           "title": "Mini logs ({host=\"mini\"})",
-          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 12 },
+          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 16 },
           "datasource": { "type": "loki", "uid": "loki" },
           "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" },
           "targets": [

@@ -44,6 +44,7 @@ job/instance labels survive scraping).
 | `PhotosExportNoMetrics` | warning | `absent(photos_export_last_success_timestamp_seconds)` for 48h — mini stopped pushing / Pushgateway data lost |
 | `PhotosExportFailed` | warning | `max(photos_export_last_rc) > 0` for 30m |
 | `PhotosExportCoverageRegressed` | warning | `max(photos_export_missing_resolvable) > 0` for 1h — backup coverage of *fetchable* files dropped below 100% |
+| `PhotosExportOrphansGrowing` | warning | `max_over_time(photos_export_orphans[26h]) - min_over_time(...[26h]) > 50` for 1h — untracked-dup count *rising* (not the absolute baseline) |
 
 The success-ts is pushed under its own group (`job="photos_export_lastsuccess"`)
 so a failed run can't wipe the last-success marker.
@@ -56,12 +57,19 @@ Live-Photo motion clips / `*_edited*.mov` Apple won't serve; ~9, expected,
 **deliberately un-alerted**). The combined `photos_export_missing` is still
 emitted. `PhotosExportCoverageRegressed` fires only on the *resolvable* count.
 
+**`photos_export_orphans`** (added 2026-06-22): files present in the export dir but
+**not** in osxphotos' ledger (untracked duplicates). Has a large legitimate
+baseline (≈1,070) that *drops* after a NAS-local orphan delete, so the alert keys
+on **growth** (a >50 rise over 26h), never the absolute value. Growth = new dups
+being produced (a run without `--exportdb`, a race, etc.).
+
 ## Dashboard
 "Mac mini — Photos backup" (`dashboards/photos-export.yaml`, uid `photos-export`):
 **Coverage — available files** (`100·(1 − missing_resolvable/photos_total)`),
 last-success age, last rc, exported, **Missing (resolvable)**, **Unavailable
-(edited Live-Photo clips)**; an exported / resolvable / unavailable timeseries,
-run duration, and a Loki panel for `{host="mini"}`.
+(edited Live-Photo clips)**, **Orphan dup files** (sparkline); an exported /
+resolvable / unavailable timeseries, run duration, and a Loki panel for
+`{host="mini"}`.
 
 ## Verify
 Cluster side (done):

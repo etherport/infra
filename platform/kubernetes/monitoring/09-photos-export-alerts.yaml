@@ -94,3 +94,26 @@ spec:
               download). Note: _unavailable (edited Live-Photo clips, ~9) is
               expected and NOT counted here. Logs: Loki {host="mini",job="photos-export"};
               "Mac mini — Photos backup" dashboard.
+
+        - alert: PhotosExportOrphansGrowing
+          # photos_export_orphans = files in the export dir not in osxphotos'
+          # ledger (untracked duplicates). The absolute value is NOT alertable —
+          # it has a large legitimate baseline that drops toward 0 after a
+          # NAS-local orphan delete. We only care about GROWTH: a meaningful
+          # increase means new dups are being produced (a run without --exportdb,
+          # a race, etc.). Fire on a >50 rise within a rolling 26h window.
+          expr: (max_over_time(photos_export_orphans[26h]) - min_over_time(photos_export_orphans[26h])) > 50
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "Photos-export orphan dup files growing (+{{ $value }} in 26h)"
+            description: |
+              photos_export_orphans rose by {{ $value }} over the last 26h (>50).
+              Orphans are files in the export dir not tracked by osxphotos' ledger
+              — growth means new untracked duplicates are being produced (e.g. a
+              run without --exportdb, or a race), not the expected static/declining
+              baseline. Investigate the mini's export invocation. Logs: Loki
+              {host="mini",job="photos-export"}; "Mac mini — Photos backup" dashboard.
