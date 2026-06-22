@@ -7,3 +7,4 @@ resources:
   - ai-advisor.yaml
   - blackbox-appliances.yaml
   - hubble-flows.yaml
+  - photos-export.yaml

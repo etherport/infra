@@ -32,5 +32,23 @@ spec:
       clusterIP: 10.43.32.171
     serviceMonitor:
       enabled: true
+      # Preserve the job/instance labels pushed by off-cluster sources (mini
+      # photos-export, etcd-snapshot, backup jobs) instead of overwriting them
+      # with the scrape target's labels.
+      honorLabels: true
       additionalLabels:
         release: monitoring
+    # Persist pushed metrics to a PVC. Pushgateway keeps metrics in memory, so a
+    # pod restart would drop *_last_success_timestamp_seconds and false-fire the
+    # staleness alerts (e.g. PhotosExportStale/NoMetrics). The flag set below
+    # snapshots to /data every 5m and reloads on startup.
+    persistentVolume:
+      enabled: true
+      storageClass: ceph-rbd
+      accessModes:
+        - ReadWriteOnce
+      size: 2Gi
+      mountPath: /data
+    extraArgs:
+      - --persistence.file=/data/pushgateway.store
+      - --persistence.interval=5m

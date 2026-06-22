@@ -13,6 +13,8 @@ resources:
   - 06-loki-rules-cilium-audit.yaml
   - 06-backup-alerts.yaml
   - 07-flux-monitoring.yaml
+  - 08-mini-backup-ingressroutes.yaml
+  - 09-photos-export-alerts.yaml
   - comprehensive-alerts.yaml
   - dns-health-alerts.yaml
   - grafana-admin-secret.sops.yaml

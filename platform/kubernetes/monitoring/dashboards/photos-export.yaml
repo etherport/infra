@@ -1,0 +1,111 @@
+# Grafana dashboard — Mac mini off-cluster Photos backup pipeline.
+# Metrics: photos_export_* pushed to Pushgateway by the mini after each run.
+# Logs: {host="mini"} shipped to Loki by Grafana Alloy on the mini.
+# Picked up by the Grafana sidecar via the grafana_dashboard="1" label.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: photos-export-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  photos-export.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "graphTooltip": 1,
+      "title": "Mac mini — Photos backup",
+      "uid": "photos-export",
+      "tags": ["backup", "mini"],
+      "time": { "from": "now-7d", "to": "now" },
+      "schemaVersion": 39,
+      "panels": [
+        {
+          "type": "stat",
+          "title": "Last success (age)",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": {
+            "unit": "s",
+            "thresholds": { "mode": "absolute", "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 79200 },
+              { "color": "red", "value": 93600 }
+            ] } }, "overrides": [] },
+          "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "time() - max(photos_export_last_success_timestamp_seconds)" } ]
+        },
+        {
+          "type": "stat",
+          "title": "Last run rc",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": {
+            "thresholds": { "mode": "absolute", "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ] } }, "overrides": [] },
+          "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "max(photos_export_last_rc)" } ]
+        },
+        {
+          "type": "stat",
+          "title": "Exported (last run)",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "green" } }, "overrides": [] },
+          "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "max(photos_export_exported)" } ]
+        },
+        {
+          "type": "stat",
+          "title": "Missing / unbackupable",
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": {
+            "unit": "short",
+            "thresholds": { "mode": "absolute", "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1600 }
+            ] } }, "overrides": [] },
+          "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "max(photos_export_missing)" } ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Exported vs missing",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+          "targets": [
+            { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(photos_export_exported)", "legendFormat": "exported" },
+            { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(photos_export_missing)", "legendFormat": "missing" }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Run duration",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "bars", "fillOpacity": 40 } }, "overrides": [] },
+          "targets": [
+            { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(photos_export_duration_seconds)", "legendFormat": "duration" }
+          ]
+        },
+        {
+          "type": "logs",
+          "title": "Mini logs ({host=\"mini\"})",
+          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 12 },
+          "datasource": { "type": "loki", "uid": "loki" },
+          "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" },
+          "targets": [
+            { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "expr": "{host=\"mini\"}" }
+          ]
+        }
+      ]
+    }

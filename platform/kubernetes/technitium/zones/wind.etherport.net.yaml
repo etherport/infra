@@ -184,6 +184,16 @@ records:
     value: 10.10.201.70
     comment: Wiki.js (via Traefik)
 
+  - name: pushgateway
+    type: A
+    value: 10.10.201.70
+    comment: Prometheus Pushgateway (via Traefik) — off-cluster metrics push (mini photos-export)
+
+  - name: loki
+    type: A
+    value: 10.10.201.70
+    comment: Loki log ingest (via Traefik) — off-cluster Alloy push (mini)
+
   # =============================================================================
   # Infrastructure - Power Management (via Traefik)
   # =============================================================================

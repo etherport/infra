@@ -1,0 +1,87 @@
+# Alerts for the Mac mini's off-cluster photos-export backup pipeline. The mini
+# (10.10.202.101) pushes photos_export_* metrics to the cluster Pushgateway after
+# every run. *_last_success_timestamp_seconds is pushed under its own group
+# (job="photos_export_lastsuccess") so a failed run can't wipe the last-success
+# marker. Pushgateway persistence (see helm-releases/pushgateway.yaml) keeps these
+# across pod restarts so the staleness alerts don't false-fire.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: photos-export-alerts
+  namespace: monitoring
+  labels:
+    # kube-prometheus-stack ruleSelector matches release=monitoring
+    release: monitoring
+spec:
+  groups:
+    - name: photos-export
+      rules:
+        - alert: PhotosExportStale
+          # No SUCCESSFUL run in >26h (nightly is 22:00 PT). max() so any of the
+          # success-ts series (local/photokit/resume) keeps it fresh; catches
+          # both failed and skipped runs.
+          expr: time() - max(photos_export_last_success_timestamp_seconds) > 93600
+          for: 15m
+          labels:
+            severity: critical
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "Mac mini photos export hasn't succeeded in >26h"
+            description: |
+              No successful photos_export run on the mini (10.10.202.101) in >26h
+              (nightly schedule is 22:00 PT) — a failed or skipped run.
+              Check: launchctl print gui/$(id -u)/net.wind.photos-export on the
+              mini; Loki {host="mini",job="photos-export"}; the "Mac mini — Photos
+              backup" Grafana dashboard.
+
+        - alert: PhotosExportNoMetrics
+          # The success-ts series is entirely absent for >48h — the mini stopped
+          # pushing (job/Alloy down, network/firewall/DNS) or Pushgateway lost its
+          # data (and persistence didn't restore it).
+          expr: absent(photos_export_last_success_timestamp_seconds)
+          for: 48h
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "No photos_export metrics for >48h (mini not pushing / Pushgateway data lost)"
+            description: |
+              photos_export_last_success_timestamp_seconds has been absent for
+              >48h. The mini may have stopped pushing (launchd job/Alloy down,
+              firewall/DNS), or the Pushgateway lost its store. Check the mini and
+              the pushgateway pod (kubectl -n monitoring get pod -l app.kubernetes.io/name=prometheus-pushgateway).
+
+        - alert: PhotosExportFailed
+          # Last run returned non-zero (rc persists in Pushgateway until the next
+          # push).
+          expr: max(photos_export_last_rc) > 0
+          for: 30m
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "Mac mini photos export last run returned non-zero (rc={{ $value }})"
+            description: |
+              photos_export_last_rc={{ $value }} (>0) for >30m — the last export
+              run failed. Logs: Loki {host="mini",job="photos-export"} (look for
+              "✗ export exited").
+
+        - alert: PhotosExportCoverageRegressed
+          # The set of photos that can't be exported grew beyond the known
+          # residual (~1,406 as of 2026-06). Informational — investigate new
+          # unsupported/corrupt items, not an outage.
+          expr: photos_export_missing > 1600
+          for: 0m
+          labels:
+            severity: info
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "Photos-export unbackupable residual grew (>1600: {{ $value }})"
+            description: |
+              photos_export_missing={{ $value }} (baseline ≈1,406). The number of
+              library items that can't be exported has increased — investigate
+              newly-unsupported/corrupt items in the source library.

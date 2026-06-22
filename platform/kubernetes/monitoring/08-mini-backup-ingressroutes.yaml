@@ -1,0 +1,46 @@
+# Internal Traefik IngressRoutes so the off-cluster Mac mini (10.10.202.101)
+# can reach the cluster's metrics + log sinks for its backup pipeline:
+#   pushgateway.wind.etherport.net -> svc/pushgateway:9091   (metrics push)
+#   loki.wind.etherport.net        -> svc/loki:3100          (Alloy log push, /loki/api/v1/push)
+#
+# Access control is the UDM firewall (only the mini -> Traefik VIP is allowed),
+# NOT a Traefik ipAllowList middleware: the shared Traefik LoadBalancer runs
+# externalTrafficPolicy: Cluster, so kube-proxy SNATs the client IP to a node IP
+# and an ipAllowList would 403 everything (same gotcha as the Protect webhook
+# route). These are internal sinks (no Cloudflare Access).
+#
+# websecure (443) only; the *.wind.etherport.net wildcard cert covers both hosts.
+# NB: the `web` (:80) entrypoint 301-redirects to :443, so pushers must use
+# HTTPS URLs (an http:// POST would hit the redirect).
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: pushgateway
+  namespace: monitoring
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`pushgateway.wind.etherport.net`)
+      kind: Rule
+      services:
+        - name: pushgateway
+          port: 9091
+  tls: {}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: loki
+  namespace: monitoring
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`loki.wind.etherport.net`)
+      kind: Rule
+      services:
+        - name: loki
+          port: 3100
+  tls: {}
