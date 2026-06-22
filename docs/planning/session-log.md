@@ -13,6 +13,20 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-22 (cont.) — rclone perf+metric fixes (--fast-list, bytes parse); photos missing split
+
+Follow-ups off the cleaned-up rclone dashboard.
+
+**Bytes always 0.** Owner asked why "bytes transferred" read 0 for both sources even though OneDrive was set up days ago. Two causes: (a) the latest runs genuinely transferred 0 B (no new data — confirmed in logs), AND (b) a parser bug — `TRANSFERRED_BYTES` took `head -1` of rclone's per-`--stats`-interval "Transferred:" lines, i.e. the FIRST 1-min sample (~0 during the listing phase before downloads start), so even the initial multi-GB OneDrive sync recorded 0 (7d max=0 gave it away). Fixed to `tail -1` (final summary = true total) in both `rclone-gdrive/01-` and `rclone-onedrive/01-sync-script-configmap.yaml`. (File-count metric already used tail -1; only bytes was wrong.)
+
+**gdrive ~23 min/run with zero changes.** No `--fast-list`, so rclone walked the ~36k-object Drive tree per-directory under `--tpslimit 10`. Added `--fast-list` to both jobs (one recursive listing; buffers tens of MB, well under the 1Gi limit). **Verified by a manual run: 23.5s vs the prior ~23 min (~60×), same 15,705 checks / 36,862 listed.** NAS impact was always minimal — the "Checks" are local `stat()` (size+mtime, no `--checksum`); the time was Drive API latency, not NAS load. Jobs don't actually overlap (gdrive :00–:23→now :00, onedrive :30; `concurrencyPolicy: Forbid`); S3 overlap is lock-guarded ([[M94]]). Left schedule hourly (now cheap). Noted but didn't touch 2 pre-fix errored onedrive jobs (06-21, Personal Vault `ObjectHandle is Invalid` — predates the `--exclude "/Personal Vault/**"` fix; current runs green).
+
+**Photos "missing" split (mini-agent task).** The mini now emits `photos_export_missing_resolvable` (genuinely-missing originals a re-download fixes — actionable) + `photos_export_missing_unavailable` (structurally un-fetchable edited Live-Photo clips, ~9, expected) beside the combined `photos_export_missing`. Updated `dashboards/photos-export.yaml`: new **Coverage — available files** stat (`100*(1 - missing_resolvable/clamp_min(photos_total,1))`, green@100/red below), new **Unavailable** stat (neutral blue), repointed the missing stat→resolvable (red>0, not the stale 1600 baseline), split the timeseries into exported/resolvable/unavailable, reflowed top row to 6×w4. `09-photos-export-alerts.yaml`: `PhotosExportCoverageRegressed` now `max(photos_export_missing_resolvable) > 0` for >1h, severity info→warning; unavailable un-alerted. Verified live: coverage 100%, resolvable 0, unavailable 9, total 14,346.
+
+**Commits:** `70976be` (rclone), `b9aa765` (photos). All applied + verified in-cluster. No tracker IDs (polish/observability).
+
+---
+
 ## 2026-06-22 — rclone Grafana dashboard: de-dup + clarify; pushgateway pod-label + cm-orphan fixes
 
 Owner flagged the "Rclone Sync (Google Drive / OneDrive)" dashboard: top-row stat tiles didn't say WHICH job each value belonged to; the charts showed ~3 `gdrive` series; and there was no at-a-glance way to see *unresolved* errors (an error one run that's fixed the next should read OK).
