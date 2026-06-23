@@ -108,6 +108,44 @@ data:
           slug: wikijs
           provider: !KeyOf wikijs-provider
           meta_launch_url: https://wiki.wind.etherport.net
+  forward-auth.yaml: |
+    # Domain-level forward-auth for browser admin UIs with no/weak built-in SSO
+    # (Proxmox, IPMI, PDUs, UPSs, Technitium DNS, Traefik dashboard). One proxy
+    # provider covers all *.wind hosts (cookie_domain), served by the embedded
+    # outpost; Traefik's forwardAuth middleware (38-forward-auth-middleware.yaml)
+    # gates each route. Single sign-on across all gated UIs.
+    version: 1
+    metadata:
+      name: forward-auth
+    entries:
+      - model: authentik_providers_proxy.proxyprovider
+        id: forward-auth-provider
+        identifiers:
+          name: forward-auth
+        attrs:
+          name: forward-auth
+          mode: forward_domain
+          external_host: https://auth.wind.etherport.net
+          cookie_domain: wind.etherport.net
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      - model: authentik_core.application
+        id: forward-auth-app
+        identifiers:
+          slug: forward-auth
+        attrs:
+          name: Forward Auth (admin UIs)
+          slug: forward-auth
+          provider: !KeyOf forward-auth-provider
+      # Attach the proxy provider to the built-in embedded outpost so the server
+      # serves /outpost.goauthentik.io/auth/traefik for the middleware.
+      - model: authentik_outposts.outpost
+        identifiers:
+          name: authentik Embedded Outpost
+        attrs:
+          type: proxy
+          providers:
+            - !KeyOf forward-auth-provider
   graham.yaml: |
     # Daily admin account (akadmin = break-glass). Member of the superuser group.
     # Bootstrap password via !Env (change it + enroll a passkey on first login).
