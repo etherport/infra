@@ -9,6 +9,17 @@
 # Prefer a real timeout binary if present (coreutils gtimeout, or GNU timeout).
 _MINI_TIMEOUT_BIN="$(command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null || true)"
 
+# nas_readable <dir> — true iff <dir>'s contents are READABLE from THIS process context.
+# CRITICAL (macOS, 2026-06-23): background/launchd processes need Full Disk Access to read
+# NETWORK volumes (/Volumes/<smb>). `ls`/`find`/`test` have no FDA, so they return EPERM under
+# launchd even on a perfectly healthy mount — which made the old `ls` liveness probe false-fail
+# under launchd and (worse) force-unmount good mounts. `rsync` IS the FDA-granted binary, so it
+# reads network volumes fine under launchd AND interactively; it also genuinely fails on a
+# stale/unmounted share, so it's an accurate liveness probe in BOTH contexts. Depth-limited
+# (--exclude '/*/*') so it's instant even on huge shares; openrsync's -d returns rc=23, hence
+# the --exclude trick rather than -d.
+nas_readable(){ mini_run_timeout 15 /usr/bin/rsync -n --exclude='/*/*' "$1/" "${TMPDIR:-/tmp}/.nasprobe/" >/dev/null 2>&1; }
+
 # mini_run_timeout <secs> <cmd...> — run cmd with a wall-clock cap, stdout passed through so
 # `out="$(mini_run_timeout 30 find ...)"` works. Returns the command's rc, or non-zero
 # (124 via timeout(1), or 143/137 via the fallback) if it was killed for exceeding <secs>.

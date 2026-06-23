@@ -19,9 +19,10 @@
 #      dashboard + ICloudBackup{Stale,Failed,Empty} alerts).
 #
 # PREREQ (one-time, interactive via VNC): Messages.app signed into iMessage, AND Full Disk
-# Access granted to /usr/bin/rsync (System Settings → Privacy & Security → Full Disk Access →
-# +, ⌘⇧G, /usr/bin/rsync). Without FDA the reads fail "Operation not permitted" and the run
-# aborts with a clear message (no silent empty backup).
+# Access granted to /bin/bash — macOS attributes TCC file access to the "responsible process"
+# (the launchd job's program = /bin/bash), NOT the leaf binary, so granting rsync alone is
+# ignored. With /bin/bash granted, the job + its children (rsync, sqlite3) can read Messages.
+# Without it the reads fail "Operation not permitted" and the run aborts (no silent empty backup).
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -52,27 +53,30 @@ if ! mini_acquire_lock "${LOCK}" "messages-backup.sh"; then
 fi
 trap 'rm -rf "${LOCK}"' EXIT
 
-# --- 0. preflight: source readable (FDA), NAS mounted+responsive ---
+# --- 0. preflight: source present, NAS mounted+readable ---
+# (chat.db existence is a stat — works without FDA. nas_readable probes via rsync, the
+# FDA-granted binary: `ls`/`find` EPERM on the network volume from a launchd context even on a
+# healthy mount — background processes need Full Disk Access for net vols — so they'd false-fail.)
 [ -f "${MSG_SRC}/chat.db" ] || fail "chat.db-missing"
-# Prove rsync/this process can actually READ the TCC-protected DB before doing anything — a
-# missing FDA grant shows as a read failure here, not a silent empty backup.
-if ! mini_run_timeout 20 dd if="${MSG_SRC}/chat.db" of=/dev/null bs=1m count=1 >/dev/null 2>&1; then
-  fail "no-FDA-or-unreadable-source"   # grant Full Disk Access to /usr/bin/rsync (see README)
-fi
 "${HERE}/mount-nas.sh" >/dev/null 2>&1 || true
-if ! mini_run_timeout 15 ls /Volumes/Backups >/dev/null 2>&1; then
-  fail "nas-unavailable"
-fi
+nas_readable /Volumes/Backups || fail "nas-unavailable"
 mkdir -p "${DEST_BASE}"
 
-# --- 1. rsync live DB files → staging (rsync needs FDA to read the source) ---
+# --- 1. rsync live DB files → staging. This is ALSO the FDA/read gate: rsync is the binary
+# granted Full Disk Access, so a missing grant fails here with "Operation not permitted" and we
+# abort with a clear message — never a silent empty backup. (Explicit /usr/bin/rsync = the
+# FDA-granted binary, not a Homebrew rsync that PATH might prefer.) ---
 RUNOUT="${LOGDIR}/run-$(date '+%Y%m%d-%H%M%S').out"
+rm -f "${STAGING}/chat.db" "${STAGING}/chat.db-wal" "${STAGING}/chat.db-shm"
 log "copying chat.db (+wal/shm) → staging"
-if ! mini_run_timeout "${MAX_RUNTIME}" rsync -a \
+mini_run_timeout "${MAX_RUNTIME}" /usr/bin/rsync -a \
       "${MSG_SRC}/chat.db" "${MSG_SRC}/chat.db-wal" "${MSG_SRC}/chat.db-shm" \
-      "${STAGING}/" >"${RUNOUT}" 2>&1; then
-  # -wal/-shm may legitimately not exist (DB checkpointed) — only chat.db is required.
-  [ -f "${STAGING}/chat.db" ] || fail "db-copy-failed"
+      "${STAGING}/" >"${RUNOUT}" 2>&1 || true   # -wal/-shm may not exist; only chat.db is required
+if [ ! -f "${STAGING}/chat.db" ]; then
+  if grep -qiE 'permission denied|operation not permitted|denied' "${RUNOUT}" 2>/dev/null; then
+    fail "no-FDA-rsync-cannot-read-Messages"     # grant Full Disk Access to /usr/bin/rsync (README)
+  fi
+  fail "db-copy-failed"
 fi
 
 # --- 2. checkpoint + verify on the STAGED copy (no FDA: reads staging, not ~/Library) ---
@@ -89,41 +93,49 @@ msg_count="$("${SQLITE3}" "${STAGING}/chat-clean.db" "SELECT count(*) FROM messa
 [ -n "${msg_count}" ] || msg_count=0
 log "✓ staged DB verified (integrity=ok, messages=${msg_count})"
 
-# --- 3. guarded mirror: refuse to mirror an empty source (would wipe master); cap deletions ---
-# args: <label> <src-dir> <dst-dir> <items-present> [extra rsync args] ; echoes 0 ok / 1 fail.
-# All log lines to stderr so only the rc is captured via $(...).
-mirror(){
-  local label="$1" src="$2" dst="$3" items="$4"; shift 4
-  if [ "${items}" -le 0 ]; then
-    log "✗ ${label}: source EMPTY (would wipe master) — skipping" >&2; echo 1; return
-  fi
+# --- 2b. message-count regression guard — the closest we can get to "is the local cache fully
+# synced from iCloud?". There is NO Apple API to assert local chat.db == iCloud; with "Messages
+# in iCloud" ON (it is here) the local DB is a SYNCED CACHE that can be mid-resync or trimmed.
+# So: refuse to overwrite a good NAS backup with one whose message count fell >10% below the
+# last success — a partial/incomplete sync FAILS LOUDLY instead of silently shrinking the
+# backup. First run (no baseline) proceeds; the baseline is recorded only after a clean run. ---
+CNT_STATE="${STAGING}/.last_msg_count"
+last_cnt="$(cat "${CNT_STATE}" 2>/dev/null || echo 0)"
+if [ "${last_cnt}" -gt 0 ] 2>/dev/null && [ "${msg_count}" -lt "$(( last_cnt * 9 / 10 ))" ]; then
+  fail "message-count-regressed(${msg_count}<90%_of_${last_cnt})"
+fi
+
+# --- 3. mirror to NAS. rsync ONLY (it has FDA, so it reads ~/Library/Messages AND writes the
+# network volume from launchd; ls/find can't). Deletions are capped with --max-delete so a mass
+# local-cache eviction (Messages-in-iCloud offload) ABORTS + alerts rather than shrinking the
+# NAS copy. ---
+# 3a. DB: a single clean checkpointed file, copied directly (no --delete → cannot endanger the
+#     sibling Attachments/ dir).
+log "mirror chat.db → NAS"
+if mini_run_timeout "${MAX_RUNTIME}" /usr/bin/rsync -a "${STAGING}/chat-clean.db" "${DEST_BASE}/chat.db" >>"${RUNOUT}" 2>&1; then
+  db_rc=0
+else
+  db_rc=1; log "✗ db: rsync to NAS failed (see ${RUNOUT})"
+fi
+# 3b. Attachments: mirror with --delete capped at 500 (normal churn is tiny; a cap-exceeding
+#     deletion means the local source lost a lot → abort to protect the NAS copy).
+mirror(){  # <label> <src-dir> <dst-dir> <maxdel> ; echoes 0 ok / 1 fail (logs to stderr)
+  local label="$1" src="$2" dst="$3" maxdel="$4"
   mkdir -p "${dst}"
-  local have maxdel
-  have="$(mini_run_timeout 60 find "${dst}" -type f 2>/dev/null | wc -l | tr -d ' ')"
-  maxdel=$(( have / 2 )); [ "${maxdel}" -lt 25 ] && maxdel=25
-  mini_run_timeout "${MAX_RUNTIME}" rsync -a --delete --max-delete="${maxdel}" "$@" "${src}/" "${dst}/" >>"${RUNOUT}" 2>&1
+  mini_run_timeout "${MAX_RUNTIME}" /usr/bin/rsync -a --delete --max-delete="${maxdel}" "${src}/" "${dst}/" >>"${RUNOUT}" 2>&1
   local r=$?
-  [ "${r}" -eq 25 ] && { log "✗ ${label}: hit --max-delete=${maxdel} (have=${have}) — ABORTED to protect backup" >&2; echo 1; return; }
+  [ "${r}" -eq 25 ] && { log "✗ ${label}: hit --max-delete=${maxdel} — ABORTED to protect backup" >&2; echo 1; return; }
   [ "${r}" -ne 0 ]  && { log "✗ ${label}: rsync rc=${r}" >&2; echo 1; return; }
   echo 0
 }
-
-# 3a. the DB: ship the clean checkpointed copy as chat.db (single self-contained file). Stage a
-#     one-file dir so the mirror's --delete only ever manages the DB, never Attachments.
-DBSTAGE="${STAGING}/db"; mkdir -p "${DBSTAGE}"; cp -f "${STAGING}/chat-clean.db" "${DBSTAGE}/chat.db"
-db_rc="$(mirror "db" "${DBSTAGE}" "${DEST_BASE}" 1)"
-
-# 3b. Attachments: rsync the live dir straight to the NAS (rsync FDA reads the source). Items>0
-#     guard uses a bounded source count; if FDA/source is broken this is 0 → skip (no wipe).
-att_items="$(mini_run_timeout 120 find "${MSG_SRC}/Attachments" -type f 2>/dev/null | wc -l | tr -d ' ')"
-[ -n "${att_items}" ] || att_items=0
-log "attachments in source: ${att_items}"
-att_rc="$(mirror "attachments" "${MSG_SRC}/Attachments" "${DEST_BASE}/Attachments" "${att_items}")"
+log "mirror Attachments → NAS"
+att_rc="$(mirror attachments "${MSG_SRC}/Attachments" "${DEST_BASE}/Attachments" 500)"
 
 dur="$(( $(date +%s) - START ))"
 if [ "${db_rc}" -eq 0 ] && [ "${att_rc}" -eq 0 ]; then
+  echo "${msg_count}" > "${CNT_STATE}"   # record baseline for the regression guard (only on a clean run)
   push_backup_metrics messages_backup 0 "${dur}" "${msg_count}"
-  log "✓ backup complete (messages=${msg_count}, attachments=${att_items})"
+  log "✓ backup complete (messages=${msg_count})"
   exit 0
 fi
 push_backup_metrics messages_backup 1 "${dur}" "${msg_count}" "mirror-failed"

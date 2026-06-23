@@ -310,17 +310,22 @@ overwrites the good NAS copy; next run retries). The staged DB + live `Attachmen
 delete-protection as the other pipelines). Reuses `mini-common.sh` (lock/timeout/self-heal) +
 `mount-nas.sh` (stale-mount self-heal).
 
-**⚠️ Prereq — Full Disk Access (the one blocker).** `~/Library/Messages` is TCC-protected, so
-the binary that READS it — **`/usr/bin/rsync`** — needs Full Disk Access, exactly like the
-osxphotos FDA grant (M79). `sqlite3` only ever reads the *staged* copy, so it needs no grant.
-Without FDA the run aborts cleanly with `no-FDA-or-unreadable-source` (rc=1, no silent empty
-backup). Messages.app must also be signed into iMessage (it is — confirmed 2026-06-23).
+**⚠️ Prereq — Full Disk Access (the one blocker).** `~/Library/Messages` is TCC-protected. macOS
+attributes file access to the **"responsible process"**, not the leaf binary — under launchd
+that's the job's program **`/bin/bash`** (interactively it's `Terminal.app`). So **grant Full
+Disk Access to `/bin/bash`** (NOT just rsync — a leaf-binary grant on rsync is ignored, since
+rsync runs as a child of bash). With bash granted, the launchd job + all its children (rsync,
+sqlite3) can read Messages. Without it the run aborts cleanly with `no-FDA-rsync-cannot-read-Messages`
+(rc=1, no silent empty backup). Messages.app must also be signed into iMessage (it is — 2026-06-23).
+NB: network volumes (/Volumes/<smb>) ALSO need FDA from a background context — covered by the
+same bash grant; the NAS probe uses `rsync -n` (stat-only) so it works regardless.
 
 ### One-time setup (run on the mini, as graham)
 ```bash
-# 1. Grant Full Disk Access to rsync (interactive, VNC): System Settings → Privacy & Security →
-#    Full Disk Access → + → ⌘⇧G → /usr/bin/rsync → enable. (If the launchd run still can't read,
-#    grant FDA to /bin/bash too — TCC attribution can fall to the script interpreter.)
+# 1. Grant Full Disk Access to /bin/bash (interactive, VNC): System Settings → Privacy & Security
+#    → Full Disk Access → + → ⌘⇧G → /bin/bash → enable. (This is the launchd responsible process;
+#    granting only rsync does NOT work. /bin/bash with FDA = any bash script gets FDA — acceptable
+#    on this dedicated ops mini.)
 # 2. Manual first run (verifies FDA + ships the first copy):
 infra/macos/mini/messages-backup.sh
 # 3. Load the nightly (20:00) agent once the manual run is green:

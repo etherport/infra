@@ -30,9 +30,12 @@ source "${HERE}/mini-common.sh"   # mini_run_timeout (bounded liveness probe)
 
 log() { echo "$(date '+%Y-%m-%dT%H:%M:%S') mount-nas: $*"; }
 
-# A share is "ready" only if it's mounted AND responds to I/O within the timeout. A stale SMB
-# mount (server dropped during idle — the recurring failure) still shows in `mount` but hangs.
-nas_share_ready(){ mount | grep -qF " on $1 " && mini_run_timeout 12 ls "$1" >/dev/null 2>&1; }
+# A share is "ready" only if it's mounted AND its contents are readable. A stale SMB mount
+# (server dropped during idle) still shows in `mount` but hangs/EPERMs on I/O. nas_readable
+# probes via rsync (the FDA-granted binary) so this is accurate under launchd too — `ls` here
+# would EPERM on the network volume from a background context even when the mount is healthy
+# (background procs need Full Disk Access for net vols), causing false force-remounts.
+nas_share_ready(){ mount | grep -qF " on $1 " && nas_readable "$1"; }
 
 # SMB-hardening config check. The KERNEL SMB client (which `open smb://` drives) reads
 # /etc/nsmb.conf — NOT ~/Library/Preferences/nsmb.conf. The old code wrote the user file, so
