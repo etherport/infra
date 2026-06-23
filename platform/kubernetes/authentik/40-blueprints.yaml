@@ -60,3 +60,28 @@ data:
           password: !Env AUTHENTIK_GRAHAM_PASSWORD
           groups:
             - !Find [authentik_core.group, [name, "authentik Admins"]]
+  branding.yaml: |
+    # Login-page chrome (pure cosmetic, GitOps). Solid dark-gray background
+    # (#202225, 1x1 tiled PNG), no brand logo (transparent pixel), no
+    # "Welcome to authentik!" title. Partial attr updates onto the built-in
+    # brand + flows.
+    version: 1
+    metadata:
+      name: branding
+    entries:
+      - model: authentik_core.brand
+        identifiers:
+          domain: authentik-default
+        attrs:
+          branding_logo: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII="
+      - model: authentik_flows.flow
+        identifiers:
+          slug: default-authentication-flow
+        attrs:
+          title: " "
+          background: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQUFIFAADNAGiYyvoBAAAAAElFTkSuQmCC"
+      - model: authentik_flows.flow
+        identifiers:
+          slug: default-recovery-flow
+        attrs:
+          background: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQUFIFAADNAGiYyvoBAAAAAElFTkSuQmCC"
