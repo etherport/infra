@@ -201,6 +201,20 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   incidents). Also: a **VM graceful shutdown HANGS** if an un-drainable single-instance CNPG pod (PDB
   minAvailable=1, e.g. `cue-db`) sits on it (RBD won't unmount) — drain evicts what it can, then
   `kubectl delete pod` the PDB-blocked ones before any node reboot.
+- **Authentik is the SSO IdP** at **`auth.wind.etherport.net`** (goauthentik 2024.12, embedded outpost;
+  shared HA postgres DB). It now gates internal apps (kills "internal = trusted", H38). **OIDC** apps
+  (Grafana, wiki.js, Open WebUI) + a domain-level **forward-auth** proxy provider gating the browser
+  admin UIs (Proxmox/IPMI/PDU/UPS/Technitium DNS/Traefik dashboard) via the Traefik
+  `authentik-forward-auth@authentik` middleware. **Left ungated by design:** HA + Plex (own auth;
+  forward-auth breaks HA mobile/API/webhooks + external CF logins), and loki/pushgateway/ollama
+  (machine APIs — UDM-firewall-scoped). Config = blueprints in `platform/kubernetes/authentik/40-blueprints.yaml`
+  (auto-applied by the worker; secrets via `!Env`). **Footguns:** (1) NEVER put `password:` in a user
+  blueprint — Authentik re-applies it on EVERY apply (write-only, can't diff) and clobbers UI-set
+  passwords on each worker restart; manage human passwords/passkeys in the UI (akadmin = break-glass).
+  (2) Grafana literal `role_attribute_path: 'GrafanaAdmin'` evaluates EMPTY (go-ini strips the quotes)
+  → roles reset to Viewer each login; we use `skip_org_role_sync: true` + manual server-admin grant.
+  (3) Dark theme = brand `attributes.settings.theme.base=dark` (no UI toggle in 2024.12). Full pass +
+  rationale: H38 in outstanding-work + session-log 2026-06-23 (cont. 3).
 
 ## 6. Maintenance rules (keep this memory alive)
 
