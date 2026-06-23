@@ -84,6 +84,12 @@ spec:
               value: 'true'
             - name: CUE_PROACTIVE_CHECKINS
               value: 'true'
+            # 2026-06-23: enable Web Push (browser push notifications). VAPID_PUBLIC_KEY /
+            # VAPID_PRIVATE_KEY / VAPID_SUBJECT are sourced from the cue-app secret
+            # (envFrom). Keys generated via `pnpm vapid-keys` (src/cli/vapid-keys.ts);
+            # subject = mailto:grahamsm@gmail.com.
+            - name: CUE_WEB_PUSH
+              value: 'true'
             # 2026-06-02: enable meal-assist Phase-1 (built + adversarially reviewed,
             # 17 findings fixed, 222 tests green). CUE_MEAL_ROUTER = the where-router
             # (delivery/out/cook) + pending_flow continuation (fixes lost-context); the
