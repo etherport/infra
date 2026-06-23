@@ -117,23 +117,35 @@ if mini_run_timeout "${MAX_RUNTIME}" /usr/bin/rsync -a "${STAGING}/chat-clean.db
 else
   db_rc=1; log "✗ db: rsync to NAS failed (see ${RUNOUT})"
 fi
-# 3b. Attachments: RESILIENT mirror. Heavy sustained SMB write load can trip an SMB session
-#     drop mid-copy (SESSION_RECONNECT observed) and wedge rsync — the same failure mode the
-#     M79 photos bulk-pull hit. rsync -a RESUMES (skips already-copied files), so loop with a
-#     bounded per-attempt timeout + a remount between attempts until a clean pass. The first
-#     copy may need several attempts; steady-state is one quick incremental pass. --max-delete
-#     caps a mass-deletion (local cache eviction) → abort, don't shrink the NAS copy.
+# 3b. Attachments: PARALLEL + RESILIENT mirror. The tree is 256 hashed top-level dirs (00–ff),
+#     each an independent rsync, so we shard them across ATT_PAR concurrent workers (xargs -P) —
+#     SMB multichannel carries the concurrent streams, ~PAR× the serial per-file rate (the
+#     bottleneck is per-file round-trip latency, not bandwidth). Heavy sustained SMB write load
+#     can still trip a session drop (SESSION_RECONNECT) and wedge workers, so wrap the whole
+#     parallel pass in a retry loop: each pass resumes (rsync -a skips done files), remounting
+#     between attempts, until a clean pass. --max-delete per shard caps a mass-deletion.
+ATT_SRC="${MSG_SRC}/Attachments"
+PAR="${ATT_PAR:-6}"
+SHARDS="${STAGING}/att-shards.txt"
 mkdir -p "${DEST_BASE}/Attachments"
+mini_run_timeout 60 find "${ATT_SRC}" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | sort > "${SHARDS}"
+nshards="$(wc -l < "${SHARDS}" | tr -d ' ')"
+# guard: empty enumeration = couldn't read the source (FDA/mount) → don't let an empty xargs
+# run report success (which would also let --delete wipe the NAS attachments).
+[ "${nshards}" -gt 0 ] 2>/dev/null || fail "attachments-enum-failed(0-shards)"
+log "attachments: ${nshards} shards × ${PAR}-way parallel"
 att_rc=1
-for att in $(seq 1 "${ATT_ATTEMPTS:-10}"); do
+for att in $(seq 1 "${ATT_ATTEMPTS:-8}"); do
   nas_readable /Volumes/Backups || "${HERE}/mount-nas.sh" >/dev/null 2>&1
-  log "mirror Attachments → NAS (attempt ${att})"
-  mini_run_timeout "${ATT_TIMEOUT:-1200}" /usr/bin/rsync -a --delete --max-delete=500 \
-    "${MSG_SRC}/Attachments/" "${DEST_BASE}/Attachments/" >>"${RUNOUT}" 2>&1
+  log "mirror Attachments → NAS (attempt ${att}, ${PAR}-way)"
+  # one rsync per top-level shard; {} = shard name, substituted into both src and dst.
+  mini_run_timeout "${ATT_TIMEOUT:-2400}" xargs -P "${PAR}" -I{} \
+    /usr/bin/rsync -a --delete --max-delete=200 "${ATT_SRC}/{}/" "${DEST_BASE}/Attachments/{}/" \
+    < "${SHARDS}" >>"${RUNOUT}" 2>&1
   r=$?
+  pkill -9 -f "rsync.*Messages/Attachments" 2>/dev/null   # reap any workers the timeout orphaned
   if [ "${r}" -eq 0 ]; then att_rc=0; log "✓ attachments mirror clean (attempt ${att})"; break; fi
-  if [ "${r}" -eq 25 ]; then log "✗ attachments hit --max-delete=500 — ABORTED (source lost data?)"; att_rc=1; break; fi
-  log "attachments attempt ${att} incomplete (rc=${r}) — remount + resume"
+  log "attachments attempt ${att} had failures/timeout (rc=${r}) — remount + resume"
   "${HERE}/mount-nas.sh" >/dev/null 2>&1
 done
 
