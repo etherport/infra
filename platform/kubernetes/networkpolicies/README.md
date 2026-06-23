@@ -25,6 +25,29 @@ drops as `AUDIT` verdicts and enforces nothing — the safe observation window t
 namespace's allowlist from real traffic before flipping back to enforce. See "Adding the
 next tier" below.
 
+## ⚠️ The OTHER rule that matters — allow CONTAINER ports, not SERVICE ports
+
+Cilium evaluates ingress policy **at the destination pod**, on the port the packet
+actually carries when it arrives there. For traffic via a Kubernetes Service
+(ClusterIP **or** LoadBalancer/MetalLB VIP), **kube-proxy DNATs the service port to the
+pod's `targetPort` (containerPort) *before* Cilium sees it.** So a tier allowlist must
+permit the **container** port, not the service port.
+
+This bit us hard (2026-06-23, ~16h Traefik-VIP outage): the `traefik-tier` ingress
+allowed the LoadBalancer service ports `:80/:443` from `world`, but the pod receives
+`:8000` (web) / `:8443` (websecure) after DNAT — only `:8088` (webhook) survived because
+its service and container ports share the number. `world`→VIP traffic was silently
+dropped (`Policy denied … →:8443`) while in-cluster traffic — allowed on `:8443` from
+`cluster` — kept working, masking it. Check the mapping before writing a rule:
+
+```bash
+kubectl get svc -n <ns> <svc> -o jsonpath='{range .spec.ports[*]}{.name} port={.port} target={.targetPort}{"\n"}{end}'
+```
+
+**Debugging a suspected netpol drop on a Service/VIP:** `cilium-dbg monitor --type drop`
+and look for the **pod IP + container port** as the destination — NOT the service IP/VIP
+(post-DNAT the VIP is gone from the packet). Grepping for the VIP finds nothing.
+
 ## Phasing model — opt-in per namespace via a label
 
 Enforcement is gated on the namespace label **`netpol.wind/enforced: "true"`**. A

@@ -13,6 +13,45 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-23 (cont. 5) — mini→VIP outage ROOT-CAUSED + FIXED (traefik netpol: service vs container ports)
+
+**Resolved the cont.4 mini→Traefik-VIP outage. Root cause: the `traefik-tier`
+CiliumNetworkPolicy allowed the LoadBalancer SERVICE ports from `world`, but Cilium
+evaluates ingress at the destination pod on the CONTAINER (target) port that kube-proxy
+DNATs to *before* policy is applied.** Mapping: svc `:80 web → :8000`, `:443 websecure
+→ :8443/TCP`, `:443 http3 → :8443/UDP`, `:8088 webhook → :8088` (same number). The CNP's
+`fromEntities:[all]` block listed `80/443/8088`; `:8443` was allowed only from `cluster`.
+So in-cluster→VIP worked (cluster identity) while **every `world`→VIP flow was dropped**
+(`drop (Policy denied) identity world→traefik … →:8443 tcp SYN`). `:8088` was the lone
+survivor (same port number, no remap) — which is why webhooks + photos alerts kept working
+and confused the triage. Became a **hard outage when the traefik tier flipped audit→enforce
+(06-23 tightening)** — ~16h of no mini metric pushes / log shipping. **Not reboot-related**
+(confirmed the operator's hypothesis).
+
+**Fix** (`1a98eee`): ingress `fromEntities:[all]` now allows the **container** ports
+`8000/TCP, 8443/TCP, 8443/UDP, 8088/TCP`; `:8080` (api/dashboard/mgmt) stays cluster-only.
+Applied + Flux-reconciled (no drift). **Verified** via a forced-route repro from the devbox
+(`ip route add 10.10.201.70/32 via 10.10.201.1`, which makes the same-subnet devbox take the
+routed `world` path that the mini uses): VIP `:443 → 404`, `:80 → 301` (Traefik responding;
+was `000`/timeout). Mini pushes resume on its next cron cycle.
+
+**Diagnostic path that nailed it** (after a long hunt down BGP/kube-proxy/iptables/host-fw —
+all red herrings): tcpdump on the worker showed the SYN *arriving* on eth0; the
+`iptables -t nat KUBE-SERVICES` packet counter for the VIP *incremented* (DNAT fires) — so it
+was **post-DNAT**. `cilium-dbg monitor --type drop` (with the forced route, and NOT grepping
+for `201.70` — post-DNAT the dst is the *pod* IP) surfaced the `Policy denied … →:8443` drop.
+**Lesson: when chasing a MetalLB-VIP datapath drop, monitor for the POD IP + container port,
+not the VIP.** The earlier "toggle test" (de-label traefik ns) was a false-negative — those
+re-tests went via the devbox's same-subnet ARP path without the forced route, so the packet
+died before reaching the policy.
+
+**Caveat exposed:** the traefik tier's "0 AUDIT flows → enforce" validation (cont.3/H3) was
+**incomplete** — the `world`→VIP→`:8443` ingress path was never actually exercised through the
+VIP during the audit window (only egress device routes + in-cluster ingress were). Container-
+vs-service-port is now a CLAUDE.md invariant + documented in the netpol README/runbook.
+
+---
+
 ## 2026-06-23 (cont. 4) — M80 Messages backup COMPLETE + Notes/Safari/Drive added; mini→VIP observability outage
 
 **Messages backup DONE** (`messages-backup.sh`, 20:00). chat.db: 319,679 msgs, integrity ok; attachments: **19,951 files / ~48 GB**. The attachments first-copy needed the **parallel sharded** mirror (256 hex top-dirs × 6-way `xargs -P` rsync) — serial was ~1 file/s (~5h); parallel ~6× (finished in ~1h13m over 2 attempts, attempt-1 timed out at 40min, attempt-2 resumed). Two bugs fixed en route: (a) `mini_run_timeout`-wrapped `xargs` lost stdin → empty input → false rc=0 "complete" copying nothing (fix: background `xargs` with the `<SHARDS` redirect DIRECTLY on it + own watchdog); (b) the FDA/launchd saga from cont.2. **Metrics now split**: `messages_backup` (DB/msg count) + `messages_attachments_backup` (file count) report independently.

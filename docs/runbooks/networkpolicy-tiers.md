@@ -44,6 +44,17 @@ changing a workload:
 > Rule of thumb: **if the new thing crosses an enforced namespace boundary, update that
 > tier's allowlist in the same change.** Unlabelled-to-unlabelled traffic needs nothing.
 
+> ⚠️ **CONTAINER ports, not SERVICE ports.** When the traffic arrives via a Service
+> (ClusterIP or LoadBalancer/MetalLB VIP), kube-proxy DNATs the service port to the pod's
+> `targetPort` **before** Cilium evaluates ingress at the destination pod — so the
+> allowlist must permit the *container* port. Listing the service port silently drops the
+> traffic. Get the mapping with
+> `kubectl get svc -n <ns> <svc> -o jsonpath='{range .spec.ports[*]}{.name} port={.port} target={.targetPort}{"\n"}{end}'`.
+> This caused the 2026-06-23 Traefik-VIP outage (svc `:443`→pod `:8443`; the rule allowed
+> `:443` from `world` so every external→VIP flow was dropped, in-cluster unaffected).
+> **Debug:** `cilium-dbg monitor --type drop` and look for the **pod IP + container port**
+> destination — the VIP is already gone from the packet post-DNAT.
+
 ## Adding monitoring for a new service (`monitoring` is enforced — open the channel)
 
 `monitoring` is an enforced tier (`14-tier-monitoring.yaml`). Most monitoring paths are

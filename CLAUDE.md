@@ -159,6 +159,17 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   `postgres`), you MUST update that tier's `1x-tier-<ns>.yaml` allowlist in the same change
   or its traffic is silently dropped (no alert yet). Unlabeled↔unlabeled needs nothing.
   Procedure + `hubble observe --verdict DROPPED` detection: `docs/runbooks/networkpolicy-tiers.md`.
+  ⚠️ **A tier allowlist must permit CONTAINER (target) ports, not SERVICE ports.** Cilium
+  evaluates ingress at the destination pod, and kube-proxy DNATs the Service/MetalLB-VIP
+  port → pod `targetPort` BEFORE policy is applied. Listing the service port silently drops
+  the traffic. This caused a ~16h Traefik-VIP outage (2026-06-23): `traefik-tier` allowed
+  svc `:80/:443` from `world` but the pod gets `:8000/:8443` — every external→VIP flow
+  dropped (`Policy denied world→traefik →:8443`) while in-cluster (allowed `:8443` from
+  `cluster`) worked, masking it; `:8088` survived only because svc==container port. Fix
+  `1a98eee`. Map via `kubectl get svc -n <ns> <svc> -o jsonpath=...{.targetPort}`. Debug a
+  VIP drop with `cilium-dbg monitor --type drop` filtering the **pod IP + container port**
+  (NOT the VIP — it's gone post-DNAT). NB: a tier's "0 AUDIT → enforce" validation only
+  proves the paths actually exercised during audit — exercise the `world`→VIP ingress too.
 - **Cilium WireGuard encryption is ON** (M66, 2026-06-17). East-west **pod-to-pod**
   traffic is WireGuard-encrypted (`cilium_wg0`, full mesh, NodeEncryption off); was
   cleartext VXLAN before. IaC source = `cilium_encryption_enabled: true` +
