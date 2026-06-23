@@ -28,7 +28,10 @@ data:
         disable: false
       refresh_interval: 1m
       file:
-        path: /config/users_database.yml
+        # On the writable PVC (seeded from the SOPS Secret by the init container) —
+        # the file backend rewrites this on password change, so it can't be the
+        # read-only Secret mount.
+        path: /data/users_database.yml
         password:
           algorithm: argon2
           argon2:

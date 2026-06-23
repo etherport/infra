@@ -28,6 +28,24 @@ spec:
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        # Seed the users DB onto the WRITABLE PVC once. Authelia's file backend
+        # rewrites users_database.yml on password change, so it cannot live on the
+        # read-only Secret mount. The SOPS Secret is the bootstrap seed; runtime
+        # password changes persist on /data (backed up via Velero). Guard: only
+        # copy if absent, so a pod restart never clobbers a changed password.
+        # (Adding/removing users later = edit /data directly or delete the file to
+        # re-seed from the Secret.)
+        - name: seed-users
+          image: busybox:1.36
+          command: ["sh", "-c", "[ -f /data/users_database.yml ] || cp /seed/users_database.yml /data/users_database.yml"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - { name: users, mountPath: /seed, readOnly: true }
+            - { name: data, mountPath: /data }
       containers:
         - name: authelia
           image: ghcr.io/authelia/authelia:4.38
@@ -58,7 +76,7 @@ spec:
             limits: { cpu: 500m, memory: 256Mi }
           volumeMounts:
             - { name: config, mountPath: /config/configuration.yml, subPath: configuration.yml, readOnly: true }
-            - { name: users, mountPath: /config/users_database.yml, subPath: users_database.yml, readOnly: true }
+            # users DB read from the writable PVC (/data), seeded by the init container.
             - { name: secrets, mountPath: /secrets, readOnly: true }
             - { name: data, mountPath: /data }
       volumes:
