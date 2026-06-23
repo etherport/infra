@@ -156,12 +156,20 @@ for att in $(seq 1 "${ATT_ATTEMPTS:-8}"); do
 done
 
 dur="$(( $(date +%s) - START ))"
+# Count attachment files actually on the NAS (FDA-safe under launchd; find on the net vol works
+# because the job's /bin/bash has FDA). Best-effort — used as the attachments item count.
+att_count="$(mini_run_timeout 120 find "${DEST_BASE}/Attachments" -type f 2>/dev/null | wc -l | tr -d ' ')"
+[ -n "${att_count}" ] || att_count=0
+
+# Report DB and ATTACHMENTS as SEPARATE metric groups so the dashboard shows both sync/success
+# states independently (messages_backup = the chat.db; messages_attachments_backup = the media).
+push_backup_metrics messages_backup            "${db_rc}"  "${dur}" "${msg_count}"
+push_backup_metrics messages_attachments_backup "${att_rc}" "${dur}" "${att_count}"
+
 if [ "${db_rc}" -eq 0 ] && [ "${att_rc}" -eq 0 ]; then
   echo "${msg_count}" > "${CNT_STATE}"   # record baseline for the regression guard (only on a clean run)
-  push_backup_metrics messages_backup 0 "${dur}" "${msg_count}"
-  log "✓ backup complete (messages=${msg_count})"
+  log "✓ backup complete (messages=${msg_count}, attachments=${att_count})"
   exit 0
 fi
-push_backup_metrics messages_backup 1 "${dur}" "${msg_count}" "mirror-failed"
-log "✗ mirror failed (db_rc=${db_rc} att_rc=${att_rc}; see ${RUNOUT})"
+log "✗ incomplete (db_rc=${db_rc} att_rc=${att_rc}, messages=${msg_count} attachments=${att_count}; see ${RUNOUT})"
 exit 1
