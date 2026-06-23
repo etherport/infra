@@ -49,10 +49,14 @@
 
     # Unattended upgrades configuration
     unattended_upgrades:
-      # Only install security updates by default
+      # Security + regular (-updates) bug-fix updates. Broadened from
+      # security-only 2026-06-23 (M101) so -updates packages auto-install too
+      # (previously they accumulated unpatched). Third-party repos (1Password,
+      # NodeSource) are still out of scope — not Ubuntu origins.
       allowed_origins:
         - "${distro_id}:${distro_codename}"
         - "${distro_id}:${distro_codename}-security"
+        - "${distro_id}:${distro_codename}-updates"
         - "${distro_id}ESMApps:${distro_codename}-apps-security"
         - "${distro_id}ESM:${distro_codename}-infra-security"
       # Auto-reboot when kernel updates require it
@@ -73,6 +77,7 @@
       dns-aws: "02:30"
       vpn-local: "03:00"
       vpn-aws: "03:30"
+      devbox: "05:00"        # runs the persistent Claude tmux sessions; they auto-resume on reboot
       default: "04:00"
 
     # Node exporter for Prometheus monitoring
