@@ -13,6 +13,21 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-23 (cont. 2) — M80 iMessage backup LIVE (DB) + the FDA/launchd saga
+
+Got `messages-backup.sh` working under launchd after root-causing why launchd runs failed where interactive ones succeeded. **DB backup is DONE + verified:** `chat.db` 508MB, **319,678 messages**, `integrity_check=ok`, on the NAS (`/Backups/Graham/iCloud/Messages/`); re-runs at the start of every nightly. Agent loaded (20:00).
+
+**Three root causes (all fixed):**
+1. **FDA must be on `/bin/bash`, NOT the leaf binary.** macOS attributes TCC file access to the launchd job's *responsible process* (= `/bin/bash`, the job program), so granting FDA to `/usr/bin/rsync` was ignored for reading `~/Library/Messages`. Granting `/bin/bash` FDA fixed it instantly. (Interactively the responsible process is `Terminal.app`, which is why my interactive rsync tests also couldn't read it.) Docs + script header updated to say grant `/bin/bash`.
+2. **Background/launchd processes need FDA to read NETWORK volumes too** (`/Volumes/<smb>`). My new `ls`-based liveness probe returned EPERM under launchd even on a HEALTHY mount → `mount-nas.sh` force-unmounted good mounts — **a regression that would've broken tonight's photos/DAV nightlies.** Fixed: `nas_readable()` in `mini-common.sh` probes via `rsync -n --exclude='/*/*'` (FDA-safe stat, depth-limited, instant); `mount-nas` `nas_share_ready` + the messages nas-check use it. (`-d` returns rc=23 on openrsync — used `--exclude` to limit depth.) **NB the rsync -n probe is stat-only → it can pass on a half-stale mount; the actual rsync op + watchdog backstop that.**
+3. **Attachments first-copy trips an SMB session drop under sustained write load** (`SESSION_RECONNECT_COUNT=1` at the rsync start; NAS RAID/network confirmed healthy) → wedged rsync in D-state, same mode as the M79 photos bulk-pull. Made the attachments mirror retry+resume: bounded per-attempt timeout (`ATT_TIMEOUT=1200`) + remount between attempts (`ATT_ATTEMPTS=10`), rsync -a resumes.
+
+**Design also added:** message-count **regression guard** (refuse to overwrite the NAS DB if message count drops >10% vs last success — the practical "is the local iCloud cache complete?" check; Messages-in-iCloud IS enabled here so local chat.db is a synced cache) + `--max-delete=500` on attachments. Commits `510db28` (FDA/probe fix), `31b06f3` (resilient attachments).
+
+**State:** DB backup live + verified. **Attachments first-copy IN PROGRESS** — converging slowly (~1–2 files/s over SMB nested small-files; survives drops via the retry loop) and may span attempts/nights; background monitor watching. If too slow, switch the bulk first-copy to local-tar→single-transfer to dodge per-file SMB latency. Remaining M80 tier after this: Drive.
+
+---
+
 ## 2026-06-23 (cont. 1) — CORRECTION: the 5 non-backups overnight failures were a `wait_for_rclone` set -e bug, not "transient fast-fails"
 
 Owner, reviewing overnight status emails: "all sync tasks failed… does a delete approval prevent all jobs from running until approved/rejected?" **Answer: no** — approvals are per-share (per-share lock + `approvals/approved/<share>.json`); a pending `backups` approval cannot fail other shares.
