@@ -46,6 +46,13 @@ spec:
   routes:
     - match: Host(`prox.wind.etherport.net`)
       kind: Rule
+      # Authentik forward-auth gate (domain-level; SSO cookie shared across
+      # *.wind). Canary for the device-UI rollout. NB: this gates BROWSER access
+      # to prox.wind only — the Proxmox API used by Terraform connects to the
+      # host IP (10.10.200.41:8006), not prox.wind, so it's unaffected.
+      middlewares:
+        - name: authentik-forward-auth
+          namespace: authentik
       services:
         - name: proxmox-external
           port: 8006
