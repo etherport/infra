@@ -628,7 +628,13 @@ wait_for_rclone() {
     echo "[xlock] rclone writing the share ($(basename "${lk}")) — waiting ${waited}/${RCLONE_LOCK_WAIT_SECONDS}s..."
     sleep "${RCLONE_LOCK_POLL_SECONDS}"; waited=$((waited + RCLONE_LOCK_POLL_SECONDS))
   done
-  [ "${waited}" -gt 0 ] && echo "[xlock] rclone idle — proceeding"
+  # NB: must NOT be a bare `[ … ] && echo` as the function's LAST statement — when
+  # waited==0 (the common case: no fresh rclone lock) the test returns 1, the
+  # function returns 1, and the bare `wait_for_rclone` call below trips `set -e`,
+  # killing the run before acquire_lock. (This footgun failed ALL shares the night
+  # of 2026-06-23 — first run after the cross-job-lock change 2089ec7.)
+  if [ "${waited}" -gt 0 ]; then echo "[xlock] rclone idle — proceeding"; fi
+  return 0
 }
 wait_for_rclone
 
