@@ -15,6 +15,16 @@ spec:
       enableServiceLinks: false
       securityContext: { runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: { type: RuntimeDefault } }
       initContainers:
+        # Seed the login-page background into the media volume: a 1x1 solid
+        # dark-gray (#202225) PNG that CSS background-size:cover stretches to a
+        # solid fill. flow.background points at "login-bg.png" (40-blueprints.yaml).
+        # Idempotent (overwrites each start); bytes embedded so it's git-reproducible.
+        - name: seed-login-bg
+          image: busybox:1.36
+          command: ["sh","-c","mkdir -p /media/public && echo 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQUFIFAADNAGiYyvoBAAAAAElFTkSuQmCC' | base64 -d > /media/public/login-bg.png"]
+          securityContext: { runAsNonRoot: true, runAsUser: 1000, allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] }, readOnlyRootFilesystem: true }
+          volumeMounts:
+            - { name: media, mountPath: /media }
         # Ensure the authentik DB exists (CNPG 1.24 has no Database CR). Runs as the
         # managed `authentik` role (createdb) against the maintenance `postgres` DB.
         # Idempotent; retries via the pod until the role/cluster is reachable.
