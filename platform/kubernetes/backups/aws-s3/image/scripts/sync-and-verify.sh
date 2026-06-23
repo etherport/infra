@@ -159,7 +159,8 @@ aws_retry() {
 run_sync_with_retry() {
   local output_file="$1"
   local dryrun_flag="$2"
-  shift 2
+  local delete_flag="$3"   # "true" => include --delete (full mirror); "false" => uploads/updates only
+  shift 3
   local exclude_args=("$@")
 
   local attempt=1
@@ -172,11 +173,16 @@ run_sync_with_retry() {
   while [[ ${attempt} -le ${max_attempts} ]]; do
     # Build the sync command
     local sync_cmd=(aws s3 sync "${SRC_PATH}" "${DEST_URI}"
-      --delete
       --checksum-algorithm SHA256
       --size-only
       --no-progress
     )
+
+    # --delete is gated: the real sync runs uploads-only (no --delete) while a
+    # deletion is held for approval, so new files are still backed up.
+    if [[ "${delete_flag}" == "true" ]]; then
+      sync_cmd+=(--delete)
+    fi
 
     if [[ "${dryrun_flag}" == "true" ]]; then
       sync_cmd+=(--dryrun)
@@ -753,9 +759,12 @@ request_approval() {
     guard_abort "${reason}"
   fi
   if check_rejection "${would_delete}"; then
-    echo "[delete-guard] operator previously REJECTED this deletion (snooze active) — not re-notifying; no deletion performed"
-    pushgateway_emit 0 "$(elapsed_seconds)" 0 0 0 0 "rejected_snoozed"
-    exit 1
+    echo "[delete-guard] operator previously REJECTED this deletion (snooze active) — not re-notifying; uploads still run, ${would_delete} deletion(s) held"
+    REAL_SYNC_DELETE="false"
+    DELETIONS_PENDING="true"
+    PENDING_DELETE_STATUS="rejected_snoozed"
+    PENDING_DELETE_COUNT="${would_delete}"
+    return 0
   fi
   echo "[delete-guard] deletion exceeds bounds — requesting operator approval"
   local keys_file="${LOG_DIR}/delete-keys.txt"
@@ -793,8 +802,15 @@ request_approval() {
   # deletion, and on the split-horizon internal path the token is the only gate.
   # The operator gets the real link by email; logs get a redacted reference.
   echo "[delete-guard] approval requested — signed link emailed (token redacted): ${APPROVAL_BASE_URL}/approve?t=<redacted>"
-  pushgateway_emit 0 "$(elapsed_seconds)" 0 0 0 0 "approval_pending"
-  exit 1
+  echo "[delete-guard] uploads will still run this pass; the ${would_delete} deletion(s) are HELD until approved"
+  # Do NOT exit — let the real sync run uploads-only so new/changed files are still
+  # backed up while the deletion waits for approval. The end-of-run logic marks the
+  # run approval_pending (success=0, exit 1) so it stays visibly "needs action".
+  REAL_SYNC_DELETE="false"
+  DELETIONS_PENDING="true"
+  PENDING_DELETE_STATUS="approval_pending"
+  PENDING_DELETE_COUNT="${would_delete}"
+  return 0
 }
 
 # Guard 1: source must exist and be populated (catches unmounted/empty share)
@@ -805,7 +821,7 @@ fi
 echo "=== [$RUN_ID] Dry-run to detect uploads/updates ==="
 # Dry-run is informational only; we build the manifest from the REAL sync output.
 # Uses retry logic for transient network failures (configured via SYNC_MAX_RETRIES)
-run_sync_with_retry "${DRYRUN_OUT}" "true" "${EXCLUDE_ARGS[@]}"
+run_sync_with_retry "${DRYRUN_OUT}" "true" "true" "${EXCLUDE_ARGS[@]}"
 DRYRUN_RC=$?
 
 if [[ ${DRYRUN_RC} -ne 0 ]]; then
@@ -819,6 +835,14 @@ if [[ ${DRYRUN_RC} -ne 0 ]]; then
     guard_abort "dry-run failed (rc=${DRYRUN_RC}); cannot determine deletion volume — refusing --delete sync against ${DEST_URI}"
   fi
 fi
+
+# When the delete guard holds a deletion for approval, uploads/updates still run
+# (they are purely additive and can never destroy the backup) — only the deletions
+# wait. These flags carry that state from the guard to the real sync + exit logic.
+REAL_SYNC_DELETE="true"       # "true" => the real sync includes --delete
+DELETIONS_PENDING="false"     # set true when deletions are held for approval/snooze
+PENDING_DELETE_STATUS=""      # "approval_pending" | "rejected_snoozed"
+PENDING_DELETE_COUNT="0"
 
 # Guard 2: bound how much one run is allowed to delete (catches partial mounts /
 # bulk accidental deletions that Guard 1 misses). The dry-run above already
@@ -871,17 +895,22 @@ fi
 # healthy source — including an operator-approved bulk delete — passes unchanged.
 # NB: if an approval was just consumed and the source has since gone empty, this
 # aborts WITHOUT deleting (the safe outcome); the operator simply re-approves.
-if is_true "${DELETE_GUARD_ENABLED}"; then
+# Only matters when we're about to --delete; an uploads-only pass can't wipe S3.
+if is_true "${DELETE_GUARD_ENABLED}" && is_true "${REAL_SYNC_DELETE}"; then
   assert_source_populated "pre-sync"
 fi
 
-echo "=== [$RUN_ID] Real sync ==="
+if is_true "${REAL_SYNC_DELETE}"; then
+  echo "=== [$RUN_ID] Real sync (full mirror, with --delete) ==="
+else
+  echo "=== [$RUN_ID] Real sync (UPLOADS ONLY — ${PENDING_DELETE_COUNT} deletion(s) held for approval, not deleted) ==="
+fi
 # IMPORTANT: We parse this output to build the Batch Ops manifest.
 # aws s3 sync output lines look like:
 #   upload: /src/file to s3://bucket/prefix/file
 #   copy: s3://bucket/src to s3://bucket/dst
 # Uses retry logic for transient network failures (configured via SYNC_MAX_RETRIES)
-run_sync_with_retry "${SYNC_OUT}" "false" "${EXCLUDE_ARGS[@]}"
+run_sync_with_retry "${SYNC_OUT}" "false" "${REAL_SYNC_DELETE}" "${EXCLUDE_ARGS[@]}"
 SYNC_RC=$?
 
 if [[ ${SYNC_RC} -ne 0 ]]; then
@@ -1006,11 +1035,15 @@ if [[ "${UPLOAD_COUNT}" -le 0 ]]; then
   CONSOLIDATED_REPORT="${LOG_DIR}/consolidated-report.json"
   CONSOLIDATED_REPORT_KEY="reports/${SHARE_NAME}/${TS}/report.json"
 
+  if [[ ${SYNC_RC:-0} -eq 0 ]]; then NOUP_STATUS="SUCCESS"; else NOUP_STATUS="FAILED"; fi
+  if is_true "${DELETIONS_PENDING}"; then NOUP_STATUS="APPROVAL_PENDING"; fi
+
   cat > "${CONSOLIDATED_REPORT}" <<JSON
 {
   "executionId": "${RUN_ID}",
   "share": "${SHARE_NAME}",
-  "status": "$([[ ${SYNC_RC:-0} -eq 0 ]] && echo SUCCESS || echo FAILED)",
+  "status": "${NOUP_STATUS}",
+  "deletionsPendingApproval": ${PENDING_DELETE_COUNT},
   "startTime": "${START_TS_UTC}",
   "endTime": "${END_TS_UTC}",
   "durationSeconds": ${DURATION_SECONDS},
@@ -1045,11 +1078,17 @@ JSON
   # Push metrics (success = 1 if sync exit code was 0)
   success_flag=0
   if [[ ${SYNC_RC:-0} -eq 0 ]]; then success_flag=1; fi
-  pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" 0 0 ""
+  # A held deletion is "needs action" even with no uploads this pass.
+  if is_true "${DELETIONS_PENDING}"; then success_flag=0; fi
+  pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" 0 0 "${PENDING_DELETE_STATUS}"
 
   # Upload consolidated report
   s3_put_object "${METADATA_BUCKET}" "${CONSOLIDATED_REPORT_KEY}" "${CONSOLIDATED_REPORT}"
   echo "Consolidated report uploaded to: s3://${METADATA_BUCKET}/${CONSOLIDATED_REPORT_KEY}"
+  if is_true "${DELETIONS_PENDING}"; then
+    echo "No new uploads; ${PENDING_DELETE_COUNT} deletion(s) held for approval (${PENDING_DELETE_STATUS})"
+    exit 1
+  fi
   exit 0
 fi
 
@@ -1460,6 +1499,12 @@ elif [[ "${verified_failed}" -gt 0 ]]; then
   OVERALL_STATUS="FAILED"
   # Send failure notification email
   send_failure_email "Verification failed: ${verified_failed} of ${VERIFY_COUNT:-0} files failed verification (HEAD object check)"
+elif is_true "${DELETIONS_PENDING}"; then
+  # Uploads + verification succeeded, but a deletion is HELD for approval — the
+  # full mirror isn't complete, so mark needs-action (not a hard failure). New
+  # files were still backed up this pass.
+  success_flag=0
+  OVERALL_STATUS="APPROVAL_PENDING"
 else
   success_flag=1
   OVERALL_STATUS="SUCCESS"
@@ -1496,6 +1541,8 @@ if command -v python3 >/dev/null 2>&1; then
   FILE_AUDIT_JSONL_ENV="${FILE_AUDIT_JSONL:-}" \
   BATCH_REPORT_SUMMARY_FILE_ENV="${BATCH_REPORT_SUMMARY_FILE:-}" \
   CONSOLIDATED_REPORT_ENV="$CONSOLIDATED_REPORT" \
+  DELETIONS_PENDING_ENV="${DELETIONS_PENDING}" \
+  PENDING_DELETE_COUNT_ENV="${PENDING_DELETE_COUNT}" \
   python3 - <<'PY' || record_warning "Failed to generate consolidated report"
 import os, json, sys
 from datetime import datetime, timezone
@@ -1518,6 +1565,8 @@ transfers_path = os.environ.get('TRANSFER_LOG_JSONL_ENV', '')
 file_audit_path = os.environ.get('FILE_AUDIT_JSONL_ENV', '')
 batch_summary_path = os.environ.get('BATCH_REPORT_SUMMARY_FILE_ENV', '')
 output_path = os.environ.get('CONSOLIDATED_REPORT_ENV', '')
+deletions_pending = os.environ.get('DELETIONS_PENDING_ENV', 'false').lower() in ('1', 'true', 'yes', 'y')
+pending_delete_count = int(os.environ.get('PENDING_DELETE_COUNT_ENV', '0') or '0')
 
 # Note: Overall status determination moved after file-level analysis
 # to include verification failure count in the decision
@@ -1619,6 +1668,10 @@ elif files_succeeded == 0 and total_files > 0:
     # WITH a checksum, which falsely FAILED runs where uploads were fine but a
     # source-side rewrite left some objects without checksum metadata.)
     status = "FAILED"
+elif deletions_pending:
+    # Uploads + verification are fine, but a deletion is HELD for approval — the
+    # full mirror isn't complete this pass (new files were still backed up).
+    status = "APPROVAL_PENDING"
 else:
     status = "SUCCESS"
 
@@ -1627,6 +1680,7 @@ report = {
     "executionId": run_id,
     "share": share_name,
     "status": status,
+    "deletionsPendingApproval": pending_delete_count,
     "startTime": start_ts,
     "endTime": end_ts,
     "durationSeconds": duration,
@@ -1747,6 +1801,11 @@ if [[ ${WARNING_COUNT} -gt 0 ]]; then
     } | EMAIL_SUBJECT="${subject}" EMAIL_FROM_NAME="${EMAIL_FROM_NAME}" EMAIL_FROM="${EMAIL_FROM}" EMAIL_TO="${EMAIL_TO}" "${SEND_EMAIL_SCRIPT}" \
         || echo "[email] WARN: failed to send degraded state email" >&2
   fi
+fi
+
+if is_true "${DELETIONS_PENDING}"; then
+  echo "=== [$RUN_ID] Done — uploads complete; ${PENDING_DELETE_COUNT} deletion(s) HELD for approval (${PENDING_DELETE_STATUS}); run marked needs-action ==="
+  exit 1
 fi
 
 echo "=== Done ==="
