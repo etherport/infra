@@ -1,17 +1,15 @@
-# Custom login-page theme for Authentik. Authentik's web app loads
-# /static/dist/custom.css (the `data-inject` <link> in every interface) and
-# injects it into flow shadow-roots. Because it loads on ALL interfaces
-# (flow + admin + user mgmt), every rule here is SCOPED to the login flow:
-#   - light-DOM (html/body/background): `:has(ak-flow-executor)` — only the
-#     flow page has <ak-flow-executor>; the mgmt UIs have <ak-interface-*>.
-#   - components: under `.pf-c-login` — that class only exists on the flow page.
-# This leaves the management interface entirely to Authentik's NATIVE theme
-# (toggle dark per-user via the top-right avatar → Settings → Theme → Dark;
-# 2024.12 has no server-side global theme default).
+# Custom CSS for Authentik, served at /static/dist/custom.css (the data-inject
+# <link> present on every interface) and mounted over /web/dist/custom.css on
+# the server (subPath — needs a server restart to reload).
 #
-# Mounted over /web/dist/custom.css on the server (subPath; needs a server
-# restart to reload). Palette mirrors the "modern" report emails (dark tokens
-# from backups/aws-s3/image/scripts/daily-report.sh).
+# Dark mode: Authentik 2024.12 has no server-side/global theme toggle — its dark
+# theme (theme-dark.css) is auto-selected from the browser's prefers-color-scheme
+# and can't be forced via API/blueprint. theme-dark.css uses UNGATED :root/body
+# rules + CSS custom properties (which inherit through shadow DOM), so importing
+# it here forces Authentik's NATIVE dark theme on EVERY interface (login flow +
+# admin/user management UI) — proper PatternFly dark, no per-component overrides,
+# no JS. The few rules below are just login-flow polish layered on top (scoped to
+# the flow via :has()/.pf-c-login so they don't touch the management UI).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -19,10 +17,12 @@ metadata:
   namespace: authentik
 data:
   custom.css: |
-    /* ===== Etherport SSO login-flow theme (scoped; mgmt UI untouched) ===== */
+    /* Force Authentik's native dark theme globally (login + mgmt). MUST be first. */
+    @import url("/static/dist/theme-dark.css");
 
-    /* Full-viewport dark background — scoped to the flow page via :has() so the
-       management interface keeps its native background (no invisible menus). */
+    /* ----- Etherport SSO login-flow polish (on top of native dark) ----- */
+    /* Deep-slate background matching the report emails (--bg #0b1220), full
+       viewport, scoped to the flow page so the mgmt UI keeps the native dark bg. */
     html:has(ak-flow-executor),
     body:has(ak-flow-executor) {
       background-color: #0b1220 !important;
@@ -31,8 +31,6 @@ data:
     .pf-c-login {
       background: #0b1220 !important;
       min-height: 100vh !important;
-      --pf-global--FontFamily--sans-serif: -apple-system, BlinkMacSystemFont,
-        "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
     }
     .pf-c-background-image {
       background: #0b1220 !important;
@@ -44,7 +42,8 @@ data:
     .pf-c-background-image::before,
     .pf-c-background-image svg { display: none !important; }
 
-    /* The login card — dark surface, soft border, rounded, subtle shadow */
+    /* Login card — slightly lifted surface, soft border, rounded (outer shadow
+       root, so a plain .pf-c-login descendant selector reaches it reliably). */
     .pf-c-login .pf-c-login__main {
       background-color: #131c2e !important;
       border: 1px solid #243049 !important;
@@ -52,59 +51,3 @@ data:
       box-shadow: 0 10px 34px rgba(0, 0, 0, 0.40) !important;
       overflow: hidden !important;
     }
-    .pf-c-login .pf-c-login__main-header,
-    .pf-c-login .pf-c-login__main-body,
-    .pf-c-login .pf-c-login__main-footer {
-      background-color: transparent !important;
-    }
-
-    /* Headings + the flow title ("Etherport SSO") */
-    .pf-c-login .pf-c-title,
-    .pf-c-login h1, .pf-c-login h2, .pf-c-login h3 {
-      color: #f1f5f9 !important;
-      font-weight: 600 !important;
-      letter-spacing: -0.01em !important;
-    }
-
-    /* Labels + body text */
-    .pf-c-login .pf-c-form__label,
-    .pf-c-login .pf-c-form__label-text,
-    .pf-c-login .pf-c-login__main-body {
-      color: #e8eaf0 !important;
-    }
-    .pf-c-login .pf-c-form__helper-text,
-    .pf-c-login small { color: #94a3b8 !important; }
-
-    /* Inputs — dark fill, slate border, rounded */
-    .pf-c-login .pf-c-form-control {
-      background-color: #0b1220 !important;
-      color: #e8eaf0 !important;
-      border: 1px solid #243049 !important;
-      border-radius: 8px !important;
-    }
-    .pf-c-login .pf-c-form-control:hover { border-color: #334155 !important; }
-    .pf-c-login .pf-c-form-control:focus {
-      border-color: #3b82f6 !important;
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important;
-    }
-    .pf-c-login .pf-c-form-control::placeholder { color: #64748b !important; }
-
-    /* Primary button — uses the email accent (near-white) on the dark card */
-    .pf-c-login .pf-c-button.pf-m-primary {
-      background-color: #f1f5f9 !important;
-      color: #0b1220 !important;
-      border: none !important;
-      border-radius: 8px !important;
-      font-weight: 600 !important;
-      transition: background-color 0.12s ease !important;
-    }
-    .pf-c-login .pf-c-button.pf-m-primary:hover,
-    .pf-c-login .pf-c-button.pf-m-primary:focus {
-      background-color: #e2e8f0 !important;
-      color: #0b1220 !important;
-    }
-
-    /* Links + muted footer */
-    .pf-c-login a,
-    .pf-c-login .pf-c-button.pf-m-link { color: #93c5fd !important; }
-    .pf-c-login .pf-c-login__footer { color: #94a3b8 !important; }
