@@ -35,6 +35,13 @@
     node_ready_retries: 40
     node_ready_delay: 15
 
+  # The kubectl steps run via delegate_to: localhost; ansible's local connection
+  # doesn't inherit an interactive shell's env, so resolve the kubeconfig
+  # explicitly (override with -e kubeconfig_path=..., else $KUBECONFIG, else
+  # $HOME/.kube/config on the control host).
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path | default(lookup('env', 'KUBECONFIG'), true) | default(lookup('env', 'HOME') ~ '/.kube/config', true) }}"
+
   pre_tasks:
     - name: Require explicit confirmation (-e confirm=yes)
       ansible.builtin.assert:
