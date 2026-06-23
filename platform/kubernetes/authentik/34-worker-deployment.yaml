@@ -34,5 +34,7 @@ spec:
           resources: { requests: { cpu: 100m, memory: 384Mi }, limits: { cpu: "1", memory: 768Mi } }
           volumeMounts:
             - { name: media, mountPath: /media }
+            - { name: blueprints, mountPath: /blueprints/custom, readOnly: true }
       volumes:
         - { name: media, emptyDir: {} }   # worker media is transient (server holds the PVC)
+        - { name: blueprints, configMap: { name: authentik-blueprints } }

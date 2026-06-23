@@ -128,6 +128,27 @@ spec:
         existingSecret: grafana-admin-credentials
         userKey: admin-user
         passwordKey: admin-password
+      # H38 SSO: Authentik OIDC. Local admin (above) stays as a fallback — no
+      # lockout. Client secret via env from the grafana-oidc Secret (overrides
+      # grafana.ini). Maps the Authentik user to a Grafana Admin (single-owner).
+      envFromSecret: grafana-oidc
+      grafana.ini:
+        server:
+          root_url: https://grafana.wind.etherport.net
+        auth.generic_oauth:
+          enabled: true
+          name: Authentik
+          client_id: grafana
+          scopes: "openid email profile"
+          auth_url: https://auth.wind.etherport.net/application/o/authorize/
+          token_url: https://auth.wind.etherport.net/application/o/token/
+          api_url: https://auth.wind.etherport.net/application/o/userinfo/
+          email_attribute_path: email
+          login_attribute_path: preferred_username
+          name_attribute_path: name
+          allow_sign_up: true
+          use_pkce: true
+          role_attribute_path: "'Admin'"
       resources:
         requests:
           memory: "128Mi"

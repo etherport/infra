@@ -22,6 +22,7 @@ resources:
   - comprehensive-alerts.yaml
   - dns-health-alerts.yaml
   - grafana-admin-secret.sops.yaml
+  - grafana-oidc-secret.sops.yaml
   - alertmanager-secret.sops.yaml
   - nvidia-gpu-dashboard.yaml
   - loki-datasource.yaml

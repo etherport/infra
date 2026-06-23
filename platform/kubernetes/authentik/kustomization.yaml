@@ -10,3 +10,4 @@ resources:
   - 34-worker-deployment.yaml
   - 35-server-service.yaml
   - 36-ingressroute.yaml
+  - 40-blueprints.yaml
