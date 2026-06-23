@@ -13,3 +13,4 @@ resources:
   - 06-open-webui-deployment.yaml
   - 07-open-webui-service.yaml
   - 08-open-webui-ingressroute.yaml
+  - 09-open-webui-oidc.sops.yaml

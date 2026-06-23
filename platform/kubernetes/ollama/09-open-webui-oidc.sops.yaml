@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Secret
+metadata:
+    name: open-webui-oidc
+    namespace: ollama
+type: Opaque
+stringData:
+    OAUTH_CLIENT_SECRET: ENC[AES256_GCM,data:xSerTYEQi/goNHE8J3m+vkl1ftAMZD1o6r/u22ExKGQ3woeYmVH2WToC5KzbV6v6XWyCQCQRhfLaQxJ+0bAU7Q==,iv:1/SRg/1rA+lmLdQxp//RNgLmWj/+7WlyvjnhRWLFPGQ=,tag:2X4kcD8Ca3hAFVwq/cUlWA==,type:str]
+sops:
+    kms: []
+    gcp_kms: []
+    azure_kv: []
+    hc_vault: []
+    age:
+        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSA3MHl5aWwwaW5qaWdKSld3
+            S0FIVU11TkJDR0FTZ0N2OXhRNHUwYTlGcVQ0CmFxUUE2bDJ4NFQzWVZ6amN6bVll
+            VGQzRUFWRDAvYmZYcU1ZT3Z6bGZ1aHcKLS0tIG5yR0ZLWEkzMU5JOXF4QmI5bS8r
+            ckZLblRhTWtQNXJhRGlyUjBxaWE3UzQK6iVvgSLTtOUWpU1EmZumJsjQT19/7W/O
+            tOrm19l2NX91GDQ1uTgphnxo2VCHiBDyfjxpFxWlFxtkDfRu8M6FTA==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBQb3gxTE1qeE9WRHd5dkFZ
+            MituaGFlMWhTSlFxU25vbWZ2cmxJcHpDcnpzClB0TVRzTXdMM3BpVWpPdDN0RmpQ
+            SDhXNE96MjFGdjd5cVlkbUZ1SzJFNTQKLS0tIHNMNUh3SWVjek9oNFhQc01QUUVV
+            ME1LOW81TGRCbDMzMHNBL2trZHpoL1EKtgHwO2xJltQ1o/VWipg4+9Ul7f5KD9zx
+            GOFfDGR9P/vHT60h7LF59zdNY+hyiEq+JQI7oXofZoyQtguqvR+ayA==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-06-23T16:17:51Z"
+    mac: ENC[AES256_GCM,data:VCONZza1y9nwZFrnS0TrIZ5WkvHKY2T0l8LPp8Dq1Lz92Z1yw9BoTwOQJuiuG+vgY2ePzceqh3gysETiK/jfpdm+g72ib7Zh2p79dfQP4O64ds588+mVEbqKt1gE9QGboTU9RkxZEEgYWt6MTd17WuXks6TIS60cb8BVSxxUTJQ=,iv:sTTdPDgWvWIk6v//4MU2xlS9PmHwy6fdfLdMpDhEeRg=,tag:NxOCbf2U/2wNArh/Zjl+Vg==,type:str]
+    pgp: []
+    encrypted_regex: ^(data|stringData)$
+    version: 3.9.4
