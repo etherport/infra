@@ -13,6 +13,16 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-23 (cont. 4) — M80 Messages backup COMPLETE + Notes/Safari/Drive added; mini→VIP observability outage
+
+**Messages backup DONE** (`messages-backup.sh`, 20:00). chat.db: 319,679 msgs, integrity ok; attachments: **19,951 files / ~48 GB**. The attachments first-copy needed the **parallel sharded** mirror (256 hex top-dirs × 6-way `xargs -P` rsync) — serial was ~1 file/s (~5h); parallel ~6× (finished in ~1h13m over 2 attempts, attempt-1 timed out at 40min, attempt-2 resumed). Two bugs fixed en route: (a) `mini_run_timeout`-wrapped `xargs` lost stdin → empty input → false rc=0 "complete" copying nothing (fix: background `xargs` with the `<SHARDS` redirect DIRECTLY on it + own watchdog); (b) the FDA/launchd saga from cont.2. **Metrics now split**: `messages_backup` (DB/msg count) + `messages_attachments_backup` (file count) report independently.
+
+**Notes + Safari + iCloud Drive added** (`icloud-files-backup.sh` + `net.wind.icloud-files.plist`, 19:30): Notes (whole group container, NoteStore.sqlite integrity-checked read-only before mirror — **414 notes / 397 MB**), Safari `Bookmarks.plist` (464 KB), iCloud Drive (CloudDocs — **only 2 local files, 0 stubs**; owner doesn't use it for production, confirmed). Each a guarded rsync mirror (`--max-delete`, refuse-missing) with its own metric (`notes_backup`/`safari_backup`/`icloud_drive_backup`). Reminders confirmed **already covered** (CalDAV VTODO in the Calendars sync). **iCloud backup coverage is now complete** for everything the owner uses.
+
+**⚠️ mini→Traefik-VIP observability OUTAGE (open, infra-agent handoff).** The mini (10.10.202.101) can't TCP-reach the Traefik VIP `10.10.201.70:443` (timeout) since today's firewall/netpol/H38 cleanup, so ALL mini metric pushes (Pushgateway) + log shipping (Loki/Alloy) fail — both route through that VIP. **Backups are UNAFFECTED** (they go to the NAS `sequoia:445`, reachable). Pushgateway/Loki are healthy (in-cluster pushers reach them via ClusterIP); only the external mini→VIP route is broken. Likely the UDM zone firewall (202→201/VIP allow dropped), MetalLB↔UDM BGP, or H38 Traefik forward-auth on the pushgateway/loki routes. Full infra-agent prompt (route fix + dashboard/alert wiring for the 5 new metric series) handed to the owner this session. Until fixed, mini `*_last_success` reads stale — expected backlog, not a backup failure. Commits `510db28` `31b06f3` `06af775` `4a72751` `59d1178`.
+
+---
+
 ## 2026-06-23 (cont. 3) — Authentik SSO pass COMPLETE + login branding; S3 approval-flow; M101 VM patching
 
 Closed out the Authentik SSO pass (H38), plus a cluster of smaller items.

@@ -333,6 +333,22 @@ ln -sf "$PWD/infra/macos/mini/net.wind.messages-backup.plist" ~/Library/LaunchAg
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.wind.messages-backup.plist
 ```
 
+## M80 — Notes / Safari / iCloud Drive (`icloud-files-backup.sh`, `net.wind.icloud-files`)
+Backs up the "file-shaped" iCloud categories to `/Volumes/Backups/Graham/iCloud/{Notes,Safari,Drive}/`,
+nightly at **19:30** (staggered first). One script, three guarded rsync mirrors, each with its
+own metric (`notes_backup` / `safari_backup` / `icloud_drive_backup`):
+- **Notes** — the whole `group.com.apple.notes` container (NoteStore.sqlite + Accounts/ media);
+  the DB is `integrity_check`ed read-only before mirroring so a corrupt DB never propagates.
+- **Safari** — `Bookmarks.plist` (bookmarks + reading list).
+- **iCloud Drive** — `~/Library/Mobile Documents/com~apple~CloudDocs`; logs the `.icloud`
+  evicted-stub count (Optimize-Storage placeholders mirror as stubs, not real data).
+
+Same prereq as Messages: **Full Disk Access on `/bin/bash`** (covers all three + the network
+volume). All NAS access via rsync; guarded with `--max-delete`; mount self-heals via `mount-nas.sh`.
+**Reminders need no separate job** — they're CalDAV (VTODO) and already ride the Calendars sync.
+Load: `ln -sf "$PWD/infra/macos/mini/net.wind.icloud-files.plist" ~/Library/LaunchAgents/` then
+`launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.wind.icloud-files.plist`.
+
 ## `net.wind.alloy` — ship the mini's logs to Loki (`alloy-config.alloy`)
 Grafana **Alloy** tails the backup-pipeline logs and pushes them to the cluster **Loki** so
 this off-cluster macOS host's logs are searchable in Grafana (and alertable via the Loki
