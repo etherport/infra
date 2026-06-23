@@ -117,19 +117,25 @@ if mini_run_timeout "${MAX_RUNTIME}" /usr/bin/rsync -a "${STAGING}/chat-clean.db
 else
   db_rc=1; log "✗ db: rsync to NAS failed (see ${RUNOUT})"
 fi
-# 3b. Attachments: mirror with --delete capped at 500 (normal churn is tiny; a cap-exceeding
-#     deletion means the local source lost a lot → abort to protect the NAS copy).
-mirror(){  # <label> <src-dir> <dst-dir> <maxdel> ; echoes 0 ok / 1 fail (logs to stderr)
-  local label="$1" src="$2" dst="$3" maxdel="$4"
-  mkdir -p "${dst}"
-  mini_run_timeout "${MAX_RUNTIME}" /usr/bin/rsync -a --delete --max-delete="${maxdel}" "${src}/" "${dst}/" >>"${RUNOUT}" 2>&1
-  local r=$?
-  [ "${r}" -eq 25 ] && { log "✗ ${label}: hit --max-delete=${maxdel} — ABORTED to protect backup" >&2; echo 1; return; }
-  [ "${r}" -ne 0 ]  && { log "✗ ${label}: rsync rc=${r}" >&2; echo 1; return; }
-  echo 0
-}
-log "mirror Attachments → NAS"
-att_rc="$(mirror attachments "${MSG_SRC}/Attachments" "${DEST_BASE}/Attachments" 500)"
+# 3b. Attachments: RESILIENT mirror. Heavy sustained SMB write load can trip an SMB session
+#     drop mid-copy (SESSION_RECONNECT observed) and wedge rsync — the same failure mode the
+#     M79 photos bulk-pull hit. rsync -a RESUMES (skips already-copied files), so loop with a
+#     bounded per-attempt timeout + a remount between attempts until a clean pass. The first
+#     copy may need several attempts; steady-state is one quick incremental pass. --max-delete
+#     caps a mass-deletion (local cache eviction) → abort, don't shrink the NAS copy.
+mkdir -p "${DEST_BASE}/Attachments"
+att_rc=1
+for att in $(seq 1 "${ATT_ATTEMPTS:-10}"); do
+  nas_readable /Volumes/Backups || "${HERE}/mount-nas.sh" >/dev/null 2>&1
+  log "mirror Attachments → NAS (attempt ${att})"
+  mini_run_timeout "${ATT_TIMEOUT:-1200}" /usr/bin/rsync -a --delete --max-delete=500 \
+    "${MSG_SRC}/Attachments/" "${DEST_BASE}/Attachments/" >>"${RUNOUT}" 2>&1
+  r=$?
+  if [ "${r}" -eq 0 ]; then att_rc=0; log "✓ attachments mirror clean (attempt ${att})"; break; fi
+  if [ "${r}" -eq 25 ]; then log "✗ attachments hit --max-delete=500 — ABORTED (source lost data?)"; att_rc=1; break; fi
+  log "attachments attempt ${att} incomplete (rc=${r}) — remount + resume"
+  "${HERE}/mount-nas.sh" >/dev/null 2>&1
+done
 
 dur="$(( $(date +%s) - START ))"
 if [ "${db_rc}" -eq 0 ] && [ "${att_rc}" -eq 0 ]; then
