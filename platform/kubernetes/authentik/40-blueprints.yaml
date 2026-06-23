@@ -78,7 +78,7 @@ data:
         identifiers:
           slug: default-authentication-flow
         attrs:
-          title: " "
+          title: "\u200B"   # zero-width space: non-blank (DRF rejects "") but renders empty
           background: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQUFIFAADNAGiYyvoBAAAAAElFTkSuQmCC"
       - model: authentik_flows.flow
         identifiers:
