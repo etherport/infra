@@ -74,6 +74,14 @@ data:
           domain: authentik-default
         attrs:
           branding_logo: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII="
+          # Force Authentik's NATIVE dark theme for every interface (login flow +
+          # admin/user mgmt). 2024.12 has no theme column, but the web reads
+          # brand.attributes.settings.theme.base — this is the supported way to
+          # override the default "automatic" (OS prefers-color-scheme) theme.
+          attributes:
+            settings:
+              theme:
+                base: dark
       - model: authentik_flows.flow
         identifiers:
           slug: default-authentication-flow

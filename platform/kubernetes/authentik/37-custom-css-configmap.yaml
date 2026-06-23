@@ -2,14 +2,11 @@
 # <link> present on every interface) and mounted over /web/dist/custom.css on
 # the server (subPath — needs a server restart to reload).
 #
-# Dark mode: Authentik 2024.12 has no server-side/global theme toggle — its dark
-# theme (theme-dark.css) is auto-selected from the browser's prefers-color-scheme
-# and can't be forced via API/blueprint. theme-dark.css uses UNGATED :root/body
-# rules + CSS custom properties (which inherit through shadow DOM), so importing
-# it here forces Authentik's NATIVE dark theme on EVERY interface (login flow +
-# admin/user management UI) — proper PatternFly dark, no per-component overrides,
-# no JS. The few rules below are just login-flow polish layered on top (scoped to
-# the flow via :has()/.pf-c-login so they don't touch the management UI).
+# Dark mode is forced NATIVELY via the brand attribute settings.theme.base=dark
+# (see 40-blueprints.yaml) — that's the supported way and themes every interface
+# (login + admin/user mgmt) using Authentik's own PatternFly dark theme. The
+# rules here are ONLY login-flow polish on top of that, scoped to the flow via
+# :has()/.pf-c-login so they never touch the management UI.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -17,9 +14,6 @@ metadata:
   namespace: authentik
 data:
   custom.css: |
-    /* Force Authentik's native dark theme globally (login + mgmt). MUST be first. */
-    @import url("/static/dist/theme-dark.css");
-
     /* ----- Etherport SSO login-flow polish (on top of native dark) ----- */
     /* Deep-slate background matching the report emails (--bg #0b1220), full
        viewport, scoped to the flow page so the mgmt UI keeps the native dark bg. */

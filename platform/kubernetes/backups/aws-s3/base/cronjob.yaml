@@ -12,7 +12,13 @@ spec:
   failedJobsHistoryLimit: 5
   jobTemplate:
     spec:
-      backoffLimit: 1
+      # 0 = no Job-level retry. The script already retries transient sync
+      # failures internally (run_sync_with_retry / SYNC_MAX_RETRIES), so a
+      # Job retry mostly just re-ran the terminal guard/approval exits — which
+      # re-sent the approval email once per attempt (the "2 emails ~5min apart"
+      # symptom). One attempt → one approval email. A genuine infra failure is
+      # picked up by the next nightly run.
+      backoffLimit: 0
       # GC Job records 25h after they finish. Originally set to 3600
       # (1h) on 2026-05-22 to clear stuck Failed jobs that were
       # producing ~4k KubeJobFailed alertmanager emails — but 1h was
