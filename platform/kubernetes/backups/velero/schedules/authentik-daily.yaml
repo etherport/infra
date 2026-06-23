@@ -1,0 +1,16 @@
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: authentik-daily
+  namespace: velero
+spec:
+  schedule: "0 4 * * *"
+  template:
+    includedNamespaces:
+      - authentik
+    # Authentik state lives in the shared `postgres-cluster` (authentik DB), backed
+    # up by CNPG Barman (continuous WAL + daily base to S3) — NOT here. This captures
+    # the namespace's K8s resources + FS-backs-up the media PVC (uploaded icons/etc.).
+    # Redis is ephemeral (emptyDir, cache/broker) — nothing to back up there.
+    defaultVolumesToFsBackup: true
+    ttl: 720h0m0s

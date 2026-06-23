@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: velero
 
 resources:
+  - authentik-daily.yaml
   - critical-apps-daily.yaml
   - cue-daily.yaml
   - infrastructure-daily.yaml

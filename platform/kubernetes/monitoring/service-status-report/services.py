@@ -33,6 +33,9 @@ SERVICES = [
     ("Core platform", "cert-manager",           "deployment", "cert-manager",   "cert-manager"),
     ("Core platform", "cert-manager webhook",   "deployment", "cert-manager",   "cert-manager-webhook"),
     ("Core platform", "cert-manager cainjector","deployment", "cert-manager",   "cert-manager-cainjector"),
+    ("Core platform", "Authentik server",       "deployment", "authentik",      "authentik-server"),
+    ("Core platform", "Authentik worker",       "deployment", "authentik",      "authentik-worker"),
+    ("Core platform", "Authentik Redis",        "deployment", "authentik",      "authentik-redis"),
 
     # GitOps
     ("GitOps", "Flux helm-controller",         "deployment", "flux-system",    "helm-controller"),
