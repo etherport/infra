@@ -40,3 +40,23 @@ data:
           slug: grafana
           provider: !KeyOf grafana-provider
           meta_launch_url: https://grafana.wind.etherport.net
+  graham.yaml: |
+    # Daily admin account (akadmin = break-glass). Member of the superuser group.
+    # Bootstrap password via !Env (change it + enroll a passkey on first login).
+    version: 1
+    metadata:
+      name: graham-user
+    entries:
+      - model: authentik_core.user
+        id: graham-user
+        identifiers:
+          username: graham
+        attrs:
+          username: graham
+          name: Graham
+          email: grahamsm@gmail.com
+          is_active: true
+          path: users
+          password: !Env AUTHENTIK_GRAHAM_PASSWORD
+          groups:
+            - !Find [authentik_core.group, [name, "authentik Admins"]]
