@@ -148,7 +148,12 @@ data:
             - !KeyOf forward-auth-provider
   graham.yaml: |
     # Daily admin account (akadmin = break-glass). Member of the superuser group.
-    # Bootstrap password via !Env (change it + enroll a passkey on first login).
+    # NB: deliberately NO `password` attr — Authentik re-applies a blueprint
+    # password on EVERY apply (write-only field, can't diff), which clobbered
+    # UI-set passwords on each worker restart. graham's password + passkey are
+    # managed in the UI; the initial password was set once via the bootstrap
+    # value (AUTHENTIK_GRAHAM_PASSWORD, now unused). On a rebuild, use akadmin
+    # (break-glass) to re-set graham's password.
     version: 1
     metadata:
       name: graham-user
@@ -163,7 +168,6 @@ data:
           email: grahamsm@gmail.com
           is_active: true
           path: users
-          password: !Env AUTHENTIK_GRAHAM_PASSWORD
           groups:
             - !Find [authentik_core.group, [name, "authentik Admins"]]
   branding.yaml: |
