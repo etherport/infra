@@ -138,11 +138,17 @@ att_rc=1
 for att in $(seq 1 "${ATT_ATTEMPTS:-8}"); do
   nas_readable /Volumes/Backups || "${HERE}/mount-nas.sh" >/dev/null 2>&1
   log "mirror Attachments → NAS (attempt ${att}, ${PAR}-way)"
-  # one rsync per top-level shard; {} = shard name, substituted into both src and dst.
-  mini_run_timeout "${ATT_TIMEOUT:-2400}" xargs -P "${PAR}" -I{} \
+  # one rsync per top-level shard ({} = shard name, into both src and dst). The `< SHARDS`
+  # redirect is DIRECTLY on the backgrounded xargs (always honored) — NOT via mini_run_timeout,
+  # which lost xargs's stdin (empty input → 0 work → false rc=0). Own watchdog kills xargs + its
+  # rsync children on timeout.
+  xargs -P "${PAR}" -I{} \
     /usr/bin/rsync -a --delete --max-delete=200 "${ATT_SRC}/{}/" "${DEST_BASE}/Attachments/{}/" \
-    < "${SHARDS}" >>"${RUNOUT}" 2>&1
-  r=$?
+    < "${SHARDS}" >>"${RUNOUT}" 2>&1 &
+  xpid=$!
+  ( sleep "${ATT_TIMEOUT:-2400}"; kill -0 "$xpid" 2>/dev/null && { pkill -9 -P "$xpid" 2>/dev/null; kill -9 "$xpid" 2>/dev/null; } ) & wd=$!
+  wait "$xpid" 2>/dev/null; r=$?
+  kill "$wd" 2>/dev/null; wait "$wd" 2>/dev/null
   pkill -9 -f "rsync.*Messages/Attachments" 2>/dev/null   # reap any workers the timeout orphaned
   if [ "${r}" -eq 0 ]; then att_rc=0; log "✓ attachments mirror clean (attempt ${att})"; break; fi
   log "attachments attempt ${att} had failures/timeout (rc=${r}) — remount + resume"
