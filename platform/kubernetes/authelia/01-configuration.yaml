@@ -59,11 +59,20 @@ data:
       local:
         path: /data/db.sqlite3
     notifier:
-      # Filesystem notifier — self-contained (no SMTP dependency). 2FA-device
-      # registration + password-reset links are written here; retrieve once from
-      # the pod for the initial TOTP enrollment (kubectl exec ... cat the file).
-      filesystem:
-        filename: /data/notification.txt
+      # SES SMTP (reuses the Alertmanager SES creds). Used for 2FA-device
+      # registration codes + password-reset codes — rare, online operations.
+      # LOGIN stays fully local (file user DB + TOTP/WebAuthn), so internal app
+      # access still works during an internet outage; only enroll/reset emails need
+      # SES. disable_startup_check so a transient SES hiccup can't block boot.
+      # Password via AUTHELIA_NOTIFIER_SMTP_PASSWORD_FILE (see 05-deployment.yaml).
+      disable_startup_check: true
+      smtp:
+        address: 'submission://email-smtp.us-west-2.amazonaws.com:587'
+        timeout: '10s'
+        username: 'AKIA4C5DM33XKE5WUPG4'
+        sender: 'Authelia <alerts@etherport.net>'
+        identifier: 'wind.etherport.net'
+        subject: '[Authelia] {title}'
     identity_validation:
       reset_password:
         # jwt_secret from AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE

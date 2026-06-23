@@ -36,6 +36,7 @@ spec:
             - { name: AUTHELIA_SESSION_SECRET_FILE, value: /secrets/SESSION_SECRET }
             - { name: AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE, value: /secrets/STORAGE_ENCRYPTION_KEY }
             - { name: AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE, value: /secrets/JWT_SECRET }
+            - { name: AUTHELIA_NOTIFIER_SMTP_PASSWORD_FILE, value: /secrets/SMTP_PASSWORD }
           ports:
             - { name: http, containerPort: 9091 }
           securityContext:
