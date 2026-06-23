@@ -296,10 +296,42 @@ ln -sf "$PWD/infra/macos/mini/net.wind.icloud-dav.plist" ~/Library/LaunchAgents/
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.wind.icloud-dav.plist
 ```
 
+## M80 — iMessage backup (`messages-backup.sh`, `net.wind.messages-backup`)
+Backs up the Messages history — `chat.db` + `Attachments/` — to **`/Volumes/Backups/Graham/iCloud/Messages/`**
+(restorable to a Mac), nightly at **20:00** (staggered before DAV 21:00 / photos 22:00; ships
+offsite via the 01:00 s3-sync). Pushes `messages_backup_*` to Pushgateway (auto-covered by the
+iCloud-backups dashboard + `ICloudBackup{Stale,Failed,Empty}` alerts).
+
+**How it stays consistent + safe:** `rsync` copies the live `chat.db` (+`-wal`/`-shm`) to LOCAL
+staging, then `sqlite3 .backup` on the **staged** copy checkpoints the WAL into a clean
+standalone `chat.db` and runs `integrity_check` — a torn/corrupt copy FAILS the run (it never
+overwrites the good NAS copy; next run retries). The staged DB + live `Attachments/` are then
+**guarded-mirrored** to the NAS (refuse-if-source-empty + `--max-delete` cap — same
+delete-protection as the other pipelines). Reuses `mini-common.sh` (lock/timeout/self-heal) +
+`mount-nas.sh` (stale-mount self-heal).
+
+**⚠️ Prereq — Full Disk Access (the one blocker).** `~/Library/Messages` is TCC-protected, so
+the binary that READS it — **`/usr/bin/rsync`** — needs Full Disk Access, exactly like the
+osxphotos FDA grant (M79). `sqlite3` only ever reads the *staged* copy, so it needs no grant.
+Without FDA the run aborts cleanly with `no-FDA-or-unreadable-source` (rc=1, no silent empty
+backup). Messages.app must also be signed into iMessage (it is — confirmed 2026-06-23).
+
+### One-time setup (run on the mini, as graham)
+```bash
+# 1. Grant Full Disk Access to rsync (interactive, VNC): System Settings → Privacy & Security →
+#    Full Disk Access → + → ⌘⇧G → /usr/bin/rsync → enable. (If the launchd run still can't read,
+#    grant FDA to /bin/bash too — TCC attribution can fall to the script interpreter.)
+# 2. Manual first run (verifies FDA + ships the first copy):
+infra/macos/mini/messages-backup.sh
+# 3. Load the nightly (20:00) agent once the manual run is green:
+ln -sf "$PWD/infra/macos/mini/net.wind.messages-backup.plist" ~/Library/LaunchAgents/net.wind.messages-backup.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.wind.messages-backup.plist
+```
+
 ## `net.wind.alloy` — ship the mini's logs to Loki (`alloy-config.alloy`)
 Grafana **Alloy** tails the backup-pipeline logs and pushes them to the cluster **Loki** so
 this off-cluster macOS host's logs are searchable in Grafana (and alertable via the Loki
-ruler). Tails `photos-export.log`, `photos-export/*.out|*.log`, `mount-nas.log`, `alloy.log`
+ruler). Tails `photos-export.log`, `photos-export/*.out|*.log`, `icloud-dav*`, `messages-backup*`, `mount-nas.log`, `alloy.log`
 (labels `host="mini"`, `job=`). Buffers to a local WAL and retries, so it's harmless before
 Loki is reachable — nothing lost.
 

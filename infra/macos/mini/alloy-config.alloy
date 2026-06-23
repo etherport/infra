@@ -16,6 +16,8 @@ local.file_match "mini_logs" {
     {__path__ = "/Users/grahamsmith/Library/Logs/photos-export/*.log", job = "photos-export"},
     {__path__ = "/Users/grahamsmith/Library/Logs/icloud-dav.log",      job = "icloud-dav"},
     {__path__ = "/Users/grahamsmith/Library/Logs/icloud-dav/*.out",    job = "icloud-dav"},
+    {__path__ = "/Users/grahamsmith/Library/Logs/messages-backup.log", job = "messages-backup"},
+    {__path__ = "/Users/grahamsmith/Library/Logs/messages-backup/*.out", job = "messages-backup"},
     {__path__ = "/Users/grahamsmith/Library/Logs/mount-nas.log",       job = "mount-nas"},
     {__path__ = "/Users/grahamsmith/Library/Logs/alloy.log",           job = "alloy"},
   ]
