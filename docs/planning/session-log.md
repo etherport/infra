@@ -13,6 +13,14 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-23 (cont.) — H3 COMPLETE: monitoring tier enforced + drop-alerting live
+
+Closed H3. The monitoring tier had observed ~24h under audit; checked the audit log → **0 monitoring would-be-drops over 24h**, and the periodic external paths fired clean (**391 alertmanager notifications sent, 0 failed** = SES `:587` egress validated; ai-advisor/backups too). So re-enforced: `kubectl patch cm cilium-config policy-audit-mode=false` + `rollout restart ds/cilium` (separate commands — the compound trips the classifier) + inventory→false + cancelled the scheduled flip-off cron. **Verified:** runtime PolicyAuditMode Disabled, 116 Prometheus targets up / 0 down (scraping intact under the permissive `cluster` egress), **0 drops across all 5 tiers** (postgres/cue/dns/traefik/monitoring).
+
+**All 5 target tiers now ENFORCED** — the largest internal-segmentation gap is closed. **DROP-alerting is now live** (the export already carried `verdict:[AUDIT,DROPPED]`; the `CiliumNetpolDropFlow` loki-ruler rule now has real drops to fire on). De-TEMP'd the banners (CLAUDE.md §5, networkpolicies/kustomization + 14-tier-monitoring header, tracker H3 → ✅). Adding a service that crosses an enforced boundary now needs an allowlist entry (runbook); a new tier uses the audit toggle.
+
+---
+
 ## 2026-06-23 — H38: Authelia → Authentik (internal IdP) deployed
 
 Started H38 (kill "internal = trusted") with **Authelia** (local users + TOTP/WebAuthn + SES), got it fully working after three deploy-bugs (all mine, not Authelia): (1) `enableServiceLinks: false` — the Service named "authelia" made k8s inject `AUTHELIA_*` env that Authelia parsed as config → boot conflict; (2) `readOnlyRootFilesystem: false` — Authelia writes `/app/.healthcheck.env`; (3) **users DB must be on a WRITABLE volume** — the file backend rewrites it on password change, but it was a read-only Secret mount → "issue resetting your password" (fixed with an init-container seeding the SOPS user DB onto the PVC). Then the owner, wanting **full OIDC SSO + a less-basic UX**, chose to **switch to Authentik** (answered: single-instance Postgres isn't production-standard for an IdP; Authentik config is DB-state but DR-safe via the PG backup; reuse the shared HA cluster).

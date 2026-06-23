@@ -3,10 +3,9 @@
 # Prometheus scrapes EVERY namespace + external hosts; Alloy ingests logs/syslog;
 # Alertmanager + ai-advisor egress externally.
 #
-# ⚠️ OBSERVATION DRAFT (2026-06-22). Applied under policy-audit-mode ON → enforces
-# nothing yet; logs would-be drops as AUDIT in Loki {job="hubble-audit"} so we confirm
-# the full flow set (incl. PERIODIC ones: alert emails, ai-advisor runs, backup reports,
-# external scrapes) before flipping to enforce.
+# ENFORCED 2026-06-23. Verified via the audit toggle: 0 would-be-drops over a 24h
+# window — including the PERIODIC paths (alert emails / ai-advisor / backup reports /
+# external scrapes; 391 alertmanager notifications sent, 0 failed) — then audit OFF.
 #
 # Design (high-fanout infra, like traefik): egress is PERMISSIVE so scraping never
 # breaks — `toEntities: cluster` (every in-cluster scrape target, any port) + `world`

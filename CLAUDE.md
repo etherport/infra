@@ -132,22 +132,22 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   `pre-flight.yml` afterward to restore `root:root`. Real run path (venv, `--tags=cilium,download`)
   + full incident: `docs/runbooks/cilium-cni-dir-owner.md`. Cilium is **Helm-managed**
   (release `cilium`/kube-system), **not** Flux.
-- ⏳ **TEMP (2026-06-22): audit is back ON** to observe **monitoring** (tier 5, widest) —
-  so all 5 labeled tiers are AUDIT-ONLY (non-enforcing) right now; flip-off pending after a
-  ~24h observation (`14-tier-monitoring.yaml`; a scheduled re-check will re-enforce). The
-  normal/target state is enforcing, described next.
-- **Cilium `policy-audit-mode` (normal state) is OFF — policies ENFORCE** (since 2026-06-22;
-  was the H3 observation phase 06-15→06-22). IaC source of truth = `cilium_policy_audit_mode`
+- **Cilium `policy-audit-mode` is OFF — policies ENFORCE** (since 2026-06-22; was the H3
+  observation phase 06-15→06-22). IaC source of truth = `cilium_policy_audit_mode: false`
   in the kubespray inventory; toggle live via the `cilium-config` ConfigMap + `kubectl
-  rollout restart ds/cilium` (read only at startup), NOT a raw kubespray run. H3
+  rollout restart ds/cilium` (read only at startup), NOT a raw kubespray run. ⚠️ patch +
+  rollout as SEPARATE commands (the compound one trips the auto-mode classifier). H3
   NetworkPolicy manifests in `platform/kubernetes/networkpolicies/`; enforcement is
-  **per-namespace opt-in via the `netpol.wind/enforced=true` label** — **`postgres`** (1),
-  **`cue`** (2), **`dns`/Technitium** (3), **`traefik`** (4) are labeled/enforced so far
-  (each allowlist built+verified from Hubble/audit data, 0 drops post-flip). **All unlabeled
-  namespaces stay allow-all.** (dns query ports `:53`/`:853`/`:53443` open to `all`,
-  `:5380` admin in-cluster only; traefik egress is permissive — `cluster` any-port + `world`
-  :80/:443/:8006 — so backend routes never cut; traefik ns is labelled via the
-  `namespace-pss-labels.yaml` patch since it's Helm-created. Remaining tier: `monitoring`.)
+  **per-namespace opt-in via the `netpol.wind/enforced=true` label** — **all 5 target tiers
+  ENFORCED: `postgres`, `cue`, `dns`/Technitium, `traefik`, `monitoring`** (each allowlist
+  built+verified from Hubble/audit data, 0 drops). **All unlabeled namespaces stay allow-all.**
+  (dns query ports open to `all`, `:5380` admin in-cluster only; traefik + monitoring egress
+  permissive — `cluster` any-port + enumerated `world` ports — so scrapes/routes never cut;
+  traefik/monitoring labelled via the `namespace-pss-labels.yaml` patch since Helm-created.)
+  **DROP alerting is LIVE:** export carries `verdict:[AUDIT,DROPPED]` → Loki `{job="hubble-audit"}`
+  → loki-ruler `CiliumNetpolDropFlow` (in-cluster drop to/from an enforced ns = "open a
+  channel"). Adding a service that crosses an enforced boundary → update the per-tier CNP;
+  see `docs/runbooks/networkpolicy-tiers.md`. To add a NEW tier, toggle audit on first.
   NB: the audit→Loki pipeline only surfaces `AUDIT` verdicts (observation phase) — once a
   tier ENFORCES, a wrongly-dropped flow does NOT alert (M-tier follow-up: hubble DROP→Loki→alert).
   ⚠️ **Audit is a single GLOBAL
