@@ -179,14 +179,14 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "wind_cluster" {
           service        = "http://home-assistant.home-automation.svc.cluster.local:8123"
           origin_request = { no_tls_verify = false, connect_timeout = 10 }
         },
-        // Cue API — NOT in the cf_tunnel_services map (that wires CF Access SSO,
-        // which would block the Telegram webhook). Public reachability is
-        // restricted to exactly the webhook + health endpoints via `path`;
-        // everything else 404s at the catch-all and is reachable only over
-        // Tailscale.
+        // Cue API — serves the WHOLE app now (2026-06-23); CF Access does the
+        // gating via per-path apps in cue-access.tf (testers SSO / /health bypass
+        // / /ingest/healthkit service token). Telegram is removed, so the old
+        // path-limit is gone. NOT in the cf_tunnel_services map because that wires
+        // a single blanket SSO policy; cue needs the per-path Access apps instead.
         {
           hostname       = "cue.etherport.net"
-          path           = "^/health$|^/telegram/webhook/?$"
+          path           = null
           service        = "http://cue-api.cue.svc.cluster.local:3000"
           origin_request = { no_tls_verify = false, connect_timeout = 10 }
         },
@@ -230,9 +230,8 @@ resource "cloudflare_dns_record" "approve_cname" {
 }
 
 // Cue API — apex-level "cue.etherport.net" so Universal SSL (root +
-// *.etherport.net) covers TLS (a valid public cert is required for the
-// Telegram webhook). Proxied so the edge terminates TLS and the
-// path-restricted tunnel ingress rule applies. NO CF Access app here.
+// *.etherport.net) covers TLS. Proxied so the edge terminates TLS and CF Access
+// intercepts. Whole app served; CF Access apps (cue-access.tf) gate per path.
 resource "cloudflare_dns_record" "cue_cname" {
   zone_id = var.cloudflare_zone_id
   name    = "cue.${var.cf_zone_domain}"
@@ -240,7 +239,7 @@ resource "cloudflare_dns_record" "cue_cname" {
   content = "${cloudflare_zero_trust_tunnel_cloudflared.wind_cluster.id}.cfargotunnel.com"
   ttl     = 1
   proxied = true
-  comment = "CF tunnel for Cue API (public paths: /telegram/webhook + /health only)"
+  comment = "CF tunnel for Cue API (CF Access: testers SSO + /health bypass + /ingest/healthkit service token)"
 }
 
 // ---------------------------------------------------------------------------

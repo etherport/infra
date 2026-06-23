@@ -54,6 +54,16 @@ variable "allowed_emails" {
   default     = ["grahamsm@gmail.com"]
 }
 
+variable "cue_tester_emails" {
+  description = <<-EOT
+    Allow-list for the Cue web app (cue.etherport.net) CF Access SSO policy.
+    Add a tester = append their email here + `terraform apply`. For higher churn,
+    switch the cue Access policy (cue-access.tf) to a Google Group include.
+  EOT
+  type    = list(string)
+  default = ["grahamsm@gmail.com"]
+}
+
 variable "cf_tunnel_services" {
   description = <<-EOT
     Services exposed publicly via CF Tunnel + CF Access (Google SSO).
