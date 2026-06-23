@@ -1,0 +1,127 @@
+---
+# Rolling OS patch + reboot for Kubernetes nodes (M101).
+# Per node, ONE AT A TIME (serial: 1): cordon -> drain -> apt full-upgrade ->
+# reboot (only if required) -> wait Ready -> uncordon.
+#
+# WHY: k8s nodes are excluded from base.yml's unattended-upgrades auto-reboot
+# (they need draining first), so they had no coordinated patch/reboot path.
+# This is the controlled alternative — run it during a maintenance window.
+#
+# RUN FROM a host with kubectl + cluster-admin AND ansible (the Mac mini):
+#   cd infra/ansible
+#   # workers/GPU first (lower risk), then control plane:
+#   ansible-playbook -i inventory/wind/inventory.ini playbooks/k8s-node-patch.yml -l kube_node -e confirm=yes
+#   ansible-playbook -i inventory/wind/inventory.ini playbooks/k8s-node-patch.yml -l kube_control_plane -e confirm=yes
+#   # or a single node:
+#   ansible-playbook ... playbooks/k8s-node-patch.yml -l k8s-w1 -e confirm=yes
+#
+# PRECONDITIONS / CAVEATS:
+#   - Your kubeconfig MUST point at the HA API endpoint (VIP/LB), NOT a single
+#     control-plane node — otherwise patching that CP breaks kubectl mid-run.
+#   - 3-node etcd/control-plane tolerates exactly ONE CP down → serial:1 is required.
+#   - CNPG single-instance gotcha (cue-db, PDB minAvailable=1): a normal drain
+#     blocks on it; this playbook force-deletes CNPG pods that block the drain
+#     (brief restart for single-instance DBs; HA clusters just fail over).
+#   - Assumes kubectl node name == ansible inventory_hostname (kubespray default).
+- name: Rolling patch + reboot of Kubernetes nodes
+  hosts: k8s_cluster
+  serial: 1
+  become: true
+  any_errors_fatal: true     # stop the rollout if a node fails to come back healthy
+  gather_facts: true
+  vars:
+    drain_timeout: 600
+    reboot_timeout: 900
+    node_ready_retries: 40
+    node_ready_delay: 15
+
+  pre_tasks:
+    - name: Require explicit confirmation (-e confirm=yes)
+      ansible.builtin.assert:
+        that: confirm | default('') == 'yes'
+        fail_msg: >-
+          Refusing to run: this drains + reboots nodes. Re-run with -e confirm=yes
+          (and ideally -l <subset>). See the header for recommended ordering.
+      run_once: true
+      delegate_to: localhost
+      become: false
+
+  tasks:
+    - name: Cordon {{ inventory_hostname }}
+      ansible.builtin.command: kubectl cordon {{ inventory_hostname }}
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Drain {{ inventory_hostname }} (first attempt)
+      ansible.builtin.command: >-
+        kubectl drain {{ inventory_hostname }}
+        --ignore-daemonsets --delete-emptydir-data --timeout={{ drain_timeout }}s
+      delegate_to: localhost
+      become: false
+      register: drain_result
+      failed_when: false
+      changed_when: true
+
+    - name: Handle PDB-blocked CNPG pods, then retry drain
+      when: drain_result.rc != 0
+      delegate_to: localhost
+      become: false
+      block:
+        - name: Find CNPG pods still scheduled on {{ inventory_hostname }}
+          ansible.builtin.command: >-
+            kubectl get pods -A -l cnpg.io/cluster
+            --field-selector spec.nodeName={{ inventory_hostname }}
+            -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name --no-headers
+          register: cnpg_pods
+          changed_when: false
+
+        - name: Force-delete blocking CNPG pods (single-instance fails over / restarts)
+          ansible.builtin.command: >-
+            kubectl delete pod -n {{ (item.split() | first) }} {{ (item.split() | last) }} --wait=false
+          loop: "{{ cnpg_pods.stdout_lines }}"
+          when: item | trim | length > 0
+
+        - name: Retry drain {{ inventory_hostname }}
+          ansible.builtin.command: >-
+            kubectl drain {{ inventory_hostname }}
+            --ignore-daemonsets --delete-emptydir-data --timeout={{ drain_timeout }}s
+          changed_when: true
+
+    - name: Update apt cache on {{ inventory_hostname }}
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Full upgrade (security + -updates) on {{ inventory_hostname }}
+      ansible.builtin.apt:
+        upgrade: dist
+        autoremove: true
+
+    - name: Check whether a reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: Reboot {{ inventory_hostname }} (only if required, e.g. kernel update)
+      ansible.builtin.reboot:
+        reboot_timeout: "{{ reboot_timeout }}"
+        post_reboot_delay: 30
+      when: reboot_required.stat.exists
+
+    - name: Wait for {{ inventory_hostname }} to report Ready
+      ansible.builtin.command: >-
+        kubectl get node {{ inventory_hostname }}
+        -o jsonpath={.status.conditions[?(@.type=="Ready")].status}
+      delegate_to: localhost
+      become: false
+      register: node_ready
+      until: node_ready.stdout == "True"
+      retries: "{{ node_ready_retries }}"
+      delay: "{{ node_ready_delay }}"
+      changed_when: false
+
+    - name: Uncordon {{ inventory_hostname }}
+      ansible.builtin.command: kubectl uncordon {{ inventory_hostname }}
+      delegate_to: localhost
+      become: false
+      changed_when: true
