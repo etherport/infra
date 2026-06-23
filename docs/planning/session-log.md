@@ -13,6 +13,16 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-23 — H38: Authelia → Authentik (internal IdP) deployed
+
+Started H38 (kill "internal = trusted") with **Authelia** (local users + TOTP/WebAuthn + SES), got it fully working after three deploy-bugs (all mine, not Authelia): (1) `enableServiceLinks: false` — the Service named "authelia" made k8s inject `AUTHELIA_*` env that Authelia parsed as config → boot conflict; (2) `readOnlyRootFilesystem: false` — Authelia writes `/app/.healthcheck.env`; (3) **users DB must be on a WRITABLE volume** — the file backend rewrites it on password change, but it was a read-only Secret mount → "issue resetting your password" (fixed with an init-container seeding the SOPS user DB onto the PVC). Then the owner, wanting **full OIDC SSO + a less-basic UX**, chose to **switch to Authentik** (answered: single-instance Postgres isn't production-standard for an IdP; Authentik config is DB-state but DR-safe via the PG backup; reuse the shared HA cluster).
+
+**Authentik deployed** (`4170b27`, `9d67a44`): IdP live at **auth.wind.etherport.net** (portal 302, embedded forward-auth outpost connected). **DB on the shared HA `postgres-cluster`** — added a CNPG `managed.role` `authentik` (login+createdb, password in a SOPS secret mirrored to the authentik ns) and the server/worker **init-container creates the `authentik` DB** (CNPG 1.24 has no Database CR + superuser disabled, so the role self-creates it); added `authentik` to the **postgres-tier NetworkPolicy allowlist** (the documented "new service crosses an enforced boundary" case). App: redis (ephemeral) + server + worker (goauthentik 2024.12.3) + 2Gi media PVC; SOPS secrets (SECRET_KEY, bootstrap admin pw/token, SES SMTP pw, DB pw); SES email (enroll/reset; login stays local). **Backups:** DB rides the shared cluster's barman; media PVC via the new `authentik-daily` Velero schedule. **service-status:** server/worker/redis added. akadmin bootstrapped (pw surfaced once → change + MFA in UI).
+
+**Verified:** authelia pruned; authentik role + DB created; redis/server/worker healthy; portal 302 via the VIP; embedded outpost up. **Next = the actual SSO pass** (owner chose full SSO), all as git **blueprints**: OIDC provider + Grafana (OIDC/header → maps to existing user by email), wiki.js (OIDC), and a **proxy provider + Traefik forward-auth middleware** for the no-OIDC apps (HA/loki/pushgateway/ollama/device UIs). Nothing is gated yet (zero lockout risk). Tracker H38 has the detail.
+
+---
+
 ## 2026-06-23 — Adversarial review of the aws-s3 NAS→S3 backup app → full fix set shipped
 
 Owner: "we never got a chance to perform an adversarial code review… get up to speed and perform the adversarial review", then "do the full set of fixes" + "I approved a delete request this morning which would run overnight tonight — ensure that's maintained once we update."
