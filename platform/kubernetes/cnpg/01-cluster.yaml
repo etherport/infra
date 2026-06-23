@@ -67,6 +67,22 @@ spec:
       secret:
         name: postgres-app-credentials
 
+  # Declaratively-managed extra roles (bootstrap owner above is wikijs). CNPG
+  # creates/maintains these via its operator connection — no superuser needed.
+  # `authentik` (H38 IdP): login + createdb so the authentik-create-db Job can run
+  # `CREATE DATABASE authentik OWNER authentik` itself (CNPG 1.24 lacks the Database
+  # CR). Password from the authentik-db-role secret (same value mirrored into the
+  # authentik namespace for the app). The authentik DB rides this cluster's existing
+  # barman backup automatically.
+  managed:
+    roles:
+      - name: authentik
+        ensure: present
+        login: true
+        createdb: true
+        passwordSecret:
+          name: authentik-db-role
+
   # Continuous WAL archiving + scheduled full backups to S3 via Barman
   # Cloud. Pairs with the daily ScheduledBackup CR in 06-scheduled-backup.yaml.
   # Restore via `bootstrap.recovery` referencing an externalCluster

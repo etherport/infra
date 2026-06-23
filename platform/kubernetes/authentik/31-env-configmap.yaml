@@ -1,0 +1,21 @@
+# Non-secret Authentik env (secrets in authentik-secret). Server + worker share it.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: authentik-env, namespace: authentik }
+data:
+  AUTHENTIK_POSTGRESQL__HOST: postgres-cluster-rw.postgres.svc.cluster.local
+  AUTHENTIK_POSTGRESQL__PORT: "5432"
+  AUTHENTIK_POSTGRESQL__NAME: authentik
+  AUTHENTIK_POSTGRESQL__USER: authentik
+  AUTHENTIK_REDIS__HOST: authentik-redis.authentik.svc.cluster.local
+  AUTHENTIK_EMAIL__HOST: email-smtp.us-west-2.amazonaws.com
+  AUTHENTIK_EMAIL__PORT: "587"
+  AUTHENTIK_EMAIL__USERNAME: AKIA4C5DM33XKE5WUPG4
+  AUTHENTIK_EMAIL__USE_TLS: "true"
+  AUTHENTIK_EMAIL__FROM: "authentik <alerts@etherport.net>"
+  AUTHENTIK_BOOTSTRAP_EMAIL: grahamsm@gmail.com
+  AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+  AUTHENTIK_DISABLE_STARTUP_ANALYTICS: "true"
+  AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+  AUTHENTIK_AVATARS: initials
+  AUTHENTIK_LOG_LEVEL: info

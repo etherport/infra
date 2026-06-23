@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-worker
+  namespace: authentik
+  labels: { app.kubernetes.io/name: authentik, app.kubernetes.io/component: worker }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app.kubernetes.io/name: authentik, app.kubernetes.io/component: worker } }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: authentik, app.kubernetes.io/component: worker }
+    spec:
+      enableServiceLinks: false
+      securityContext: { runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: { type: RuntimeDefault } }
+      initContainers:
+        - name: create-db
+          image: ghcr.io/cloudnative-pg/postgresql:16.4
+          command: ["sh","-c","psql -v ON_ERROR_STOP=1 -tAc \"SELECT 1 FROM pg_database WHERE datname='authentik'\" | grep -q 1 || psql -v ON_ERROR_STOP=1 -c \"CREATE DATABASE authentik OWNER authentik\""]
+          env:
+            - { name: PGHOST, value: postgres-cluster-rw.postgres.svc.cluster.local }
+            - { name: PGUSER, value: authentik }
+            - { name: PGDATABASE, value: postgres }
+            - { name: PGPASSWORD, valueFrom: { secretKeyRef: { name: authentik-secret, key: AUTHENTIK_POSTGRESQL__PASSWORD } } }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] }, readOnlyRootFilesystem: true }
+      containers:
+        - name: worker
+          image: ghcr.io/goauthentik/server:2024.12.3
+          args: ["worker"]
+          envFrom:
+            - configMapRef: { name: authentik-env }
+            - secretRef: { name: authentik-secret }
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } }
+          resources: { requests: { cpu: 100m, memory: 384Mi }, limits: { cpu: "1", memory: 768Mi } }
+          volumeMounts:
+            - { name: media, mountPath: /media }
+      volumes:
+        - { name: media, emptyDir: {} }   # worker media is transient (server holds the PVC)

@@ -29,6 +29,9 @@ spec:
             k8s:io.kubernetes.pod.namespace: wikijs
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: postgres
+        - matchLabels:
+            # H38: Authentik (IdP) uses the shared cluster's `authentik` DB.
+            k8s:io.kubernetes.pod.namespace: authentik
       toPorts:
         - ports:
             - { port: "5432", protocol: TCP }

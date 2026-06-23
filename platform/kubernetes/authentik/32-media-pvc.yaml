@@ -1,11 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
-metadata:
-  name: authelia-data
-  namespace: authelia
+metadata: { name: authentik-media, namespace: authentik }
 spec:
   accessModes: [ReadWriteOnce]
   storageClassName: ceph-rbd
-  resources:
-    requests:
-      storage: 1Gi
+  resources: { requests: { storage: 2Gi } }

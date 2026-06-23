@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Secret
+metadata:
+    name: authentik-db-role
+    namespace: postgres
+type: kubernetes.io/basic-auth
+stringData:
+    username: ENC[AES256_GCM,data:qolooG+xg/Ym,iv:QyWqg/8OUYq9gpp15tosp3biEA4JVsBD6RtoWcJ4qBc=,tag:bOXndXWvHeTNugcVRvNPbQ==,type:str]
+    password: ENC[AES256_GCM,data:0qg6VvXtKvCsU55rhjlH6BtkeG0aqJ/l5l0t5Rwwew==,iv:4rchzKk5VFrKl9pHr6kHAfA5F9xfWlkKXZEmPp4NaS8=,tag:BsiFf0oey3pEZwoVpf4+CA==,type:str]
+sops:
+    kms: []
+    gcp_kms: []
+    azure_kv: []
+    hc_vault: []
+    age:
+        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBxanRIaEZpaWtiWEJHc2JO
+            ZzZwNXZwbDRPOU9PNFFOeW1wVlBhTUpLOEZJCnlyUjI0dUxnb1l4UnFYU1pkTUlx
+            akpEeGsrV2VwVTJiNUsyN2E4eTNNemsKLS0tIDdzbkhVaTd6cmlaYysyYWdqSU0w
+            N0N2blY3OTB0em43Z2ZzZzVlb0M4T1kK4bedyoxigqJgiGUlPC4sENAGItZ3ZmX5
+            Wjnk3MJWlZTkQaiol6tEAUw7IfTgnpF8gXUJlMIGN/cDXRUU1hzm8Q==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBLbGlOQnp2N2Nmc1lOejgy
+            ZCs0RlJjQUtPSzIxcVpwY0dEaGlHUXp1dXhFCmJMTmQ0V2F5cytkL2U5ZjBTTC9o
+            QzVobkZhbHZML0RidDhOQU9QL1RLVFkKLS0tIDFEQzE2czRpOFRYalBUeHBMenM3
+            aXJaMWtWRi9GWVpoMjlieHQrVWJZcEkKdqhxuqw5rzg2fP4rHtxMvYAEmhV4UIKm
+            LV+G3XjVJKV+pjZK9tLnzvJTBhItGTynW+dhdU/SJUCx9f8oOlsqtw==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-06-23T13:19:11Z"
+    mac: ENC[AES256_GCM,data:jSLkO1V0jlHbQ8yp46RidAVlACIAbYEayCgq+uqBgEk7q3yRKF/UfkVqiuKqTfiSoaLaiuXHfXJudZm/DR2YfSo+x8Ut2WPoLf5L9628ES4iWCXzc+odKsq8BRJlKSpArfNMSEe8VASgDCR39XnNKdCfyuL4yPmwg7kGDVG+zQo=,iv:4HGCFlNAQFeUy/6/vx1NRzWdLNrQNWRFWODwbRkTa9E=,tag:1R72ZKjnNwwFUIezg9F2YA==,type:str]
+    pgp: []
+    encrypted_regex: ^(data|stringData)$
+    version: 3.9.4
