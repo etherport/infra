@@ -21,7 +21,7 @@ spec:
         # Idempotent (overwrites each start); bytes embedded so it's git-reproducible.
         - name: seed-login-bg
           image: busybox:1.36
-          command: ["sh","-c","mkdir -p /media/public && echo 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQUFIFAADNAGiYyvoBAAAAAElFTkSuQmCC' | base64 -d > /media/public/login-bg.png"]
+          command: ["sh","-c","mkdir -p /media/public && echo 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPgFlIAAABpAD4z6GE4AAAAAElFTkSuQmCC' | base64 -d > /media/public/login-bg.png"]
           securityContext: { runAsNonRoot: true, runAsUser: 1000, allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] }, readOnlyRootFilesystem: true }
           volumeMounts:
             - { name: media, mountPath: /media }
@@ -54,6 +54,8 @@ spec:
           volumeMounts:
             - { name: media, mountPath: /media }
             - { name: blueprints, mountPath: /blueprints/custom, readOnly: true }
+            - { name: custom-css, mountPath: /web/dist/custom.css, subPath: custom.css, readOnly: true }
       volumes:
         - { name: media, persistentVolumeClaim: { claimName: authentik-media } }
         - { name: blueprints, configMap: { name: authentik-blueprints } }
+        - { name: custom-css, configMap: { name: authentik-custom-css } }

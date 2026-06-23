@@ -83,7 +83,7 @@ data:
           name: "Welcome to authentik!"
           slug: default-authentication-flow
           designation: authentication
-          title: "\u200B"   # zero-width space: non-blank (DRF rejects "") but renders empty
+          title: "Etherport SSO"
           # flow.background is a FileField served from /media/public/<name>; a
           # data-URI gets stored as a bogus filename. The solid dark-gray PNG is
           # seeded into the media volume by the server's seed-login-bg init

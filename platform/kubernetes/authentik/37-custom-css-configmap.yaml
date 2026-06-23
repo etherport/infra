@@ -1,0 +1,103 @@
+# Custom login-page theme for Authentik. Authentik's web app loads
+# /static/dist/custom.css (the `data-inject` <link> in the flow page) and
+# injects it into every flow shadow-root, so these PatternFly overrides reach
+# the login card. Mounted over /web/dist/custom.css on the server (subPath).
+#
+# Palette mirrors the "modern" report emails (dark theme tokens from
+# backups/aws-s3/image/scripts/daily-report.sh):
+#   --bg #0b1220  --surface #131c2e  --border #243049
+#   --text #e8eaf0  --muted #94a3b8  --accent #f1f5f9  radius 10-12px
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authentik-custom-css
+  namespace: authentik
+data:
+  custom.css: |
+    /* ---- Etherport SSO theme (matches report-email palette) ---- */
+    :host,
+    .pf-c-login,
+    .pf-c-background-image {
+      --pf-global--FontFamily--sans-serif: -apple-system, BlinkMacSystemFont,
+        "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+
+    /* Page background — deep slate, same as the email --bg (dark) */
+    .pf-c-background-image,
+    .pf-c-background-image__filter,
+    .ak-login-container {
+      background: #0b1220 !important;
+    }
+    .pf-c-background-image::before,
+    .pf-c-background-image svg { display: none !important; }
+
+    /* The login card — dark surface, soft border, rounded, subtle shadow */
+    .pf-c-login__main {
+      background-color: #131c2e !important;
+      border: 1px solid #243049 !important;
+      border-radius: 12px !important;
+      box-shadow: 0 10px 34px rgba(0, 0, 0, 0.40) !important;
+      overflow: hidden !important;
+    }
+    .pf-c-login__main-header,
+    .pf-c-login__main-body,
+    .pf-c-login__main-footer {
+      background-color: transparent !important;
+    }
+
+    /* Headings + the flow title ("Etherport SSO") */
+    .pf-c-login__main-header .pf-c-title,
+    .pf-c-title,
+    h1, h2, h3 {
+      color: #f1f5f9 !important;
+      font-weight: 600 !important;
+      letter-spacing: -0.01em !important;
+    }
+
+    /* Labels + helper/body text */
+    .pf-c-form__label,
+    .pf-c-form__label-text,
+    .pf-c-login__main-body,
+    .pf-c-form__helper-text {
+      color: #e8eaf0 !important;
+    }
+    .pf-c-form__helper-text,
+    small, .pf-c-login__main-footer-band { color: #94a3b8 !important; }
+
+    /* Inputs — dark fill, slate border, rounded */
+    .pf-c-form-control {
+      background-color: #0b1220 !important;
+      color: #e8eaf0 !important;
+      border: 1px solid #243049 !important;
+      border-radius: 8px !important;
+    }
+    .pf-c-form-control:hover { border-color: #334155 !important; }
+    .pf-c-form-control:focus {
+      border-color: #3b82f6 !important;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important;
+    }
+    .pf-c-form-control::placeholder { color: #64748b !important; }
+
+    /* Primary button — uses the email accent (near-white) for a clean,
+       modern CTA that reads as "on-brand" against the dark card */
+    .pf-c-button.pf-m-primary {
+      background-color: #f1f5f9 !important;
+      color: #0b1220 !important;
+      border: none !important;
+      border-radius: 8px !important;
+      font-weight: 600 !important;
+      transition: background-color 0.12s ease !important;
+    }
+    .pf-c-button.pf-m-primary:hover,
+    .pf-c-button.pf-m-primary:focus {
+      background-color: #e2e8f0 !important;
+      color: #0b1220 !important;
+    }
+
+    /* Links (e.g. recover password) — muted blue accent */
+    a, .pf-c-login__main-footer-links a, .pf-c-button.pf-m-link {
+      color: #93c5fd !important;
+    }
+
+    /* "Powered by authentik" footer — keep, just mute it */
+    .pf-c-login__footer { color: #94a3b8 !important; }
