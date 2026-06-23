@@ -89,6 +89,14 @@ resource "aws_s3_bucket_public_access_block" "velero" {
 resource "aws_s3_bucket" "archive" {
   bucket = "archive.wind.etherport.net"
 
+  # Object Lock — the backstop against a leaked-credential mass-delete. Was
+  # enabled out-of-band on this (versioned) bucket and missing from TF; codified
+  # 2026-06-23 (M101 drift review). Default retention lives in
+  # aws_s3_bucket_object_lock_configuration.archive below. NB: object lock can
+  # only be enabled at creation OR on an existing versioned bucket — this matches
+  # the already-enabled live state (import → zero-diff), it does NOT recreate.
+  object_lock_enabled = true
+
   lifecycle {
     prevent_destroy = true
   }
@@ -106,6 +114,22 @@ resource "aws_s3_bucket_versioning" "archive" {
   versioning_configuration {
     status     = "Enabled"
     mfa_delete = "Disabled"
+  }
+}
+
+# Default Object Lock retention: GOVERNANCE / 180 days (matches live, codified
+# 2026-06-23). GOVERNANCE (not COMPLIANCE) so a holder of s3:BypassGovernanceRetention
+# can still purge versions for legit cleanup (e.g. the M96/M97 dedup runs) — see
+# the M97 ProtectBackupObjectsFromDeletion Deny interplay. logs.archive / archive-test
+# deliberately have NO object lock.
+resource "aws_s3_bucket_object_lock_configuration" "archive" {
+  bucket = aws_s3_bucket.archive.id
+
+  rule {
+    default_retention {
+      mode = "GOVERNANCE"
+      days = 180
+    }
   }
 }
 
