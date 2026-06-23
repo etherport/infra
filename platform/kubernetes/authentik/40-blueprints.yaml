@@ -78,10 +78,10 @@ data:
         identifiers:
           slug: default-authentication-flow
         attrs:
+          # name/slug/designation are required by the flow serializer (kept at
+          # current values); only title + background are actually changed.
+          name: "Welcome to authentik!"
+          slug: default-authentication-flow
+          designation: authentication
           title: "\u200B"   # zero-width space: non-blank (DRF rejects "") but renders empty
-          background: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQUFIFAADNAGiYyvoBAAAAAElFTkSuQmCC"
-      - model: authentik_flows.flow
-        identifiers:
-          slug: default-recovery-flow
-        attrs:
           background: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQUFIFAADNAGiYyvoBAAAAAElFTkSuQmCC"
