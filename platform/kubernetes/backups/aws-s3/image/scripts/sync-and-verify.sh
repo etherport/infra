@@ -390,7 +390,10 @@ HTML_END
 # for the same share (prevents both CronJob overlap AND manual job conflicts)
 LOCK_NAME="aws-s3-sync-lock-${SHARE_NAME}"
 LOCK_NAMESPACE="${LOCK_NAMESPACE:-backups}"
-LOCK_MAX_AGE_SECONDS=86400  # 24 hours - consider lock stale after this
+# 48h. Was 24h, but a large initial/catch-up sync can exceed a day; at 24h the
+# NEXT night's run would treat the still-held lock as stale, delete it, and start
+# a CONCURRENT `aws s3 sync --delete` against the same prefix. Env-overridable.
+LOCK_MAX_AGE_SECONDS="${LOCK_MAX_AGE_SECONDS:-172800}"
 
 acquire_lock() {
   echo "[lock] Attempting to acquire lock: ${LOCK_NAME}"
@@ -468,6 +471,20 @@ acquire_lock() {
 
 release_lock() {
   if ! command -v kubectl &>/dev/null; then
+    return 0
+  fi
+
+  # Only release a lock we actually OWN. The EXIT trap is armed before
+  # acquire_lock, so a job that exits 0 on the "lock held by another job" skip
+  # path (or after a stale-lock takeover by a third job) must NOT delete the
+  # current holder's lock — doing so would defeat the mutex and let concurrent
+  # `--delete` syncs run. Compare the live owner to this run before deleting.
+  local current_owner
+  current_owner=$(kubectl get configmap "${LOCK_NAME}" \
+    --namespace="${LOCK_NAMESPACE}" \
+    -o jsonpath='{.data.owner}' 2>/dev/null || echo "")
+  if [[ "${current_owner}" != "${RUN_ID}" ]]; then
+    echo "[lock] Not releasing ${LOCK_NAME}: owned by '${current_owner:-<none>}', not this run (${RUN_ID})"
     return 0
   fi
 
@@ -644,6 +661,28 @@ guard_abort() {
   exit 1
 }
 
+# Source-health check (Guard 1 logic, factored out so it can run twice). Aborts
+# if the NFS source is missing, looks empty/unmounted, or fails the optional
+# sentinel. Called once before the dry-run AND again immediately before the real
+# `--delete` sync (H3) to close the window where the source could drop between
+# the two. A healthy, populated source — including an operator-approved bulk
+# delete — passes unchanged; only a genuinely empty/unmounted source aborts.
+assert_source_populated() {
+  local phase="$1"
+  if [[ ! -d "${SRC_PATH}" ]]; then
+    guard_abort "[${phase}] source path ${SRC_PATH} does not exist (NFS not mounted?) — refusing --delete sync against ${DEST_URI}"
+  fi
+  local src_entries
+  src_entries="$(ls -A1 "${SRC_PATH}" 2>/dev/null | wc -l | tr -d ' ')" || src_entries=0
+  if [[ "${src_entries}" -lt "${DELETE_GUARD_MIN_SOURCE_ENTRIES}" ]]; then
+    guard_abort "[${phase}] source ${SRC_PATH} has ${src_entries} top-level entries (< ${DELETE_GUARD_MIN_SOURCE_ENTRIES}); appears empty/unmounted — refusing --delete sync that would wipe ${DEST_URI}"
+  fi
+  if [[ -n "${DELETE_GUARD_SENTINEL}" && ! -e "${SRC_PATH}/${DELETE_GUARD_SENTINEL}" ]]; then
+    guard_abort "[${phase}] sentinel ${SRC_PATH}/${DELETE_GUARD_SENTINEL} missing; source not confirmed healthy — refusing --delete sync against ${DEST_URI}"
+  fi
+  echo "[delete-guard] source check OK (${phase}): ${src_entries} top-level entries present"
+}
+
 # --- Approval flow (human-in-the-loop for large deletions via CF Access) ---
 # When Guard 2 would trip, instead of a hard abort we can request operator
 # approval: write a pending-deletion record + full manifest to S3, email a
@@ -744,25 +783,17 @@ request_approval() {
       "${SEND_EMAIL_SCRIPT}" --html || echo "[email] WARN: failed to send approval email" >&2
   fi
 
-  echo "[delete-guard] approval requested: ${approve_url}"
+  # Do NOT log the full signed approve URL — the HMAC token in it authorises the
+  # deletion, and on the split-horizon internal path the token is the only gate.
+  # The operator gets the real link by email; logs get a redacted reference.
+  echo "[delete-guard] approval requested — signed link emailed (token redacted): ${APPROVAL_BASE_URL}/approve?t=<redacted>"
   pushgateway_emit 0 "$(elapsed_seconds)" 0 0 0 0 "approval_pending"
   exit 1
 }
 
 # Guard 1: source must exist and be populated (catches unmounted/empty share)
 if is_true "${DELETE_GUARD_ENABLED}"; then
-  if [[ ! -d "${SRC_PATH}" ]]; then
-    guard_abort "source path ${SRC_PATH} does not exist (NFS not mounted?) — refusing --delete sync against ${DEST_URI}"
-  fi
-  # Count top-level entries only (cheap; no full-tree walk)
-  src_entries="$(ls -A1 "${SRC_PATH}" 2>/dev/null | wc -l | tr -d ' ')" || src_entries=0
-  if [[ "${src_entries}" -lt "${DELETE_GUARD_MIN_SOURCE_ENTRIES}" ]]; then
-    guard_abort "source ${SRC_PATH} has ${src_entries} top-level entries (< ${DELETE_GUARD_MIN_SOURCE_ENTRIES}); appears empty/unmounted — refusing --delete sync that would wipe ${DEST_URI}"
-  fi
-  if [[ -n "${DELETE_GUARD_SENTINEL}" && ! -e "${SRC_PATH}/${DELETE_GUARD_SENTINEL}" ]]; then
-    guard_abort "sentinel ${SRC_PATH}/${DELETE_GUARD_SENTINEL} missing; source not confirmed healthy — refusing --delete sync against ${DEST_URI}"
-  fi
-  echo "[delete-guard] source check OK: ${src_entries} top-level entries present"
+  assert_source_populated "pre-dryrun"
 fi
 
 echo "=== [$RUN_ID] Dry-run to detect uploads/updates ==="
@@ -773,6 +804,14 @@ DRYRUN_RC=$?
 
 if [[ ${DRYRUN_RC} -ne 0 ]]; then
   echo "Dry-run failed with exit code ${DRYRUN_RC}" | tee -a "${ERROR_FILE}"
+  # Fail closed: the delete guard derives the deletion count by parsing this
+  # dry-run. A failed/partial dry-run can under-count deletions (parse 0) and let
+  # an unbounded `--delete` proceed. Refuse a destructive sync we couldn't
+  # analyse. (run_sync_with_retry already retried transient errors, so a non-zero
+  # rc here is a real, persistent failure.)
+  if is_true "${DELETE_GUARD_ENABLED}"; then
+    guard_abort "dry-run failed (rc=${DRYRUN_RC}); cannot determine deletion volume — refusing --delete sync against ${DEST_URI}"
+  fi
 fi
 
 # Guard 2: bound how much one run is allowed to delete (catches partial mounts /
@@ -817,6 +856,17 @@ if is_true "${DELETE_GUARD_ENABLED}"; then
       echo "[delete-guard] deletion volume within bounds — proceeding"
     fi
   fi
+fi
+
+# H3: re-assert source health immediately before the destructive --delete. The
+# dry-run + guards above measured an EARLIER moment; if the NFS source dropped in
+# between (stale handle, unmount, partial mount), the real --delete would mirror a
+# phantom mass-deletion to S3. Re-checking here closes that TOCTOU window. A
+# healthy source — including an operator-approved bulk delete — passes unchanged.
+# NB: if an approval was just consumed and the source has since gone empty, this
+# aborts WITHOUT deleting (the safe outcome); the operator simply re-approves.
+if is_true "${DELETE_GUARD_ENABLED}"; then
+  assert_source_populated "pre-sync"
 fi
 
 echo "=== [$RUN_ID] Real sync ==="
@@ -1033,7 +1083,7 @@ else
   # GNU parallel spawns new bash instances that don't inherit exported functions
   cat > "${VERIFY_WORK_DIR}/verify-one.sh" <<'VERIFY_SCRIPT'
 #!/bin/bash
-set -euo pipefail
+set -uo pipefail
 
 BUCKET="$1"
 KEY="$2"
@@ -1043,15 +1093,37 @@ REGION="$4"
 # Create safe filename for output (hash of bucket:key)
 HASH=$(echo -n "${BUCKET}:${KEY}" | md5sum | awk '{print $1}')
 RESULT_FILE="${OUTPUT_DIR}/${HASH}.json"
+ERR_FILE="${RESULT_FILE}.err"
 
-# Try to get object metadata with checksum enabled
-if aws s3api head-object \
-    --bucket "${BUCKET}" \
-    --key "${KEY}" \
-    --checksum-mode ENABLED \
-    --region "${REGION}" \
-    --output json 2>/dev/null > "${RESULT_FILE}.tmp"; then
+# Retry head-object on TRANSIENT errors (throttling / 5xx / network) before
+# declaring failure. With many parallel HEADs against lots of objects, an
+# occasional 503 SlowDown or socket reset is expected; recording it as a
+# verification failure would fail the whole run (and never get retried — the
+# re-HEAD settle pass only covers succeeded-but-no-checksum). A genuine
+# 404/NoSuchKey is NOT retried — it won't recover.
+ATTEMPTS=4
+DELAY=2
+ok=false
+last_err=""
+for ((i=1; i<=ATTEMPTS; i++)); do
+  if aws s3api head-object \
+      --bucket "${BUCKET}" \
+      --key "${KEY}" \
+      --checksum-mode ENABLED \
+      --region "${REGION}" \
+      --output json 2>"${ERR_FILE}" > "${RESULT_FILE}.tmp"; then
+    ok=true
+    break
+  fi
+  last_err="$(tr '\n' ' ' < "${ERR_FILE}" 2>/dev/null | tail -c 300)"
+  if grep -qiE "Not Found|404|NoSuchKey|does not exist" "${ERR_FILE}" 2>/dev/null; then
+    break   # genuine miss — stop retrying
+  fi
+  sleep "${DELAY}"
+  DELAY=$(( DELAY * 2 ))
+done
 
+if [ "${ok}" = "true" ]; then
   # Success - object exists and we got metadata
   jq -c --arg bucket "${BUCKET}" \
      --arg key "${KEY}" \
@@ -1064,22 +1136,21 @@ if aws s3api head-object \
        checksum_sha256: (.ChecksumSHA256 // ""),
        last_modified: (.LastModified // "")
      }' "${RESULT_FILE}.tmp" > "${RESULT_FILE}"
-  rm -f "${RESULT_FILE}.tmp"
-
 else
-  # Failed - file doesn't exist or error occurred
+  # Failed after retries - object missing or persistently inaccessible
   jq -cn \
     --arg bucket "${BUCKET}" \
     --arg key "${KEY}" \
+    --arg err "${last_err}" \
     '{
       bucket: $bucket,
       key: $key,
       status: "failed",
-      error_code: "NoSuchKey",
-      error_message: "HeadObject failed - object may not exist or is inaccessible"
+      error_code: "HeadObjectFailed",
+      error_message: ("HeadObject failed after retries: " + $err)
     }' > "${RESULT_FILE}"
-  rm -f "${RESULT_FILE}.tmp"
 fi
+rm -f "${RESULT_FILE}.tmp" "${ERR_FILE}"
 VERIFY_SCRIPT
   chmod +x "${VERIFY_WORK_DIR}/verify-one.sh"
 
@@ -1201,25 +1272,37 @@ VERIFY_SCRIPT
   python3 - <<'PYAUDIT' || record_warning "Failed to create file audit log"
 import json, os, sys, base64, hashlib
 
-def calculate_composite_checksum(file_path, part_size_mb=8):
-    """Calculate S3-compatible composite checksum for multipart upload."""
-    part_size = part_size_mb * 1024 * 1024
-    part_hashes = []
+DEFAULT_PART_SIZE_MB = int(os.environ.get('CHECKSUM_PART_SIZE_MB', '8'))
 
+def _composite_hex(file_path, part_size):
+    """Composite SHA256 over fixed-size parts. Returns (hex_or_None, n_parts)."""
+    part_hashes = []
     with open(file_path, 'rb') as f:
         while True:
             chunk = f.read(part_size)
             if not chunk:
                 break
-            part_hash = hashlib.sha256(chunk).digest()
-            part_hashes.append(part_hash)
-
+            part_hashes.append(hashlib.sha256(chunk).digest())
     if len(part_hashes) <= 1:
-        # Single part - return simple hash
-        return None
+        return None, len(part_hashes)
+    return hashlib.sha256(b''.join(part_hashes)).digest().hex(), len(part_hashes)
 
-    composite_hash = hashlib.sha256(b''.join(part_hashes)).digest()
-    return composite_hash.hex()
+def calculate_composite_checksum(file_path, expected_parts=0, part_size_mb=DEFAULT_PART_SIZE_MB):
+    """S3-compatible composite SHA256 for a multipart object. Tries the default
+    chunk size first; if that doesn't reproduce the object's actual part count
+    (aws-cli auto-scales the chunk size for very large files, so the fixed 8 MB
+    assumption is wrong past ~80 GB), derive a whole-MB part size that yields
+    expected_parts and recompute. Returns (hex_or_None, parts_used)."""
+    mb = 1024 * 1024
+    hex_default, parts_default = _composite_hex(file_path, part_size_mb * mb)
+    if expected_parts <= 0 or parts_default == expected_parts:
+        return hex_default, parts_default
+    file_size = os.path.getsize(file_path)
+    derived = (file_size + expected_parts - 1) // expected_parts   # ceil(size/parts)
+    derived = ((derived + mb - 1) // mb) * mb                      # round up to whole MB
+    if derived <= 0:
+        return hex_default, parts_default
+    return _composite_hex(file_path, derived)
 
 transfers_path = os.environ.get('TRANSFER_LOG_JSONL', '')
 verify_path = os.environ.get('VERIFICATION_RESULTS_JSONL', '')
@@ -1290,11 +1373,25 @@ with open(output_path, 'w') as out:
                     if source_sha256 and s3_sha256:
                         if is_composite and local_path and os.path.exists(local_path):
                             # For composite checksums, calculate matching composite from source
-                            composite_source = calculate_composite_checksum(local_path)
+                            try:
+                                expected_parts = int(part_count)
+                            except (ValueError, TypeError):
+                                expected_parts = 0
+                            composite_source, parts_used = calculate_composite_checksum(
+                                local_path, expected_parts=expected_parts)
                             if composite_source:
                                 checksum_match = (composite_source == s3_sha256)
                                 if not checksum_match:
-                                    checksum_mismatch_details = f"Source(composite): {composite_source}, S3: {s3_sha256}"
+                                    if expected_parts and parts_used != expected_parts:
+                                        # Couldn't reproduce aws-cli's multipart chunking
+                                        # (auto-scaled chunk size on a very large file) —
+                                        # mark UNAVAILABLE, not a (false) corruption.
+                                        checksum_match = None
+                                        print(f"WARN: composite checksum unverifiable for {s3_key} "
+                                              f"(rebuilt {parts_used} parts vs {expected_parts}); marking unavailable",
+                                              file=sys.stderr)
+                                    else:
+                                        checksum_mismatch_details = f"Source(composite): {composite_source}, S3: {s3_sha256}"
                             else:
                                 # File too small for multipart - skip comparison
                                 checksum_match = None
@@ -1619,7 +1716,10 @@ if [[ ${WARNING_COUNT} -gt 0 ]]; then
   echo "=== Backup completed with ${WARNING_COUNT} warning(s) ==="
 
   if is_true "${EMAIL_ENABLED}"; then
-    local subject="${EMAIL_SUBJECT} (DEGRADED: ${SHARE_NAME})"
+    # NB: this block runs at top-level scope (NOT in a function) — `local` here
+    # errors under `set -euo pipefail` and would flip a warning-but-successful run
+    # into a FAILED job. Plain assignment.
+    subject="${EMAIL_SUBJECT} (DEGRADED: ${SHARE_NAME})"
     {
       echo "Sequoia to S3 sync completed with WARNINGS"
       echo
@@ -1631,7 +1731,7 @@ if [[ ${WARNING_COUNT} -gt 0 ]]; then
       echo
       echo "Source:        ${SRC_PATH}"
       echo "Destination:   ${DEST_URI}"
-      echo "Summary (S3):   ${RUN_SUMMARY_URI}"
+      echo "Report (S3):   s3://${METADATA_BUCKET}/${CONSOLIDATED_REPORT_KEY:-reports/${SHARE_NAME}/${TS}/report.json}"
       echo
       echo "--- warnings.txt ---"
       cat "${WARNINGS_FILE}" 2>/dev/null || echo "(no warnings file)"

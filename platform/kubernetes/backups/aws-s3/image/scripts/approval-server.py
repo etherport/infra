@@ -143,7 +143,8 @@ def _aws_s3api(args, **kw):
 
 
 def s3_get_text(key):
-    tmp = tempfile.mktemp()
+    fd, tmp = tempfile.mkstemp()
+    os.close(fd)
     try:
         r = _aws_s3api(["get-object", "--bucket", METADATA_BUCKET, "--key", key, tmp])
         if r.returncode != 0:
@@ -156,7 +157,8 @@ def s3_get_text(key):
 
 
 def s3_put_text(key, body, content_type="application/json"):
-    tmp = tempfile.mktemp()
+    fd, tmp = tempfile.mkstemp()
+    os.close(fd)
     try:
         with open(tmp, "w") as f:
             f.write(body)

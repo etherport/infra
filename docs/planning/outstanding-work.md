@@ -21,6 +21,30 @@ revision use the next free ID per tier. Status legend:
 
 ---
 
+## 2026-06-23 — aws-s3 NAS→S3 backup: adversarial review + fix set
+
+First adversarial review of the `platform/kubernetes/backups/aws-s3` app (full
+narrative + per-finding rationale in [`session-log.md`](session-log.md);
+plan/findings at `~/.claude/plans/pure-floating-kernighan.md`). Full fix set
+shipped this session:
+
+| ID | Finding | State |
+|---|---|---|
+| **AB-H1** | Lock released by a non-owner job (defeats the mutex → concurrent `--delete`) | ✅ ownership-gated `release_lock` |
+| **AB-H2** | End-of-run degraded block (`local`/unset var) flips a warning-run into a FAILED Job | ✅ fixed; can't change exit status |
+| **AB-H3** | Delete guard measured a dry-run; real `--delete` was a separate unbounded sync (TOCTOU wipe) | ✅ re-assert source health before the destructive sync (conservative) |
+| **AB-M2** | Transient verification HEAD → false FAILED (no retry) | ✅ retry `head-object` on transient |
+| **AB-M3** | 24h stale-lock < long initial sync → concurrent run | ✅ 48h, env-overridable |
+| **AB-M4** | `daily-report` SA/RBAC missing from git (drift); dead `ghcr-creds` ref | ✅ captured SA/RBAC; image is public, ref removed |
+| **AB-M5** | Approve token echoed to pod logs | ✅ redacted (REQUIRE_CF_EMAIL left off — split-horizon) |
+| **AB-L1** | `validate-existing-backups.sh` false-"corruption" on multipart + report-upload AccessDenied | ✅ composite-aware + `reports/` prefix |
+| **AB-L2/L3/L5a-d** | dead code, stale README IAM JSON, fail-open dry-run, no ephemeral-storage limit, composite 8MB assumption, `mktemp` | ✅ all addressed |
+| **AB-L4** | Mutable `:main` image tag for a delete-capable workload | ⏳ deferred (sha-pin after tonight's approved run; `:main` kept so tonight gets the fixes) |
+| **AB-H3b** | Fuller manifest-driven delete (drive deletes from the measured set) | ⏳ deferred follow-up to the conservative re-assert |
+| **AB-L6** | "Object Lock" claimed in README but no `object_lock_configuration` in TF | ⏳ operator verifying out-of-band (believed enabled) |
+
+---
+
 ## Next-up checklist (updated 2026-05-29)
 
 Active execution order. The zone migration + switch ACLs + Kopia decom +

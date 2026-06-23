@@ -13,6 +13,38 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-23 — Adversarial review of the aws-s3 NAS→S3 backup app → full fix set shipped
+
+Owner: "we never got a chance to perform an adversarial code review… get up to speed and perform the adversarial review", then "do the full set of fixes" + "I approved a delete request this morning which would run overnight tonight — ensure that's maintained once we update."
+
+**Review (read the whole production path first-hand + a 5-lens cost fan-out):** 3 HIGH, 5 MEDIUM, several LOW. Plan/findings artifact: `~/.claude/plans/pure-floating-kernighan.md`.
+
+**Fixes landed in `image/scripts/` + manifests (this session):**
+- **H1** — `release_lock()` now only deletes the lock ConfigMap when `.data.owner==$RUN_ID`. The EXIT trap is armed before `acquire_lock`, so the old code had a job that *skipped* (lock held by another) delete the **holder's** lock on exit → defeated the mutex → concurrent `--delete` syncs. (concurrencyPolicy:Forbid only covers same-CronJob overlap, not manual↔scheduled.)
+- **H2** — the end-of-script "completed with warnings" block ran at top-level scope but used `local subject=` (errors under `set -euo pipefail`) and `${RUN_SUMMARY_URI}` (never set). Any `WARNING_COUNT>0` run (e.g. an expected checksum-unavailable on the `backups` share) exited non-zero → false FAILED Job + the degraded email never sent. Fixed both; the block can no longer change exit status.
+- **H3** — the delete guard measured a **dry-run**, then the real `--delete` was a *separate, unbounded* `aws s3 sync`. If the NFS source dropped in between, the real sync wiped S3 despite the guard passing. Factored Guard 1 into `assert_source_populated()` and **re-assert it immediately before the real `--delete`** (conservative design: a healthy source — incl. an approved bulk delete — passes unchanged; a genuinely empty source aborts without wiping).
+- **L5a** — a failed/partial dry-run is now **fail-closed** (`guard_abort`) instead of parsing "0 deletions" and proceeding to an unbounded `--delete`.
+- **M2** — `verify-one.sh` retries `head-object` (4 attempts, backoff) on transient 503/socket before recording `failed`; a genuine 404 is not retried. Stops transient throttling from producing a false verification FAILED.
+- **M3** — `LOCK_MAX_AGE_SECONDS` 24h→48h, env-overridable (a long initial sync could be force-unlocked into a concurrent run at 24h).
+- **L5c** — composite (multipart) checksum now derives part size from the part count when 8 MB doesn't reproduce it; an unreconstructable composite is marked *unavailable*, not a false "corruption".
+- **M5** — the signed approve URL is no longer echoed to pod logs (`token redacted`); `request-approval.py` still prints it (its return channel). Deliberately did **not** force `APPROVAL_REQUIRE_CF_EMAIL=true` — backup-approve is split-horizon, so an on-network operator hits the internal Traefik path (no CF header) and it would reject their own click; documented in the deployment.
+- **L5d** — `approval-server.py` `tempfile.mktemp()` → `mkstemp`.
+- **M4** — the `daily-report` SA + Role (`jobs`/`cronjobs` get,list) + RoleBinding existed in-cluster (41d) but were **missing from git** (drift); captured into `daily-report/rbac.yaml`. The `ghcr-creds` imagePullSecret was a **dead reference** — the GHCR package is **public** (anonymous pull → 200; neither live SA has a pull secret), so removed it from `base/serviceaccount.yaml`.
+- **L5b** — `ephemeral-storage` requests/limits on the `work` emptyDir workloads.
+- **L2** — deleted dead `verify.py`, `verify-existing-files.py`, `enhance-report-with-checksums.sh`.
+- **L1** — `validate-existing-backups.sh`: composite-aware comparison (was false-"corruption" on every multipart file) + `REPORT_PREFIX` moved under the IAM-granted `reports/` prefix (was `validation-reports/` → AccessDenied on upload).
+- **L3** — README "Production Policy" JSON synced to the live policy (`approvals/*`, `infra` bucket) + a source-of-truth banner pointing at the TF JSON.
+
+**Cost note (operator is cost-sensitive, 10TB+):** audited every fix — none raise steady-state AWS spend. Verified the `archive` bucket transitions to **Deep Archive at 5 days** (180-day min) + expires noncurrent versions at 30 days (`infra/terraform/aws/s3/main.tf:126,144`), so the data-safety fixes (H3/L5a/L5e/H2/M3) **avert** a Deep Archive early-deletion bill (~$5-6/TB of churned cold data) in the wipe/concurrent-sync tail. `--size-only` kept (M1, accepted) — it's the mtime-churn cost control, not the checksum algo.
+
+**L6 (open):** README/Security claim "Object Lock" on the data bucket but there's **no `object_lock_configuration` in the TF** — operator is verifying out-of-band (says it IS enabled). Treat as enabled.
+
+**Overnight-safety design:** an operator approval written this morning (`approvals/approved/<share>.json`, 48h TTL) must be consumed by tonight's run, which pulls the new `:main` image. H3 is conservative (a healthy source passes), so the approved bulk delete still runs; `check_approval` consumes the marker then the real `--delete` executes. **Image kept on `:main` tonight** so the run gets the fixes; **L4 (sha-pin) deferred** to a post-tonight follow-up (pinning to a not-yet-built sha would break the pull). Also deferred: the fuller **manifest-driven H3** (drive deletes from the measured set) — the re-assert is the tonight-safe interim.
+
+**State at end:** all scripts `bash -n` + embedded-Python compile clean; manifests pending `kubectl kustomize`. **Next:** verify the approval marker + a manual dry-run for the approved share, commit+push (triggers the `:main` rebuild — confirm it finishes before the share's 01:00 PT schedule), watch tonight's run consume the marker + delete, then land L4 + manifest-driven H3.
+
+---
+
 ## 2026-06-22 (cont. 9) — netpol DROP alerting + iCloud backup alerts enabled
 
 **Drop notification (answers "how are we told to open a channel once enforcing").** Built the DROP-alert pipeline (was the H3 follow-up): extended the Cilium hubble export to `verdict:[AUDIT,DROPPED]` (live `kubectl patch cm cilium-config` — the `patch+rollout` compound cmd hit the auto-mode classifier, so run them as SEPARATE commands — + `rollout restart ds/cilium`; durable in the kubespray inventory). The global audit switch means one export covers both phases: AUDIT while observing, DROPPED while enforcing, same `{job="hubble-audit"}` Loki stream. Added loki-ruler rule **`CiliumNetpolDropFlow`** (`06-loki-rules-cilium-audit.yaml`): fires (warning → Alertmanager email) on a sustained DROPPED flow to/from an enforced ns from an **in-cluster** source (`src_ns!=""` drops external-scan noise). So drops are **stored in Loki** (Grafana Explore) and **alerted via Alertmanager**, naming `src→dst:port` → add to the per-tier CNP per the runbook. External (`src=world`) drops still need manual `hubble observe`. Verified AUDIT export intact post-rollout (monitoring observation unaffected); loki accepted both rules. Activates automatically when the monitoring flip re-enforces. `83c14da`.

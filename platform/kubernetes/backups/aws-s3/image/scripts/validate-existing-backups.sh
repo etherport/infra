@@ -30,7 +30,11 @@ set -euo pipefail
 SHARE_NAME="${1:-}"
 SAMPLE_PERCENT="${2:-100}"
 PARALLEL_WORKERS="${PARALLEL_WORKERS:-50}"
-REPORT_PREFIX="${REPORT_PREFIX:-validation-reports}"
+# Under reports/ so the existing IAM grant (logs.../reports/*) covers the upload.
+# Was "validation-reports/", which the s3-backup policy does NOT grant → the final
+# report cp failed AccessDenied. reports/validation/ is not enumerated by the
+# daily-report job (which lists reports/<share>/), so there's no collision.
+REPORT_PREFIX="${REPORT_PREFIX:-reports/validation}"
 
 if [[ -z "$SHARE_NAME" ]]; then
   echo "ERROR: Share name required" >&2
@@ -182,19 +186,77 @@ validate_object() {
     return
   fi
 
-  # Convert S3 checksum from base64 to hex for comparison
-  local S3_SHA256=$(echo "$S3_SHA256_BASE64" | base64 -d | xxd -p -c 256)
+  # Compare source to S3 checksum. Handle BOTH simple and COMPOSITE (multipart)
+  # checksums: S3 returns "<base64>-<N>" for multipart objects, so naively
+  # base64-decoding that and comparing to a whole-file sha256 ALWAYS "mismatches"
+  # (the old bug — false "data corruption" on every large/multipart file). For a
+  # composite, reconstruct S3's composite from the local file using a part size
+  # derived from the part count (aws-cli auto-scales the chunk size on big files).
+  # Verdict is one of: valid | mismatch | unverifiable.
+  local VERDICT
+  VERDICT=$(CKSUM_B64="$S3_SHA256_BASE64" LOCALF="$LOCAL_PATH" SRCHEX="$SOURCE_SHA256" python3 - <<'PYV'
+import os, sys, base64, hashlib
+b64 = os.environ.get('CKSUM_B64', '')
+local = os.environ.get('LOCALF', '')
+src_hex = os.environ.get('SRCHEX', '')
 
-  # Compare checksums
-  if [[ "$SOURCE_SHA256" == "$S3_SHA256" ]]; then
+def composite_hex(path, part_size):
+    hs = []
+    with open(path, 'rb') as f:
+        while True:
+            c = f.read(part_size)
+            if not c:
+                break
+            hs.append(hashlib.sha256(c).digest())
+    if len(hs) <= 1:
+        return None, len(hs)
+    return hashlib.sha256(b''.join(hs)).digest().hex(), len(hs)
+
+try:
+    if '-' in b64:                         # composite (multipart) checksum
+        core, n = b64.rsplit('-', 1)
+        n = int(n)
+        s3_hex = base64.b64decode(core).hex()
+        mb = 1024 * 1024
+        h, parts = composite_hex(local, 8 * mb)
+        if parts != n:                     # 8MB assumption wrong → derive part size
+            size = os.path.getsize(local)
+            der = (size + n - 1) // n
+            der = ((der + mb - 1) // mb) * mb
+            h, parts = composite_hex(local, der)
+        if h is None or parts != n:
+            print('unverifiable')          # can't reproduce chunking — NOT corruption
+        else:
+            print('valid' if h == s3_hex else 'mismatch')
+    else:                                  # simple whole-file SHA256
+        s3_hex = base64.b64decode(b64).hex()
+        print('valid' if s3_hex == src_hex else 'mismatch')
+except Exception as e:
+    sys.stderr.write('verify error: %s\n' % e)
+    print('unverifiable')
+PYV
+)
+
+  if [[ "$VERDICT" == "valid" ]]; then
     jq -cn \
       --arg s3_key "$S3_KEY" \
       --arg local_path "$LOCAL_PATH" \
       --arg status "valid" \
       --arg source_sha256 "$SOURCE_SHA256" \
-      --arg s3_sha256 "$S3_SHA256" \
+      --arg s3_checksum "$S3_SHA256_BASE64" \
       --argjson size "$LOCAL_SIZE" \
-      '{s3_key:$s3_key, local_path:$local_path, status:$status, source_sha256:$source_sha256, s3_sha256:$s3_sha256, size:$size}' \
+      '{s3_key:$s3_key, local_path:$local_path, status:$status, source_sha256:$source_sha256, s3_checksum:$s3_checksum, size:$size}' \
+      > "$RESULT"
+  elif [[ "$VERDICT" == "unverifiable" ]]; then
+    jq -cn \
+      --arg s3_key "$S3_KEY" \
+      --arg local_path "$LOCAL_PATH" \
+      --arg status "s3_checksum_unverifiable" \
+      --arg source_sha256 "$SOURCE_SHA256" \
+      --arg s3_checksum "$S3_SHA256_BASE64" \
+      --argjson size "$LOCAL_SIZE" \
+      --arg error "Composite checksum could not be reconstructed (multipart chunk size unknown); NOT treated as corruption" \
+      '{s3_key:$s3_key, local_path:$local_path, status:$status, source_sha256:$source_sha256, s3_checksum:$s3_checksum, size:$size, error:$error}' \
       > "$RESULT"
   else
     jq -cn \
@@ -202,10 +264,10 @@ validate_object() {
       --arg local_path "$LOCAL_PATH" \
       --arg status "checksum_mismatch" \
       --arg source_sha256 "$SOURCE_SHA256" \
-      --arg s3_sha256 "$S3_SHA256" \
+      --arg s3_checksum "$S3_SHA256_BASE64" \
       --argjson size "$LOCAL_SIZE" \
       --arg error "CRITICAL: Checksum mismatch - data corruption detected!" \
-      '{s3_key:$s3_key, local_path:$local_path, status:$status, source_sha256:$source_sha256, s3_sha256:$s3_sha256, size:$size, error:$error}' \
+      '{s3_key:$s3_key, local_path:$local_path, status:$status, source_sha256:$source_sha256, s3_checksum:$s3_checksum, size:$size, error:$error}' \
       > "$RESULT"
   fi
 }
@@ -249,6 +311,7 @@ CHECKSUM_MISMATCH_COUNT=$(jq -r 'select(.status == "checksum_mismatch") | .s3_ke
 SIZE_MISMATCH_COUNT=$(jq -r 'select(.status == "size_mismatch") | .s3_key' "$RESULTS_JSONL" 2>/dev/null | wc -l | tr -d ' ')
 SOURCE_MISSING_COUNT=$(jq -r 'select(.status == "source_missing") | .s3_key' "$RESULTS_JSONL" 2>/dev/null | wc -l | tr -d ' ')
 S3_CHECKSUM_MISSING_COUNT=$(jq -r 'select(.status == "s3_checksum_missing") | .s3_key' "$RESULTS_JSONL" 2>/dev/null | wc -l | tr -d ' ')
+S3_CHECKSUM_UNVERIFIABLE_COUNT=$(jq -r 'select(.status == "s3_checksum_unverifiable") | .s3_key' "$RESULTS_JSONL" 2>/dev/null | wc -l | tr -d ' ')
 
 END_EPOCH="$(date +%s)"
 DURATION=$((END_EPOCH - START_EPOCH))
@@ -282,6 +345,7 @@ jq -cn \
   --argjson size_mismatch "$SIZE_MISMATCH_COUNT" \
   --argjson source_missing "$SOURCE_MISSING_COUNT" \
   --argjson s3_checksum_missing "$S3_CHECKSUM_MISSING_COUNT" \
+  --argjson s3_checksum_unverifiable "$S3_CHECKSUM_UNVERIFIABLE_COUNT" \
   --arg source "$SRC_PATH" \
   --arg destination "s3://${DEST_BUCKET}/${DEST_PREFIX}" \
   '{
@@ -299,7 +363,8 @@ jq -cn \
       checksumMismatch: $checksum_mismatch,
       sizeMismatch: $size_mismatch,
       sourceMissing: $source_missing,
-      s3ChecksumMissing: $s3_checksum_missing
+      s3ChecksumMissing: $s3_checksum_missing,
+      s3ChecksumUnverifiable: $s3_checksum_unverifiable
     },
     source: $source,
     destination: $destination,
@@ -341,6 +406,7 @@ echo "Checksum Mismatch:  $CHECKSUM_MISMATCH_COUNT"
 echo "Size Mismatch:      $SIZE_MISMATCH_COUNT"
 echo "Source Missing:     $SOURCE_MISSING_COUNT"
 echo "S3 Checksum Missing: $S3_CHECKSUM_MISSING_COUNT"
+echo "S3 Cksum Unverifiable: $S3_CHECKSUM_UNVERIFIABLE_COUNT"
 echo "Duration:           ${DURATION}s"
 echo "==================================="
 echo

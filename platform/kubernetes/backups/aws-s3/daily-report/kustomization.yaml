@@ -8,6 +8,7 @@ namespace: backups
 
 resources:
   - namespace.yaml
+  - rbac.yaml              # daily-report SA + Role/RoleBinding (job-list for the report)
   - cronjob-email-summary.yaml
 
 configMapGenerator:

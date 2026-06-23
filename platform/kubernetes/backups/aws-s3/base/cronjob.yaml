@@ -68,9 +68,16 @@ spec:
                 requests:
                   memory: "512Mi"
                   cpu: "200m"
+                  # Bound node-local scratch (the `work` emptyDir holds one JSON
+                  # per uploaded object + sync/dest listings). Without a limit a
+                  # huge share could fill node ephemeral storage and trigger a
+                  # node-wide disk-pressure eviction; with it, only this pod is
+                  # evicted (a clean, bounded failure).
+                  ephemeral-storage: "1Gi"
                 limits:
                   memory: "4Gi"
                   cpu: "2000m"
+                  ephemeral-storage: "8Gi"
               env:
                 # --- per-share values (overridden by patches) ---
                 - name: SHARE_NAME

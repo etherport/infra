@@ -52,9 +52,14 @@ spec:
             - name: APPROVAL_TOLERANCE_PERCENT
               value: "10"
             # CF Access enforces identity at the edge and the HMAC token binds each
-            # request to a real pending deletion. Set REQUIRE_CF_EMAIL=true (+ a
-            # non-empty ALLOWED_EMAILS) to additionally reject any in-cluster direct
-            # hit that bypasses the tunnel (defence in depth).
+            # request to a real pending deletion. Kept "false" deliberately:
+            # backup-approve resolves split-horizon, so an ON-network operator
+            # (home/VPN/Tailscale) reaches the INTERNAL Traefik route, which carries
+            # no Cf-Access-Authenticated-User-Email header — turning this on would
+            # reject the operator's own approval click. The token in the email is the
+            # gate on that path, and (since the M5 fix) is no longer echoed to pod
+            # logs. Only set true (+ ALLOWED_EMAILS) if approvals are always done via
+            # the external CF-Access URL.
             - name: APPROVAL_REQUIRE_CF_EMAIL
               value: "false"
             - name: APPROVAL_ALLOWED_EMAILS

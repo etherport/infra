@@ -159,6 +159,14 @@ surfaced in `base/cronjob.yaml` env for per-share override.
   `DELETE_GUARD_MAX_PERCENT` (default `10`) of the current destination object
   count. The percentage rule applies only when the destination has at least
   `DELETE_GUARD_MIN_DEST_FOR_PERCENT` objects (default `50`).
+- **Guard 3 — re-assert before the destructive sync** (H3, 2026-06-23): the
+  dry-run/guards above measure an *earlier* moment, and the real `--delete` is a
+  separate `aws s3 sync` invocation. Immediately before it runs, Guard 1's
+  source-health check runs **again**, closing the window where the NFS source
+  could drop *between* the dry-run and the real sync (a stale handle / unmount
+  would otherwise let `--delete` mirror a phantom mass-deletion). Relatedly, a
+  failed/partial **dry-run** is now fatal (fail-closed) rather than parsing
+  "0 deletions" and proceeding to an unbounded `--delete`.
 
 When a guard trips: no sync/delete runs, S3 is untouched, and the job exits
 non-zero. What happens next depends on whether the **approval flow** is
@@ -293,6 +301,14 @@ Built and published automatically via GitHub Actions:
 
 #### Production Policy (Normal Operations)
 
+> **Source of truth:** the live policy is
+> [`infra/terraform/aws/iam-policies/s3-backup-kubernetes-policy.json`](../../../../infra/terraform/aws/iam-policies/s3-backup-kubernetes-policy.json)
+> (IAM policy `s3-backup-kubernetes-policy`, applied out-of-band via `aws iam
+> create-policy-version`). The JSON below mirrors it — if they differ, trust the
+> file. **Do not** re-apply an older copy of this block: the `approvals/*` grant
+> is what makes the delete-approval flow work, and dropping it silently breaks
+> approvals.
+
 Use this policy for day-to-day backup operations:
 
 ```json
@@ -309,7 +325,8 @@ Use this policy for day-to-day backup operations:
             "Resource": [
                 "arn:aws:s3:::archive.wind.etherport.net",
                 "arn:aws:s3:::logs.archive.wind.etherport.net",
-                "arn:aws:s3:::archive-test.wind.etherport.net"
+                "arn:aws:s3:::archive-test.wind.etherport.net",
+                "arn:aws:s3:::infra.wind.etherport.net"
             ]
         },
         {
@@ -332,8 +349,10 @@ Use this policy for day-to-day backup operations:
                 "arn:aws:s3:::archive.wind.etherport.net/batch/*",
                 "arn:aws:s3:::logs.archive.wind.etherport.net/reports/*",
                 "arn:aws:s3:::logs.archive.wind.etherport.net/batch/*",
+                "arn:aws:s3:::logs.archive.wind.etherport.net/approvals/*",
                 "arn:aws:s3:::archive-test.wind.etherport.net/objects/*",
-                "arn:aws:s3:::archive-test.wind.etherport.net/batch/*"
+                "arn:aws:s3:::archive-test.wind.etherport.net/batch/*",
+                "arn:aws:s3:::infra.wind.etherport.net/*"
             ]
         }
     ]
