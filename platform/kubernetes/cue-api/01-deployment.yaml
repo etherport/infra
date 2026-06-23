@@ -61,6 +61,15 @@ spec:
                 secretKeyRef:
                   name: cue-db-app
                   key: uri
+            # Cloudflare Access — the app verifies the injected Cf-Access-Jwt-Assertion
+            # (signature + iss + aud against the team JWKS) and maps the Google email to
+            # the Cue user, so a forwarded link can't impersonate. Non-secret identifiers
+            # (the AUD is in every JWT; team domain is public). Set up in
+            # infra/terraform/cloudflare/cue-access.tf.
+            - name: CUE_CF_ACCESS_TEAM_DOMAIN
+              value: 'etherport.cloudflareaccess.com'
+            - name: CUE_CF_ACCESS_AUD
+              value: '8b91aee4901cf89710ab95cd3a9008830c687f72ce70bd2eafc0759288010ad3'
             # Enable the interaction-style learn loop in dev (per deploy spec).
             - name: CUE_INTERACTION_LEARNING
               value: 'true'
