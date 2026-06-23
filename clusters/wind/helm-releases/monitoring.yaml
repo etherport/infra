@@ -148,7 +148,13 @@ spec:
           name_attribute_path: name
           allow_sign_up: true
           use_pkce: true
-          role_attribute_path: "'Admin'"
+          # Single-owner homelab: every Authentik login that reaches Grafana gets
+          # full Grafana Server Admin (instance superuser — Server Admin menu),
+          # matching the local admin account. "GrafanaAdmin" requires
+          # allow_assign_grafana_admin. (To scope this later, switch to a
+          # groups-based expression once the provider emits a groups claim.)
+          role_attribute_path: "'GrafanaAdmin'"
+          allow_assign_grafana_admin: true
       resources:
         requests:
           memory: "128Mi"
