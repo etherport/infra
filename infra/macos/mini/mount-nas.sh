@@ -25,7 +25,14 @@ SHARES=(Personal-Drive Backups)
 SPARSEBUNDLE="/Volumes/Personal-Drive/Photos/PhotosLibrary.sparsebundle"
 ATTACH_VOL="/Volumes/PhotosLib"
 
+# shellcheck source=mini-common.sh
+source "${HERE}/mini-common.sh"   # mini_run_timeout (bounded liveness probe)
+
 log() { echo "$(date '+%Y-%m-%dT%H:%M:%S') mount-nas: $*"; }
+
+# A share is "ready" only if it's mounted AND responds to I/O within the timeout. A stale SMB
+# mount (server dropped during idle — the recurring failure) still shows in `mount` but hangs.
+nas_share_ready(){ mount | grep -qF " on $1 " && mini_run_timeout 12 ls "$1" >/dev/null 2>&1; }
 
 # SMB-hardening config check. The KERNEL SMB client (which `open smb://` drives) reads
 # /etc/nsmb.conf — NOT ~/Library/Preferences/nsmb.conf. The old code wrote the user file, so
@@ -45,9 +52,16 @@ fi
 rc=0
 for share in "${SHARES[@]}"; do
   vol="/Volumes/${share}"
-  if mount | grep -qF " on ${vol} "; then
-    log "✓ ${share}: already mounted at ${vol}"
+  if nas_share_ready "${vol}"; then
+    log "✓ ${share}: already mounted + responsive at ${vol}"
     continue
+  fi
+  # Listed but unresponsive (stale) → force-unmount so the mount below re-establishes it. If it's
+  # Personal-Drive, detach the sparsebundle first (PhotosLib is backed by a file on it).
+  if mount | grep -qF " on ${vol} "; then
+    log "⚠ ${share}: mounted but UNRESPONSIVE (stale) — force-remounting"
+    [ "${share}" = "Personal-Drive" ] && hdiutil detach -force "${ATTACH_VOL}" >/dev/null 2>&1
+    diskutil unmount force "${vol}" >/dev/null 2>&1 || true
   fi
 
   log "mounting ${share} via open smb://${SERVER}/${share}"
@@ -56,8 +70,8 @@ for share in "${SHARES[@]}"; do
   mounted=false
   for i in $(seq 1 20); do            # `open` is async — poll ~40s
     sleep 2
-    if mount | grep -qF " on ${vol} "; then
-      log "▶ ${share}: mounted at ${vol} (after $((i * 2))s)"
+    if nas_share_ready "${vol}"; then
+      log "▶ ${share}: mounted + responsive at ${vol} (after $((i * 2))s)"
       mounted=true
       break
     fi

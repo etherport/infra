@@ -40,16 +40,12 @@ trap 'rm -rf "${LOCK}"' EXIT
 # and re-mount, then re-probe. Only abort if it's still dead after the remount (real NAS-down).
 # Live-validated 2026-06-22 21:00: the nightly hit a stale mount; this self-heal is the fix
 # (the old code just aborted, missing the backup).
-nas_ready(){ mini_run_timeout 15 ls /Volumes/Backups >/dev/null 2>&1; }
+# mount-nas.sh ensures the shares are mounted AND responsive — it now force-remounts a stale
+# mount internally (centralised self-heal), so one call covers missing-and-stale. Then a final
+# bounded probe before we touch the share; abort with a metric only if it's still dead.
 "${HERE}/mount-nas.sh" >/dev/null 2>&1 || true
-if ! nas_ready; then
-  log "Backups mount missing/STALE — force-remounting"
-  hdiutil detach -force /Volumes/PhotosLib >/dev/null 2>&1 || true   # sparsebundle sits on Personal-Drive
-  diskutil unmount force /Volumes/Backups >/dev/null 2>&1 || true
-  "${HERE}/mount-nas.sh" >/dev/null 2>&1 || true
-fi
-if ! nas_ready; then
-  log "✗ Backups not mounted/responsive after remount — aborting (NAS down?)"
+if ! mini_run_timeout 15 ls /Volumes/Backups >/dev/null 2>&1; then
+  log "✗ Backups not mounted/responsive after mount-nas self-heal — aborting (NAS down?)"
   push_backup_metrics contacts_backup 1 "$(( $(date +%s) - START ))" 0 nas-unavailable
   push_backup_metrics calendars_backup 1 "$(( $(date +%s) - START ))" 0 nas-unavailable
   exit 1
