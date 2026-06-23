@@ -69,7 +69,7 @@ data:
     metadata:
       name: branding
     entries:
-      - model: authentik_core.brand
+      - model: authentik_brands.brand
         identifiers:
           domain: authentik-default
         attrs:
