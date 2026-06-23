@@ -19,29 +19,40 @@ metadata:
   name: traefik-tier
   namespace: traefik
 spec:
-  description: "Traefik: ingress on public entrypoints (:80/:443/:8088) from all + mgmt (:8080/:8443) in-cluster; egress permissive (cluster any-port + world :80/:443/:8006) so backends never cut. OBSERVATION DRAFT (audit on)."
+  description: "Traefik: ingress on public entrypoint CONTAINER ports (:8000/:8443tcp/:8443udp/:8088) from all + mgmt (:8080) in-cluster; egress permissive (cluster any-port + world :80/:443/:8006) so backends never cut. ENFORCED."
   endpointSelector: {}
   ingress:
     # Public entrypoints — the proxy is meant to be reached by everyone: cluster pods,
     # the Cloudflare tunnel (cloudflared), LAN clients via the MetalLB VIP (world), and
-    # Protect webhooks on :8088 (IP-literal HTTP from the Protect host = world).
+    # Protect webhooks (IP-literal HTTP from the Protect host = world).
+    #
+    # ⚠️ CRITICAL: kube-proxy DNATs the LoadBalancer SERVICE port to the pod's CONTAINER
+    # (target) port BEFORE Cilium evaluates ingress policy at the destination pod, so this
+    # MUST list the *container* ports, not the service ports. Mapping (svc -> container):
+    #   :80   web              -> :8000/TCP
+    #   :443  websecure        -> :8443/TCP
+    #   :443  websecure-http3  -> :8443/UDP
+    #   :8088 webhook          -> :8088/TCP  (same number — why webhooks kept working when
+    #                                          this block wrongly listed service ports)
+    # Listing the service ports (80/443) instead silently dropped ALL world->VIP traffic
+    # once this tier flipped audit->enforce (2026-06-23 incident: see session-log).
     - fromEntities:
         - all
       toPorts:
         - ports:
-            - { port: "80", protocol: TCP }
-            - { port: "443", protocol: TCP }
-            - { port: "443", protocol: UDP }
+            - { port: "8000", protocol: TCP }
+            - { port: "8443", protocol: TCP }
+            - { port: "8443", protocol: UDP }
             - { port: "8088", protocol: TCP }
-    # Internal mgmt/api/ping/metrics (:8080) + secondary entrypoint (:8443) — in-cluster
-    # only (kubelet probes on :8080 are also covered by allow-cluster-essentials host
-    # ingress; monitoring scrape by allow-monitoring-scrape).
+    # Internal mgmt/api/dashboard/ping/metrics (:8080) — in-cluster only (kubelet probes on
+    # :8080 are also covered by allow-cluster-essentials host ingress; monitoring scrape by
+    # allow-monitoring-scrape). :8443 is now world-reachable above (it's the public TLS
+    # entrypoint), so it no longer needs a cluster-only allow.
     - fromEntities:
         - cluster
       toPorts:
         - ports:
             - { port: "8080", protocol: TCP }
-            - { port: "8443", protocol: TCP }
     # Intra-namespace.
     - fromEndpoints:
         - matchLabels:
