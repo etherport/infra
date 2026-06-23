@@ -9,6 +9,11 @@ spec:
   routes:
     - match: Host(`dns.wind.etherport.net`)
       kind: Rule
+      # Authentik forward-auth gate (Technitium admin UI). DNS service itself
+      # (:53/:853) is unaffected — this only gates the :5380 web UI via Traefik.
+      middlewares:
+        - name: authentik-forward-auth
+          namespace: authentik
       services:
         # Primary - technitium-0 (high weight, gets ~99% of traffic)
         - name: technitium-0

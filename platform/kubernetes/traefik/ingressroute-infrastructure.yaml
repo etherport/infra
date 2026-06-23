@@ -51,6 +51,9 @@ spec:
   routes:
     - match: Host(`ups1.wind.etherport.net`)
       kind: Rule
+      middlewares:
+        - name: authentik-forward-auth
+          namespace: authentik
       services:
         - name: ups1-external
           port: 443
@@ -93,6 +96,9 @@ spec:
   routes:
     - match: Host(`ups2.wind.etherport.net`)
       kind: Rule
+      middlewares:
+        - name: authentik-forward-auth
+          namespace: authentik
       services:
         - name: ups2-external
           port: 443
@@ -135,6 +141,9 @@ spec:
   routes:
     - match: Host(`pdu1.wind.etherport.net`)
       kind: Rule
+      middlewares:
+        - name: authentik-forward-auth
+          namespace: authentik
       services:
         - name: pdu1-external
           port: 80
@@ -175,6 +184,9 @@ spec:
   routes:
     - match: Host(`pdu2.wind.etherport.net`)
       kind: Rule
+      middlewares:
+        - name: authentik-forward-auth
+          namespace: authentik
       services:
         - name: pdu2-external
           port: 80
@@ -215,6 +227,9 @@ spec:
   routes:
     - match: Host(`prox-ipmi.wind.etherport.net`)
       kind: Rule
+      middlewares:
+        - name: authentik-forward-auth
+          namespace: authentik
       services:
         - name: prox-ipmi-external
           port: 443

@@ -105,6 +105,10 @@ spec:
         entryPoints:
           - websecure
         matchRule: Host(`traefik.wind.etherport.net`)
+        # Authentik forward-auth gate (the dashboard had no auth before).
+        middlewares:
+          - name: authentik-forward-auth
+            namespace: authentik
     persistence:
       enabled: false
     ports:
