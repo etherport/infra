@@ -148,13 +148,15 @@ spec:
           name_attribute_path: name
           allow_sign_up: true
           use_pkce: true
-          # Single-owner homelab: every Authentik login that reaches Grafana gets
-          # full Grafana Server Admin (instance superuser — Server Admin menu),
-          # matching the local admin account. "GrafanaAdmin" requires
-          # allow_assign_grafana_admin. (To scope this later, switch to a
-          # groups-based expression once the provider emits a groups claim.)
-          role_attribute_path: "'GrafanaAdmin'"
-          allow_assign_grafana_admin: true
+          # Authentik handles authentication; Grafana roles are managed MANUALLY.
+          # The JMESPath literal role mapping (role_attribute_path: 'GrafanaAdmin')
+          # evaluated to empty on this build (go-ini strips the wrapping quotes →
+          # the literal becomes a missing-claim lookup), so every login reset the
+          # user to Viewer — clobbering manual role grants. skip_org_role_sync
+          # stops that; graham/akadmin are granted Grafana server admin directly
+          # (persists). Promote any new OIDC user manually (single-owner). Revisit
+          # with a groups-claim expression if multi-user role mapping is needed.
+          skip_org_role_sync: true
       resources:
         requests:
           memory: "128Mi"
