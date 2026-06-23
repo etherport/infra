@@ -33,23 +33,25 @@ if ! mini_acquire_lock "${LOCK}" "icloud-dav-backup.sh"; then
 fi
 trap 'rm -rf "${LOCK}"' EXIT
 
-# Ensure the Backups share is mounted (DAV needs only Backups — not the photos sparsebundle).
-if ! mount | grep -qF " on /Volumes/Backups "; then
-  log "mounting Backups"; open "smb://${SMB_USER}@${SERVER}/Backups"
-  for i in $(seq 1 20); do sleep 2; mount | grep -qF " on /Volumes/Backups " && break; done
+# Ensure Backups is mounted AND RESPONSIVE. A stale SMB mount (server dropped during idle —
+# the recurring failure here) still shows in `mount` but hangs on I/O, so `mount`-string checks
+# pass while every find/rsync would hang. So: ensure mounted (mount-nas.sh self-heals a missing
+# mount), then a bounded liveness probe; if the probe fails the mount is STALE → force-unmount
+# and re-mount, then re-probe. Only abort if it's still dead after the remount (real NAS-down).
+# Live-validated 2026-06-22 21:00: the nightly hit a stale mount; this self-heal is the fix
+# (the old code just aborted, missing the backup).
+nas_ready(){ mini_run_timeout 15 ls /Volumes/Backups >/dev/null 2>&1; }
+"${HERE}/mount-nas.sh" >/dev/null 2>&1 || true
+if ! nas_ready; then
+  log "Backups mount missing/STALE — force-remounting"
+  hdiutil detach -force /Volumes/PhotosLib >/dev/null 2>&1 || true   # sparsebundle sits on Personal-Drive
+  diskutil unmount force /Volumes/Backups >/dev/null 2>&1 || true
+  "${HERE}/mount-nas.sh" >/dev/null 2>&1 || true
 fi
-if ! mount | grep -qF " on /Volumes/Backups "; then
-  log "✗ Backups not mounted — aborting"
+if ! nas_ready; then
+  log "✗ Backups not mounted/responsive after remount — aborting (NAS down?)"
   push_backup_metrics contacts_backup 1 "$(( $(date +%s) - START ))" 0 nas-unavailable
   push_backup_metrics calendars_backup 1 "$(( $(date +%s) - START ))" 0 nas-unavailable
-  exit 1
-fi
-# Liveness probe: a stale/dead SMB mount still appears in `mount` but hangs on I/O. A bounded
-# stat proves the mount actually responds before we touch it (else every later find/rsync hangs).
-if ! mini_run_timeout 15 ls /Volumes/Backups >/dev/null 2>&1; then
-  log "✗ Backups mount is listed but UNRESPONSIVE (stale) — aborting"
-  push_backup_metrics contacts_backup 1 "$(( $(date +%s) - START ))" 0 nas-unresponsive
-  push_backup_metrics calendars_backup 1 "$(( $(date +%s) - START ))" 0 nas-unresponsive
   exit 1
 fi
 # Sync to LOCAL staging first (vdirsyncer), then rsync staging -> Backups master location.
