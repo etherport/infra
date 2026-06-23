@@ -126,7 +126,9 @@ data:
           name: forward-auth
           mode: forward_domain
           external_host: https://auth.wind.etherport.net
-          cookie_domain: wind.etherport.net
+          # Apex cookie (broadened from wind.etherport.net 2026-06-23 per owner) so
+          # the forward-auth SSO session spans all *.etherport.net, not just *.wind.
+          cookie_domain: etherport.net
           authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
           invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
       - model: authentik_core.application
