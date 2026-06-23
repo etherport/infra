@@ -152,7 +152,7 @@ records:
   - name: auth
     type: A
     value: 10.10.201.70
-    comment: Authelia forward-auth portal (H38, via Traefik)
+    comment: Authentik IdP / forward-auth portal (H38, via Traefik)
 
   - name: grafana
     type: A
