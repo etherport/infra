@@ -22,11 +22,27 @@ data:
         "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
     }
 
-    /* Page background — deep slate, same as the email --bg (dark) */
+    /* Page background — deep slate, same as the email --bg (dark).
+       The custom.css <link> also styles the light DOM (not just the injected
+       shadow roots), so set html/body too — otherwise only the flow column is
+       dark and wide desktops show white gutters. Force the bg layer to cover
+       the whole viewport. */
+    html, body {
+      background-color: #0b1220 !important;
+      margin: 0 !important;
+    }
+    .pf-c-login,
+    .pf-c-login__container,
     .pf-c-background-image,
     .pf-c-background-image__filter,
     .ak-login-container {
       background: #0b1220 !important;
+    }
+    .pf-c-background-image {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
     }
     .pf-c-background-image::before,
     .pf-c-background-image svg { display: none !important; }
