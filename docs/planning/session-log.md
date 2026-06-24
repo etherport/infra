@@ -13,6 +13,46 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-24 (cont. 10) — UDM/network hardening cleanup (VPN-zone tighten + audit)
+
+Network-hardening tidy-up pass on the UDM. **Done + verified:**
+- **M42 — VPN-zone allows tightened** (`udm-firewall.yml`): `Vpn → Trusted (all)` +
+  `Vpn → Management (all)` → `(admin)` = **TCP on a new `Vpn-Admin-Ports` group**
+  (22/53/80/443/6443/8006), logging on. Keeps the UDM backup WireGuard tunnel + `Vpn`
+  zone (owner wants it as break-glass for cluster/PVE VPN loss + future tunnels e.g.
+  Teleport) but a connected client no longer gets full LAN reach. Applied live from the
+  devbox (the playbook is **create-only** per H34, so: real apply created the group + 2
+  `(admin)` policies additively, then **API-deleted** the 2 old `(all)` policies — their
+  auto `(Return)` twins cascaded). Verified: only `(admin)` remain. Empty zone (0 VPN
+  clients) → no live impact. Resolves firewall-zones anomaly #3.
+
+**Audited / confirmed (owner asks):**
+- **Default network (199) is unused** — UDM API shows **0 of 102 active clients** on
+  10.10.199.x. It stays (it's the native transit + `.1` default route). NB you can't fix
+  the "device on an unused port lands on trusted-transit 199" risk by tightening the
+  `Internal` zone — the switch-routed VLANs (201/202/209/210) are zoneless and **transit
+  through `Internal`**, so `Internal→Trusted (all)` carries legit clients→servers traffic.
+  The fix is at the **switch-port level**.
+- **~33 unused/down switch ports** fleet-wide; **no "Disabled" port profile exists**, and
+  several profiles (Cameras/Phones/APs/UniFi-Devices) + the fallback are native to
+  Default/199. → UI action: create a Disabled profile, apply to unused ports.
+
+**Decisions (owner):** Security/205 isolation+DNS → **FIX** (UI: disable Network Isolation,
+set DHCP DNS .5/.6); LTE WAN → **keep**; VPN zone → **keep + tighten** (done).
+
+**Recommendation captured (task #18) — physically-exposed switches** (Driveway, Access Road,
+Outdoor Junction, Chapel, ua-gate): disable unused ports + **per-port VLAN minimization**
+(camera→Security/205, AP→its SSID VLAN, gate→Access VLAN, so a hijacked port lands in an
+already-isolated zone) + **802.1X/MAB** via RADIUS (only the "Default" placeholder profile
+exists today). MAC filtering alone is spoofable — VLAN confinement + zone firewall is the
+real control.
+
+**Still open (UI / queued):** Security/205 fix (UI), unused-ports → Disabled incl. the
+outdoor switches (UI, task #18), **M47** udm-firewall.yml auth → `X-API-Key` (`udm_api_key`
+exists; codifiable), **L24** BGP session auth (UI/FRR).
+
+---
+
 ## 2026-06-24 (cont. 9) — H30 supply-chain CLOSED (image digest-pinning, staged)
 
 Finished H30. Found two of the "deferred" items already done (the 3 TF workflows use the

@@ -299,9 +299,9 @@ Source: `networks.json` (`dhcpd_dns_1`, `dhcpd_dns_2`).
 
 These are documented here so a reader doesn't mistake them for bugs in this doc. Each is tracked separately.
 
-1. **Security/205 Network Isolation = ON + DHCP DNS empty.** Network Isolation at L2 prevents any inter-VLAN traffic regardless of zone policy. With no DHCP DNS, SimpliSafe gear has no resolver. Either disable isolation + set DNS to .5/.6, or document the deliberately-blank choice. Tracked: audit P1 #6 / M30-adjacent.
+1. **Security/205 Network Isolation = ON + DHCP DNS empty.** Network Isolation at L2 prevents any inter-VLAN traffic regardless of zone policy. With no DHCP DNS, SimpliSafe gear has no resolver. **Decision 2026-06-24 (owner): FIX** — disable isolation + set DHCP DNS to `.5`/`.6`. Pending UI action (the `unifi` TF provider lacks `network_isolation_enabled`; 205 not in TF). Tracked: **M104**.
 2. **Internal → Hotspot is Allow All.** Anything on the Servers VLAN can reach guest devices. Practical risk: low (guests ephemeral). Documented intent was Deny. Tracked: audit P2 #11.
-3. **VPN zone is wired but unused.** WireGuard WAN1 (192.168.3.0/24) has no clients. VPN → Internal is Allow All; if the pool is ever populated, those clients get full LAN reach with no policy in place. Tracked under the M42 cleanup decision.
+3. ~~**VPN zone is wired but unused.**~~ **RESOLVED 2026-06-24 (M42).** The `Vpn → Trusted/Management` allows were tightened from `all` → **TCP on `Vpn-Admin-Ports`** (22/53/80/443/6443/8006), logged, so a future break-glass WG client gets scoped admin access, not full LAN reach. The UDM backup WireGuard tunnel + `Vpn` zone are deliberately retained (break-glass for cluster/PVE VPN loss + future tunnels e.g. Teleport). (The built-in `VPN → Internal Allow-All` predefined policy can't be removed, but `Internal` no longer contains trusted server VLANs directly — those are reached via the scoped `Vpn → Trusted` rule.)
 4. **LTE WAN still configured.** Failover priority 4, never carried traffic. Slated for removal.
 5. **`Wireguard Travel` port-forward is `enabled=false`** but still in the config. Should be deleted (audit P2 #9).
 

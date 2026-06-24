@@ -253,9 +253,17 @@ orphaned. Not service-affecting on its own.
 - **Fix:** for each tenant VLAN with DHCP DNS set to `.5/.6` today (Management, Servers, Clients, IoT, vSAN, Ceph, Unifi per M25 audit §1.6), add `52.40.219.113` as a 3rd entry. UDM UI per-network or via the `paultyng/unifi` TF provider if codifying. Skip Guest (already uses public DNS by design).
 - **Effort:** S — UI clicks or one TF block per network.
 
-### ⏳ M42. UDM WireGuard cleanup (renumbered from archived M14)
+### ✅ M42. UDM WireGuard cleanup + VPN-zone tighten — DONE 2026-06-24
 - **Source:** carried forward via `docs/architecture/firewall-zones.md` cross-reference. Original archive ID was M14 but that's now reused for the s3-sync SSL probe item above. ID rotated to M42 to disambiguate.
-- **Effort:** S. Walk the UDM WG peer list, drop stale entries (likely vpn-mumbai before M38 destroyed it — verify), confirm wg0_regional_peers in `infra/ansible/playbooks/wireguard.yml` matches.
+- ✅ **WG peer list already clean:** `wg0_regional_peers: []` in `wireguard.yml` (vpn-mumbai removed/documented post-M38). No stale homelab-side peers.
+- ✅ **VPN-zone allows tightened 2026-06-24** (owner: keep the UDM backup WG tunnel + `Vpn` zone as break-glass for cluster/PVE VPN loss + future tunnels e.g. Teleport, but scope it): `Vpn → Trusted/Management (all)` → `(admin)` = **TCP on `Vpn-Admin-Ports`** (22/53/80/443/6443/8006), logged. Applied live from devbox (create-only playbook → additive create + API-delete of the 2 old `(all)`; verified only `(admin)` remain). Resolves firewall-zones anomaly #3 (unused zone → full-LAN-reach if populated).
+
+### ⏳ M103. Switch-port security cleanup (Default/199 unused-port risk + exposed outdoor switches)
+- **Source:** owner 2026-06-24 (network-hardening pass). Confirmed via UDM API: **Default/199 has 0 of 102 active clients** (unused except `.1` transit/route). Risk: **~33 unused/down switch ports** fleet-wide default to Default/199 (Internal trusted-transit zone), and **no "Disabled" port profile exists** — a device on an open jack lands on trusted-transit. Can't fix via the `Internal` zone (it carries the zoneless switch-routed VLAN transit) — fix is at the **port level**.
+- **Plan (UI / future unifi-TF port profiles):** (1) create a **Disabled** port profile, apply to all unused ports (prioritize the **physically-exposed** switches — Driveway, Access Road, Outdoor Junction, Chapel, ua-gate; task #18). (2) **Per-port VLAN minimization** — camera→Security/205, outdoor AP→its SSID VLAN, ua-gate→dedicated Access VLAN (a hijacked port then lands in an already-isolated/zoned VLAN). (3) **802.1X + MAC-Auth-Bypass** via RADIUS (only the "Default" placeholder profile exists today) — known MAC→VLAN, unknown→quarantine/deny; MAB is spoofable so VLAN confinement is the real control. (4) L2: DHCP guard/snooping, port isolation, loop/storm control. (5) Physical: lockboxes, device password, SSH off. **Effort:** S (disable unused + VLAN-min, UI) + M (802.1X/MAB project).
+
+### ⏳ M104. Security/205 (SimpliSafe) — disable Network Isolation + set DHCP DNS (owner: FIX)
+- **Source:** firewall-zones anomaly #1. VLAN 205 has Network Isolation = ON + empty DHCP DNS → SimpliSafe can't resolve via LAN. Owner chose **fix** (not document-as-deliberate). **Action (UI — `unifi` TF provider lacks `network_isolation_enabled`; 205 not in TF):** disable Network Isolation on the Security network + set DHCP Name Server to `10.10.201.5`,`10.10.201.6`. Update firewall-zones.md after.
 
 ### 🟡 M41. Plex log centralization + AI-augmented alert remediation
 - **Done partial:** 2026-05-23 (commits `77a9ee0` `30d7f20` `062b3b1`).
