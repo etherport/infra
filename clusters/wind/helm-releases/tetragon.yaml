@@ -1,0 +1,58 @@
+---
+# M74 — Cilium Tetragon: eBPF runtime security / detection (assume-breach layer).
+# OBSERVE-ONLY (no enforcement/kill). v1 deploys the agent with stdout export DISABLED:
+# Alloy tails ALL pod logs → a naive Tetragon stdout firehose would flood the single-binary
+# Loki. So v1 loads the eBPF sensors (on-demand forensics via `tetra getevents`) without any
+# Loki firehose. v2 wires SELECTIVE export (TracingPolicy-matched/kprobe events only, with
+# PROCESS_EXEC/EXIT denied) + a loki-ruler alert — see platform/kubernetes/tetragon/README.md.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tetragon
+  labels:
+    tier: system  # privileged eBPF DaemonSet — PSA-exempt by design
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: tetragon
+  namespace: flux-system
+spec:
+  releaseName: tetragon
+  interval: 1h
+  chart:
+    spec:
+      chart: tetragon
+      version: "1.7.x"
+      sourceRef:
+        kind: HelmRepository
+        name: cilium   # tetragon ships from the cilium helm repo (already defined)
+  targetNamespace: tetragon
+  install:
+    createNamespace: true
+    crds: Create
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  values:
+    # v1: NO stdout export → no Alloy/Loki firehose. Forensics via `tetra getevents`.
+    export:
+      stdout:
+        enabled: false
+    tetragon:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 512Mi
+    tetragonOperator:
+      resources:
+        requests:
+          cpu: 25m
+          memory: 64Mi
+        limits:
+          memory: 128Mi
