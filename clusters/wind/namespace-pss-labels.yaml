@@ -201,3 +201,13 @@ metadata:
   name: wireguard
   labels:
     tier: system  # hostNetwork + NET_ADMIN for VPN tunnels
+---
+# flux-system: GitOps engine. enforce=baseline (flux always complies; restricted is
+# achievable per dry-run but baseline avoids any future-upgrade wedge risk on the
+# critical reconciler). warn=restricted already set by the flux bootstrap (gotk-components).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flux-system
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
