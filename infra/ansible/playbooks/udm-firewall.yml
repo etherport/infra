@@ -308,54 +308,69 @@
         destination: { zone_name: Management, ip_group_name: mgmt-admin-hosts, port_group_name: Mgmt-Admin-Ports }
 
   pre_tasks:
-    # Credentials: prefer env vars (CI — UDM_USERNAME/UDM_PASSWORD from
-    # GH secrets via ansible-unifi.yml), fall back to the 1Password CLI
-    # (laptop, op agent unlocked).
-    - name: Use env-var credentials when present (CI)
+    # M47 (2026-06-24): prefer the rotatable Integration-API key (X-API-Key). It also
+    # authenticates the legacy /api/ + v2 /v2/api/ endpoints this playbook uses (verified
+    # 2026-06-24: GET firewall-policies + firewallgroup → 200 with X-API-Key; bad key → 401).
+    # Headless/devbox + CI source it from env UDM_API_KEY (SOPS bundle / GH secret).
+    # If no key is present, fall back to the legacy username/password login below — a
+    # non-breaking migration; drop the fallback once UDM_API_KEY is wired into CI.
+    - name: Use env-var API key when present (preferred — M47)
       ansible.builtin.set_fact:
-        udm_username: "{{ lookup('env', 'UDM_USERNAME') }}"
-        udm_password: "{{ lookup('env', 'UDM_PASSWORD') }}"
+        udm_api_key: "{{ lookup('env', 'UDM_API_KEY') }}"
       no_log: true
-      when: lookup('env', 'UDM_USERNAME') | length > 0
+      when: lookup('env', 'UDM_API_KEY') | length > 0
 
-    # Use command modules (not pipe lookup) so we get proper terminal
-    # access to the 1Password CLI session/agent. Lookups run in a stripped
-    # subprocess that can't see OP_SESSION.
-    - name: Fetch credentials from 1Password (laptop fallback)
-      when: lookup('env', 'UDM_USERNAME') | length == 0
+    - name: Resolve username/password (legacy fallback — only when no API key)
+      when: udm_api_key | default('') | length == 0
       block:
-        - name: Verify op CLI present
-          ansible.builtin.command: op --version
-          changed_when: false
-        - name: Fetch UDM username from 1Password
-          ansible.builtin.command:
-            argv: [op, item, get, "UDM (tf-admin)", --fields, username]
-          register: udm_user_op
-          changed_when: false
-          no_log: true
-        - name: Fetch UDM password from 1Password
-          ansible.builtin.command:
-            argv: [op, item, get, "UDM (tf-admin)", --fields, password, --reveal]
-          register: udm_pass_op
-          changed_when: false
-          no_log: true
-        - name: Set UDM credential facts from 1Password
+        # Prefer env vars (CI — UDM_USERNAME/UDM_PASSWORD from GH secrets via
+        # ansible-unifi.yml), fall back to the 1Password CLI (laptop, op agent unlocked).
+        - name: Use env-var credentials when present (CI)
           ansible.builtin.set_fact:
-            udm_username: "{{ udm_user_op.stdout | trim }}"
-            udm_password: "{{ udm_pass_op.stdout | trim }}"
+            udm_username: "{{ lookup('env', 'UDM_USERNAME') }}"
+            udm_password: "{{ lookup('env', 'UDM_PASSWORD') }}"
           no_log: true
+          when: lookup('env', 'UDM_USERNAME') | length > 0
 
-    - name: Assert UDM credentials present
+        # Use command modules (not pipe lookup) so we get proper terminal
+        # access to the 1Password CLI session/agent. Lookups run in a stripped
+        # subprocess that can't see OP_SESSION.
+        - name: Fetch credentials from 1Password (laptop fallback)
+          when: lookup('env', 'UDM_USERNAME') | length == 0
+          block:
+            - name: Verify op CLI present
+              ansible.builtin.command: op --version
+              changed_when: false
+            - name: Fetch UDM username from 1Password
+              ansible.builtin.command:
+                argv: [op, item, get, "UDM (tf-admin)", --fields, username]
+              register: udm_user_op
+              changed_when: false
+              no_log: true
+            - name: Fetch UDM password from 1Password
+              ansible.builtin.command:
+                argv: [op, item, get, "UDM (tf-admin)", --fields, password, --reveal]
+              register: udm_pass_op
+              changed_when: false
+              no_log: true
+            - name: Set UDM credential facts from 1Password
+              ansible.builtin.set_fact:
+                udm_username: "{{ udm_user_op.stdout | trim }}"
+                udm_password: "{{ udm_pass_op.stdout | trim }}"
+              no_log: true
+
+    - name: Assert UDM auth present (API key OR username+password)
       ansible.builtin.assert:
         that:
-          - udm_username | length > 0
-          - udm_password | length > 0
-        fail_msg: "No UDM creds — set UDM_USERNAME/UDM_PASSWORD env (CI) or unlock 1Password 'UDM (tf-admin)' (laptop)."
+          - (udm_api_key | default('') | length > 0) or (udm_username | default('') | length > 0 and udm_password | default('') | length > 0)
+        fail_msg: "No UDM auth — set UDM_API_KEY (preferred), or UDM_USERNAME/UDM_PASSWORD env, or 1Password 'UDM (tf-admin)'."
 
   tasks:
     # -----------------------------------------------------------------
     # 1. Login → capture TOKEN + CSRF
     # -----------------------------------------------------------------
+    # Login flow runs ONLY in the legacy fallback (no UDM_API_KEY). With an API key
+    # these three tasks are skipped — auth is the X-API-Key header built below.
     - name: UDM login
       check_mode: false # read-only auth; must run under --check for a real dry-run
       ansible.builtin.uri:
@@ -370,12 +385,14 @@
         return_content: false
       register: udm_login
       no_log: true
+      when: udm_api_key | default('') | length == 0
 
     - name: Extract TOKEN cookie + CSRF from login headers
       ansible.builtin.set_fact:
         udm_token: "{{ udm_login.set_cookie | regex_search('TOKEN=([^;]+)', '\\1') | first }}"
         udm_csrf: "{{ udm_login['x_updated_csrf_token'] | default(udm_login.x_csrf_token | default('')) }}"
       no_log: true
+      when: udm_api_key | default('') | length == 0
 
     - name: Sanity-check session captured
       ansible.builtin.assert:
@@ -383,13 +400,15 @@
           - udm_token | length > 0
           - udm_csrf | length > 0
         fail_msg: "Failed to capture UDM session (TOKEN+CSRF) from login response."
+      when: udm_api_key | default('') | length == 0
 
-    - name: Build common auth headers
+    - name: Build common auth headers (X-API-Key when present, else login cookie+CSRF)
       ansible.builtin.set_fact:
-        udm_headers:
-          Cookie: "TOKEN={{ udm_token }}"
-          X-Csrf-Token: "{{ udm_csrf }}"
-          Content-Type: application/json
+        udm_headers: >-
+          {{ ({'X-API-Key': udm_api_key}
+              if (udm_api_key | default('') | length > 0)
+              else {'Cookie': 'TOKEN=' + udm_token, 'X-Csrf-Token': udm_csrf})
+             | combine({'Content-Type': 'application/json'}) }}
       no_log: true
 
     # -----------------------------------------------------------------

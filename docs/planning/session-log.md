@@ -47,9 +47,15 @@ already-isolated zone) + **802.1X/MAB** via RADIUS (only the "Default" placehold
 exists today). MAC filtering alone is spoofable — VLAN confinement + zone firewall is the
 real control.
 
-**Still open (UI / queued):** Security/205 fix (UI), unused-ports → Disabled incl. the
-outdoor switches (UI, task #18), **M47** udm-firewall.yml auth → `X-API-Key` (`udm_api_key`
-exists; codifiable), **L24** BGP session auth (UI/FRR).
+**M47 — DONE 2026-06-24 (auth-swap):** `udm-firewall.yml` now prefers `X-API-Key`
+(`udm_api_key` from the SOPS bundle / `UDM_API_KEY` env) and falls back to the
+username/password login when no key — verified both paths via `--check` (failed=0).
+`ansible-unifi.yml` passes `UDM_API_KEY` (empty → fallback). Follow-up: add the
+`UDM_API_KEY` GH secret, then drop the login fallback. Verified `X-API-Key` works on the
+legacy + v2 endpoints (200; bad key → 401).
+
+**Still open (UI / queued):** Security/205 fix (UI — **M104**), unused-ports → Disabled incl.
+the outdoor switches (UI — **M103** / task #18), **L24** BGP session auth (UI/FRR).
 
 ---
 

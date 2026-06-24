@@ -75,6 +75,9 @@ jobs:
       - name: Run Ansible playbook (check mode)
         if: github.event.inputs.action == 'check'
         env:
+          # M47: UDM_API_KEY (X-API-Key) is preferred when set; falls back to
+          # UDM_USERNAME/UDM_PASSWORD login when the secret is absent (non-breaking).
+          UDM_API_KEY: ${{ secrets.UDM_API_KEY }}
           UDM_USERNAME: ${{ secrets.UDM_USERNAME }}
           UDM_PASSWORD: ${{ secrets.UDM_PASSWORD }}
         run: |
@@ -89,6 +92,8 @@ jobs:
       - name: Run Ansible playbook (apply)
         if: github.event.inputs.action == 'apply'
         env:
+          # M47: prefer UDM_API_KEY (X-API-Key); fall back to username/password login.
+          UDM_API_KEY: ${{ secrets.UDM_API_KEY }}
           UDM_USERNAME: ${{ secrets.UDM_USERNAME }}
           UDM_PASSWORD: ${{ secrets.UDM_PASSWORD }}
         run: |
