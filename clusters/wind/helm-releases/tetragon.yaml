@@ -39,9 +39,11 @@ spec:
       retries: 3
   values:
     # v1: NO stdout export → no Alloy/Loki firehose. Forensics via `tetra getevents`.
+    # NB: the disable key is `export.mode: ""` (empty = no sidecar). There is NO
+    # `export.stdout.enabled` flag — Helm silently drops unknown keys, so the wrong
+    # path leaves the chart default (mode: "stdout") active = full firehose. (chart 1.7)
     export:
-      stdout:
-        enabled: false
+      mode: ""
     tetragon:
       resources:
         requests:
