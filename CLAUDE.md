@@ -119,7 +119,19 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   `udm_ssh_user`/`udm_ssh_password`; integration API via `protect-tf` key but it's
   **read-only — Alarm Manager automations are UI-only**). UNAS `10.10.209.10`.
 - **Never delete the `terraform-homelab` IAM access key** — it's shared with the local
-  homelab profile (H29 cutover note).
+  homelab profile (H29 cutover note). NB it's also the **single shared key copied across
+  ~13 in-cluster K8s secrets** (velero/s3-sync/barman/ai-advisor/cloudwatch) — **M75 (IRSA)
+  is migrating those to per-workload roles**; once nothing in-cluster uses it, **rotate it,
+  don't delete**.
+- **M75 IRSA (in-cluster AWS workload identity), Phase 1+2 live since 2026-06-24:** new TF stack
+  `infra/terraform/aws/cluster-irsa/` (CI workflow `terraform-cluster-irsa.yml`) created the IAM
+  OIDC provider + 4 least-priv roles (`wind-irsa-{velero,s3-sync,barman,cloudwatch-read}`) + a
+  **deliberately PUBLIC** S3 bucket `wind-cluster-oidc-830881980142` (the issuer — serves only
+  the OIDC discovery doc + the cluster's *public* SA signing keys; public-read is **by design,
+  not a leak**). ⏳ NOT yet active: needs Phase 3 (flip apiserver `--service-account-issuer` —
+  disruptive, gated) + Phase 4 (pod-identity webhook + per-workload migration). Full
+  procedure/rollback: `docs/runbooks/irsa-workload-identity.md`. **etcd-backup is host-level
+  (CP systemd), NOT an IRSA target.**
 
 ## 5. Key invariants / gotchas (non-obvious; will bite you)
 
