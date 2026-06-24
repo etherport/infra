@@ -43,6 +43,7 @@ docs/
 | [kubernetes-upgrade.md](runbooks/kubernetes-upgrade.md) | Kubernetes version upgrade procedures |
 | [disaster-recovery.md](runbooks/disaster-recovery.md) | Recovery procedures for failure scenarios |
 | [macos-photos-backup.md](runbooks/macos-photos-backup.md) | iCloud Photos backup on the mini (M79): operate, replicate to a new host, monitor, troubleshoot |
+| [cairn-deployment.md](runbooks/cairn-deployment.md) | Deploy the `cairn` native iCloud→NAS backup agent on the mini (M103): build/sign, TCC, launchd, monitor, cut over from the bash suite |
 | [dns-resolution-issues.md](runbooks/dns-resolution-issues.md) | DNS troubleshooting |
 | [mini-photos-export-observability.md](runbooks/mini-photos-export-observability.md) | Cluster-side metrics/logs/alerts for the Mac mini photos backup |
 | [gpu-dcgm-exporter-wedge.md](runbooks/gpu-dcgm-exporter-wedge.md) | Empty GPU dashboard / `TargetDown` dcgm — driver wedge on gpu1, reboot VM 120 |

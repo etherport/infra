@@ -13,6 +13,24 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-24 (cont. 16) — cairn native backup agent: M1–M5 + M6-half built; photos network-fragility designed out
+
+**What:** built out **`cairn`** (M103; repo [sparked-diamond/cairn](https://github.com/sparked-diamond/cairn), `~/code/cairn`) from skeleton to nearly-deployable. **27 tests green**, all pushed. Decisions + code live in the cairn repo; infra got a deploy runbook ([`../runbooks/cairn-deployment.md`](../runbooks/cairn-deployment.md)).
+
+**Built this session:**
+- **M3 all native sources:** `contacts` (Contacts framework → vCards — verified **2,049 = exact parity** with the old CardDAV backup); `notes`/`calendars`/`reminders` via a new **`store`** source (consistent `sqlite3 .backup` + companion mirror, **auto-discovers** `*.sqlite`/`*.sqlitedb` across macOS-version layouts); `messages` **in-place** (chat.db snapshot to local disk → push + ~48 GB Attachments additive — can't stage on 15 GB free).
+- **M4 photos** = **osxphotos wrapper, in-place on the NAS**, replicating the bash invocation **byte-for-byte** (→ no S3 re-upload) + every lesson (local export-DB, no `--ramdb`, `--cleanup` off, daemon-restart per retry). Plus the **network-resilience foundation**: `runSupervised` (hard timeout + **stall-watchdog** + process-group kill — "hang at 71 % forever" → killed in seconds), `MountHealth` (timed RW probe + ordered **SMB→sparsebundle→APFS self-heal**, Keychain creds, no secrets), `withResilientRetry` (heal-before-attempt, resume via `--update`).
+- **M5:** run history (JSON) + `cairn status` + **`cairn_health` heartbeat** (pollable agent-liveness rollup to Pushgateway) + `cairn tcc` (status/`--request`/FDA deep-link).
+- **M6-half:** `cairn install` (launchd LaunchAgents from `schedule:` fields + a 900 s health agent), `cairn run --due` (catch-up + idempotent), and **quit-Photos-before-every-run**.
+
+**Why these decisions (forks the owner chose):** wrap **osxphotos** not native PhotoKit — PhotoKit can't read keywords/persons/captions (only the Photos DB has them, via osxphotos), and re-implementing that reader is a per-macOS-version maintenance trap; osxphotos = full metadata + byte-stable + no re-upload. Keep + **harden the network sparsebundle** (not an SSD — no physical access; not `icloudpd` — reintroduces Apple-ID/app-password/2FA/rate-limit + metadata loss). Calendars via **`store`** not EventKit→.ics (EventKit has no native .ics serializer; reconstruction is lossy).
+
+**Key operational findings (mini, photos):** the Photos library is a **sparsebundle on the NAS** (`/Volumes/Personal-Drive/Photos/PhotosLibrary.sparsebundle` → APFS `/Volumes/PhotosLib`), seed **~10 %** (4,572/~44k originals, 7.3 GB). The network **actively throws I/O errors on hot DB reads** — a manual `cp` of the 586 MB `Photos.sqlite` returned `fcopyfile: Input/output error`; that + Photos.app open is what produced the **"library could not be opened (-1)"** dialogs. cairn quits Photos + supervises/heals to absorb this. **S3 is still all `STANDARD`** (not yet Deep-Archive) so a restructure would've been free — but we kept the current layout, so **no churn either way**.
+
+**State:** cairn feature-complete except CI signed release + the operational cutover. **Next steps:** (1) on the mini via VNC: `cairn tcc --request` + add `cairn.app` to Full Disk Access; (2) run notes/calendars/messages against a staging dest, diff vs bash output; (3) let cairn own the photo seed headlessly (quits Photos, supervised, resumable); (4) flip schedules + unload the matching bash LaunchAgents per-category; (5) CI signed `.app` release. Reverse = unload cairn agents, re-enable bash. **Until cutover: don't keep Photos.app open on the `(NAS)` library** (the `(-1)` friction).
+
+---
+
 ## 2026-06-24 (cont. 15) — M75 IRSA workload identity (Phase 1+2: foundation live + verified)
 
 Started M75 — kill the long-lived static AWS IAM keys in-cluster (self-hosted IRSA).
@@ -232,7 +250,6 @@ imagePullPolicy:Always; the tag-mutation threat barely applies) and **cue-api on
 (dev) — bringing them under Flux digest is optional future work, not required for H30.
 **Gotcha for future:** `.status.latestImage` is empty in this image-reflector build — check
 the ImagePolicy's Ready **condition message** for the resolved tag+digest.
-
 ---
 
 ## 2026-06-24 (cont. 8) — backup verification false-negative fixed (special-char keys)
