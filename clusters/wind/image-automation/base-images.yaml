@@ -156,6 +156,9 @@ metadata:
 spec:
   imageRepositoryRef:
     name: blackbox-exporter
+  # Digest-pin (H30): automation writes image:tag@sha256:... — immutable supply chain.
+  digestReflectionPolicy: Always
+  interval: 24h
   filterTags:
     pattern: '^v(?P<sem>\d+\.\d+\.\d+)$'
     extract: '$sem'
