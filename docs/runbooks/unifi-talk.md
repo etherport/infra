@@ -179,13 +179,18 @@ Telnyx) for HA — the Talk API exposes adding multiple gateways via
    on the trunk and updating the Twilio termination config + port-forward
    (would also drop the 8 signal-IP ACL entries since TLS is mTLS-style
    auth). **Action:** evaluate moving to TLS+sRTP.
-2. **Emergency address (911) assign task is FAILED** since `2025-06-08T23:03:21Z`
-   with `message retry limit exceeded`. The address (843 Greenbriar Dr,
-   Skyforest CA) is `state: valid` but never finished associating with
-   PN `PN7b83e…2bccf`. `emergency_address/list` returns `[]`.
-   **911 calls likely will not deliver correct location.** Re-run the
-   emergency-address assignment in the Talk UI (Settings → Emergency
-   Calls) ASAP.
+2. ✅ **Emergency address (911) — RESOLVED at the carrier (verified 2026-06-24).** The
+   stale failure below was on the *old* PN `PN7b83e…2bccf`; the primary DID was
+   re-released/re-acquired (2026-05-26) as **`PN2b496425…`**. Twilio API now confirms
+   `+19094142433` → **`emergency_status: Active`**, `emergency_address_sid = AD1fe171…`
+   = **843 GREENBRIAR DR SKYFOREST CA** which is **`validated: True, emergency_enabled:
+   True`**. 911 routes at the carrier (SIP-trunk 911 uses the DID's emergency address,
+   not the UniFi Talk UI field — the Talk `emergency_address/list` being `[]` is the app's
+   own view, cosmetic vs carrier delivery). The Twilio TF (`infra/terraform/twilio/`) var
+   `emergency_address` matches this address, so no drift. **TF-hygiene follow-up:** confirm
+   `twilio_api_accounts_addresses.primary` + the DID are in the twilio TF state (imported)
+   so a future `apply` reuses, not duplicates, the address. *(Historical: the assign task
+   failed 2025-06-08 "retry limit exceeded" on the old PN.)*
 3. **DID `+1 (909) 414-1003` is orphaned** — no group, no extension, no
    ring flow points at it. Inbound calls to that number probably hit
    Talk's default "no route" handling (silent drop or busy). Either:

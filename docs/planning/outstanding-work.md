@@ -220,8 +220,9 @@ _Completed items keep a one-line ✅ header here (grep-able by ID); their **full
 - Source: task #25. Only act if it recurs.
 - **Note on ID:** the *archived* outstanding-work-2026-05-16.md used M14 for a UDM WireGuard cleanup item; some older cross-references (e.g. `docs/architecture/firewall-zones.md`) still point at that older meaning. To disambiguate, that WireGuard cleanup is now M42 (below). The two are unrelated.
 
-### ⏳ M15. Twilio Talk: fix 911 emergency address
-- Source: task #20. Out-of-band (Twilio console).
+### ✅ M15. Twilio Talk: 911 emergency address — RESOLVED (verified at carrier 2026-06-24)
+- Source: task #20. **Verified via the Twilio API 2026-06-24:** the primary DID `+19094142433` (PN `PN2b496425…`, re-acquired 2026-05-26 — the runbook's old "FAILED" was on the retired PN `PN7b83e…`) shows **`emergency_status: Active`**, bound to address **`AD1fe171…` = 843 GREENBRIAR DR SKYFOREST CA**, which is **`validated: True, emergency_enabled: True`**. So 911 delivers correct location at the carrier (SIP-trunk 911 uses the DID's emergency address; the UniFi Talk UI `emergency_address/list=[]` is the app's cosmetic view, not carrier delivery). The Twilio TF `emergency_address` var matches (843 Greenbriar Dr / Skyforest / CA / 92385) → no drift. **No apply was needed** — the live state is already correct + the TF intends it.
+- ⏳ **TF-hygiene follow-up (not a safety item):** confirm `twilio_api_accounts_addresses.primary` + the primary DID are imported into the twilio TF state, so a future `terraform apply` reuses (not duplicates) the address. Do during the next twilio-stack touch (M16/M17). See `docs/runbooks/unifi-talk.md` §"Known issues" #2.
 
 ### ⏳ M16. Twilio Talk: route or release orphan DID
 - Source: task #21. Out-of-band.
