@@ -140,7 +140,7 @@ spec:
               value: 'true'
             # 2026-06-03 (delivery deep-links): render up to 3 real nearby storefront links
             # (Uber Eats / DoorDash / Talabat / Deliveroo, from the live-lookup citations) as
-            # one-tap Telegram inline URL buttons instead of a single pasted link. Host+path
+            # one-tap inline URL buttons instead of a single pasted link. Host+path
             # anchored (rejects listicles/lookalikes); search pushed to surface specific
             # storefronts. Honest limit: opens the store in the user's app (no pre-filled cart).
             # Unit-tested (262 green); not gold-set-evaluable (needs live search). User-authorized.
@@ -160,8 +160,8 @@ spec:
             # Pure mealCoachMessage directive, unit-tested; rides cue@20b4c5b+. User-authorized.
             - name: CUE_PHOTO_HEDGE
               value: 'true'
-            # 2026-06-04 (album fusion): photos sent as ONE Telegram album (shared media_group_id)
-            # arrive as racing webhooks → without buffering they fuse-miss and reply N times. When ON,
+            # 2026-06-04 (album fusion): multiple photos of the same meal sent close together
+            # arrive as racing requests → without buffering they fuse-miss and reply N times. When ON,
             # album items are buffered (2.5s debounce) and fused into ONE estimate + ONE reply by
             # chaining the existing fusion path (forceMeal + skipCoach intermediates; replaces the roll,
             # never double-counts; converges on the meal_photo dedup flow so a straggler/stray angle
@@ -194,8 +194,8 @@ spec:
             # daily_state BEFORE the meal take — the real food<->activity integration (and the
             # activity lead-in then correctly stays quiet because training is KNOWN). Needs
             # CUE_TODAY_STATE_EXTRACTION (on). CUE_TODAY_WEB — a read-only, auto-refreshing web
-            # view at GET /ui/today?userId=<uuid> (Tailnet/in-cluster only; the public tunnel
-            # exposes just /health + /telegram/webhook). Both unit-tested; ride cue@e9488cc.
+            # view at GET /ui/today?userId=<uuid> (now also reachable via CF Access SSO on the
+            # public tunnel). Both unit-tested; ride cue@e9488cc.
             # User-authorized. (parseCoords false-positive fix from the adversarial review: cue@e8977b0.)
             - name: CUE_TODAY_FROM_MEALS
               value: 'true'
@@ -274,9 +274,9 @@ spec:
             - name: CUE_MODEL_REASONING
               value: 'claude-opus-4-8'
             # Per-user web auth (cue@PR#2, 2026-06-11): every route except /health +
-            # /telegram/webhook + the PWA shell assets needs a SIGNED access link
+            # the PWA shell assets needs a verified CF-Access JWT or a SIGNED access link
             # (pnpm mint-web-token) or the in-process internal header. Closes the
-            # DECISIONS 2026-06-08 IDOR hard gate for collaborator #2 on the tailnet
+            # DECISIONS 2026-06-08 IDOR hard gate for multi-user.
             # web client. CUE_WEB_TOKEN_SECRET rides the cue-app SOPS secret;
             # fail-closed superRefine (auth on without the secret refuses to boot).
             - name: CUE_WEB_AUTH
@@ -306,10 +306,11 @@ spec:
             # within 2h — refinements/re-asks skip the billed web search.
             - name: CUE_LOOKUP_CACHE
               value: 'true'
-          # ANTHROPIC_API_KEY + TELEGRAM_* come from the cue-app Secret.
+          # ANTHROPIC_API_KEY, CUE_WEB_TOKEN_SECRET, VAPID_*, and the CF healthkit
+          # service token come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
           # (all of these are optional at boot — see src/config/env.ts; the
-          # Telegram route 503s and the AI gateway asserts only when used).
+          # AI gateway asserts only when used).
           envFrom:
             - secretRef:
                 name: cue-app

@@ -64,7 +64,7 @@ resources:
   # Drizzle owns the schema; pgvector pre-enabled. See the dir README.
   - ../../platform/kubernetes/cue-db
   # Cue API — Node/Fastify app (cue ns). Image from ghcr (private); public via
-  # CF tunnel, path-restricted to /health + /telegram/webhook. See dir README.
+  # CF tunnel + CF Access (per-path SSO/service-token/bypass). See dir README.
   - ../../platform/kubernetes/cue-api
   # H38 — internal identity gate (Authentik IdP + forward-auth + OIDC SSO).
   # See platform/kubernetes/authentik/.

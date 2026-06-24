@@ -10,8 +10,8 @@
 # SCOPE: this exposes ALL of cue-api's routes to the tailnet (not just /ui/today) —
 # same trust model as cue-db-ts above: access is governed by the tailnet ACL
 # (infra/tailscale/policy.hujson, currently allow-all → the owner's + collaborator's
-# devices). The PUBLIC surface is unchanged (still only the cloudflared tunnel's
-# /health + /telegram/webhook). Tighten the ACL there if/when the tailnet grows.
+# devices). The PUBLIC surface is the cloudflared tunnel + CF Access (per-path, see
+# cue-access.tf). Tighten the ACL there if/when the tailnet grows.
 apiVersion: v1
 kind: Service
 metadata:

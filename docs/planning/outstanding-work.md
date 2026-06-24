@@ -455,8 +455,8 @@ orphaned. Not service-affecting on its own.
 ### ⏳ L18. `optional: true` secret refs can start pods degraded
 - Review 2026-06-10. e.g. `cue-api/01-deployment.yaml` — intentional for bootstrap, but a workload can run in a no-auth state; worth an alert on the empty-secret condition. **Effort:** S.
 
-### ⏳ L19. Verify Telegram webhook auth (cross-repo)
-- Review 2026-06-10. The one public POST (`/telegram/webhook`) relies on Telegram's secret-token header, validated in the separate `cue` app repo — not confirmable from infra. Verify the check exists (an unauthenticated webhook = abuse vector). **Effort:** S (verification).
+### ✅ L19. Verify Telegram webhook auth (cross-repo) — OBSOLETE (2026-06-24)
+- The Telegram surface is **retired** (no `/telegram/webhook` route is registered in the `cue` app; the `TELEGRAM_*` secrets have been removed from `cue-app`). The public surface is now `cue.etherport.net` behind CF Access (per-path SSO / service token / `/health` bypass). No webhook to verify.
 
 ### ✅ L21. `terraform-google` auth → GCP WIF — RESOLVED 2026-06-13  — _full detail in [archive/completed-2026-H1.md](archive/completed-2026-H1.md)_
 ### ⏳ L20. Branch protection / CODEOWNERS (single-owner risk, accepted?)

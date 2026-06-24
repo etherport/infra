@@ -4,7 +4,7 @@ namespace: cue # namespace itself is created by cue-db (00-namespace.yaml)
 resources:
   - 01-deployment.yaml
   - 02-service.yaml
-  - 03-secret-app.sops.yaml # ANTHROPIC_API_KEY + TELEGRAM_* (SOPS-encrypted)
+  - 03-secret-app.sops.yaml # ANTHROPIC_API_KEY + CUE_WEB_TOKEN_SECRET + VAPID_* + CF healthkit token (SOPS-encrypted)
   - 04-secret-ghcr.sops.yaml # ghcr read-only pull cred (SOPS-encrypted)
   - 05-tailscale-svc.yaml # tailnet-only LoadBalancer → cue-api.<tailnet>.ts.net:3000 (raw TCP)
   - 06-ingress.yaml # tailnet HTTPS Ingress → https://cue.<tailnet>.ts.net (secure ctx: geolocation)

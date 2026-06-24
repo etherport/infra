@@ -22,14 +22,13 @@ local Docker build — CI is the source of truth.
 - `DATABASE_URL` ← `cue-db-app` secret, key `uri` (CNPG-generated, in-cluster rw).
 - `CUE_INTERACTION_LEARNING=true` (plain env, dev).
 - `cue-app` Secret (SOPS-encrypted, `03-secret-app.sops.yaml`) — wired via an
-  **optional** `envFrom` so the pod is healthy before it's fully populated:
-  - `TELEGRAM_WEBHOOK_SECRET` — set (generated at create time).
-  - `TELEGRAM_USER_ID` — set (`00000000-0000-4000-8000-000000000001`, seed owner).
-  - `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_IDS` —
-    **to be added**. Add with, e.g.:
+  **optional** `envFrom` so the pod is healthy before it's fully populated. Keys:
+  `ANTHROPIC_API_KEY`, `CUE_WEB_TOKEN_SECRET`, `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`
+  / `VAPID_SUBJECT` (Web Push), `CUE_HEALTHKIT_CF_CLIENT_ID` / `CUE_HEALTHKIT_CF_CLIENT_SECRET`
+  (the CF Access service token for `/ingest/healthkit`). Add/update a value with, e.g.:
     ```bash
-    sops --set '["stringData"]["ANTHROPIC_API_KEY"] "sk-ant-..."' \
-      platform/kubernetes/cue-api/03-secret-app.sops.yaml
+    sops set platform/kubernetes/cue-api/03-secret-app.sops.yaml \
+      '["stringData"]["ANTHROPIC_API_KEY"]' '"sk-ant-..."'
     ```
 - `ghcr-cue` Secret (`04-secret-ghcr.sops.yaml`, SOPS) — ghcr read-only pull
   cred. Created from a `read:packages` PAT; currently commented out in
