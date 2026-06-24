@@ -13,6 +13,37 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-24 (cont. 14) — M74 Tetragon eBPF runtime detection (observe-only v1) + Loki-firehose fix
+
+Deployed **Cilium Tetragon** (the security-arc's runtime/"assume-breach" detection layer)
+observe-only, and caught a real misconfiguration before it could flood Loki.
+
+- **Engine** via Flux HelmRelease (`helm-releases/tetragon.yaml`, chart 1.7.x from the
+  existing `cilium` HelmRepository), ns `tetragon` `tier=system`. eBPF sensors loaded on all
+  8 nodes (DS 8/8). **No enforcement/kill** — forensics on demand via gRPC:
+  `kubectl exec -n tetragon ds/tetragon -c tetragon -- tetra getevents -o compact` (verified
+  live — streamed kube-proxy/iptables exec events).
+- **🔴 Caught + fixed a silent Loki-firehose footgun (`a4ba00f`):** v1 first shipped with
+  `export.stdout.enabled: false` to keep events off stdout (Alloy tails *all* pod logs into
+  the single-binary Loki). **That is not a real chart key** — Helm silently drops unknown
+  values, so the chart default `export.mode: "stdout"` stayed active and the `export-stdout`
+  sidecar ran the **full** process_exec/exit firehose. Measured before fixing: **497 lines/min
+  on one node, ~800/min cluster-wide ≈ 1.1M lines/day** straight into Loki. Verified the real
+  key from the v1.7.0 chart values.yaml = **`export.mode: ""`** (empty = no sidecar). After the
+  fix: sidecar removed, DS pods went **2/2 → 1/1**, steady-state export = 0. **Tell for the
+  future: tetragon pods must be 1/1; a 2nd `export-stdout` container means export is back ON.**
+- **Why observe-only / export-off in v1:** zero Loki risk while the sensors are validated. v2
+  (deferred) = TracingPolicies (high-signal: writes to `/etc/shadow`·`sudoers`·`authorized_keys`,
+  shell-in-container, unexpected privileged syscalls) + **selective** export (re-enable
+  `export.mode: "stdout"` with a denylist dropping PROCESS_EXEC/EXIT + health checks → only
+  matches flow to Loki) + a loki-ruler alert mirroring the hubble-audit pattern. Plan in
+  `platform/kubernetes/tetragon/README.md`.
+- **Security-arc status:** M72 (PSA) ✅ · M73 (Kyverno audit) ✅ · **M74 (Tetragon observe) 🟡 v1**.
+  Remaining arc items: M75 (in-cluster workload identity / IRSA), M76 (short-lived SSH certs),
+  M77 (selective PVE VM firewalling), L24 (BGP auth) — all ⏳.
+
+---
+
 ## 2026-06-24 (cont. 13) — M73 Kyverno admission engine (audit-first)
 
 Deployed Kyverno (the security-arc's admission-policy layer) **defensively**:

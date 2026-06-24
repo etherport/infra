@@ -20,6 +20,13 @@ Export to stdout is **disabled on purpose**: Alloy tails *all* pod logs into the
 Loki, so a naive Tetragon firehose (every process exec, cluster-wide) would flood it. v1
 therefore takes zero Loki risk.
 
+> **Gotcha (chart 1.7):** the disable key is **`export.mode: ""`** (empty string = no
+> sidecar), **not** `export.stdout.enabled`. There is no such flag — Helm silently drops
+> unknown values, so the wrong path leaves the chart default (`export.mode: "stdout"`) active
+> and the `export-stdout` sidecar runs the full firehose (~800 process_exec/exit lines/min
+> cluster-wide → ~1.1M/day into Loki). Verify after any change: the DaemonSet pods should be
+> **1/1** (just `tetragon`), not 2/2 — a second `export-stdout` container means export is ON.
+
 ## v2 (planned) — the detection pipeline
 
 1. **TracingPolicies** here (start high-signal, low-volume): e.g. write to `/etc/shadow` //
