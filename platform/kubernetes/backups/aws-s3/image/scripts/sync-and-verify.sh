@@ -1130,10 +1130,15 @@ else
 #!/bin/bash
 set -uo pipefail
 
-BUCKET="$1"
-KEY="$2"
-OUTPUT_DIR="$3"
-REGION="$4"
+# $1 is a single tab-delimited "bucket<TAB>key" record, split byte-exact here.
+# Do NOT take bucket/key as separate positional args fed by GNU parallel's {1}/{2}
+# column substitution: that mangled keys containing spaces/parens/!/multibyte chars
+# (e.g. curly apostrophe U+2019) into bogus args → an invalid --bucket → HeadObjectFailed
+# "bucket name must match the regex". Passing the whole record as one opaque arg + splitting
+# on the tab here is robust to any key. (2026-06-24 fix — see session-log.)
+IFS=$'\t' read -r BUCKET KEY <<< "$1"
+OUTPUT_DIR="$2"
+REGION="$3"
 
 # Create safe filename for output (hash of bucket:key)
 HASH=$(echo -n "${BUCKET}:${KEY}" | md5sum | awk '{print $1}')
@@ -1204,9 +1209,12 @@ VERIFY_SCRIPT
     # Use GNU parallel if available (more memory efficient)
     PARALLEL_JOBS=25
     echo "Starting parallel verification (${PARALLEL_JOBS} workers with GNU parallel)..."
-    cat "${VERIFY_WORK_DIR}/files-to-verify.tsv" | \
-      parallel --colsep '\t' -j "${PARALLEL_JOBS}" \
-        "${VERIFY_WORK_DIR}/verify-one.sh" {1} {2} "${VERIFY_WORK_DIR}/results" "${AWS_REGION}"
+    # Pass the WHOLE tab-delimited line as one quoted arg ({}); verify-one.sh splits it.
+    # Do NOT use `--colsep '\t' {1} {2}` — parallel's column substitution mangled
+    # special-char/multibyte keys → bogus --bucket → HeadObjectFailed (2026-06-24 fix).
+    parallel -j "${PARALLEL_JOBS}" \
+      "${VERIFY_WORK_DIR}/verify-one.sh" {} "${VERIFY_WORK_DIR}/results" "${AWS_REGION}" \
+      < "${VERIFY_WORK_DIR}/files-to-verify.tsv"
 
   else
     # Fallback: bash background jobs (less memory efficient, use fewer workers)
@@ -1216,8 +1224,8 @@ VERIFY_SCRIPT
     COUNT=0
     TOTAL=$(wc -l < "${VERIFY_WORK_DIR}/files-to-verify.tsv" | tr -d ' ')
 
-    while IFS=$'\t' read -r BUCKET KEY; do
-      "${VERIFY_WORK_DIR}/verify-one.sh" "${BUCKET}" "${KEY}" "${VERIFY_WORK_DIR}/results" "${AWS_REGION}" &
+    while IFS= read -r REC; do
+      "${VERIFY_WORK_DIR}/verify-one.sh" "${REC}" "${VERIFY_WORK_DIR}/results" "${AWS_REGION}" &
 
       COUNT=$((COUNT + 1))
 
