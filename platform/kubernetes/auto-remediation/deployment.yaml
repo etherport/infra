@@ -72,18 +72,13 @@ spec:
           value: "us-west-2"
         - name: AWS_VPC_CIDR_PREFIX
           value: "10.10.100."
-        - name: AWS_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              name: ai-advisor-aws-cloudwatch
-              key: aws_access_key_id
-              optional: true
-        - name: AWS_SECRET_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              name: ai-advisor-aws-cloudwatch
-              key: aws_secret_access_key
-              optional: true
+        # M75 IRSA: read-only CloudWatch via AssumeRoleWithWebIdentity
+        # (wind-irsa-cloudwatch-read) instead of a static key. boto3 picks
+        # these up from the default chain; _get_logs_client() gates on them.
+        - name: AWS_ROLE_ARN
+          value: "arn:aws:iam::830881980142:role/wind-irsa-cloudwatch-read"
+        - name: AWS_WEB_IDENTITY_TOKEN_FILE
+          value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
         - name: AI_ADVISOR_MAX_INPUT_TOKENS
           value: "8000"
         - name: AI_ADVISOR_MODEL
@@ -141,6 +136,10 @@ spec:
         - name: advisor-ssh-key
           mountPath: /etc/advisor-ssh
           readOnly: true
+        # M75 IRSA: projected SA token (aud sts.amazonaws.com) for web identity.
+        - name: aws-iam-token
+          mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+          readOnly: true
         resources:
           requests:
             memory: "128Mi"
@@ -167,3 +166,11 @@ spec:
           - key: id_ed25519
             path: id_ed25519
             mode: 0400
+      # M75 IRSA: projected SA token (aud sts.amazonaws.com) for web identity.
+      - name: aws-iam-token
+        projected:
+          sources:
+            - serviceAccountToken:
+                audience: sts.amazonaws.com
+                expirationSeconds: 3600
+                path: token

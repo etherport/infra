@@ -869,7 +869,11 @@ data:
         if _boto3_logs is not None or _boto3_import_attempted:
             return _boto3_logs
         _boto3_import_attempted = True
-        if not os.environ.get('AWS_ACCESS_KEY_ID') or not os.environ.get('AWS_SECRET_ACCESS_KEY'):
+        # Credentials present either as static keys OR as IRSA web identity (M75).
+        # boto3 resolves both from the default chain; gate on one being configured.
+        _have_static = os.environ.get('AWS_ACCESS_KEY_ID') and os.environ.get('AWS_SECRET_ACCESS_KEY')
+        _have_irsa = os.environ.get('AWS_WEB_IDENTITY_TOKEN_FILE') and os.environ.get('AWS_ROLE_ARN')
+        if not _have_static and not _have_irsa:
             return None
         try:
             import boto3  # type: ignore
