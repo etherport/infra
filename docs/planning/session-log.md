@@ -13,6 +13,29 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-24 (cont. 13) — M73 Kyverno admission engine (audit-first)
+
+Deployed Kyverno (the security-arc's admission-policy layer) **defensively**:
+- **Engine** via Flux HelmRelease (`helm-releases/kyverno.yaml`, chart 3.8.x → Kyverno
+  **v1.18.1**), 4 controllers healthy. Deployed engine-first with **no policies** (zero
+  interception) → verified → then policies. (Scare: `kubectl get clusterpolicy` showed a
+  `cluster-policy` dated 2026-05-12 — it's the **NVIDIA gpu-operator** `ClusterPolicy`
+  (`nvidia.com`), not Kyverno's; FQ `clusterpolicies.kyverno.io` is empty.)
+- **Starter policies** (`platform/kubernetes/kyverno/`): `require-resource-requests`,
+  `disallow-latest-tag` (cue excluded). **All audit-only** (`validate.failureAction:
+  Audit`) + **fail-open** (`webhookConfiguration.failurePolicy: Ignore`) + control-plane/
+  operator namespaces excluded. Verified a violating pod still **admits** (audit ≠ block).
+- **Kyverno v1.18 API gotcha:** spec-level `validationFailureAction`/`failurePolicy` are
+  **deprecated** → use per-rule `validate.failureAction` + `spec.webhookConfiguration.
+  failurePolicy` (confirmed via `kubectl explain` against the live CRD before writing).
+- **Division of labour:** PSA (M72) = pod-security posture; Kyverno = the rest (requests,
+  tags, next cosign image-provenance for H30).
+
+**Next:** review `polr` → promote clean rules to Enforce; add cosign verifyImages. Then
+**M74 (Tetragon)** — runtime detection; another substantial deploy → checkpointed here.
+
+---
+
 ## 2026-06-24 (cont. 12) — M15 911 verified + M72 PSA enforce (security-arc start)
 
 **M15 — Twilio 911 emergency address: RESOLVED (verified at carrier).** Queried the Twilio
