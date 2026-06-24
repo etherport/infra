@@ -1,7 +1,3 @@
-# DNS GitOps Sync Watcher
-# Watches zone ConfigMap and syncs to Technitium instantly on change
-# Idempotent - only changes records that differ from desired state
----
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -236,7 +232,6 @@ data:
 
     if __name__ == "__main__":
         main()
-
   watcher.py: |
     #!/usr/bin/env python3
     """Watch ConfigMap for changes and trigger sync."""
@@ -336,7 +331,7 @@ spec:
     spec:
       containers:
         - name: watcher
-          image: python:3.14-alpine # {"$imagepolicy": "flux-system:python-alpine"}
+          image: python:3.14-alpine@sha256:26730869004e2b9c4b9ad09cab8625e81d256d1ce97e72df5520e806b1709f92 # {"$imagepolicy": "flux-system:python-alpine"}
           command:
             - sh
             - -c
@@ -365,13 +360,13 @@ spec:
             - name: CHECK_INTERVAL
               value: "5"
             - name: FULL_SYNC_INTERVAL
-              value: "3600"  # 1h periodic full re-sync (safety net)
+              value: "3600" # 1h periodic full re-sync (safety net)
             # Drift deletion — start DRY-RUN until reviewed, then flip.
             # See sync.py for the safety model.
             - name: DELETE_DRIFT
               value: "true"
             - name: DRY_RUN_DELETE
-              value: "false"  # set to "true" to log-only without deleting
+              value: "false" # set to "true" to log-only without deleting
             - name: MAX_DRIFT_DELETE
               value: "10"
           volumeMounts:

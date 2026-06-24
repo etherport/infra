@@ -1,29 +1,10 @@
-# Idempotent CronJob that ensures Technitium's log/stat retention is set.
-#
-# Technitium has no env-var for maxLogFileDays — the only way to set it
-# is via the admin web API after login. Without this, logs and stats
-# accumulate forever (the 2026-05-23 incident: technitium-1's PVC hit
-# 96.8% with 16 days of unrotated query logs in 4.2GB).
-#
-# Runs weekly at 03:00 PT. Per-fire it logs in, reads the current
-# settings, and PATCHes them only if they differ from what's declared
-# here. Idempotent: a second run within the same week is a no-op.
-#
-# Target settings:
-#   maxLogFileDays  = 7     (query logs; ~30MB/day on busy node)
-#   maxStatFileDays = 90    (small JSON files, cheap to keep)
-#
-# Companion files: 02a-static-pv-recovery.yaml (PV capacity 10Gi),
-# 02-statefulset.yaml (volumeClaimTemplate 10Gi).
-
----
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: technitium-set-log-retention
   namespace: dns
 spec:
-  schedule: "0 10 * * 1"  # Mondays 03:00 PT (10:00 UTC)
+  schedule: "0 10 * * 1" # Mondays 03:00 PT (10:00 UTC)
   timeZone: "America/Los_Angeles"
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 3
@@ -37,7 +18,7 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: configure
-              image: python:3.14-slim # {"$imagepolicy": "flux-system:python-slim"}
+              image: python:3.14-slim@sha256:63a4c7f612a00f92042cbdcc7cdc6a306f38485af0a200b9c89de7d9b1607d15 # {"$imagepolicy": "flux-system:python-slim"}
               command: ["python3", "/work/configure-retention.py"]
               env:
                 # Comma-separated per-pod URLs — Technitium cluster mode

@@ -1,4 +1,3 @@
----
 # Daily service-status digest email.
 # Queries Prometheus for deployment/statefulset/daemonset readiness +
 # Alertmanager for firing alerts, then emails a styled HTML report via
@@ -34,7 +33,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: report
-              image: python:3.14-slim # {"$imagepolicy": "flux-system:python-slim"}
+              image: python:3.14-slim@sha256:63a4c7f612a00f92042cbdcc7cdc6a306f38485af0a200b9c89de7d9b1607d15 # {"$imagepolicy": "flux-system:python-slim"}
               imagePullPolicy: IfNotPresent
               command: ["python3", "/work/service-status-report.py"]
               env:

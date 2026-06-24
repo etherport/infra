@@ -16,7 +16,7 @@ spec:
       serviceAccountName: remediation-controller
       containers:
       - name: controller
-        image: python:3.14-slim # {"$imagepolicy": "flux-system:python-slim"}
+        image: python:3.14-slim@sha256:63a4c7f612a00f92042cbdcc7cdc6a306f38485af0a200b9c89de7d9b1607d15 # {"$imagepolicy": "flux-system:python-slim"}
         command:
         - /bin/bash
         - -c
@@ -30,106 +30,106 @@ spec:
         - containerPort: 8080
           name: webhook
         env:
-          # AI Advisor (M41 Phase 1 — advisory-only). Set
-          # AI_ADVISOR_ENABLED=true to turn on after populating both
-          # the anthropic-api-key and SMTP secrets.
-          - name: AI_ADVISOR_ENABLED
-            value: "true"
-          # $0.50/day — reverted 2026-05-25 from a $5.00 bump that
-          # wasn't operator-approved. Re-raise only after explicit
-          # discussion if sustained cap-hits become a real problem.
-          - name: AI_ADVISOR_DAILY_COST_USD_CAP
-            value: "0.50"
-          # Phase 2 (approve-via-email). Set to "true" + populate the
-          # approval-hmac secret + set APPROVAL_BASE_URL to your Tailscale
-          # hostname for the controller. See:
-          # docs/runbooks/ai-advisor-phase2-enable.md
-          - name: AI_PHASE2_ENABLED
-            value: "true"
-          # Phase 3 (autonomous execute, opt-in per alert). Kill switch.
-          # When "true", alerts carrying `ai_remediation: "auto"` label
-          # get auto-executed if confidence + action + namespace clear
-          # the guardrails. Default OFF. See:
-          # docs/runbooks/ai-advisor-phase3-enable.md
-          - name: AI_PHASE3_ENABLED
-            value: "true"
-          - name: AI_PHASE3_CONFIDENCE_THRESHOLD
-            value: "0.85"
-          - name: APPROVAL_BASE_URL
-            value: "https://approve.etherport.net"
-          - name: APPROVAL_TTL_HOURS
-            value: "24"
-          - name: APPROVAL_HMAC_KEY
-            valueFrom:
-              secretKeyRef:
-                name: ai-advisor-approval-hmac
-                key: hmac_key
-                optional: true
-          # M45 Phase B: CloudWatch Logs read for AWS-side alerts.
-          # Optional; missing/empty creds = advisor silently skips
-          # the CW fetch step (graceful degradation).
-          - name: AWS_REGION_PRIMARY
-            value: "us-west-2"
-          - name: AWS_VPC_CIDR_PREFIX
-            value: "10.10.100."
-          - name: AWS_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: ai-advisor-aws-cloudwatch
-                key: aws_access_key_id
-                optional: true
-          - name: AWS_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: ai-advisor-aws-cloudwatch
-                key: aws_secret_access_key
-                optional: true
-          - name: AI_ADVISOR_MAX_INPUT_TOKENS
-            value: "8000"
-          - name: AI_ADVISOR_MODEL
-            value: "claude-sonnet-4-6"
-          - name: EMAIL_TO
-            value: "graham.m.smith@me.com"
-          - name: EMAIL_FROM
-            value: "Etherport AI Advisor <ai-advisor@etherport.net>"
-          - name: SMTP_HOST
-            value: "email-smtp.us-west-2.amazonaws.com"
-          - name: SMTP_PORT
-            value: "587"
-          - name: LOKI_URL
-            value: "http://loki.monitoring.svc.cluster.local:3100"
-          - name: PROMETHEUS_URL
-            value: "http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
-          - name: ANTHROPIC_API_KEY
-            valueFrom:
-              secretKeyRef:
-                name: ai-advisor-anthropic-key
-                key: api_key
-          # Deep-mode institutional-knowledge tools (search_git_log,
-          # read_runbook) talk to the GitHub API. Token is optional —
-          # without it, requests are unauthenticated and rate-limited
-          # to 60/hr per source IP, which is enough for occasional
-          # deep-mode calls but will rate-limit under bursts. Create
-          # secret `ai-advisor-github` with key `token` to populate
-          # (fine-grained PAT, public-repo read access only).
-          - name: GITHUB_REPO
-            value: "sparked-diamond/infra"
-          - name: GITHUB_TOKEN
-            valueFrom:
-              secretKeyRef:
-                name: ai-advisor-github
-                key: token
-                optional: true
-          - name: SMTP_USER
-            valueFrom:
-              secretKeyRef:
-                name: ai-advisor-smtp
-                key: smtp_auth_username
-          - name: SMTP_PASS
-            valueFrom:
-              secretKeyRef:
-                name: ai-advisor-smtp
-                key: smtp_auth_password
+        # AI Advisor (M41 Phase 1 — advisory-only). Set
+        # AI_ADVISOR_ENABLED=true to turn on after populating both
+        # the anthropic-api-key and SMTP secrets.
+        - name: AI_ADVISOR_ENABLED
+          value: "true"
+        # $0.50/day — reverted 2026-05-25 from a $5.00 bump that
+        # wasn't operator-approved. Re-raise only after explicit
+        # discussion if sustained cap-hits become a real problem.
+        - name: AI_ADVISOR_DAILY_COST_USD_CAP
+          value: "0.50"
+        # Phase 2 (approve-via-email). Set to "true" + populate the
+        # approval-hmac secret + set APPROVAL_BASE_URL to your Tailscale
+        # hostname for the controller. See:
+        # docs/runbooks/ai-advisor-phase2-enable.md
+        - name: AI_PHASE2_ENABLED
+          value: "true"
+        # Phase 3 (autonomous execute, opt-in per alert). Kill switch.
+        # When "true", alerts carrying `ai_remediation: "auto"` label
+        # get auto-executed if confidence + action + namespace clear
+        # the guardrails. Default OFF. See:
+        # docs/runbooks/ai-advisor-phase3-enable.md
+        - name: AI_PHASE3_ENABLED
+          value: "true"
+        - name: AI_PHASE3_CONFIDENCE_THRESHOLD
+          value: "0.85"
+        - name: APPROVAL_BASE_URL
+          value: "https://approve.etherport.net"
+        - name: APPROVAL_TTL_HOURS
+          value: "24"
+        - name: APPROVAL_HMAC_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ai-advisor-approval-hmac
+              key: hmac_key
+              optional: true
+        # M45 Phase B: CloudWatch Logs read for AWS-side alerts.
+        # Optional; missing/empty creds = advisor silently skips
+        # the CW fetch step (graceful degradation).
+        - name: AWS_REGION_PRIMARY
+          value: "us-west-2"
+        - name: AWS_VPC_CIDR_PREFIX
+          value: "10.10.100."
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: ai-advisor-aws-cloudwatch
+              key: aws_access_key_id
+              optional: true
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ai-advisor-aws-cloudwatch
+              key: aws_secret_access_key
+              optional: true
+        - name: AI_ADVISOR_MAX_INPUT_TOKENS
+          value: "8000"
+        - name: AI_ADVISOR_MODEL
+          value: "claude-sonnet-4-6"
+        - name: EMAIL_TO
+          value: "graham.m.smith@me.com"
+        - name: EMAIL_FROM
+          value: "Etherport AI Advisor <ai-advisor@etherport.net>"
+        - name: SMTP_HOST
+          value: "email-smtp.us-west-2.amazonaws.com"
+        - name: SMTP_PORT
+          value: "587"
+        - name: LOKI_URL
+          value: "http://loki.monitoring.svc.cluster.local:3100"
+        - name: PROMETHEUS_URL
+          value: "http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ai-advisor-anthropic-key
+              key: api_key
+        # Deep-mode institutional-knowledge tools (search_git_log,
+        # read_runbook) talk to the GitHub API. Token is optional —
+        # without it, requests are unauthenticated and rate-limited
+        # to 60/hr per source IP, which is enough for occasional
+        # deep-mode calls but will rate-limit under bursts. Create
+        # secret `ai-advisor-github` with key `token` to populate
+        # (fine-grained PAT, public-repo read access only).
+        - name: GITHUB_REPO
+          value: "sparked-diamond/infra"
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: ai-advisor-github
+              key: token
+              optional: true
+        - name: SMTP_USER
+          valueFrom:
+            secretKeyRef:
+              name: ai-advisor-smtp
+              key: smtp_auth_username
+        - name: SMTP_PASS
+          valueFrom:
+            secretKeyRef:
+              name: ai-advisor-smtp
+              key: smtp_auth_password
         volumeMounts:
         - name: script
           mountPath: /scripts
