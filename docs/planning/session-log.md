@@ -13,6 +13,35 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-24 (cont. 12) — M15 911 verified + M72 PSA enforce (security-arc start)
+
+**M15 — Twilio 911 emergency address: RESOLVED (verified at carrier).** Queried the Twilio
+API: primary DID +19094142433 (re-acquired PN `PN2b496425…`; the runbook's "FAILED" was the
+retired PN) → `emergency_status: Active`, bound to `AD1fe171…` = 843 Greenbriar Dr, which is
+`validated: True, emergency_enabled: True`. So 911 delivers correct location at the carrier
+(SIP-trunk 911 uses the DID's emergency address; the Talk UI `emergency_address/list=[]` is
+cosmetic). TF var matches → no drift. **No apply needed.** Corrected the stale runbook note.
+Residual: TF-import hygiene (confirm address+DID in twilio state). M16 (orphan DID — found 3
+non-primary DIDs) + M17 (trunk still `secure=false` → TLS+sRTP) remain.
+
+**M72 — Pod Security Admission audit/warn → enforce: substantially done.** Most app
+namespaces were already enforcing baseline (2026-06-02). This pass: dry-ran every audit-only
++ unlabeled namespace via `kubectl label --dry-run=server` to see what would break, then
+**added `enforce=baseline` to `flux-system`** (`5a52b54`; live + flux healthy — baseline not
+restricted to avoid an engine wedge on a future upgrade, though it dry-ran restricted-clean).
+**15 namespaces now enforce.** Exempt-by-design (legit elevated): monitoring, tailscale,
+home-automation, gpu-operator-system, velero (audit/warn=baseline); blackbox/metallb/
+wireguard (privileged). **Residual (documented in tracker M72):** 4 baseline-clean
+*Helm-created* namespaces (cert-manager, cnpg-system, github-actions-runner, plex) need
+labeling *at source* (explicit ns + `createNamespace:false`) since a patch has no build
+target; + ~7 stale/empty namespaces (kopia, technitium-dns, rclone-gdrive, home, media,
+infra, gpu-operator) to delete in a separate cleanup.
+
+**Next:** M73 (Kyverno) — a cluster-wide admission webhook; deploy audit-first. Substantial
+new operator → start fresh (checkpointed here).
+
+---
+
 ## 2026-06-24 (cont. 11) — M82: Terraform → CI-only, devbox drops standing AWS/PVE creds
 
 Owner chose **CI-only** for M82 (over keep-on-devbox / re-home). Most of the path was
