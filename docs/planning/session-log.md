@@ -13,6 +13,16 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-23 (cont. 5) — mini observability restored (VIP fix verified) + size metric + mini_health heartbeat
+
+**VIP fix verified from the mini.** Infra restored the mini→Traefik-VIP route (Cilium `traefik-tier` was allowing the LB *service* ports :80/:443 from world but enforces on the DNAT'd *container* ports :8000/:8443 — commit 1a98eee). From the mini: `nc 10.10.201.70:443` connects, end-to-end pushgateway POST works (PUSH_OK), Alloy→Loki clean since restart (was timing out until 23:07Z). Re-pushed all backup metrics: messages/notes/safari/drive/photos green+fresh. **contacts/calendars rc=1 = transient iCloud DAV throttle** from my dozens of debug runs (manual `discover` succeeds; data safe, master intact) — left to self-heal on the 21:00 nightly; do NOT keep re-running (worsens the throttle).
+
+**Dashboard asks (owner): item count + size-on-disk per category, both dashboards.** Item count already exists (`<job>_items` / `photos_export_photos_total`). Added **size**: `<job>_bytes` (+ `photos_export_bytes`) via new `nas_du_bytes` helper (du of each NAS dest, bounded timeout + skip-on-fail so a slow du never zeroes the panel), emitted opt-in via `BACKUP_BYTES`/`PHOTOS_BYTES`; wired into all 8 categories. `2267fc8`.
+
+**Agent-health metric (owner).** New `mini-health.sh` + `net.wind.mini-health` (every 15 min, RunAtLoad) pushes `mini_health_*`: `mini_health_up` (rollup), `mini_health_check{check="agents_loaded|nas_readable|nsmb_applied"}`, `agents_loaded`/`agents_expected` (6), `disk_free_bytes`, and `mini_health_last_check_timestamp_seconds` (heartbeat). The heartbeat is the dead-man's-switch — if it stops arriving the mini is down or can't reach the VIP (would've caught today's outage). Cheap + FDA-free (launchctl/mount/df/rsync-stat). Verified push: up=1, agents 6/6, nas/nsmb ok, 21G free. **Infra-agent handoff (prompt given to owner):** add item-count + size panels per category to BOTH dashboards; surface `mini_health` in the 06:00 service-status-report email + alert on `mini_health_up==0` and heartbeat-absence.
+
+---
+
 ## 2026-06-24 (cont. 7) — Control-plane OS patch (cp1/cp2/cp3) — completes M101 node patching
 
 Patched the 3 control planes with `infra/ansible/playbooks/k8s-node-patch.yml`, finishing
