@@ -31,8 +31,14 @@ pod (projected SA token, aud=sts.amazonaws.com, iss=<bucket-url>)
   provider + 4 roles + policies applied (via CI). **Verified from the public
   internet**: discovery `issuer` matches the URL, `jwks_uri` resolves, JWKS ==
   cluster keys. Harmless until Phase 3 + 4.
-- ⏳ **Phase 3:** flip the kube-apiserver `--service-account-issuer` (disruptive).
-- ⏳ **Phase 4:** pod-identity webhook + per-workload migration + secret deletion.
+- ✅ **Phase 3 DONE + e2e-verified (2026-06-24):** all 3 CPs flipped
+  (cp2→cp3→cp1), dual issuer (bucket primary + `cluster.local` secondary) +
+  `--api-audiences` pinned. Proven end-to-end: a `velero-server` SA token
+  (`aud=sts.amazonaws.com`) successfully `AssumeRoleWithWebIdentity` → `wind-irsa-velero`
+  returned short-lived `ASIA…` creds. ⏳ **Persistence in IaC is a follow-up** (see
+  "Persist in IaC" — DRIFT RISK).
+- ⏳ **Phase 4:** pod-identity webhook + per-workload migration + secret deletion +
+  shared-key rotation.
 
 ---
 
@@ -93,16 +99,50 @@ expect a brief kubectl blip while it restarts.
 # in a throwaway pod annotated for a role (or wait for Phase 4 migration to prove it).
 ```
 
-### Persist in IaC (kubespray)
+### Persist in IaC (kubespray) — ⚠️ DRIFT RISK, follow-up
 
-The live edit is drift until captured. Add to the kubespray inventory
-(`infra/kubespray/inventory/group_vars/.../k8s-cluster.yml`) the apiserver
-extraArgs for the dual issuer, so a future kubespray run keeps it. ⚠️ kubeadm
-v1beta3 `extraArgs` is a map (one value per flag) — multiple
-`--service-account-issuer` needs the list-style extraArgs (kubeadm v1beta4 /
-kubespray support) — confirm the installed kubespray's mechanism before relying on
-a run. Until then, the manifest edit + this runbook are the record. **Never run
-kubespray except via `infra/kubespray/kubespray.sh`** (Cilium cni-owner landmine).
+The live change is a **hand-edit of the static pod manifest on each CP — it is NOT
+in git/kubespray.** A kubespray run that regenerates `kube-apiserver.yaml` from the
+kubeadm config will **WIPE it** → apiserver reverts to the single `cluster.local`
+issuer → **all IRSA-migrated workloads lose AWS access.** (Low near-term risk: runs
+are rare/operator-gated and no workload depends on IRSA until Phase 4 — but it MUST
+be persisted as part of completing Phase 4.)
+
+**Blocker:** this kubespray uses the kubeadm **v1beta3** config
+(`roles/kubernetes/control-plane/templates/kubeadm-config.v1beta3.yaml.j2`), whose
+`apiServer.extraArgs` is a **map** (one value per flag) — so it **cannot express two
+`--service-account-issuer` flags**. Options, cleanest last:
+
+1. **Collapse to a SINGLE issuer (recommended, do after Phase 4 + a token-refresh
+   wait).** The secondary `cluster.local` issuer only exists so pre-flip tokens
+   (`iss=cluster.local`) keep validating. Bound SA tokens refresh at ~80% TTL
+   (~48 min). **>1 h after the flip (or after restarting all pods), no token carries
+   `iss=cluster.local`** → safe to drop it. Then the config is single-valued and
+   fits the v1beta3 map via `kube_kubeadm_apiserver_extra_args`:
+   ```yaml
+   kube_kubeadm_apiserver_extra_args:
+     service-account-issuer: https://wind-cluster-oidc-830881980142.s3.us-west-2.amazonaws.com
+     api-audiences: https://kubernetes.default.svc.cluster.local,sts.amazonaws.com
+   ```
+   (`api-audiences` MUST stay pinned — see the gotcha below.) Re-hand-edit the live
+   manifests to single-issuer to match, OR let the next gated kubespray run apply it.
+2. **`kubeadm_patches`** — kubespray can apply kubeadm patch files to the generated
+   manifests; a strategic-merge/JSON6902 patch CAN add a duplicate flag. More moving
+   parts; only needed if dual-issuer must persist long-term.
+
+**Never run kubespray except via `infra/kubespray/kubespray.sh`** (Cilium cni-owner
+landmine).
+
+### ⚠️ Gotcha — pin `--api-audiences` or you break ALL in-cluster auth
+
+`--api-audiences` was **unset** (it defaults to the FIRST `--service-account-issuer`).
+Changing the first issuer to the bucket URL therefore silently changes the default
+accepted audience to the bucket URL → every existing in-cluster token (`aud =
+https://kubernetes.default.svc.cluster.local`) would fail audience validation → 401
+cluster-wide. The fix (applied here): **explicitly set**
+`--api-audiences=https://kubernetes.default.svc.cluster.local,sts.amazonaws.com`
+alongside the issuer change. Validate per-CP by presenting a `cluster.local`-audience
+token to that node — **403 (RBAC) = authN OK; 401 = broken.**
 
 ### Rollback
 

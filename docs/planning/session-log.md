@@ -59,13 +59,28 @@ Started M75 — kill the long-lived static AWS IAM keys in-cluster (self-hosted 
   blocked by the auto-mode classifier** → switched to plan-first (repo's cardinal
   rule), reviewed (14→then 5 add, 0 destroy), then applied. S3 `InvalidTag` gotcha:
   bucket tag VALUES reject parens (the `(IRSA)` in a Name tag).
-- **State:** Phase 1+2 = the **entire reversible foundation**, live + verified,
-  harmless until Phase 3. **Phase 3 (flip apiserver issuer) is the single disruptive,
-  hard-to-reverse action** (rolling kube-apiserver restart; no HA API VIP, cp1 is the
-  endpoint) — **deliberately checkpointed for a focused, monitored window** rather
-  than the tail of a long session. Full procedure + rollback + Phase 4 (pod-identity
-  webhook + per-workload migration + secret deletion + shared-key rotation):
-  `docs/runbooks/irsa-workload-identity.md`.
+- **Phase 3 DONE this session (user approved "do now") + e2e-verified:** flipped
+  `--service-account-issuer` on all 3 CPs by hand-editing the static manifests
+  (atomic temp+rename), cp2→cp3→**cp1 last** (cp1 is the endpoint → brief kubectl
+  blip, self-healed). Dual issuer: **bucket primary + `cluster.local` secondary**, and
+  — the crucial catch — **explicitly pinned `--api-audiences=…cluster.local,
+  sts.amazonaws.com`**: it was unset (defaults to the FIRST issuer), so flipping the
+  issuer would have silently 401'd EVERY existing in-cluster token. Validated per-CP by
+  presenting a `cluster.local`-aud token to each node (403 = authN OK, not 401).
+  **End-to-end proof:** `kubectl create token velero-server -n velero
+  --audience=sts.amazonaws.com` (now `iss=bucket`, `sub=system:serviceaccount:velero:
+  velero-server`) → real `aws sts assume-role-with-web-identity` (no prior creds) →
+  `wind-irsa-velero` returned short-lived `ASIA…` creds. The whole chain works.
+- **⚠️ Persistence is the open follow-up (drift risk):** the manifests are hand-edited,
+  NOT in kubespray — a kubespray run would revert them (v1beta3 extraArgs map can't hold
+  two `--service-account-issuer` values). Plan: after Phase 4 + a >1h token-refresh wait,
+  drop the `cluster.local` secondary issuer → single-issuer config fits the v1beta3 map
+  (`kube_kubeadm_apiserver_extra_args`). Low near-term risk (runs are gated; no workload
+  on IRSA until Phase 4). Documented in the runbook + CLAUDE.md.
+- **State:** Phases 1-3 done + verified. **Phase 4 (pod-identity webhook + migrate the
+  ~6 workload groups off the shared static key, verify each, delete secrets, rotate the
+  key) is the remaining large chunk** — naturally incremental, lower per-step risk.
+  Full procedure: `docs/runbooks/irsa-workload-identity.md`.
 
 ---
 

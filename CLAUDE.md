@@ -123,15 +123,20 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   ~13 in-cluster K8s secrets** (velero/s3-sync/barman/ai-advisor/cloudwatch) — **M75 (IRSA)
   is migrating those to per-workload roles**; once nothing in-cluster uses it, **rotate it,
   don't delete**.
-- **M75 IRSA (in-cluster AWS workload identity), Phase 1+2 live since 2026-06-24:** new TF stack
-  `infra/terraform/aws/cluster-irsa/` (CI workflow `terraform-cluster-irsa.yml`) created the IAM
-  OIDC provider + 4 least-priv roles (`wind-irsa-{velero,s3-sync,barman,cloudwatch-read}`) + a
-  **deliberately PUBLIC** S3 bucket `wind-cluster-oidc-830881980142` (the issuer — serves only
-  the OIDC discovery doc + the cluster's *public* SA signing keys; public-read is **by design,
-  not a leak**). ⏳ NOT yet active: needs Phase 3 (flip apiserver `--service-account-issuer` —
-  disruptive, gated) + Phase 4 (pod-identity webhook + per-workload migration). Full
-  procedure/rollback: `docs/runbooks/irsa-workload-identity.md`. **etcd-backup is host-level
-  (CP systemd), NOT an IRSA target.**
+- **M75 IRSA (in-cluster AWS workload identity), Phases 1-3 live + e2e-verified since 2026-06-24:**
+  TF stack `infra/terraform/aws/cluster-irsa/` (CI workflow `terraform-cluster-irsa.yml`) created
+  the IAM OIDC provider + 4 least-priv roles (`wind-irsa-{velero,s3-sync,barman,cloudwatch-read}`)
+  + a **deliberately PUBLIC** S3 bucket `wind-cluster-oidc-830881980142` (the issuer — serves only
+  the OIDC discovery doc + the cluster's *public* SA signing keys; public-read is **by design, not
+  a leak**). The **kube-apiserver `--service-account-issuer`** is flipped on all 3 CPs to that
+  bucket URL (primary) + `cluster.local` (secondary), with **`--api-audiences` pinned** — these are
+  **hand-edits of the static pod manifests, NOT in kubespray (DRIFT RISK: a kubespray run reverts
+  them → IRSA breaks)**; persistence is a follow-up. ⚠️ **GOTCHA if you ever touch apiserver SA
+  flags:** `--api-audiences` defaults to the FIRST `--service-account-issuer`, so changing the
+  issuer without pinning api-audiences silently 401s every existing in-cluster token. ⏳ Phase 4
+  pending: pod-identity webhook + migrate the ~6 workloads off the shared key + delete secrets +
+  rotate the key. Full procedure/rollback: `docs/runbooks/irsa-workload-identity.md`. **etcd-backup
+  is host-level (CP systemd), NOT an IRSA target.**
 
 ## 5. Key invariants / gotchas (non-obvious; will bite you)
 
