@@ -1,5 +1,13 @@
 # Cloudflare full-zone management — etherport.net
 
+> **Status 2026-06-24: migration COMPLETE.** Cloudflare is authoritative for `etherport.net`
+> (NS cutover done; **Route53 zone deleted 2026-05-27**). Text below written mid-migration
+> ("mirroring current Route53 state", "Route53 still authoritative", "keep writing to Route53",
+> the "NS cutover" todo) is **historical** — DNS is CF-only now and the `cloudflare-ddns`
+> CronJob writes via the **CF API** (not Route53). The module also now manages `cue.etherport.net`
+> tunnel ingress + per-path CF Access (`cue-access.tf`). NB on the Linux devbox: any `pbcopy`/BSD
+> `sed -i ''` snippets below are macOS-only — use `xclip`/GNU `sed -i` instead.
+
 ## What this module owns
 
 1. **The etherport.net zone in CF** (manually created, then imported)
