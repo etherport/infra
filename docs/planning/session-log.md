@@ -13,6 +13,54 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-24 (cont. 6) — Cue public access + Web Push; VIP-outage preventive alert; doc review
+
+**Cue public internet access** (`33b368a` `93f76d4` `6e42876`, applied via CI earlier today):
+`cue.etherport.net` now served through the CF Tunnel with **per-path** Zero-Trust Access —
+the app behind **Google SSO** (allow-list `cue_tester_emails`, default `grahamsm@gmail.com`),
+`/health` **bypass** (no auth, for uptime checks), and `/ingest/healthkit` behind a
+**service token** (`cloudflare_zero_trust_access_service_token.cue_healthkit`) for the
+HealthKit ingestor. cue-api verifies the CF Access JWT itself via `CUE_CF_ACCESS_TEAM_DOMAIN`
+(`etherport.cloudflareaccess.com`) + `CUE_CF_ACCESS_AUD` (the app AUD). TF in
+`infra/terraform/cloudflare/cue-access.tf`; the cue ingress regex was set to null (serve the
+whole app). **To add a tester:** append their email to `cue_tester_emails` in
+`cloudflare/variables.tf` + `terraform apply` (or switch the policy to a Google Group for
+higher churn). Applied from CI, not the devbox (devbox TF hit empty-IDP + http refresh errors).
+
+**Cue Web Push enabled** (`49953f9`): added `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`
+(= `mailto:grahamsm@gmail.com`) to the `cue-app` SOPS secret (values from
+`/home/ubuntu/code/cue/vapid.private.json`, never echoed; secret stays encrypted) + set
+`CUE_WEB_PUSH=true` inline in the deployment (`CUE_PROACTIVE_CHECKINS` already on). Push
+egress to browser push services (`:443`) is already covered by cue-tier's `world:443` egress —
+no netpol change. cue-api rolled 1/1, 0 restarts, all 4 env vars populated.
+
+**VIP-outage PREVENTIVE GUARD** (`4d57c3e`) — the "doesn't repeat" half of cont.5. Added a
+third loki-ruler rule **`CiliumTraefikIngressDrop`** (critical) in
+`06-loki-rules-cilium-audit.yaml`: fires on ANY `DROPPED` flow to the traefik tier on a
+PUBLIC entrypoint container port (`:8000`/`:8443`/`:8088`). Those ports MUST accept `world`
+by design, so a drop there is *always* a policy bug — which is why this rule deliberately
+does NOT exclude `world`/empty-`src_ns` (the existing `CiliumNetpolDropFlow` filters
+`src_ns!=""` to drop scan noise, and that exact filter is what hid the 06-23 outage for
+~16h — the DROPPED flows were in Loki the whole time, just unalerted). Now a future
+external→VIP netpol break pages in ~10m. (Couldn't query Loki to replay the historical
+drops — the distroless loki image has no shell/wget — but the rule reuses the identical JSON
+fields as the working `CiliumNetpolDropFlow`, and cilium-monitor during the outage confirmed
+`world→traefik …→:8443`.) Live: cm has 3 rules, Flux `4d57c3e`.
+
+**Doc review pass:** confirmed today's items are captured — Authentik SSO (H38, cont.3 +
+CLAUDE.md §5), M80 iCloud backups (cont.4), the VIP outage (cont.5), and now cue + the
+guard. CLAUDE.md §5 DROP-alerting note updated (3 rules; the remaining `world`→non-traefik
+gap is explicit). Mini backup dashboard/alerts confirmed **already generic** (templated
+`cat` repeat + `.+_backup_*` regex) — new categories (messages/notes/safari/icloud_drive)
+auto-appear once the mini re-pushes (nightly cron, now that the VIP path is fixed); no change
+needed.
+
+**State:** all of today's work shipped + documented. Open follow-ups: mini metric pushes
+resume on tonight's cron (verify pushgateway freshness then); control-plane node patch
+(cp1/2/3) still pending; cue-api still on `:latest` (intentional during dev, M64).
+
+---
+
 ## 2026-06-23 (cont. 5) — mini→VIP outage ROOT-CAUSED + FIXED (traefik netpol: service vs container ports)
 
 **Resolved the cont.4 mini→Traefik-VIP outage. Root cause: the `traefik-tier`

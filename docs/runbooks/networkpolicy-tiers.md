@@ -54,6 +54,9 @@ changing a workload:
 > `:443` from `world` so every external→VIP flow was dropped, in-cluster unaffected).
 > **Debug:** `cilium-dbg monitor --type drop` and look for the **pod IP + container port**
 > destination — the VIP is already gone from the packet post-DNAT.
+> **Alert:** `CiliumTraefikIngressDrop` (critical, `06-loki-rules-cilium-audit.yaml`) fires on
+> any DROPPED flow to traefik `:8000/:8443/:8088` — so this specific class can't silently
+> recur. Non-traefik `world`-source drops still need manual `hubble observe --verdict DROPPED`.
 
 ## Adding monitoring for a new service (`monitoring` is enforced — open the channel)
 

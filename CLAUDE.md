@@ -145,11 +145,16 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   permissive — `cluster` any-port + enumerated `world` ports — so scrapes/routes never cut;
   traefik/monitoring labelled via the `namespace-pss-labels.yaml` patch since Helm-created.)
   **DROP alerting is LIVE:** export carries `verdict:[AUDIT,DROPPED]` → Loki `{job="hubble-audit"}`
-  → loki-ruler `CiliumNetpolDropFlow` (in-cluster drop to/from an enforced ns = "open a
-  channel"). Adding a service that crosses an enforced boundary → update the per-tier CNP;
-  see `docs/runbooks/networkpolicy-tiers.md`. To add a NEW tier, toggle audit on first.
-  NB: the audit→Loki pipeline only surfaces `AUDIT` verdicts (observation phase) — once a
-  tier ENFORCES, a wrongly-dropped flow does NOT alert (M-tier follow-up: hubble DROP→Loki→alert).
+  → loki-ruler rules in `platform/kubernetes/monitoring/06-loki-rules-cilium-audit.yaml`:
+  `CiliumNetpolDropFlow` (IN-CLUSTER drop to/from an enforced ns = "open a channel") +
+  `CiliumTraefikIngressDrop` (**critical**; any drop to traefik on a PUBLIC entrypoint
+  container port `:8000/:8443/:8088` — these must accept `world`, so a drop = ingress/VIP
+  reachability bug; added after the 06-23 outage so a future external→VIP netpol break
+  alerts in ~10m instead of staying silent). Adding a service that crosses an enforced
+  boundary → update the per-tier CNP; see `docs/runbooks/networkpolicy-tiers.md`. To add a
+  NEW tier, toggle audit on first. NB GAP: `CiliumNetpolDropFlow` excludes `world` sources
+  (scan noise), so a wrongly-dropped EXTERNAL client to a NON-traefik enforced tier still
+  won't auto-alert — find those with `hubble observe --verdict DROPPED`.
   ⚠️ **Audit is a single GLOBAL
   switch**, so to add a new tier you must briefly flip audit back ON (ConfigMap+rollout),
   label + observe the new namespace via Loki `{job="hubble-audit"}`, build its allowlist

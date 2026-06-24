@@ -48,6 +48,14 @@ kubectl get svc -n <ns> <svc> -o jsonpath='{range .spec.ports[*]}{.name} port={.
 and look for the **pod IP + container port** as the destination — NOT the service IP/VIP
 (post-DNAT the VIP is gone from the packet). Grepping for the VIP finds nothing.
 
+**Detection (so it can't silently recur):** the `CiliumTraefikIngressDrop` loki-ruler rule
+(`platform/kubernetes/monitoring/06-loki-rules-cilium-audit.yaml`) pages **critical** on any
+`DROPPED` flow to traefik on a public entrypoint container port (`:8000/:8443/:8088`) — these
+must accept `world`, so a drop is always a policy bug. (The general `CiliumNetpolDropFlow`
+rule excludes `world` sources as scan noise, which is exactly what hid the 2026-06-23 outage
+for 16h.) A `world`-source drop to a *non-traefik* enforced tier still won't auto-alert —
+use `hubble observe --verdict DROPPED` for those.
+
 ## Phasing model — opt-in per namespace via a label
 
 Enforcement is gated on the namespace label **`netpol.wind/enforced: "true"`**. A
