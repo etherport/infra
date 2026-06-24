@@ -2,7 +2,9 @@
 
 ## Overview
 
-Site-to-site VPN connecting local homelab to AWS. This is the **production traffic path** for ALB-routed services.
+Site-to-site VPN connecting local homelab to AWS.
+
+> **⚠️ ALB decommissioned 2026-05-27.** This tunnel previously fronted the AWS ALB public-ingress path; the public edge is now the CF Tunnel + Access (no ALB). The site-to-site tunnel remains in use for AWS↔homelab connectivity (e.g. dns-aws, regional travel VPNs).
 
 **Note:** For remote client access, [Tailscale](vpn-tailscale.md) is the primary solution.
 
@@ -433,6 +435,8 @@ platform/kubernetes/wireguard/
 **Important:** K8s and vpn-local use the SAME wg0 keys so AWS sees a single peer.
 
 ## Configuration Sync Status
+
+> **⚠️ Snapshot — may be stale.** The sync table below reflects a point-in-time check (2026-05-03) and is not auto-verified. Confirm against the live `wg show` / Ansible run before relying on it.
 
 All WireGuard endpoints are in sync as of 2026-05-03:
 

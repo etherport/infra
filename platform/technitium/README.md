@@ -1,5 +1,11 @@
 # Technitium DNS Server Configuration
 
+> **⚠️ The canonical Technitium doc is `platform/kubernetes/technitium/README.md`.**
+> This file covers only the Ansible / standalone-VM bits. The AWS-instance
+> (`10.10.100.5`, dns-aws) and Route53-sinkhole language below is **historical** —
+> Route53 was deleted 2026-05-27 (DNS is authoritative on Cloudflare). Trust the
+> canonical doc for current cluster/zone state.
+
 ## Overview
 
 Technitium DNS Server configuration is managed through a combination of:

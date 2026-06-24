@@ -94,10 +94,11 @@ git commit -m "Add Tailscale operator for mesh VPN"
 git push
 ```
 
-Or force reconciliation:
+Or force reconciliation (no flux CLI on the hosts — CLAUDE.md §3):
 
 ```bash
-flux reconcile kustomization flux-system --with-source
+kubectl annotate -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 ```
 
 ### 6. Approve Routes

@@ -34,7 +34,7 @@ Automated, safe node reboots for security updates.
 Run Ansible playbook to configure all nodes:
 
 ```bash
-cd ~/Projects/homelab-infra/infra/kubespray
+cd ~/code/infra/infra/kubespray
 ./venv/bin/ansible-playbook \
   -i inventory/mycluster/hosts.yaml \
   ../platform/kubernetes/kured/configure-unattended-upgrades.yml
@@ -192,13 +192,30 @@ helm upgrade kured kubereboot/kured \
 
 ### Disable Kured Temporarily
 
-```bash
-# Suspend Kured (prevents any reboots)
-kubectl scale deployment kured -n kube-system --replicas=0
+**Kured is a DaemonSet, not a Deployment** — `kubectl scale deployment kured`
+does nothing (there is no Deployment to scale). To stop reboots, use one of:
 
-# Re-enable
-kubectl scale deployment kured -n kube-system --replicas=1
+```bash
+# Block reboots cluster-wide via the kured lock annotation on a node
+# (kured won't acquire the reboot lock while it's held):
+kubectl annotate ds/kured -n kube-system \
+  weave.works/kured-most-recent-reboot-needed- 2>/dev/null || true
+
+# Simplest: set a rebootBlockerLabel / restrict the maintenance window in
+# kured-values.yaml and `helm upgrade` (chart-managed), e.g. an empty window
+# or a blocking node label, so no reboot ever fires.
+
+# Or, to fully stop the daemon, delete the DaemonSet (Helm/Flux recreates it):
+kubectl delete ds/kured -n kube-system
+
+# Re-enable by re-running the helm install/upgrade (or letting Flux reconcile):
+helm upgrade --install kured kubereboot/kured \
+  --namespace kube-system \
+  --values platform/kubernetes/kured/kured-values.yaml
 ```
+
+The clean approach is to manage the pause through the chart values
+(`rebootBlockerLabel` / maintenance window) rather than poking the live object.
 
 ## Troubleshooting
 
@@ -241,9 +258,9 @@ kubectl drain k8s-w1 --ignore-daemonsets --delete-emptydir-data --force --grace-
 
 ### Multiple Nodes Trying to Reboot
 
-Check concurrency setting:
+Check concurrency setting (kured is a DaemonSet):
 ```bash
-kubectl get deployment kured -n kube-system -o yaml | grep concurrency
+kubectl get ds kured -n kube-system -o yaml | grep concurrency
 # Should be 1
 ```
 

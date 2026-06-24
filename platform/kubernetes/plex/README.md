@@ -11,7 +11,7 @@ GPU-accelerated Plex Media Server deployment with hardware transcoding on Tesla 
 - **Media Access**: NFS mounts from `sequoia.wind.etherport.net`
 - **GPU**: NVIDIA Tesla P40 with time-slicing (hardware transcoding)
 - **Access**: https://plex.wind.etherport.net
-- **GitOps**: Managed by Flux (see [Flux Overview](../../docs/gitops/flux-overview.md))
+- **GitOps**: Managed by Flux (see [Flux Overview](../../../docs/setup/gitops/flux-overview.md))
 
 ## Architecture
 
@@ -71,15 +71,16 @@ git commit -m "plex: update configuration"
 git push
 
 # Force Flux to sync immediately (or wait ~10 minutes)
-flux reconcile source git flux-system
-flux reconcile kustomization flux-system
+# (no flux CLI on the hosts — CLAUDE.md §3)
+kubectl annotate -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 
 # Verify deployment
 kubectl get pods -n plex
 kubectl logs -n plex -l app=plex -f
 ```
 
-See [Making Changes to GitOps Apps](../../docs/gitops/making-changes.md) for detailed workflows.
+See [Making Changes to GitOps Apps](../../../docs/setup/gitops/making-changes.md) for detailed workflows.
 
 ### Manual Deployment (Not Recommended)
 

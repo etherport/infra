@@ -52,8 +52,9 @@ For full architecture documentation, see [docs/architecture/vpn-wireguard.md](..
 Changes pushed to `main` are automatically deployed by Flux.
 
 ```bash
-# Force reconciliation
-flux reconcile kustomization flux-system --with-source
+# Force reconciliation (no flux CLI on the hosts — CLAUDE.md §3)
+kubectl annotate -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 ```
 
 ### Manual

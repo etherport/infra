@@ -2,7 +2,11 @@
 
 ## Overview
 
-Tailscale provides mesh VPN connectivity for remote client access as a supplement to the WireGuard site-to-site tunnel. While WireGuard handles production traffic routing between AWS and the homelab, Tailscale enables:
+Tailscale provides mesh VPN connectivity for remote client access as a supplement to the WireGuard site-to-site tunnel.
+
+> **⚠️ ALB decommissioned 2026-05-27.** The "ALB ingress" framing below is historical — the public edge is now the CF Tunnel + Access. The WireGuard site-to-site tunnel still carries AWS↔homelab traffic, and the `accept-routes=false` rule below still matters so Tailscale doesn't hijack that path.
+
+While WireGuard handles AWS↔homelab traffic routing, Tailscale enables:
 
 - Direct device-to-device connections without hub routing
 - Easy client onboarding without manual key exchange

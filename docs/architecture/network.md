@@ -31,30 +31,25 @@ External Request
       v
   DNS (Cloudflare — authoritative for etherport.net since 2026-05; Route53 deleted 2026-05-27)
       |
-      +------------------------+
-      |                        |
-      v                        v
-  AWS ALB                Cloudflare Tunnel (cloudflared)
-  *.wind.etherport.net   approve.etherport.net + CF Access
-      |                        |
-      +------------+-----------+
-                   |
-                   v  (via WireGuard site-to-site for ALB path)
-            MetalLB VIP (10.10.201.70)
-                   |
-                   v
-            Traefik Ingress
-                   |
-                   v
-            Kubernetes Service
-                   |
-                   v
-            Application Pod
+      v
+  Cloudflare Tunnel (cloudflared) + CF Access   [*.wind.etherport.net]
+      |
+      v
+  MetalLB VIP (10.10.201.70)
+      |
+      v
+  Traefik Ingress
+      |
+      v
+  Kubernetes Service
+      |
+      v
+  Application Pod
 ```
 
-After NS-cutover (`docs/runbooks/cloudflare-access-enable.md`), the
-ALB tier is positioned to be dropped — most ingresses already route
-fine through CF Tunnel.
+The public edge is the Cloudflare Tunnel + Access (ALB decommissioned
+2026-05-27; the old WireGuard-fronted ALB tier no longer exists). See
+`docs/runbooks/cloudflare-access-enable.md`.
 
 ## Related Documentation
 

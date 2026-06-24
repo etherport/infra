@@ -33,7 +33,7 @@ cert-manager  →  Secret traefik/wildcard-wind-etherport-net-tls
 ```
 
 - **Source of truth:** cert-manager. Renews 60 days before expiry via
-  Route53 DNS-01.
+  Cloudflare DNS-01 (migrated off Route53 2026-05-27).
 - **Cert type:** RSA 2048. cert-manager issues an RSA-keyed wildcard
   specifically for UniFi devices (`wildcard-wind-etherport-net-rsa`)
   alongside the ECDSA wildcard Traefik uses. **UniFi OS unifi-core

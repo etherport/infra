@@ -11,7 +11,7 @@ Automated hourly sync from Google Drive to NFS backup storage using rclone.
 - **Source**: Google Drive (My Drive)
 - **Destination**: `sequoia.wind.etherport.net:/var/nfs/shared/Backups/Graham/Google Drive/`
 - **Method**: One-way sync (Google Drive → NFS)
-- **GitOps**: Managed by Flux (see [Flux Overview](../../docs/gitops/flux-overview.md))
+- **GitOps**: Managed by Flux (see [Flux Overview](../../../docs/setup/gitops/flux-overview.md))
 
 ## Safety / data-loss protection (2026-06-21)
 
@@ -79,14 +79,15 @@ git commit -m "rclone: update sync configuration"
 git push
 
 # Force Flux to sync immediately (or wait ~10 minutes)
-flux reconcile source git flux-system
-flux reconcile kustomization flux-system
+# (no flux CLI on the hosts — CLAUDE.md §3)
+kubectl annotate -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 
 # Verify
 kubectl get cronjob -n rclone
 ```
 
-See [Making Changes to GitOps Apps](../../docs/gitops/making-changes.md) for detailed workflows.
+See [Making Changes to GitOps Apps](../../../docs/setup/gitops/making-changes.md) for detailed workflows.
 
 ### Manual Deployment (Not Recommended)
 

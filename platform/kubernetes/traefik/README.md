@@ -75,10 +75,10 @@ Traefik is installed via a Flux HelmRelease (since 2026-05-12):
 - `platform/kubernetes/traefik/traefik-values.yaml` — Helm values (HA
   `replicas: 2`, no ACME / no PVC, TLS served from cert-manager wildcard)
 
-To force a re-install/upgrade, reconcile the HelmRelease via Flux:
+To force a re-install/upgrade, reconcile the HelmRelease (no flux CLI on the hosts — CLAUDE.md §3):
 
 ```bash
-flux reconcile helmrelease traefik -n flux-system
+kubectl annotate -n flux-system helmrelease/traefik reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 ```
 
 The legacy "helm install" path is no longer used.
@@ -129,14 +129,14 @@ git commit -m "traefik: add IngressRoute for switch1"
 git push
 
 # Force Flux to sync immediately (or wait ~10 minutes)
-flux reconcile source git flux-system
-flux reconcile kustomization flux-system
+kubectl annotate -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 
 # Verify
 kubectl get ingressroute -n traefik
 ```
 
-See [Flux GitOps Overview](../../docs/gitops/flux-overview.md) for more details.
+See [Flux GitOps Overview](../../../docs/setup/gitops/flux-overview.md) for more details.
 
 ### Manual Deployment (Not Recommended)
 
@@ -162,7 +162,7 @@ git commit -m "traefik: add IngressRoute for <device>"
 git push
 
 # 4. Force reconciliation
-flux reconcile kustomization flux-system
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 
 # 5. Verify
 kubectl get ingressroute -n traefik
@@ -186,7 +186,7 @@ git commit -m "traefik: update <route> configuration"
 git push
 
 # Force reconciliation
-flux reconcile kustomization flux-system
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 ```
 
 ## Verification
@@ -269,13 +269,13 @@ spec:
   insecureSkipVerify: true
 ```
 
-This tells Traefik to skip TLS verification when connecting to backend devices, while still presenting a valid certificate (from Route53/Let's Encrypt) to end users.
+This tells Traefik to skip TLS verification when connecting to backend devices, while still presenting a valid certificate (Let's Encrypt, DNS-01 via Cloudflare) to end users.
 
 ## Related Documentation
 
 - [Traefik Official Docs](https://doc.traefik.io/traefik/)
-- [Flux GitOps Overview](../../docs/gitops/flux-overview.md)
-- [Making Changes to GitOps Apps](../../docs/gitops/making-changes.md)
+- [Flux GitOps Overview](../../../docs/setup/gitops/flux-overview.md)
+- [Making Changes to GitOps Apps](../../../docs/setup/gitops/making-changes.md)
 - [Traefik IngressRoute CRD](https://doc.traefik.io/traefik/routing/providers/kubernetes-crd/)
 
 ## Notes
@@ -283,9 +283,14 @@ This tells Traefik to skip TLS verification when connecting to backend devices, 
 - **Flux-managed**: Both the Traefik install (HelmRelease) and the
   IngressRoutes/cert-manager objects in this directory are Flux-managed.
 - **Certificate Management**: cert-manager issues a wildcard
-  `*.wind.etherport.net` certificate via Route53 DNS-01
-  (`clusterissuer-letsencrypt.yaml` + `certificate-wildcard.yaml`), and
-  the Traefik default `TLSStore` (`tlsstore-default.yaml`) serves it for
-  every IngressRoute. Individual routes no longer need a `certResolver`.
+  `*.wind.etherport.net` certificate via Cloudflare DNS-01 (migrated off
+  Route53 2026-05-27) (`clusterissuer-letsencrypt.yaml` +
+  `certificate-wildcard.yaml`), and the Traefik default `TLSStore`
+  (`tlsstore-default.yaml`) serves it for every IngressRoute. Individual
+  routes no longer need a `certResolver`.
+- **Device-admin auth**: the device-admin IngressRoutes (Proxmox / IPMI /
+  PDU / UPS / Technitium DNS / Traefik dashboard) are gated by the
+  `authentik-forward-auth@authentik` forward-auth middleware (H38) — the
+  internal-equals-trusted assumption is gone.
 - **LoadBalancer IP**: Traefik gets its external IP from MetalLB (typically first available IP from pool)
 - **Namespace**: All IngressRoutes are in the `traefik` namespace, even if routing to services in other namespaces

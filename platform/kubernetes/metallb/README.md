@@ -33,17 +33,19 @@ MetalLB provides LoadBalancer-type Service support for bare-metal Kubernetes clu
                  │ Assigns IP from pool
                  ↓
 ┌──────────────────────────────────────┐
-│        MetalLB Controller            │
-│   (IPAddressPool + L2Advertisement)  │
+│   MetalLB controller + speakers      │
+│   (IPAddressPool + BGPAdvertisement  │
+│    + BGPPeer → UDM, ASN 64512)       │
 └────────────────┬─────────────────────┘
                  │
-                 │ ARP announcements
+                 │ eBGP — advertises each VIP as a /32
                  ↓
 ┌──────────────────────────────────────┐
-│          Local Network               │
-│     10.10.201.5, .70-.90             │
+│      UDM router (BGP peer)           │
+│   ECMP routes to 10.10.201.5,.70-.90 │
 └──────────────────────────────────────┘
 ```
+(Raw ICMP to a VIP fails by design — the VIP is BGP-routed, not ARP-owned by a node. TCP works.)
 
 ## IP Allocation
 
@@ -56,7 +58,7 @@ MetalLB provides LoadBalancer-type Service support for bare-metal Kubernetes clu
 
 ## Files
 
-- `metallb-wind.yaml` - IPAddressPool and L2Advertisement configuration
+- `metallb-wind.yaml` - IPAddressPool + BGPAdvertisement + BGPPeer configuration
 - `kustomization.yaml` - Kustomize configuration for Flux
 
 ## Prerequisites
@@ -68,7 +70,7 @@ helm repo add metallb https://metallb.github.io/metallb
 helm install metallb metallb/metallb -n metallb-system --create-namespace
 ```
 
-This repo only manages the **configuration** (IPAddressPool and L2Advertisement), not the MetalLB installation itself.
+This repo only manages the **configuration** (IPAddressPool + BGPAdvertisement + BGPPeer), not the MetalLB installation itself.
 
 ## Deployment
 
@@ -90,16 +92,17 @@ git add platform/kubernetes/metallb/metallb-wind.yaml
 git commit -m "metallb: expand IP pool to .100"
 git push
 
-# Force Flux to sync immediately (or wait ~10 minutes)
-flux reconcile source git flux-system
-flux reconcile kustomization flux-system
+# Force Flux to sync immediately (no flux CLI on the hosts — CLAUDE.md §3; or wait ~10 min)
+kubectl annotate -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 
 # Verify
 kubectl get ipaddresspool -n metallb-system
-kubectl get l2advertisement -n metallb-system
+kubectl get bgpadvertisement -n metallb-system   # BGP mode — no l2advertisement
+kubectl get bgppeer -n metallb-system
 ```
 
-See [Flux GitOps Overview](../../docs/gitops/flux-overview.md) for more details.
+See [Flux GitOps Overview](../../../docs/setup/gitops/flux-overview.md) for more details.
 
 ### Manual Deployment (Not Recommended)
 
@@ -128,8 +131,8 @@ git add platform/kubernetes/metallb/metallb-wind.yaml
 git commit -m "metallb: add more IPs to pool"
 git push
 
-# Force reconciliation
-flux reconcile kustomization flux-system
+# Force reconciliation (no flux CLI on the hosts — CLAUDE.md §3)
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 ```
 
 ### Reserve Specific IP for a Service
@@ -207,22 +210,27 @@ kubectl logs -n metallb-system -l app.kubernetes.io/component=controller
 
 **Solution**: Ensure IP pool doesn't overlap with DHCP range or static IPs used elsewhere on the network.
 
-### L2Advertisement Not Working
+### BGP session / advertisement not working
 
 **Check**:
 ```bash
-# Verify L2Advertisement exists
-kubectl get l2advertisement -n metallb-system
+# Verify the BGP peer + advertisement objects exist
+kubectl get bgppeer,bgpadvertisement -n metallb-system
 
-# Check speaker logs
+# Speaker logs (BGP session establishment / route advertisement)
 kubectl logs -n metallb-system -l app.kubernetes.io/component=speaker -f
+
+# On the UDM (UI-managed FRR): confirm the eBGP neighbor is Established and
+# the VIP /32s appear as ECMP routes. UDM BGP has no API — it's configured in
+# the UI; durable via the FRR config in git + controller backup. See
+# docs/runbooks/bgp-phase-{a,b,c}.md.
 ```
 
 ## Related Documentation
 
 - [MetalLB Official Docs](https://metallb.universe.tf/)
-- [Flux GitOps Overview](../../docs/gitops/flux-overview.md)
-- [Making Changes to GitOps Apps](../../docs/gitops/making-changes.md)
+- [Flux GitOps Overview](../../../docs/setup/gitops/flux-overview.md)
+- [Making Changes to GitOps Apps](../../../docs/setup/gitops/making-changes.md)
 
 ## Services Using MetalLB
 

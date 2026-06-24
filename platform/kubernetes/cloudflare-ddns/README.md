@@ -73,13 +73,13 @@ data:
 ### 3. Deploy
 
 This module is managed by Flux. Commit changes to git; Flux reconciles
-within ~10 minutes (or force with `flux reconcile`):
+within ~10 minutes (or force it — no flux CLI on the hosts, CLAUDE.md §3):
 
 ```bash
 git add platform/kubernetes/cloudflare-ddns/base/configmap.yaml
 git commit -m "cloudflare-ddns: update DNS records"
 git push
-flux reconcile kustomization flux-system
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 ```
 
 ### 4. Monitor updates

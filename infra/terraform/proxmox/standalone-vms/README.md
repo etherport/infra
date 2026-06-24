@@ -24,6 +24,13 @@ Configuration baseline (applied to every standalone VM by the TF):
   only — `lifecycle.ignore_changes = [watchdog]` prevents subsequent applies
   from re-mutating the device (see "gh-runner self-kill" below)
 
+> **⚠️ The i6300esb hardware watchdog is BLOCKED / has never armed (M91).** The
+> `i6300esb` kernel module is absent from the node kernel (`6.8.0-124-generic` ships
+> only `softdog` + `wdat_wdt`; even `linux-modules-extra` lacks it), so `/dev/watchdog0`
+> never appears and the guest daemon is inert. The device is attached in config but
+> non-functional. **Do NOT `modprobe i6300esb`** (it FATALs the k8s-node-fixes playbook).
+> See CLAUDE.md §5. Verify a kernel module exists before relying on a watchdog device.
+
 Per-service configuration is applied via Ansible playbooks in
 `infra/ansible/playbooks/`:
 

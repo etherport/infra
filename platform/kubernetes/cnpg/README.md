@@ -26,10 +26,10 @@ postgres namespace (Flux managed)
 
 The operator is installed via Flux at
 `clusters/wind/helm-releases/cnpg.yaml` (chart version pinned to the
-`0.22.x` track). To force an upgrade:
+`0.22.x` track). To force an upgrade (no flux CLI on the hosts — CLAUDE.md §3):
 
 ```bash
-flux reconcile helmrelease cnpg -n flux-system
+kubectl annotate -n flux-system helmrelease/cnpg reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 ```
 
 If you ever need to install/upgrade out of band:
@@ -91,7 +91,7 @@ git commit -m "Add CloudNativePG cluster with encrypted credentials"
 git push
 
 # Flux will reconcile automatically, or force sync:
-flux reconcile kustomization flux-system
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 ```
 
 ### 5. Verify Cluster

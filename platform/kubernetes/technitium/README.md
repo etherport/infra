@@ -57,9 +57,9 @@ sops 05-secret.sops.yaml
 ### 2. Deploy via Flux or kubectl
 
 ```bash
-# Via Flux (recommended)
+# Via Flux (recommended) — no flux CLI on the hosts, CLAUDE.md §3
 git add -A && git commit -m "Deploy Technitium" && git push
-flux reconcile kustomization flux-system
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 
 # Or direct apply
 kubectl apply -k platform/kubernetes/technitium/
@@ -329,12 +329,12 @@ The `dns-sync-watcher` deployment syncs records directly to ALL Technitium insta
 
 ## External Monitoring
 
-AWS Route53 health checks monitor critical endpoints from outside the infrastructure:
-- Home Assistant, Grafana, Traefik, Plex, Kopia
-- Alerts via SNS email when endpoints become unreachable
-- Operates independently of homelab DNS/VPN
-
-Configuration: `infra/terraform/aws/external-monitoring/`
+> **Historical:** external uptime checks were previously done with AWS Route53
+> health checks (Home Assistant, Grafana, Traefik, Plex, Kopia → SNS email
+> alerts). **Route53 was deleted 2026-05-27** when DNS migrated to Cloudflare,
+> so this stack no longer exists. External availability now rides on the
+> Cloudflare edge / tunnel; internal endpoint monitoring is handled by
+> Prometheus + blackbox-exporter in-cluster.
 
 ## Files
 

@@ -2,6 +2,19 @@
 
 Kubernetes cluster deployment and management using [Kubespray](https://github.com/kubernetes-sigs/kubespray).
 
+> **⚠️ Critical invariants — read CLAUDE.md §5 before running kubespray:**
+> - **Run kubespray ONLY via `./kubespray.sh`.** A raw `cluster.yml` / `--tags=cilium`
+>   chowns `/opt/cni/bin` to `kube`, which breaks Cilium's `mount-cgroup` on the next
+>   agent restart (`Init:CrashLoopBackOff`, latent). `kubespray.sh` auto-runs
+>   `pre-flight.yml` afterward to restore `root:root`. See
+>   `docs/runbooks/cilium-cni-dir-owner.md`.
+> - **Cilium is Helm-managed** (release `cilium`/kube-system), **not** Flux. Apply Cilium
+>   config changes via `helm upgrade cilium --reuse-values --set …` + `kubectl rollout
+>   restart ds/cilium`, **not** a kubespray run.
+> - **Cilium WireGuard encryption is ON** (pod-to-pod east-west) and **policy enforcement
+>   is ON** (audit mode off). IaC source for these lives in this inventory's group_vars,
+>   but live changes go through Helm/ConfigMap, not a kubespray run. See CLAUDE.md §5.
+
 ## Directory Structure
 
 ```
@@ -25,7 +38,7 @@ kubespray/
 ### Initial Setup (one time)
 
 ```bash
-cd ~/Projects/homelab-infra/infra/kubespray
+cd ~/code/infra/infra/kubespray
 ./setup.sh
 ```
 
@@ -40,7 +53,7 @@ This will:
 Use the wrapper script:
 
 ```bash
-cd ~/Projects/homelab-infra/infra/kubespray
+cd ~/code/infra/infra/kubespray
 
 # Deploy or update cluster
 ./kubespray.sh cluster.yml
@@ -64,7 +77,7 @@ cd ~/Projects/homelab-infra/infra/kubespray
 Or manually:
 
 ```bash
-cd ~/Projects/homelab-infra/infra/kubespray/kubespray
+cd ~/code/infra/infra/kubespray/kubespray
 source venv/bin/activate
 # Inventory is now a single file at the kubespray dir root:
 # infra/kubespray/inventory/inventory.ini  (the wrapper symlinks/passes
@@ -86,6 +99,10 @@ ansible-playbook -i ../inventory/inventory.ini cluster.yml --become
 | k8s-w3 | worker | 10.10.201.55 |
 | k8s-w4 | worker | 10.10.201.56 |
 | k8s-gpu1 | worker (GPU) | 10.10.201.60 |
+
+> **Verify node/IP membership against the live cluster** (`kubectl get nodes -o wide`)
+> rather than trusting this table — it can drift, and other docs (e.g.
+> `platform/kubernetes/technitium/README.md`) may list worker IPs differently.
 
 ## Key Configuration
 

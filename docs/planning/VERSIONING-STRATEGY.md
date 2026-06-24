@@ -1,5 +1,7 @@
 # Container Image Versioning & Release Strategy
 
+> **⚠️ Superseded / not adopted (2026-06-24).** The repo uses the Flux `$imagepolicy` + digest-pin model (see `docs/planning/outstanding-work.md` M64/H30), not semver release tags; `cue-api` is intentionally on `:latest` during dev. Kept as a considered-and-declined ADR.
+
 ## Current State
 
 **What we have now:**

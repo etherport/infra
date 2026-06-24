@@ -5,7 +5,7 @@ Wiki.js is a modern, powerful wiki app built on Node.js.
 ## Architecture
 
 ```
-Internet → AWS ALB → VPN → Traefik (10.10.201.70)
+Internet → Cloudflare Tunnel (cloudflared) → Traefik VIP (10.10.201.70)
                               ↓
                      IngressRoute (wiki.wind.etherport.net)
                               ↓
@@ -15,6 +15,10 @@ Internet → AWS ALB → VPN → Traefik (10.10.201.70)
                               ↓
                      postgres-cluster-rw.postgres:5432
 ```
+
+> The AWS ALB public path was decommissioned 2026-05-27; external access is
+> now via the Cloudflare Tunnel to the Traefik VIP. Wiki.js authentication
+> is **Authentik OIDC** (the homelab SSO IdP).
 
 ## Prerequisites
 
@@ -66,8 +70,8 @@ git add -A
 git commit -m "Add Wiki.js with encrypted database credentials"
 git push
 
-# Flux will reconcile automatically, or force sync:
-flux reconcile kustomization flux-system
+# Flux will reconcile automatically, or force sync (no flux CLI on the hosts — CLAUDE.md §3):
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 ```
 
 ### 4. Verify Deployment
@@ -159,11 +163,12 @@ kubectl get secret -n wikijs wiki-js-db-credentials -o jsonpath='{.data.DB_PASS}
 ### Flux not deploying
 
 ```bash
-# Check Flux status
-flux get kustomization flux-system
+# Check Flux status (no flux CLI on the hosts — CLAUDE.md §3)
+kubectl get kustomizations -n flux-system
 
-# View Flux logs
-flux logs --all-namespaces
+# View Flux controller logs
+kubectl logs -n flux-system deploy/kustomize-controller
+kubectl logs -n flux-system deploy/source-controller
 
 # Check for SOPS decryption errors
 kubectl logs -n flux-system deploy/kustomize-controller | grep -i sops

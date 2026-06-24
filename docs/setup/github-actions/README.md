@@ -4,10 +4,12 @@ This repository uses GitHub Actions for CI/CD automation of container images and
 
 ## Overview
 
+Key workflows (not exhaustive — there are ~20 in `.github/workflows/`; run `ls .github/workflows/` for the full set):
+
 ```
 .github/workflows/
 ├── aws-s3-sync-image.yml       # Container image build for S3 backup
-├── cloudflare-ddns-image.yml      # Container image build for DDNS updater
+├── cloudflare-ddns-image.yml   # Container image build for DDNS updater
 └── terraform-regional-vpn.yml  # Terraform deployment for travel VPN
 ```
 
@@ -53,8 +55,8 @@ The `terraform-regional-vpn.yml` workflow automates temporary travel VPN deploym
 │                                                                              │
 │  2. ENVIRONMENT SETUP                                                        │
 │     ├── Checkout repository                                                  │
-│     ├── Install Terraform 1.14.3                                            │
-│     ├── Configure AWS credentials (via secrets)                             │
+│     ├── Install Terraform 1.15.5                                            │
+│     ├── Configure AWS credentials (GitHub→AWS OIDC, no static keys)         │
 │     ├── Install SOPS binary                                                  │
 │     └── Configure SOPS age key (for secret decryption)                      │
 │                                                                              │
@@ -83,12 +85,14 @@ The `terraform-regional-vpn.yml` workflow automates temporary travel VPN deploym
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Secrets Required
+### AWS auth + Secrets Required
+
+**AWS auth is via GitHub→AWS OIDC (H29), not static keys.** The workflow assumes an
+IAM role via the GitHub OIDC provider — there are no `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY` secrets in the repo. See `infra/terraform/aws/github-oidc/`.
 
 | Secret | Description |
 |--------|-------------|
-| `AWS_ACCESS_KEY_ID` | AWS credentials for terraform-homelab user |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key |
 | `SOPS_AGE_KEY` | Age private key for decrypting SOPS secrets |
 
 ### Manual Dispatch Parameters
@@ -115,7 +119,7 @@ The `terraform-regional-vpn.yml` workflow automates temporary travel VPN deploym
 
 | Aspect | Local | CI (GitHub Actions) |
 |--------|-------|---------------------|
-| AWS Auth | `~/.aws/credentials` profile | Environment variables |
+| AWS Auth | `~/.aws/credentials` profile | GitHub→AWS OIDC role assumption (H29) |
 | SOPS Key | `~/.config/sops/age/keys.txt` | `SOPS_AGE_KEY` secret |
 | Backend Profile | `homelab` | Overridden to empty |
 | Provider Profile | `homelab` | `-var="aws_profile="` |
@@ -156,7 +160,7 @@ Builds the `cloudflare-ddns` container for dynamic DNS updates.
 
 **Image:** `ghcr.io/sparked-diamond/cloudflare-ddns:main`
 
-**Purpose:** Update Route53 DNS records when homelab IP changes
+**Purpose:** Update Cloudflare DNS records when the homelab IP changes (Route53 retired 2026-05-27; DNS is authoritative on Cloudflare)
 
 ## Adding New Workflows
 

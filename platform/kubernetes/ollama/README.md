@@ -14,6 +14,10 @@ A ChatGPT-like interface for interacting with the LLM. Features include:
 - Code syntax highlighting
 - Multiple model support
 
+> **Auth:** Open WebUI (`chat.wind.etherport.net`) is gated by **Authentik OIDC**
+> (the homelab SSO IdP). The raw Ollama API (`ollama.wind.etherport.net`) is
+> left **ungated** by design — it's a machine API, scoped by the UDM firewall.
+
 ### API Access
 
 **Base URL**: https://ollama.wind.etherport.net

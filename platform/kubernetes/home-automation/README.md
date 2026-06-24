@@ -139,11 +139,11 @@ Flux watches the git repository and will:
 
 #### 5. Force Manual Sync (if needed)
 
-To force an immediate sync instead of waiting:
+To force an immediate sync instead of waiting (no flux CLI on the hosts — CLAUDE.md §3):
 
 ```bash
-flux reconcile source git flux-system
-flux reconcile kustomization flux-system
+kubectl annotate -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 
 # Watch the rollout
 kubectl rollout status deployment/home-assistant -n home-automation
@@ -198,7 +198,7 @@ git commit -m "home-automation: add location configuration"
 git push
 
 # 4. Force reconciliation (or wait 1-5 minutes)
-flux reconcile kustomization flux-system
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 
 # 5. Verify pod restart
 kubectl get pods -n home-automation -w
@@ -222,7 +222,7 @@ git commit -m "home-automation: upgrade to 2024.1.0"
 git push
 
 # Force reconciliation
-flux reconcile kustomization flux-system
+kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
 
 # Watch rollout
 kubectl rollout status deployment/home-assistant -n home-automation
@@ -278,8 +278,8 @@ kubectl logs -n home-automation -l app=home-assistant --tail=100 | grep -i error
 **Steps**:
 1. Check Flux reconciliation status:
    ```bash
-   flux get sources git
-   flux get kustomizations
+   kubectl get gitrepositories -n flux-system
+   kubectl get kustomizations -n flux-system
    ```
 
 2. Look for errors in Flux:
@@ -289,8 +289,8 @@ kubectl logs -n home-automation -l app=home-assistant --tail=100 | grep -i error
 
 3. Force reconciliation:
    ```bash
-   flux reconcile source git flux-system
-   flux reconcile kustomization flux-system
+   kubectl annotate -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
+   kubectl annotate -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
    ```
 
 4. Verify new ConfigMap was created:

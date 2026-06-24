@@ -25,7 +25,7 @@ cilium_cni_exclusive: false
 
 Re-run Kubespray:
 ```bash
-cd ~/Projects/homelab-infra/infra/kubespray
+cd ~/code/infra/infra/kubespray
 ./kubespray.sh cluster.yml --tags network
 ```
 

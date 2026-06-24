@@ -1,5 +1,7 @@
 # Terraform Remote State with S3 + DynamoDB
 
+> **⚠️ DynamoDB lock table deleted ~2026-04; state locking is now S3-native (`use_lockfile = true` on the backend). The DynamoDB steps below are historical** and kept for context only — do not create a DynamoDB table. See the "Implementation Details" section at the bottom for the current backend layout.
+
 **Date**: 2025-12-31
 **Context**: Migrating from local Terraform state to remote S3 backend
 **Status**: ✅ Implemented (2025-12-31)
