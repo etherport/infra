@@ -158,7 +158,9 @@ done
 dur="$(( $(date +%s) - START ))"
 # Count attachment files actually on the NAS (FDA-safe under launchd; find on the net vol works
 # because the job's /bin/bash has FDA). Best-effort — used as the attachments item count.
-att_count="$(mini_run_timeout 120 find "${DEST_BASE}/Attachments" -type f 2>/dev/null | wc -l | tr -d ' ')"
+# Count attachment files on the NAS for the metric. Generous timeout — counting ~20k files over
+# SMB can take a while under load; a too-short cap silently undercounts the item metric.
+att_count="$(mini_run_timeout 600 find "${DEST_BASE}/Attachments" -type f 2>/dev/null | wc -l | tr -d ' ')"
 [ -n "${att_count}" ] || att_count=0
 
 # Report DB and ATTACHMENTS as SEPARATE metric groups so the dashboard shows both sync/success
