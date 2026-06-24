@@ -1,9 +1,14 @@
 ---
 # LogQL alert rules for the loki-ruler — Cilium NetworkPolicy observability (H3).
-# Two rules off the same hubble export (job="hubble-audit", verdict AUDIT+DROPPED):
-#   - CiliumNetpolAuditFlow: would-be-drops during a tier's OBSERVATION (audit on)
-#   - CiliumNetpolDropFlow:  real drops to/from an enforced tier (audit off) =
-#     "a channel may need opening" (add to the per-tier CNP allowlist)
+# Three rules off the same hubble export (job="hubble-audit", verdict AUDIT+DROPPED):
+#   - CiliumNetpolAuditFlow:    would-be-drops during a tier's OBSERVATION (audit on)
+#   - CiliumNetpolDropFlow:     real drops to/from an enforced tier from an IN-CLUSTER
+#                               source (audit off) = "a channel may need opening"
+#   - CiliumTraefikIngressDrop: drops on a Traefik PUBLIC entrypoint (:8000/:8443/:8088)
+#                               from ANY source incl. `world` = ingress/VIP reachability
+#                               bug (the 2026-06-23 outage class; CRITICAL). This one
+#                               intentionally does NOT exclude world — those ports are
+#                               meant to accept everyone, so a drop is never scan noise.
 #
 # Cilium runs in policy-audit-mode: traffic a NetworkPolicy WOULD deny is logged
 # as an AUDIT verdict but allowed through. Cilium exports those AUDIT flows to a
@@ -110,3 +115,53 @@ data:
                 Tuples (Grafana Explore, Loki):
                   {job="hubble-audit"} | json | flow_verdict="DROPPED"
                   | line_format "{{`{{.flow_source_namespace}}/{{.flow_source_pod_name}} -> {{.flow_destination_namespace}}/{{.flow_destination_pod_name}}:{{.flow_l4_TCP_destination_port}}`}}"
+
+          # PREVENTIVE GUARD (added after the 2026-06-23 ~16h Traefik-VIP outage):
+          # catch a DROPPED flow to the Traefik ingress tier on a PUBLIC entrypoint
+          # CONTAINER port — :8000 (web, svc :80), :8443 (websecure, svc :443),
+          # :8088 (webhook). These ports MUST accept `world` by design (they ARE the
+          # public ingress), so a DROP here is ALWAYS a policy bug — never legitimate
+          # scan noise — which is why this rule (unlike CiliumNetpolDropFlow above)
+          # deliberately does NOT filter out `world`/empty src_ns. This is exactly the
+          # class that went silent for 16h: the traefik-tier CNP listed the SERVICE
+          # ports (80/443) instead of the CONTAINER ports (8000/8443) that kube-proxy
+          # DNATs to before Cilium evaluates ingress, so every external→VIP flow was
+          # dropped while CiliumNetpolDropFlow ignored it (src=world excluded). The
+          # drops were in Loki the whole time — only the alert was blind. severity is
+          # CRITICAL: the ingress controller being unreachable from off-cluster is a
+          # site-wide external outage. Fix = ensure 13-tier-traefik.yaml allows these
+          # CONTAINER ports from `all` (CLAUDE.md §5; docs/runbooks/networkpolicy-tiers.md).
+          - alert: CiliumTraefikIngressDrop
+            expr: |
+              sum by (dport) (
+                count_over_time(
+                  {job="hubble-audit"}
+                  | json verdict="flow.verdict", dst_ns="flow.destination.namespace", dport="flow.l4.TCP.destination_port"
+                  | __error__=""
+                  | verdict="DROPPED"
+                  | dst_ns="traefik"
+                  | dport=~"8000|8443|8088"
+                  [15m]
+                )
+              ) > 0
+            for: 10m
+            labels:
+              severity: critical
+              component: network
+              source: cilium-hubble
+            annotations:
+              summary: "Traefik ingress DROPPING a PUBLIC entrypoint (:{{ $labels.dport }}) — external/VIP reachability broken"
+              description: |
+                Cilium DROPPED traffic to the traefik tier on container port
+                {{ $labels.dport }} — a PUBLIC entrypoint that MUST accept `world`
+                (:8000 web ← svc :80, :8443 websecure ← svc :443, :8088 webhook).
+                A drop here means the traefik-tier CiliumNetworkPolicy is denying
+                external/LAN clients reaching the Traefik VIP (10.10.201.70) — the
+                2026-06-23 service-vs-container-port outage class (off-cluster apps
+                like the mini lose metric push / log shipping; external sites break).
+                FIX: ensure platform/kubernetes/networkpolicies/13-tier-traefik.yaml
+                allows CONTAINER ports 8000/8443tcp/8443udp/8088 from `all` (NOT the
+                service ports). See CLAUDE.md §5 + docs/runbooks/networkpolicy-tiers.md.
+                Tuples (Grafana Explore, Loki):
+                  {job="hubble-audit"} | json | flow_verdict="DROPPED" | flow_destination_namespace="traefik"
+                  | line_format "{{`{{.flow_source_identity}} -> traefik:{{.flow_l4_TCP_destination_port}}`}}"
