@@ -31,6 +31,7 @@ current state is documented.
 | `cloudflare-provider-v5-migration.md` | M69 CF provider v4→v5 — ✅ applied + verified 2026-06-13 (PR #66). Migration mechanics preserved. | `docs/planning/outstanding-work.md` M69 / Next-up #6 |
 | `gcp-oidc-wif-l21.md` | L21 GCP→Workload Identity Federation — ✅ done 2026-06-13. | `docs/planning/outstanding-work.md` L21 |
 | `udm-audit-2026-05-23.md` | One-shot read-only UDM/UniFi config-vs-docs audit; findings drove M30/M52/M56 (all ✅). 884-line historical snapshot. | `docs/architecture/firewall-zones.md` (live zone state) |
+| `completed-2026-H1.md` | Full detail for ✅-done tracker items (H3/H29–H40, M-tier, L-tier), extracted 2026-06-24 to slim the live tracker. The tracker keeps a one-line ✅ header per item linking here. | `docs/planning/outstanding-work.md` (one-line ✅ headers) |
 
 ## Future archive convention
 
