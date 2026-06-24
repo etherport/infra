@@ -1,0 +1,55 @@
+# M73 — Kyverno guardrail: every container must declare CPU + memory requests.
+# AUDIT-only (validate.failureAction: Audit) → reported via PolicyReports, nothing blocked.
+# failurePolicy: Ignore → a down/slow admission controller fails OPEN (never wedges admission).
+# Flip failureAction → Enforce per-rule once `kubectl get polr -A` is clean.
+# (Division of labour: PSA handles pod-security posture; Kyverno does the guardrails PSA can't —
+#  resource requests, image tags, later image-signature/provenance for H30.)
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-resource-requests
+  annotations:
+    policies.kyverno.io/title: Require Resource Requests
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/description: >-
+      Containers must set resources.requests.cpu and .memory so the scheduler can place
+      them and one workload can't starve its neighbours. Audit-only for now (M73).
+spec:
+  background: true
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: check-container-requests
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              # System + operator namespaces whose pods legitimately omit requests
+              # (managed by their own charts/operators, out of our control).
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - flux-system
+                - kyverno
+                - cilium-secrets
+                - metallb-system
+                - multus-system
+                - gpu-operator-system
+                - gpu-operator
+                - ceph-csi
+                - velero
+      validate:
+        failureAction: Audit
+        message: "Every container must set resources.requests.cpu and resources.requests.memory."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  requests:
+                    memory: "?*"
+                    cpu: "?*"

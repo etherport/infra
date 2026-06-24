@@ -1,0 +1,75 @@
+# M73 — Kyverno guardrail: images must carry an explicit, non-':latest' tag.
+# AUDIT-only + failurePolicy Ignore (see 00-require-resource-requests.yaml header).
+# Pairs with H30 (digest-pinning): a tag is the floor; digest is the goal.
+# cue-api is EXCLUDED — it intentionally floats on :latest during dev (H30/M64).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/title: Disallow Latest Tag
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/description: >-
+      Require an explicit image tag and forbid ':latest' so deploys are reproducible.
+      Audit-only for now (M73). cue-api excluded (intentional :latest during dev).
+spec:
+  background: true
+  webhookConfiguration:
+    failurePolicy: Ignore
+  rules:
+    - name: require-image-tag
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - flux-system
+                - kyverno
+                - gpu-operator-system
+                - gpu-operator
+                - velero
+                - cilium-secrets
+                - multus-system
+                - ceph-csi
+      validate:
+        failureAction: Audit
+        message: "An explicit image tag is required (no untagged images)."
+        pattern:
+          spec:
+            containers:
+              - image: "*:*"
+    - name: disallow-latest-tag
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - flux-system
+                - kyverno
+                - gpu-operator-system
+                - gpu-operator
+                - velero
+                - cilium-secrets
+                - multus-system
+                - ceph-csi
+                - cue   # cue-api intentionally floats on :latest during dev (H30/M64)
+      validate:
+        failureAction: Audit
+        message: "Using a ':latest' image tag is not allowed — pin a version (ideally a digest)."
+        pattern:
+          spec:
+            containers:
+              - image: "!*:latest"

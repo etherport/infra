@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Kyverno ClusterPolicies (M73). The Kyverno ENGINE is a HelmRelease
+# (clusters/wind/helm-releases/kyverno.yaml); these are the policies.
+# All audit-only + failurePolicy Ignore — see README.md.
+resources:
+  - 00-require-resource-requests.yaml
+  - 01-disallow-latest-tag.yaml
