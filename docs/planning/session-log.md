@@ -13,6 +13,36 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-24 (cont. 9) — H30 supply-chain CLOSED (image digest-pinning, staged)
+
+Finished H30. Found two of the "deferred" items already done (the 3 TF workflows use the
+checksum-verified `setup-sops` action; all 111 Actions SHA-pinned via PR #62). The real
+remainder was **image digest-pinning**: added `digestReflectionPolicy: Always` + `interval`
+to **all 13 `ImagePolicy` objects** so Flux image-automation rewrites manifests to
+`tag@sha256:…` (immutable supply chain).
+
+**Staged rollout (owner chose "non-critical first")** — given it rolls the whole Flux fleet:
+1. **Canary** `blackbox-exporter` (`206417b`): validated the full mechanism end-to-end —
+   ImagePolicy resolves the digest (in this Flux build the resolved ref is in the Ready
+   *condition message*, not `.status.latestImage`, which reads empty) → automation commits
+   `prom/blackbox-exporter:v0.28.0@sha256:…` → Flux applies → pod rolls 1/1 clean.
+2. **Wave 1** (non-critical): python-alpine/-slim, busybox, velero-plugin-aws, rclone,
+   open-webui, ollama, wikijs — all digest-pinned + rolled healthy (auto-remediation, velero,
+   open-webui, ollama, wiki-js).
+3. **Wave 2** (sensitive): technitium DNS, cloudflared, home-assistant, plex. technitium STS
+   + cloudflared are **2-replica** → rolled one-at-a-time → **DNS stayed up** (verified
+   `getent grafana.wind.etherport.net → 10.10.201.70` from dns-ns + cue-ns pods) and the
+   tunnel stayed up. HA/Plex took a brief single-pod restart.
+
+**Result:** all 13 upstream images digest-pinned, fleet healthy, nothing broke. **In-house
+images (aws-s3-sync etc.) deliberately left on `:main`** (we build them; CI rebuild on push +
+imagePullPolicy:Always; the tag-mutation threat barely applies) and **cue-api on `:latest`**
+(dev) — bringing them under Flux digest is optional future work, not required for H30.
+**Gotcha for future:** `.status.latestImage` is empty in this image-reflector build — check
+the ImagePolicy's Ready **condition message** for the resolved tag+digest.
+
+---
+
 ## 2026-06-24 (cont. 8) — backup verification false-negative fixed (special-char keys)
 
 **Symptom:** overnight the `backups` share's s3-sync ran FAILED — `homelab_backup_last_run_success{share="backups"}=0`, **9 of 20,813 files "failed verification"** (the run that mirrored yesterday's 20,813-file mini iCloud push incl. 19,951 Messages attachments). The `S3SyncFailed` alert fired; the **AI advisor handled it correctly** — diagnosed once then `Cooldown active … skipping action` (H39 dedup working, no email flood).
