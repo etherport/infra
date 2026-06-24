@@ -107,13 +107,11 @@ spec:
     # cilium's `tmp` volume ("daemonset pod not found in running state in node
     # k8s-cpX" x3). Tolerate the taint -> node-agent on all 8 -> backup clean.
     nodeAgent:
-      # M75 IRSA: the node-agent (Kopia → S3) needs creds too; same projected
-      # token + web-identity env as the server (shares the velero-server SA).
-      extraEnvVars:
-        - name: AWS_ROLE_ARN
-          value: "arn:aws:iam::830881980142:role/wind-irsa-velero"
-        - name: AWS_WEB_IDENTITY_TOKEN_FILE
-          value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
+      # M75 IRSA: the node-agent (Kopia → S3) needs creds too. NB the chart renders
+      # `configuration.extraEnvVars` into the node-agent as well, so the AWS_ROLE_ARN
+      # / AWS_WEB_IDENTITY_TOKEN_FILE env above already apply here — do NOT repeat
+      # them under nodeAgent.extraEnvVars (that double-sets them → Helm patch fails).
+      # Only the projected-token VOLUME is node-agent-scoped, so add that here:
       extraVolumes:
         - name: aws-iam-token
           projected:
