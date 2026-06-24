@@ -173,6 +173,11 @@ spec:
                   value: "arn:aws:iam::830881980142:role/wind-irsa-s3-sync"
                 - name: AWS_WEB_IDENTITY_TOKEN_FILE
                   value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
+                # The pod runs as uid 1000 with HOME=/ (unwritable); the aws CLI v2
+                # web-identity provider caches assumed creds under $HOME/.aws → point
+                # HOME at a writable dir or it fails with "Permission denied: /.aws".
+                - name: HOME
+                  value: "/tmp"
               envFrom:
                 - secretRef:
                     name: approval-hmac          # APPROVAL_HMAC_SECRET (mint approval tokens)

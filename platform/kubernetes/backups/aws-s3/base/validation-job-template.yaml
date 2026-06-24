@@ -95,6 +95,9 @@ spec:
               value: "arn:aws:iam::830881980142:role/wind-irsa-s3-sync"
             - name: AWS_WEB_IDENTITY_TOKEN_FILE
               value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
+            # aws CLI v2 web-identity cache needs a writable $HOME (pod HOME=/).
+            - name: HOME
+              value: "/tmp"
           volumeMounts:
             - name: nfs-src
               mountPath: /src
