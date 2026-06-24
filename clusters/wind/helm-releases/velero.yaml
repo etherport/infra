@@ -67,8 +67,31 @@ spec:
         - provider: aws
           config:
             region: us-west-2
+      # M75 IRSA: server env so the AWS SDK assumes wind-irsa-velero via web identity.
+      extraEnvVars:
+        - name: AWS_ROLE_ARN
+          value: "arn:aws:iam::830881980142:role/wind-irsa-velero"
+        - name: AWS_WEB_IDENTITY_TOKEN_FILE
+          value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
     credentials:
-      existingSecret: cloud-credentials
+      # M75 IRSA: no static-key secret. velero (server + node-agent) uses the AWS
+      # SDK default chain → AssumeRoleWithWebIdentity via the projected SA token +
+      # AWS_ROLE_ARN/AWS_WEB_IDENTITY_TOKEN_FILE (role wind-irsa-velero, trust
+      # system:serviceaccount:velero:velero-server). Both pods share that SA.
+      useSecret: false
+    # Server pod: projected SA token (aud sts.amazonaws.com).
+    extraVolumes:
+      - name: aws-iam-token
+        projected:
+          sources:
+            - serviceAccountToken:
+                audience: sts.amazonaws.com
+                expirationSeconds: 3600
+                path: token
+    extraVolumeMounts:
+      - name: aws-iam-token
+        mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+        readOnly: true
     initContainers:
       - name: velero-plugin-for-aws
         image: velero/velero-plugin-for-aws:v1.13.2
@@ -84,6 +107,25 @@ spec:
     # cilium's `tmp` volume ("daemonset pod not found in running state in node
     # k8s-cpX" x3). Tolerate the taint -> node-agent on all 8 -> backup clean.
     nodeAgent:
+      # M75 IRSA: the node-agent (Kopia → S3) needs creds too; same projected
+      # token + web-identity env as the server (shares the velero-server SA).
+      extraEnvVars:
+        - name: AWS_ROLE_ARN
+          value: "arn:aws:iam::830881980142:role/wind-irsa-velero"
+        - name: AWS_WEB_IDENTITY_TOKEN_FILE
+          value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
+      extraVolumes:
+        - name: aws-iam-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: sts.amazonaws.com
+                  expirationSeconds: 3600
+                  path: token
+      extraVolumeMounts:
+        - name: aws-iam-token
+          mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+          readOnly: true
       # Requests-only (no limits) — see the `resources:` note above (M5).
       resources:
         requests:
