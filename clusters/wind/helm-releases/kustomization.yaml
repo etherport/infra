@@ -13,6 +13,7 @@ resources:
   - tailscale-operator.yaml
   - tailscale-connector.yaml
   - github-actions-runner.yaml
+  - kyverno.yaml          # M73 admission-policy engine (audit-first, no policies yet)
   # Logging (Loki single-binary + Alloy DaemonSet for k8s + syslog)
   - loki.yaml
   - alloy.yaml
