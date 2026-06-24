@@ -9,3 +9,25 @@
 # system_cpu_reserved: 250m
 # system_ephemeral_storage_reserved: 2Gi
 # system_pid_reserved: "1000"
+
+# M75 IRSA — in-cluster AWS workload identity (self-hosted OIDC).
+# The kube-apiserver's --service-account-issuer must be a PUBLIC, TLS-valid URL so
+# AWS STS can fetch the OIDC discovery + JWKS to validate pod projected tokens. We
+# point it at the public S3 bucket that hosts them (infra/terraform/aws/cluster-irsa).
+# These render into apiServer.extraArgs (kubeadm v1beta3). Full design + the live
+# cutover (done 2026-06-24 by hand-editing the static manifests) + this persistence:
+# docs/runbooks/irsa-workload-identity.md.
+#
+# NB v1beta3 extraArgs is a MAP (one value per flag) → it can express only a SINGLE
+# service-account-issuer. The live manifests currently run DUAL issuer (bucket
+# primary + kubernetes.default.svc.cluster.local secondary) so that pre-cutover
+# tokens kept validating during the flip. By the time any kubespray run applies this,
+# all bound SA tokens (1h TTL, refresh ~48m) have long since re-minted with
+# iss=<bucket>, so collapsing to the single bucket issuer here is safe. **api-audiences
+# MUST stay pinned** — it defaults to the first issuer, so changing the issuer without
+# this would 401 every in-cluster token (it keeps cluster.local for existing-aud
+# tokens + adds sts.amazonaws.com for IRSA). The SA signing key (sa.key) is unchanged,
+# so the published JWKS stays valid.
+kube_kubeadm_apiserver_extra_args:
+  service-account-issuer: "https://wind-cluster-oidc-830881980142.s3.us-west-2.amazonaws.com"
+  api-audiences: "https://kubernetes.default.svc.cluster.local,sts.amazonaws.com"
