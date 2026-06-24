@@ -31,14 +31,16 @@ pod (projected SA token, aud=sts.amazonaws.com, iss=<bucket-url>)
   provider + 4 roles + policies applied (via CI). **Verified from the public
   internet**: discovery `issuer` matches the URL, `jwks_uri` resolves, JWKS ==
   cluster keys. Harmless until Phase 3 + 4.
-- ✅ **Phase 3 DONE + e2e-verified (2026-06-24):** all 3 CPs flipped
-  (cp2→cp3→cp1), dual issuer (bucket primary + `cluster.local` secondary) +
-  `--api-audiences` pinned. Proven end-to-end: a `velero-server` SA token
-  (`aud=sts.amazonaws.com`) successfully `AssumeRoleWithWebIdentity` → `wind-irsa-velero`
-  returned short-lived `ASIA…` creds. ⏳ **Persistence in IaC is a follow-up** (see
-  "Persist in IaC" — DRIFT RISK).
-- ⏳ **Phase 4:** pod-identity webhook + per-workload migration + secret deletion +
-  shared-key rotation.
+- ✅ **Phase 3 DONE + e2e-verified (2026-06-24):** flipped all 3 CPs, then
+  **collapsed to a SINGLE bucket issuer** (+ pinned `--api-audiences`) once tokens
+  refreshed — see Phase 3 + Persistence below. IRSA proven end-to-end.
+- ✅ **Phase 4 DONE (2026-06-24):** all in-cluster AWS workloads migrated to IRSA
+  via **manual token projection** (no webhook), static-key secrets deleted. Details
+  + per-workload gotchas below.
+- ✅ **Persistence VALIDATED (2026-06-24):** live apiserver config == kubespray IaC
+  (single bucket issuer), both proven working. Zero drift.
+- ⏳ **Only follow-up:** deactivate/remove the 4 now-orphaned dedicated IAM access
+  keys (their key material lingers in git history + AWS). See "Orphaned IAM keys".
 
 ---
 
@@ -99,39 +101,29 @@ expect a brief kubectl blip while it restarts.
 # in a throwaway pod annotated for a role (or wait for Phase 4 migration to prove it).
 ```
 
-### Persist in IaC (kubespray) — ⚠️ DRIFT RISK, follow-up
+### Persist in IaC (kubespray) — ✅ DONE (live == IaC, validated)
 
-The live change is a **hand-edit of the static pod manifest on each CP — it is NOT
-in git/kubespray.** A kubespray run that regenerates `kube-apiserver.yaml` from the
-kubeadm config will **WIPE it** → apiserver reverts to the single `cluster.local`
-issuer → **all IRSA-migrated workloads lose AWS access.** (Low near-term risk: runs
-are rare/operator-gated and no workload depends on IRSA until Phase 4 — but it MUST
-be persisted as part of completing Phase 4.)
-
-**Blocker:** this kubespray uses the kubeadm **v1beta3** config
-(`roles/kubernetes/control-plane/templates/kubeadm-config.v1beta3.yaml.j2`), whose
-`apiServer.extraArgs` is a **map** (one value per flag) — so it **cannot express two
-`--service-account-issuer` flags**. Options, cleanest last:
-
-1. **Collapse to a SINGLE issuer (recommended, do after Phase 4 + a token-refresh
-   wait).** The secondary `cluster.local` issuer only exists so pre-flip tokens
-   (`iss=cluster.local`) keep validating. Bound SA tokens refresh at ~80% TTL
-   (~48 min). **>1 h after the flip (or after restarting all pods), no token carries
-   `iss=cluster.local`** → safe to drop it. Then the config is single-valued and
-   fits the v1beta3 map via `kube_kubeadm_apiserver_extra_args`:
-   ```yaml
-   kube_kubeadm_apiserver_extra_args:
-     service-account-issuer: https://wind-cluster-oidc-830881980142.s3.us-west-2.amazonaws.com
-     api-audiences: https://kubernetes.default.svc.cluster.local,sts.amazonaws.com
-   ```
-   (`api-audiences` MUST stay pinned — see the gotcha below.) Re-hand-edit the live
-   manifests to single-issuer to match, OR let the next gated kubespray run apply it.
-2. **`kubeadm_patches`** — kubespray can apply kubeadm patch files to the generated
-   manifests; a strategic-merge/JSON6902 patch CAN add a duplicate flag. More moving
-   parts; only needed if dual-issuer must persist long-term.
+The apiserver flag was first a hand-edit of the static pod manifests (not in git),
+which a kubespray run would have reverted. Now persisted:
+[`infra/kubespray/inventory/group_vars/k8s_cluster/kube_control_plane.yml`](../../infra/kubespray/inventory/group_vars/k8s_cluster/kube_control_plane.yml)
+sets `kube_kubeadm_apiserver_extra_args` (renders into `apiServer.extraArgs`):
+```yaml
+kube_kubeadm_apiserver_extra_args:
+  service-account-issuer: "https://wind-cluster-oidc-830881980142.s3.us-west-2.amazonaws.com"
+  api-audiences: "https://kubernetes.default.svc.cluster.local,sts.amazonaws.com"
+```
+kubeadm **v1beta3** `extraArgs` is a map (one value per flag) → it can express only a
+**single** `service-account-issuer`. So the initial DUAL-issuer cutover (bucket
+primary + `cluster.local` secondary, for token-validity safety during the flip) was
+**collapsed to the single bucket issuer** once all bound SA tokens had re-minted with
+`iss=<bucket>` (1 h TTL, refresh ~48 m). **The live manifests were re-edited to single
+issuer to MATCH this IaC and validated in production** (all 3 CPs single issuer, IRSA
+e2e re-confirmed, token auth 403). So live == IaC == single bucket issuer — a future
+gated kubespray run reproduces the working config, no drift.
 
 **Never run kubespray except via `infra/kubespray/kubespray.sh`** (Cilium cni-owner
-landmine).
+landmine). After any kubespray run, confirm the apiserver issuer is the bucket URL
+(not the kubeadm default) and IRSA still assumes a role.
 
 ### ⚠️ Gotcha — pin `--api-audiences` or you break ALL in-cluster auth
 
@@ -144,40 +136,85 @@ cluster-wide. The fix (applied here): **explicitly set**
 alongside the issuer change. Validate per-CP by presenting a `cluster.local`-audience
 token to that node — **403 (RBAC) = authN OK; 401 = broken.**
 
-### Rollback
-
-Restore `/root/kube-apiserver.yaml.pre-irsa` over the manifest on each CP (kubelet
-restarts apiserver back to the single cluster.local issuer). Tokens minted with the
-bucket iss become unvalidatable once the bucket issuer is removed — but those are
-only the IRSA/projected tokens; default in-cluster auth uses cluster.local which is
-restored. Safe.
-
 ---
 
-## Phase 4 — pod-identity webhook + migrate workloads
+## Phase 4 — migrate workloads (manual token projection — ✅ DONE 2026-06-24)
 
-1. **Deploy `amazon-eks-pod-identity-webhook`** (Flux HelmRelease or manifests). It
-   mutates pods whose SA carries `eks.amazonaws.com/role-arn`: injects a projected
-   SA-token volume (aud `sts.amazonaws.com`) + `AWS_ROLE_ARN` +
-   `AWS_WEB_IDENTITY_TOKEN_FILE` env. (Off-EKS works; it's just a mutating webhook.)
-2. **Per workload** (one at a time, verify each before the next):
-   - annotate the SA: `eks.amazonaws.com/role-arn: <role_arns[workload] from TF output>`
-   - drop the static-key env/secret refs:
-     - **velero**: remove `credential` from the BSL + the `cloud-credentials` secret;
-       the AWS plugin uses the SDK default chain (web identity).
-     - **CNPG barman** (postgres + cue): set
-       `barmanObjectStore.s3Credentials.inheritFromIAMRole: true`, drop the secret.
-     - **s3-sync (rclone)**: set `env_auth = true` (SDK/web-identity chain), drop the
-       `*-aws-backup-credentials` secret env.
-     - **ai-advisor / cloudwatch-to-loki**: rely on the SDK default chain; drop the
-       cloudwatch creds secret. (cloudwatch-to-loki uses the `default` SA — annotate
-       it, or give it a dedicated SA first.)
-   - verify the workload still reads/writes S3 / CloudWatch (run the cronjob / a
-     velero backup / a CNPG backup).
-3. **Delete the static-key secrets** once every consumer is migrated + verified.
-4. **Rotate (NOT delete — [[H29]]) the shared `terraform-homelab` key** once nothing
-   in-cluster uses it. (etcd-backup runs on the CP HOSTS, not as a pod — it is NOT an
-   IRSA target; it stays a host credential, tracked under [[M71]].)
+**No pod-identity webhook.** Chosen to avoid a cluster-wide mutating admission
+webhook + its serving cert; instead each workload **manually projects** an SA token
+and sets the web-identity env. (CNPG's operator-managed pods are covered via the
+Cluster CR's `projectedVolumeTemplate` + `env`, which mount at `/projected`.)
+
+**The standard injection** (workloads where you control the pod spec):
+```yaml
+# container env:
+- { name: AWS_ROLE_ARN,                value: "arn:aws:iam::830881980142:role/wind-irsa-<role>" }
+- { name: AWS_WEB_IDENTITY_TOKEN_FILE, value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token" }
+# container volumeMount:
+- { name: aws-iam-token, mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount, readOnly: true }
+# pod volume:
+- name: aws-iam-token
+  projected:
+    sources: [ { serviceAccountToken: { audience: sts.amazonaws.com, expirationSeconds: 3600, path: token } } ]
+```
+
+**Migrated workloads → role** (all verified — backup completed / STS assume / S3 list):
+| Workload (ns) | SA | role | mechanism |
+|---|---|---|---|
+| velero server + node-agent (velero) | velero-server | velero | chart `configuration.extraEnvVars` (→ both pods) + `extraVolumes`/`extraVolumeMounts` + `nodeAgent.extraVolumes/Mounts`; `credentials.useSecret: false` |
+| s3-sync ×7 + approval-server + validation-job + daily-report + unifi-backup (backups) | s3-sync\* / unifi-backup / daily-report | s3-sync | env + projected vol; dropped `aws-backup-credentials` envFrom |
+| CNPG postgres-cluster (postgres) + cue-db (cue) | postgres-cluster / cue-db | barman | Cluster CR `env` + `projectedVolumeTemplate` (token at **`/projected/token`**) + `s3Credentials.inheritFromIAMRole: true` |
+| ai-advisor (auto-remediation) | remediation-controller | cloudwatch-read | deployment env + projected vol; controller `_get_logs_client()` guard now accepts web identity |
+| cloudwatch-to-loki (cloudwatch-to-loki) | cloudwatch-to-loki | cloudwatch-read | cronjob env + projected vol |
+
+Then the static-key secrets were removed (SOPS files + kustomization entries →
+Flux prune; velero `cloud-credentials` + an orphan velero-restored
+`aws-backup-credentials` deleted live). **No static AWS keys remain in etcd.**
+
+### Phase 4 gotchas (all hit + fixed)
+- **velero double-env (Helm `$setElementOrder` UpgradeFailed):** the chart renders
+  `configuration.extraEnvVars` into BOTH server AND node-agent → don't ALSO set
+  `nodeAgent.extraEnvVars` (duplicates the vars). Put env only in
+  `configuration.extraEnvVars`; node-agent needs only its own `extraVolumes/Mounts`.
+- **velero Kopia maintenance STS region:** the repo-maintenance Jobs inherit velero's
+  env and do their OWN `AssumeRoleWithWebIdentity` → need **`AWS_REGION`** or the SDK
+  builds `sts..amazonaws.com` (empty region) → DNS fail. The BSL region config does
+  NOT cover this. Set `AWS_REGION`/`AWS_DEFAULT_REGION` in `configuration.extraEnvVars`.
+- **aws CLI v2 + non-root `$HOME`:** the s3-sync/approval/unifi/daily-report/validation
+  pods run as uid 1000 with HOME=/ (unwritable); the CLI caches assumed creds under
+  `$HOME/.aws` → `Permission denied: '/.aws'`. Set **`HOME=/tmp`**. (boto3 — ai-advisor,
+  cloudwatch-to-loki — and the Go SDK — velero, CNPG — don't disk-cache, unaffected.)
+- **Test as the REAL security context:** a root throwaway pod hides the `$HOME` issue;
+  verify with the workload's actual `runAsUser`.
+
+### Orphaned IAM keys — ⏳ the only remaining cleanup
+The migrated secrets were NOT one shared key — they were **4 distinct dedicated
+per-workload IAM users** (the `AKIA4C5DM33X` prefix is just the account-ID prefix
+shared by every key in account 830881980142). All are now unused in-cluster, but
+their key material lingers in **git history** (the deleted SOPS files) + is still
+**Active in AWS**, so finish the teardown:
+| Access key | IAM user | TF-managed? |
+|---|---|---|
+| `…G2SF43X2` | ai-advisor-readonly | `infra/terraform/aws/ai-advisor-iam` (`aws_iam_access_key.ai_advisor`) |
+| `…ESUYDI7E` | barman-postgres | `infra/terraform/aws/s3` (`aws_iam_access_key.postgres_barman`) |
+| `…L7Y4X5BF` | velero (user TBD) | find the stack/user |
+| `…OVJ3J4H7` | kubernetes-s3-backup (s3-sync) | find the stack/user |
+**Do:** remove the `aws_iam_access_key` resources (+ their `output`s + any SOPS
+render refs) from the owning TF stacks and apply via CI → deletes the keys cleanly.
+For the 2 non-TF users, locate where they're defined first. **NB this is NOT the
+H29 `terraform-homelab` key** (which is shared with the local homelab profile/CI —
+rotate-only, never delete). **etcd-backup runs on the CP HOSTS (systemd), not a pod
+— it is NOT an IRSA target;** it keeps a host credential, tracked under [[M71]].
+
+> **SES SMTP exception:** `alertmanager-smtp-*` + `ai-advisor-smtp` secrets hold
+> AKIA-looking values — those are SES **SMTP usernames** (the SMTP protocol needs a
+> static username/password derived from an IAM key; it can't use web identity). They
+> are correctly out of IRSA scope and stay static.
+
+### Rollback (apiserver issuer)
+Restore `/root/kube-apiserver.yaml.pre-irsa` (or `.pre-collapse`) over the manifest
+on each CP; kubelet restarts the apiserver. (Workloads would then need their secrets
+back — restore the SOPS files from git history.)
 
 ## Maintenance
 

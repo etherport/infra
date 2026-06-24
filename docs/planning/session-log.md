@@ -71,16 +71,41 @@ Started M75 — kill the long-lived static AWS IAM keys in-cluster (self-hosted 
   --audience=sts.amazonaws.com` (now `iss=bucket`, `sub=system:serviceaccount:velero:
   velero-server`) → real `aws sts assume-role-with-web-identity` (no prior creds) →
   `wind-irsa-velero` returned short-lived `ASIA…` creds. The whole chain works.
-- **⚠️ Persistence is the open follow-up (drift risk):** the manifests are hand-edited,
-  NOT in kubespray — a kubespray run would revert them (v1beta3 extraArgs map can't hold
-  two `--service-account-issuer` values). Plan: after Phase 4 + a >1h token-refresh wait,
-  drop the `cluster.local` secondary issuer → single-issuer config fits the v1beta3 map
-  (`kube_kubeadm_apiserver_extra_args`). Low near-term risk (runs are gated; no workload
-  on IRSA until Phase 4). Documented in the runbook + CLAUDE.md.
-- **State:** Phases 1-3 done + verified. **Phase 4 (pod-identity webhook + migrate the
-  ~6 workload groups off the shared static key, verify each, delete secrets, rotate the
-  key) is the remaining large chunk** — naturally incremental, lower per-step risk.
-  Full procedure: `docs/runbooks/irsa-workload-identity.md`.
+- **Phase 4 DONE same session (user: "continue with phase 4 and ensure persistence
+  plan is valid").** Migrated EVERY in-cluster AWS workload to IRSA via **manual token
+  projection (NO webhook** — avoids a cluster-wide mutating admission webhook + cert;
+  CNPG operator pods covered by the Cluster CR's `projectedVolumeTemplate`+`env` →
+  `/projected/token`): velero (server + node-agent), the 7 s3-sync shares +
+  approval-server + validation-job + daily-report + unifi-backup, CNPG postgres +
+  cue-db (`inheritFromIAMRole`), ai-advisor, cloudwatch-to-loki. **Each verified**
+  (velero + both CNPG backups COMPLETED; STS-assume + S3-list for the CLI ones incl. a
+  uid-1000 test; ai-advisor boto3 DescribeLogGroups). **Deleted all static-key secrets**
+  (SOPS removal → Flux prune + 2 live deletes) → **no static AWS keys in etcd**.
+- **Phase 4 gotchas (all hit + fixed):** (1) velero chart renders
+  `configuration.extraEnvVars` into BOTH server AND node-agent → also setting
+  `nodeAgent.extraEnvVars` duplicated the vars → Helm `$setElementOrder` UpgradeFailed
+  + rollback; keep env only in `configuration.extraEnvVars`. (2) velero Kopia
+  **maintenance** Jobs do their OWN AssumeRoleWithWebIdentity → need `AWS_REGION` or
+  the SDK builds `sts..amazonaws.com` (empty region → DNS fail); the BSL region config
+  doesn't cover it. (3) aws CLI v2 in **non-root** pods (uid 1000, HOME=/) caches
+  assumed creds under `$HOME/.aws` → `Permission denied: '/.aws'` → set `HOME=/tmp`
+  (boto3 + Go SDK unaffected). (4) a ROOT throwaway test pod hid #3 — test as the real
+  securityContext. (5) the "13 secrets = one shared key" diagnosis was WRONG: **4
+  distinct dedicated keys** (the `AKIA4C5DM33X` prefix is just the account-ID prefix).
+  SES SMTP secrets legitimately stay static (protocol can't use web identity).
+- **Persistence VALIDATED (`2668cbe`):** added `kube_kubeadm_apiserver_extra_args`
+  (single bucket issuer + pinned api-audiences) to the kubespray inventory, then
+  **collapsed the live apiserver manifests from dual→single issuer to MATCH it**
+  (cp2→cp3→cp1, per-CP 403 validation, IRSA e2e re-confirmed). So **live == IaC ==
+  single bucket issuer, zero drift** — a future gated kubespray run reproduces working
+  IRSA. (Backups of each manifest left on the CPs: `/root/kube-apiserver.yaml.pre-irsa`
+  + `.pre-collapse`.)
+- **State:** M75 COMPLETE bar one hygiene follow-up — deactivate/remove the **4 now-
+  orphaned dedicated IAM keys** (ai-advisor-readonly, barman-postgres [TF-managed in
+  ai-advisor-iam/s3], velero, kubernetes-s3-backup [find stack]) whose material lingers
+  in git history + is Active in AWS; remove via their TF stacks + apply. **NOT the H29
+  terraform-homelab key.** Full detail + per-workload table + gotchas:
+  `docs/runbooks/irsa-workload-identity.md`.
 
 ---
 
