@@ -163,6 +163,14 @@
         # HTTPS admin UIs(443), Proxmox VE web/API(8006). All TCP.
         members: ["22", "443", "8006"]
 
+      - name: Vpn-Admin-Ports
+        # M42: break-glass admin ports for the UDM backup WireGuard tunnel (Vpn zone),
+        # so a future VPN client can fix the cluster/PVE when the primary VPN is down
+        # WITHOUT getting full LAN reach. SSH(22), DNS(53), HTTP/S admin UIs(80/443),
+        # kube-apiserver(6443), Proxmox(8006). All TCP. Widen on the spot in the UI if a
+        # real incident needs more.
+        members: ["22", "53", "80", "443", "6443", "8006"]
+
     # ---- Firewall policies (zone-based v2 API) ----
     # Each policy must specify:
     #   name, action (ALLOW|BLOCK), protocol (udp|tcp|tcp_udp|all|...),
@@ -233,7 +241,7 @@
       # ---- Trusted ingress ----
       - { name: "Internal → Trusted (all)",       action: ALLOW, protocol: all, index: 12070, enabled: true, logging: false, source: { zone_name: Internal },       destination: { zone_name: Trusted } }
       - { name: "Gateway → Trusted (all)",        action: ALLOW, protocol: all, index: 12080, enabled: true, logging: false, source: { zone_name: Gateway },        destination: { zone_name: Trusted } }
-      - { name: "Vpn → Trusted (all)",            action: ALLOW, protocol: all, index: 12090, enabled: true, logging: false, source: { zone_name: Vpn },            destination: { zone_name: Trusted } }
+      - { name: "Vpn → Trusted (admin)",          action: ALLOW, protocol: tcp, index: 12091, enabled: true, logging: true,  source: { zone_name: Vpn },            destination: { zone_name: Trusted, port_group_name: Vpn-Admin-Ports } }
       - { name: "Infrastructure → Trusted (all)", action: ALLOW, protocol: all, index: 12100, enabled: true, logging: false, source: { zone_name: Infrastructure }, destination: { zone_name: Trusted } }
       - name: "IoT → Trusted (DNS)"
         action: ALLOW
@@ -263,7 +271,7 @@
       # ---- Management (contained) ----
       - { name: "Management → External (all)", action: ALLOW, protocol: all, index: 12200, enabled: true, logging: false, create_allow_respond: false, source: { zone_name: Management }, destination: { zone_name: External } }
       - { name: "Management → Gateway (all)",  action: ALLOW, protocol: all, index: 12210, enabled: true, logging: false, create_allow_respond: false, source: { zone_name: Management }, destination: { zone_name: Gateway } }
-      - { name: "Vpn → Management (all)",       action: ALLOW, protocol: all, index: 12240, enabled: true, logging: false, source: { zone_name: Vpn },        destination: { zone_name: Management } }
+      - { name: "Vpn → Management (admin)",     action: ALLOW, protocol: tcp, index: 12241, enabled: true, logging: true,  source: { zone_name: Vpn },        destination: { zone_name: Management, port_group_name: Vpn-Admin-Ports } }
       - { name: "Gateway → Management (all)",   action: ALLOW, protocol: all, index: 12250, enabled: true, logging: false, source: { zone_name: Gateway },    destination: { zone_name: Management } }
       - name: "Management → Trusted (DNS)"
         action: ALLOW
