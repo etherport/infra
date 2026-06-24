@@ -42,19 +42,18 @@ spec:
                   value: "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
                 - name: AWS_REGION
                   value: "us-west-2"
-                - name: AWS_ACCESS_KEY_ID
-                  valueFrom:
-                    secretKeyRef:
-                      name: aws-cloudwatch-creds
-                      key: aws_access_key_id
-                - name: AWS_SECRET_ACCESS_KEY
-                  valueFrom:
-                    secretKeyRef:
-                      name: aws-cloudwatch-creds
-                      key: aws_secret_access_key
+                # M75 IRSA: short-lived creds via AssumeRoleWithWebIdentity (boto3
+                # picks these up from the default chain). No static key in etcd.
+                - name: AWS_ROLE_ARN
+                  value: "arn:aws:iam::830881980142:role/wind-irsa-cloudwatch-read"
+                - name: AWS_WEB_IDENTITY_TOKEN_FILE
+                  value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
               volumeMounts:
                 - name: script
                   mountPath: /scripts
+                - name: aws-iam-token
+                  mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+                  readOnly: true
               resources:
                 requests:
                   memory: "64Mi"
@@ -67,3 +66,11 @@ spec:
               configMap:
                 name: cloudwatch-to-loki-script
                 defaultMode: 0755
+            # M75 IRSA: projected SA token (aud sts.amazonaws.com) for web identity.
+            - name: aws-iam-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      audience: sts.amazonaws.com
+                      expirationSeconds: 3600
+                      path: token
