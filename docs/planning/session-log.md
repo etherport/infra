@@ -37,8 +37,13 @@ re-elected the leader cp1→cp2 (term 68→69).
 0 unhealthy pods, original cp1 kubeconfig works again, reboot-required cleared on all three.
 Patches were userspace (apparmor/snapd/cloud-init/libxml2/qemu-guest-agent) but still
 triggered a (clean) reboot each. Temp kubeconfigs `shred`-deleted after. M101 node-patching
-DONE; only the devbox node_exporter→Prometheus scrape remains (minor). **Future CP patches:
-reuse the per-CP `kubeconfig_path` trick until/unless an HA apiserver VIP is added.**
+DONE. **Future CP patches: reuse the per-CP `kubeconfig_path` trick until/unless an HA
+apiserver VIP is added.**
+
+**Also closed the last M101 residual** (`bb2c32c`): added the devbox `10.10.201.45:9100` to
+the `external-nodes` Prometheus scrape job (`01-external-scrape-config.yaml`, instance=`devbox`).
+Verified `up{instance="devbox"}=1`, no errors. **M101 fully DONE** — only deliberate residual
+is third-party repo (1Password/NodeSource) auto-update.
 
 ---
 
