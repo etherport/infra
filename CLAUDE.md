@@ -21,8 +21,9 @@ and the rules for keeping the project's durable memory current.
    session did, why, and how to resume. Read the latest entries to know where we
    left off. This is the "pick up after a chat-history loss" artifact.
 4. **`docs/README.md`** — index into `docs/{architecture,runbooks,operations,reference,setup,guides,planning}`.
-5. User's Claude Code memory lives outside the repo at
-   `~/.claude/projects/-Users-grahamsmith-code-infra/memory/` (`MEMORY.md` + files).
+5. User's Claude Code memory lives outside the repo, **per-machine**. On the **devbox**
+   (where dev sessions run): `~/.claude/projects/-home-ubuntu-code-infra/memory/`
+   (`MEMORY.md` + files); the mini has its own under `-Users-grahamsmith-code-infra/`.
    It holds operator preferences + cross-session facts. Repo `CLAUDE.md` is the
    in-repo equivalent that any agent (any tool, any machine) can read.
 
@@ -49,7 +50,7 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
 - **Validate before commit:** `kubectl kustomize <dir>` (there is **no standalone
   `kustomize` binary** — use `kubectl kustomize`). For new CRDs, `kubectl apply
   --dry-run=server -f` validates against live CRDs.
-- **No `flux` CLI on the mini.** Trigger reconciles via annotation:
+- **No `flux` CLI on the hosts (mini or devbox).** Trigger reconciles via annotation:
   ```bash
   kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
   kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
@@ -58,6 +59,15 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   Watch `.status.lastAppliedRevision` / `.status.artifact.revision` to confirm.
 - **Terraform** ships via GitHub Actions workflow_dispatch (CI uses GitHub→AWS
   **OIDC**, not static keys — H29; GCP uses **WIF** — L21). See README "How to apply".
+- **Node OS patching:** `infra/ansible/playbooks/k8s-node-patch.yml` (rolling
+  cordon/drain/`apt full-upgrade`/reboot-if-required/uncordon, `serial:1`, force-deletes
+  PDB-blocked single-instance CNPG pods). Its kubectl steps are `delegate_to: localhost`.
+  ⚠️ **There is NO HA API VIP** (`controlPlaneEndpoint` = the single cp1 `10.10.201.50`;
+  workers use local `nginx-proxy`). So to patch a **control-plane** node, point the
+  playbook at a *different* healthy CP: `-l k8s-cpN -e confirm=yes -e
+  kubeconfig_path=<temp kubeconfig → another CP>`. Patch **cp1 LAST** (etcd leader +
+  endpoint); verify etcd quorum (`etcdctl endpoint health --cluster`, `/etc/etcd.env`
+  has the certs) between each. Full technique: session-log 2026-06-24 cont.7.
 - **UDM/UniFi changes:** the `paultyng/unifi` TF provider covers networks/reservations/
   port-forwards; zone-based firewall + DNS live in **`infra/ansible/playbooks/udm-firewall.yml`**
   (drives the internal `/proxy/network/v2/api/...`). **Always `--check --diff` first**
@@ -107,6 +117,14 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
 
 ## 5. Key invariants / gotchas (non-obvious; will bite you)
 
+- **⚠️ Connectivity is gated at FOUR independent layers (post-2026-06 hardening).** When a
+  route/service breaks, or when you add/move one, check ALL of them — a drop at any single
+  layer looks identical from the client: (1) **UDM zone firewall** (custom zones default
+  intra-zone BLOCK; Trusted=201, Management=200); (2) **PVE host firewall** (H37 default-deny
+  — keep its THREE allows: mgmt, Ceph storage-VLAN, IPMI); (3) **Cilium NetworkPolicy tiers**
+  (5 enforced; allow CONTAINER not service ports); (4) **CF Access (edge) + Authentik
+  forward-auth (internal apps)**. Each is detailed below. Tell **timeout** (firewall SYN
+  drop) from **refused** (dead process) to localize fast.
 - **MetalLB is BGP-only, not L2** (M18/M36). Traefik VIP = `10.10.201.70`. Raw ICMP to
   VIPs fails by design; TCP works.
 - **DNS = Technitium split-horizon** at `10.10.201.5` (k8s VIP) + `10.10.201.6` (VM
