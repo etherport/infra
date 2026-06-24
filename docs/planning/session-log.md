@@ -13,6 +13,35 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-24 (cont. 7) — Control-plane OS patch (cp1/cp2/cp3) — completes M101 node patching
+
+Patched the 3 control planes with `infra/ansible/playbooks/k8s-node-patch.yml`, finishing
+the node-patch rollout (workers/GPU were done 06-23). **Key nuance — there is NO HA API
+VIP:** `controlPlaneEndpoint` is the single cp1 `10.10.201.50:6443`, workers reach the API
+via their local kubespray `nginx-proxy` (→ all CPs), and external clients (my kubeconfig,
+the mini) point straight at cp1. etcd runs as a **systemd service** (not static pods; certs
+`/etc/ssl/etcd/ssl/`, `etcdctl` env in `/etc/etcd.env`), 3 members.
+
+**Procedure (safe path without a VIP):** the playbook's kubectl steps are all
+`delegate_to: localhost` (run on the devbox), so I patched each CP with `-l <cp> -e
+kubeconfig_path=<temp kubeconfig pointed at a DIFFERENT healthy CP>`. Order **cp2 → cp3 →
+cp1**, leaving cp1 (etcd leader + endpoint) for last; cp2/cp3 patched via cp1, cp1 via cp2.
+Built temp kubeconfigs by `sed`-swapping the server URL (verified each CP's apiserver cert
+SANs cover all 3 IPs — `/healthz` ok on each). Pre-flight: etcd 3/3 healthy, CP taints
+present (clean drains), only HA/reschedulable pods evictable (cilium-operator/coredns/etc.).
+Between each CP I re-verified **etcd endpoint health + matched raft index** (quorum holds
+with 1 CP down; serial:1 is mandatory for a 3-node CP). On cp1's reboot etcd cleanly
+re-elected the leader cp1→cp2 (term 68→69).
+
+**Result:** all `failed=0`, all CPs Ready on uniform kernel `6.8.0-124`, etcd 3/3 in sync,
+0 unhealthy pods, original cp1 kubeconfig works again, reboot-required cleared on all three.
+Patches were userspace (apparmor/snapd/cloud-init/libxml2/qemu-guest-agent) but still
+triggered a (clean) reboot each. Temp kubeconfigs `shred`-deleted after. M101 node-patching
+DONE; only the devbox node_exporter→Prometheus scrape remains (minor). **Future CP patches:
+reuse the per-CP `kubeconfig_path` trick until/unless an HA apiserver VIP is added.**
+
+---
+
 ## 2026-06-24 (cont. 6) — Cue public access + Web Push; VIP-outage preventive alert; doc review
 
 **Cue public internet access** (`33b368a` `93f76d4` `6e42876`, applied via CI earlier today):
