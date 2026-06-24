@@ -20,6 +20,8 @@ metadata:
 spec:
   imageRepositoryRef:
     name: technitium
+  digestReflectionPolicy: Always  # digest-pin (H30)
+  interval: 1h
   policy:
     semver:
       range: ">=10.0.0"

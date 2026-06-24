@@ -136,6 +136,8 @@ metadata:
 spec:
   imageRepositoryRef:
     name: cloudflared
+  digestReflectionPolicy: Always  # digest-pin (H30)
+  interval: 12h
   filterTags:
     pattern: '^(?P<ts>\d{4}\.\d+\.\d+)$'
     extract: '$ts'

@@ -29,6 +29,8 @@ metadata:
 spec:
   imageRepositoryRef:
     name: plex
+  digestReflectionPolicy: Always  # digest-pin (H30)
+  interval: 1h
   filterTags:
     # Match Plex version format: X.Y.Z.BUILD-HASH (excluding arch-specific tags)
     # Extract as semver prerelease: X.Y.Z-BUILD (e.g., 1.43.0-10492)

@@ -23,6 +23,8 @@ metadata:
 spec:
   imageRepositoryRef:
     name: home-assistant
+  digestReflectionPolicy: Always  # digest-pin (H30)
+  interval: 1h
   policy:
     semver:
       range: ">=2024.0.0"
