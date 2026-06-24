@@ -209,8 +209,8 @@ Restore procedures + RTO/RPO targets:
 | LoadBalancer | MetalLB **BGP** (eBGP→UDM, ECMP), VIP pool 10.10.201.70-90 — L2 mode removed 2026-05-31 (M18/M36, BGP-only) |
 | Ingress | Traefik (10.10.201.70), wildcard cert `*.wind.etherport.net` via cert-manager + TLSStore default |
 | Site-to-site VPN | K8s WireGuard pod primary (VRRP prio 150), `vpn-local` backup (prio 100), shared VIP 10.10.201.20 |
-| AWS VPC | 10.10.100.0/22, peered with future spokes; ALB at `*.wind.etherport.net` (planned drop after CF migration) |
-| Cloudflare Tunnel | `cloudflared` deployment routes `approve.etherport.net` through CF Access (Google SSO) |
+| AWS VPC | 10.10.100.0/22, peered with future spokes. The `*.wind.etherport.net` **ALB was decommissioned 2026-05-27** — public edge is now CF Tunnel + Access. |
+| Cloudflare Tunnel | `cloudflared` routes public hostnames (`approve`, `cue.etherport.net`, …) through CF Access (Google SSO). **Internal** apps are gated by **Authentik** SSO (`auth.wind.etherport.net` — OIDC + a domain forward-auth middleware; H38). See CLAUDE.md §5. |
 | Remote access | Tailscale (operator-managed K8s ingresses + subnet router) |
 
 ## DNS
@@ -221,15 +221,16 @@ Restore procedures + RTO/RPO targets:
 | `aws.etherport.net` private | Deleted 2026-05-27 | Never had real content; private zone removed with route53 module decom |
 | `wind.etherport.net` internal | Technitium (in-cluster pair + dns-fallback + dns-aws) | MetalLB VIP 10.10.201.5 |
 | 3 personal zones (grahamsmith / smithforsb / stopthecastle) | Cloudflare, DNSSEC enabled | Owned by [sparked-diamond/personal-web](https://github.com/sparked-diamond/personal-web) (split out 2026-05-27); SES domain identities + email forwarding recipients live there too. The forwarding Lambda itself stays in this repo. |
-| DDNS writers | ddns-updater Lambda + cloudflare-ddns CronJob | **BROKEN** — both still target the deleted Route53 zone. CronJob suspended; Lambda dormant (no invokers in last hour). Migration to CF API tracked as task #84. |
+| DDNS writers | ddns-updater Lambda + cloudflare-ddns CronJob | ✅ **Migrated to the Cloudflare API** (2026-06). The CronJob writes `wind`/`wan1`/`wan2`/`sip` to the active WAN every minute. See `platform/kubernetes/cloudflare-ddns/README.md`. |
 
 Module docs: `infra/terraform/cloudflare/README.md`. CF Free plan + ALB
 decom + 5 Route53 zones deleted saves ~$27/mo vs pre-2026-05 baseline.
 
 ## Secrets
 
-SOPS + age. One age recipient per workstation; the public keys are
-in `.sops.yaml`. To edit any `*.sops.yaml`:
+SOPS + age. The age **public** keys are in `.sops.yaml`. NB the primary **private**
+key is held by 4 parties (mini disk, **devbox** disk, GH `SOPS_AGE_KEY`, Flux
+`sops-age`) — factor that into rotation blast-radius (H33). To edit any `*.sops.yaml`:
 
 ```bash
 sops <file>     # decrypts to your $EDITOR, re-encrypts on save
@@ -252,8 +253,9 @@ Most changes — push to `main`, Flux reconciles within ~1min. To force:
 ```bash
 kubectl annotate -n flux-system kustomization/flux-system \
   reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
-flux get kustomizations
-flux get helmreleases -A
+# Check status with kubectl — there is NO flux CLI on the hosts (CLAUDE.md §3):
+kubectl get kustomizations -n flux-system
+kubectl get helmreleases -A
 ```
 
 ### Terraform — via workflow dispatch (default)

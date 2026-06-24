@@ -2,13 +2,13 @@
 
 Default-deny + per-tier allowlists for the `wind` cluster. Closes H3 (the largest
 internal-segmentation gap: today Cilium is allow-all, so a compromised pod has
-unrestricted lateral movement). Detailed plan: `docs/planning/hardening-plan-2026-06-10.md` §H3.
+unrestricted lateral movement). Detailed plan: `docs/planning/archive/hardening-plan-2026-06-10.md` §H3.
 
-> ✅ **ENFORCING since 2026-06-22.** Cilium `policy-audit-mode` is now **OFF** — these
-> policies enforce (real drops). Enforced tiers (labeled `netpol.wind/enforced=true`):
-> **`postgres`** (1), **`cue`** (2), **`dns`/Technitium** (3), **`traefik`** (4) — each
-> allowlist built+verified from Hubble/audit data (0 drops post-flip). **All unlabeled
-> namespaces remain allow-all.** Remaining tier: `monitoring`.
+> ✅ **ENFORCING — ALL 5 TARGET TIERS (since 2026-06-23).** Cilium `policy-audit-mode` is
+> **OFF** — these policies enforce (real drops). Enforced tiers (labeled
+> `netpol.wind/enforced=true`): **`postgres`** (1), **`cue`** (2), **`dns`/Technitium** (3),
+> **`traefik`** (4), **`monitoring`** (5) — each allowlist built+verified from Hubble/audit
+> data (0 drops post-flip). **All unlabeled namespaces remain allow-all.** This closes H3.
 >
 > ⚠️ **Audit is a single GLOBAL switch.** To add the NEXT tier you must briefly flip audit
 > back ON, observe + build that namespace's allowlist, then flip OFF again — see "Adding a

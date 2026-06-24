@@ -1,5 +1,7 @@
 # M69 — Cloudflare Terraform provider v4 → v5 migration
 
+> **Status: Archived 2026-06-24.** Work complete; kept as an ADR/historical record. Current state: `docs/planning/outstanding-work.md`.
+
 **Status:** ✅ APPLIED + VERIFIED 2026-06-13. Migrated live headless from the
 mini: `39 imported, 11 benign in-place, 0 destroyed`; post-apply `terraform plan`
 = **No changes**. cloudflared 0 restarts (tunnel-secret `ignore_changes` held);

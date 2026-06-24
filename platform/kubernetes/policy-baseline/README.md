@@ -1,5 +1,13 @@
 # Policy Baseline — Phase 1 (audit/warn only)
 
+> **Update 2026-06-24:** This directory is still just Phase 1 (PSS audit/warn + LimitRanges).
+> But **Phase 2 — enforced NetworkPolicies — is DONE**, implemented separately in
+> [`../networkpolicies/`](../networkpolicies/) (Cilium CNPs; **all 5 tiers ENFORCING**:
+> postgres, **cue**, dns, traefik, monitoring — note: cue, not the "HA" originally listed
+> below). See [`../networkpolicies/README.md`](../networkpolicies/README.md) +
+> [`docs/runbooks/networkpolicy-tiers.md`](../../../docs/runbooks/networkpolicy-tiers.md).
+> The "Phase 2 … needs a Hubble observation window first" text below is historical.
+
 Cluster hardening primitives that are **observation-only** and impose no
 runtime risk: namespace labels (Pod Security Standards in audit + warn
 mode, not enforce) and LimitRanges (defaults for pods without explicit

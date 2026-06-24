@@ -27,7 +27,8 @@ docs/
 │   └── secrets/       # SOPS/1Password setup
 ├── reference/         # Quick reference docs
 ├── guides/            # Step-by-step tutorials
-└── planning/          # Temporary planning docs (delete when done)
+├── operations/        # Workstation/ops-host setup
+└── planning/          # Live trackers (outstanding-work, session-log) + archive/ of completed plans
 ```
 
 ---
@@ -59,6 +60,15 @@ docs/
 | [etcd-backup-restore.md](runbooks/etcd-backup-restore.md) | etcd snapshot + restore (cluster-rebuild path) |
 | [image-pinning-policy.md](runbooks/image-pinning-policy.md) | Container image pinning + Renovate cadence |
 | [dependency-update-cadence.md](runbooks/dependency-update-cadence.md) | Renovate/Helm-release update cadence |
+| [loki-log-aggregation.md](runbooks/loki-log-aggregation.md) | Loki + Alloy log-pipeline topology |
+| [alertmanager-ses-quota.md](runbooks/alertmanager-ses-quota.md) | Alertmanager SES send-quota incident + mitigation |
+| [alexa-latency-optimization.md](runbooks/alexa-latency-optimization.md) | Alexa → Home Assistant latency tuning |
+| [instance-migration.md](runbooks/instance-migration.md) | Planned VM/instance migration procedure |
+| [gpu-secureboot.md](runbooks/gpu-secureboot.md) | Disable Secure Boot on the GPU VM (120) for the NVIDIA driver |
+| [vm-watchdog.md](runbooks/vm-watchdog.md) | Proxmox VM hardware watchdog — ⚠️ **BLOCKED** (kernel module absent, M91) |
+| [twilio-talk.md](runbooks/twilio-talk.md) / [unifi-talk.md](runbooks/unifi-talk.md) | UniFi Talk + Twilio SIP phone system (two overlapping docs — merge candidate) |
+| [proxmox-ha-expansion.md](runbooks/proxmox-ha-expansion.md) | Forward-looking multi-node Proxmox HA design (not a runnable procedure) |
+| [alerts/](runbooks/alerts/) | Per-alert response runbooks (one per Prometheus alert) |
 | [auto-remediation/](runbooks/auto-remediation/) | Automated issue resolution system (legacy rule-based) |
 | **AI advisor (M41 / M45)** — ⚠️ system is **LIVE** (advisory + approve-via-email active); the per-phase *enable* runbooks below are **archived** because the one-time enablement is done, not because the feature is retired | |
 | [ai-advisor-phase1-enable.md](runbooks/archive/ai-advisor-phase1-enable.md) | Enable advisory-only diagnosis email path |
@@ -73,7 +83,7 @@ docs/
 
 | Document | Description |
 |----------|-------------|
-| [terminal-setup.md](operations/terminal-setup.md) | Terminal setup & disaster recovery for workstations |
+| [terminal-setup.md](operations/terminal-setup.md) | macOS workstation terminal setup & recovery (note: the **devbox** is the primary ops/session host since 2026-06-18; this is for the occasional Mac admin workstation) |
 
 ## Architecture
 
@@ -101,7 +111,14 @@ docs/
 | Document | Description |
 |----------|-------------|
 | [proxmox-k8s-vms.md](setup/terraform/proxmox-k8s-vms.md) | Proxmox VM provisioning |
-| [remote-state-backend.md](setup/terraform/remote-state-backend.md) | Terraform state in S3 |
+| [remote-state-backend.md](setup/terraform/remote-state-backend.md) | Terraform state in S3 (⚠️ body still describes the deleted DynamoDB lock table; locking is now S3-native `use_lockfile=true`) |
+| [aws-security-best-practices.md](setup/terraform/aws-security-best-practices.md) | TF AWS credential security practices |
+
+### CI/CD & Hosts
+| Document | Description |
+|----------|-------------|
+| [github-actions/README.md](setup/github-actions/README.md) | CI/CD workflows (⚠️ partly stale — CI now uses GitHub→AWS **OIDC**, not static keys) |
+| [headless-ops-host.md](setup/headless-ops-host.md) | Headless ops/RC host provisioning (devbox `10.10.201.45` is the live session host since 2026-06-18; mini secondary) |
 
 ### GitOps
 | Document | Description |
@@ -133,6 +150,7 @@ docs/
 
 | Document | Description |
 |----------|-------------|
+| [vpn-split-tunnel.md](guides/vpn-split-tunnel.md) | NordVPN + Tailscale split-tunnel setup |
 | [localtuya/](guides/localtuya/) | LocalTuya setup for IoT devices |
 
 ## Planning
@@ -150,7 +168,7 @@ captured yet.
 | [ai-advisor-phases-2-3-scope.md](planning/archive/ai-advisor-phases-2-3-scope.md) | M41 Phase 2/3 implementation scope |
 | [firewall-zones-future-state-2026-05-29-completed.md](planning/archive/firewall-zones-future-state-2026-05-29-completed.md) | Proposed UDM zone design (M30) — ✅ implemented; archived. Live state: [architecture/firewall-zones.md](architecture/firewall-zones.md) |
 | [hardcoded-ephemeral-ip-audit-2026-05-23.md](planning/archive/hardcoded-ephemeral-ip-audit-2026-05-23.md) | EIP / ephemeral-IP audit |
-| [udm-audit-2026-05-23.md](planning/udm-audit-2026-05-23.md) | UDM / UniFi config audit (M25) |
+| [udm-audit-2026-05-23.md](planning/archive/udm-audit-2026-05-23.md) | UDM / UniFi config audit (M25) — ✅ archived 2026-06-24; live state in [architecture/firewall-zones.md](architecture/firewall-zones.md) |
 | [udm-config-drift-2026-05-17.md](planning/archive/udm-config-drift-2026-05-17.md) | UDM config drift snapshot |
 | [ubiquiti-config-as-code-2026-05-16.md](planning/archive/ubiquiti-config-as-code-2026-05-16.md) | UniFi config-as-code design (terraform-unifi) |
 | [VERSIONING-STRATEGY.md](planning/VERSIONING-STRATEGY.md) | Container image versioning approach |
@@ -166,9 +184,9 @@ context only) live in [docs/planning/archive/](planning/archive/).
 Infrastructure layer:
 ├── Proxmox (Terraform)               VM provisioning + SDN bridges
 ├── Kubernetes (Kubespray)            Container orchestration (Cilium CNI + Multus)
-├── AWS (Terraform)                   VPC, EC2 (vpn-aws/dns-aws), ALB, Route53, SES, Lambdas
+├── AWS (Terraform)                   VPC, EC2 (vpn-aws/dns-aws), SES, Lambdas (ALB + Route53 decommissioned 2026-05-27)
 ├── UniFi (Terraform — terraform-unifi) Networks/VLANs/routes/reservations/port-forwards
-└── Cloudflare (Terraform)            etherport.net zone (NS-cutover pending), Tunnel, Access
+└── Cloudflare (Terraform)            etherport.net zone (authoritative since 2026-05-25), Tunnel, Access
 
 Configuration layer:
 ├── Ansible                  Non-K8s host config (PVE, standalone VMs, UDM)
@@ -206,8 +224,8 @@ Data layer:
 └── SOPS + age               Secret encryption (per-workstation age key)
 
 Edge / public access:
-├── Traefik (10.10.201.70)   Wildcard cert via cert-manager TLSStore
-├── AWS ALB                  Public *.wind.etherport.net (planned drop after CF migration)
-├── Cloudflare Tunnel        cloudflared deploy → CF Access → approve.etherport.net
+├── Traefik (10.10.201.70)   Wildcard cert via cert-manager TLSStore; internal apps gated by Authentik SSO (H38)
+├── Cloudflare Tunnel        cloudflared → CF Access (Google SSO) → approve / cue.etherport.net
+│                            (AWS ALB at *.wind.etherport.net was DECOMMISSIONED 2026-05-27)
 └── Tailscale operator       Per-service ingresses + subnet router for tailnet-only access
 ```

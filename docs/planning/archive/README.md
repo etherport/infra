@@ -26,6 +26,11 @@ current state is documented.
 | `K8S-W3-DEPLOYMENT-PLAN.md` | Pre-existing — completed deployment. | n/a |
 | `proxmox-sdn-implementation-2026-05-18.md` | PRs 1-6 all shipped 2026-05-18 to 2026-05-22 (#19 in canonical, ✅). | `docs/planning/outstanding-work.md` H26 + commit history |
 | `TODO-configmap-migration-2026-05-22.md` | Migration described already implemented; per-share + global excludes wired via `configMapGenerator` in `platform/kubernetes/backups/aws-s3/{base,shares/*}`. Verified via kubectl kustomize on 2026-05-22. M3 in canonical. | Each share's `kustomization.yaml` + `excludes-share.txt`; `base/excludes-global.txt` |
+| `hardening-plan-2026-06-10.md` | Detailed exec plans for H3 + H29–H34 — all ✅ done. ADR record of how the HIGH items were planned. | `docs/planning/outstanding-work.md` H3, H29–H34 |
+| `aws-iam-review-2026-06-11.md` | H31 `claude-admin` redesign + IAM audit — applied (H31 ✅), audit done (M97 ✅). Apply-bundle/audit-script retain reference value. | `docs/planning/outstanding-work.md` H31, M97 |
+| `cloudflare-provider-v5-migration.md` | M69 CF provider v4→v5 — ✅ applied + verified 2026-06-13 (PR #66). Migration mechanics preserved. | `docs/planning/outstanding-work.md` M69 / Next-up #6 |
+| `gcp-oidc-wif-l21.md` | L21 GCP→Workload Identity Federation — ✅ done 2026-06-13. | `docs/planning/outstanding-work.md` L21 |
+| `udm-audit-2026-05-23.md` | One-shot read-only UDM/UniFi config-vs-docs audit; findings drove M30/M52/M56 (all ✅). 884-line historical snapshot. | `docs/architecture/firewall-zones.md` (live zone state) |
 
 ## Future archive convention
 

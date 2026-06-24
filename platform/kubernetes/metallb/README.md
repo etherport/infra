@@ -1,6 +1,16 @@
 # MetalLB Load Balancer Configuration
 
-MetalLB configuration for bare-metal Kubernetes LoadBalancer services using Layer 2 mode.
+> ⚠️ **MODE = BGP, not Layer 2 (since 2026-05-31; M18/M36).** MetalLB peers with the UDM
+> via **eBGP** (`BGPPeer` UDM `10.10.201.1`, ASN 64512) and advertises the VIP /32s via
+> `BGPAdvertisement`; the old `L2Advertisement` was **removed**. **Sections below that
+> describe Layer-2/ARP mode (and the "L2Advertisement Not Working" troubleshooting) are
+> HISTORICAL — they no longer reflect reality.** Consequence: **raw ICMP to a VIP fails by
+> design** (the VIP isn't ARP-owned by a node); TCP works. Authoritative detail: the live
+> manifest in this directory + `docs/runbooks/bgp-phase-{a,b,c}.md`. (UDM BGP is UI-managed
+> — no API — so it's durable via the FRR config in git + controller backup.)
+
+MetalLB configuration for bare-metal Kubernetes LoadBalancer services using **BGP mode**
+(eBGP peering with the UDM; see the banner above).
 
 **Deployment Method**: This configuration is managed via **Flux GitOps**. Changes are deployed automatically from git commits.
 
@@ -9,7 +19,7 @@ MetalLB configuration for bare-metal Kubernetes LoadBalancer services using Laye
 MetalLB provides LoadBalancer-type Service support for bare-metal Kubernetes clusters. This configuration defines:
 
 - **IP Address Pool**: 10.10.201.5/32 and 10.10.201.70-10.10.201.90
-- **Mode**: Layer 2 (ARP-based)
+- **Mode**: **BGP** (eBGP peer = UDM `10.10.201.1` ASN 64512; VIP /32s via `BGPAdvertisement`)
 - **Namespace**: `metallb-system` (MetalLB operator installed via Helm separately)
 
 ## Architecture

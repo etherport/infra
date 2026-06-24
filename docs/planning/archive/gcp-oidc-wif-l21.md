@@ -1,5 +1,7 @@
 # L21 — GCP Terraform auth → Workload Identity Federation (no static key)
 
+> **Status: Archived 2026-06-24.** Work complete; kept as an ADR/historical record. Current state: `docs/planning/outstanding-work.md`.
+
 **Status:** ✅ DONE 2026-06-13. `infra/terraform/google` is now live via
 GitHub→GCP Workload Identity Federation — NO static key (mirrors H29). CI
 dispatch plan = "No changes. Your infrastructure matches the configuration."

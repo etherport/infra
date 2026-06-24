@@ -1,5 +1,7 @@
 # AWS IAM review + `claude-admin` redesign — 2026-06-11
 
+> **Status: Archived 2026-06-24.** Work complete; kept as an ADR/historical record. Current state: `docs/planning/outstanding-work.md`.
+
 Covers **H31** and the broader "scope all AWS users correctly" ask. The IaC half
 (policy files) is done in this commit; the **apply + full audit are gated on
 admin/`claude-admin` credentials** (the mini's `terraform-homelab` profile can

@@ -1,6 +1,6 @@
 # Firewall Zones and Policy
 
-This document describes the **live** zone-based firewall configuration on the UDM Pro ("Windroute"), baseline sourced from the read-only audit at `docs/planning/udm-audit-2026-05-23.md` (Part 1), updated 2026-05-28 to reflect the M30 zone-migration **Phase 1** (VLAN 212 → Infrastructure).
+This document describes the **live** zone-based firewall configuration on the UDM Pro ("Windroute"), baseline sourced from the read-only audit at `docs/planning/archive/udm-audit-2026-05-23.md` (Part 1), updated 2026-05-28 to reflect the M30 zone-migration **Phase 1** (VLAN 212 → Infrastructure).
 
 > **Controller version:** UniFi Network 9.4.x on UniFi OS 5.1.12. The v10 Zone-Based Firewall migration (`ZONE_BASED_FIREWALL`) completed 2024-12-22; the legacy `rest/firewallrule` endpoint is empty.
 
@@ -411,7 +411,7 @@ ping 10.10.202.5       # Client
 
 ## References
 
-- `docs/planning/udm-audit-2026-05-23.md` — read-only audit that drives this doc (Part 1)
+- `docs/planning/archive/udm-audit-2026-05-23.md` — read-only audit that drives this doc (Part 1)
 - `docs/planning/archive/firewall-zones-future-state-2026-05-29-completed.md` — the proposed multi-zone migration (now ✅ implemented + archived; **this** doc is the live state)
 - `docs/planning/outstanding-work.md` — M30 (reconcile zone arch), M42 (VPN cleanup)
 - `/tmp/unifi-state/` — live state dump from `scripts/unifi/dump-state.sh` (regenerate to refresh)
