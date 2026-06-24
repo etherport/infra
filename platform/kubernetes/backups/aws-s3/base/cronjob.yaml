@@ -160,9 +160,20 @@ spec:
                   value: "aws-s3-sync"
                 - name: DEBUG_PUSHGATEWAY
                   value: "false"
+
+                # M75 IRSA: short-lived creds via AssumeRoleWithWebIdentity (aws CLI
+                # v2 picks these up from the default chain). Replaces the static key
+                # that came from the aws-backup-credentials secret (removed from
+                # envFrom below). AWS_ACCOUNT_ID/AWS_REGION are set explicitly above,
+                # so dropping that secret is safe; S3_BATCH_ROLE_ARN is only needed
+                # when WAIT_FOR_BATCH=true (it's false). Role wind-irsa-s3-sync; trust
+                # covers system:serviceaccount:backups:s3-sync-* (+ unifi-backup,
+                # daily-report) — the per-share kustomize namePrefix renames this SA.
+                - name: AWS_ROLE_ARN
+                  value: "arn:aws:iam::830881980142:role/wind-irsa-s3-sync"
+                - name: AWS_WEB_IDENTITY_TOKEN_FILE
+                  value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
               envFrom:
-                - secretRef:
-                    name: aws-backup-credentials
                 - secretRef:
                     name: approval-hmac          # APPROVAL_HMAC_SECRET (mint approval tokens)
                 - configMapRef:
@@ -173,6 +184,9 @@ spec:
                   readOnly: true
                 - name: work
                   mountPath: /work
+                - name: aws-iam-token
+                  mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+                  readOnly: true
           volumes:
             # NFS will be patched per share
             - name: nfs-src
@@ -181,3 +195,11 @@ spec:
                 path: /var/nfs/shared/REPLACE_ME
             - name: work
               emptyDir: {}
+            # M75 IRSA: projected SA token (aud sts.amazonaws.com) for web identity.
+            - name: aws-iam-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      audience: sts.amazonaws.com
+                      expirationSeconds: 3600
+                      path: token

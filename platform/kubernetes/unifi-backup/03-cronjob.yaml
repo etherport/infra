@@ -42,16 +42,24 @@ spec:
                   value: "infra.wind.etherport.net"
                 - name: PUSHGATEWAY_URL
                   value: "http://pushgateway.monitoring.svc.cluster.local:9091"
-              envFrom:
-                # AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY for s3 cp
-                - secretRef:
-                    name: aws-backup-credentials
+                # M75 IRSA: short-lived creds for `aws s3 cp` via web identity
+                # (replaces the aws-backup-credentials static key). The
+                # alpine/k8s image's aws CLI v2 uses the SDK default chain.
+                - name: AWS_REGION
+                  value: "us-west-2"
+                - name: AWS_ROLE_ARN
+                  value: "arn:aws:iam::830881980142:role/wind-irsa-s3-sync"
+                - name: AWS_WEB_IDENTITY_TOKEN_FILE
+                  value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
               volumeMounts:
                 - name: ssh-key
                   mountPath: /ssh
                   readOnly: true
                 - name: script
                   mountPath: /config
+                  readOnly: true
+                - name: aws-iam-token
+                  mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
                   readOnly: true
               resources:
                 requests:
@@ -68,3 +76,11 @@ spec:
               configMap:
                 name: unifi-backup-script
                 defaultMode: 0755
+            # M75 IRSA: projected SA token (aud sts.amazonaws.com) for web identity.
+            - name: aws-iam-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      audience: sts.amazonaws.com
+                      expirationSeconds: 3600
+                      path: token

@@ -53,10 +53,26 @@ spec:
                 # AWS region for S3 operations
                 - name: AWS_REGION
                   value: "us-west-2"
+                # M75 IRSA — short-lived creds via web identity (replaces the
+                # aws-backup-credentials static key, removed from envFrom below).
+                - name: AWS_ROLE_ARN
+                  value: "arn:aws:iam::830881980142:role/wind-irsa-s3-sync"
+                - name: AWS_WEB_IDENTITY_TOKEN_FILE
+                  value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
               envFrom:
                 # Email configuration (EMAIL_FROM, EMAIL_TO, etc.)
                 - configMapRef:
                     name: aws-s3-sync-email
-                # AWS credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
-                - secretRef:
-                    name: aws-backup-credentials
+              volumeMounts:
+                - name: aws-iam-token
+                  mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+                  readOnly: true
+          volumes:
+            # M75 IRSA: projected SA token (aud sts.amazonaws.com) for web identity.
+            - name: aws-iam-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      audience: sts.amazonaws.com
+                      expirationSeconds: 3600
+                      path: token
