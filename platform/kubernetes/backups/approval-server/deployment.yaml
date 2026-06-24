@@ -64,13 +64,23 @@ spec:
               value: "false"
             - name: APPROVAL_ALLOWED_EMAILS
               value: ""
+            # M75 IRSA — short-lived creds via web identity (replaces the
+            # aws-backup-credentials static key). AWS_ACCOUNT_ID was provided by
+            # that secret (used as EXPECTED_BUCKET_OWNER) — set it explicitly now.
+            - name: AWS_ACCOUNT_ID
+              value: "830881980142"
+            - name: AWS_ROLE_ARN
+              value: "arn:aws:iam::830881980142:role/wind-irsa-s3-sync"
+            - name: AWS_WEB_IDENTITY_TOKEN_FILE
+              value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
           envFrom:
-            # AWS keys + AWS_ACCOUNT_ID (used as EXPECTED_BUCKET_OWNER)
-            - secretRef:
-                name: aws-backup-credentials
             # APPROVAL_HMAC_SECRET — shared with the sync job that mints tokens
             - secretRef:
                 name: approval-hmac
+          volumeMounts:
+            - name: aws-iam-token
+              mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+              readOnly: true
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -96,3 +106,12 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "500m"
+      volumes:
+        # M75 IRSA: projected SA token (aud sts.amazonaws.com) for web identity.
+        - name: aws-iam-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: sts.amazonaws.com
+                  expirationSeconds: 3600
+                  path: token

@@ -89,17 +89,30 @@ spec:
               value: ""
             - name: AWS_ACCOUNT_ID
               value: "830881980142"
-
-          envFrom:
-            - secretRef:
-                name: aws-backup-credentials
+            # M75 IRSA — short-lived creds via web identity (replaces the
+            # aws-backup-credentials static key). aws CLI v2 uses the default chain.
+            - name: AWS_ROLE_ARN
+              value: "arn:aws:iam::830881980142:role/wind-irsa-s3-sync"
+            - name: AWS_WEB_IDENTITY_TOKEN_FILE
+              value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
           volumeMounts:
             - name: nfs-src
               mountPath: /src
               readOnly: true
             - name: work
               mountPath: /tmp
+            - name: aws-iam-token
+              mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+              readOnly: true
       volumes:
+        # M75 IRSA: projected SA token (aud sts.amazonaws.com) for web identity.
+        - name: aws-iam-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: sts.amazonaws.com
+                  expirationSeconds: 3600
+                  path: token
         - name: nfs-src
           nfs:
             server: sequoia.wind.etherport.net

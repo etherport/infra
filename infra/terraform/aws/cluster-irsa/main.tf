@@ -61,7 +61,9 @@ locals {
     # archive-test / infra), kept as the single source of truth.
     s3-sync = {
       subs = [
-        "system:serviceaccount:backups:s3-sync-*",
+        # Matches the bare `s3-sync` SA (approval-server + validation jobs) AND the
+        # per-share `s3-sync-<share>-s3-sync` SAs (kustomize namePrefix).
+        "system:serviceaccount:backups:s3-sync*",
         "system:serviceaccount:backups:unifi-backup",
         "system:serviceaccount:backups:daily-report",
       ]
