@@ -68,11 +68,19 @@ spec:
           config:
             region: us-west-2
       # M75 IRSA: server env so the AWS SDK assumes wind-irsa-velero via web identity.
+      # AWS_REGION is REQUIRED — the Kopia repo-maintenance jobs (which inherit these
+      # env vars) build a REGIONAL STS endpoint for AssumeRoleWithWebIdentity; without
+      # a region it becomes "sts..amazonaws.com" (empty) → DNS failure → maintenance
+      # fails. The BSL region config covers S3 but not the maintenance job's STS call.
       extraEnvVars:
         - name: AWS_ROLE_ARN
           value: "arn:aws:iam::830881980142:role/wind-irsa-velero"
         - name: AWS_WEB_IDENTITY_TOKEN_FILE
           value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
+        - name: AWS_REGION
+          value: "us-west-2"
+        - name: AWS_DEFAULT_REGION
+          value: "us-west-2"
     credentials:
       # M75 IRSA: no static-key secret. velero (server + node-agent) uses the AWS
       # SDK default chain → AssumeRoleWithWebIdentity via the projected SA token +
