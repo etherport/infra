@@ -135,8 +135,9 @@ locals {
 # ---------------------------------------------------------------------------
 resource "aws_s3_bucket" "oidc" {
   bucket = local.oidc_bucket
+  # NB: S3 bucket tag VALUES are char-restricted — no parens/commas/em-dash/tilde.
   tags = {
-    Name    = "cluster OIDC discovery (IRSA)"
+    Name    = "cluster OIDC discovery"
     Purpose = "irsa-oidc-discovery"
   }
 }
