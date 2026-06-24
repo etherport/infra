@@ -19,6 +19,8 @@ metadata:
 spec:
   imageRepositoryRef:
     name: python-alpine
+  digestReflectionPolicy: Always  # digest-pin (H30)
+  interval: 24h
   filterTags:
     pattern: '^3\.(?P<minor>\d+)-alpine$'
     extract: '$minor'
@@ -44,6 +46,8 @@ metadata:
 spec:
   imageRepositoryRef:
     name: python-slim
+  digestReflectionPolicy: Always  # digest-pin (H30)
+  interval: 24h
   filterTags:
     pattern: '^3\.(?P<minor>\d+)-slim$'
     extract: '$minor'
@@ -76,6 +80,8 @@ metadata:
 spec:
   imageRepositoryRef:
     name: busybox
+  digestReflectionPolicy: Always  # digest-pin (H30)
+  interval: 24h
   filterTags:
     pattern: '^1\.(?P<minor>\d+)\.(?P<patch>\d+)$'
     extract: '$minor.$patch'
@@ -104,6 +110,8 @@ metadata:
 spec:
   imageRepositoryRef:
     name: velero-plugin-aws
+  digestReflectionPolicy: Always  # digest-pin (H30)
+  interval: 12h
   policy:
     semver:
       range: ">=1.0.0"

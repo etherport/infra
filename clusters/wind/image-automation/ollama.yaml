@@ -21,6 +21,8 @@ metadata:
 spec:
   imageRepositoryRef:
     name: ollama
+  digestReflectionPolicy: Always  # digest-pin (H30)
+  interval: 1h
   policy:
     semver:
       range: ">=0.1.0"

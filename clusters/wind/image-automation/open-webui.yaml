@@ -25,6 +25,8 @@ metadata:
 spec:
   imageRepositoryRef:
     name: open-webui
+  digestReflectionPolicy: Always  # digest-pin (H30)
+  interval: 1h
   policy:
     semver:
       range: ">=0.1.0"
