@@ -9,7 +9,6 @@ resources:
   - serviceaccount.yaml
   - rbac.yaml
   - cronjob.yaml
-  - 01-aws-secret.sops.yaml
 
 configMapGenerator:
   - name: aws-s3-sync-excludes-global

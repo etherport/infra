@@ -5,7 +5,6 @@ namespace: cloudwatch-to-loki
 
 resources:
   - 00-namespace.yaml
-  - 01-aws-creds.sops.yaml
   - 02-script-configmap.yaml
   - 03-rbac.yaml
   - 04-cronjob.yaml

@@ -13,7 +13,6 @@ resources:
   # 02 + 05 are SOPS-encrypted Secrets; must exist before the Cluster
   # references them (postgres-app-credentials, barman-s3-credentials).
   - 02-credentials.sops.yaml
-  - 05-barman-credentials.sops.yaml
   # managed-role password for the authentik DB user (H38); must exist before the
   # Cluster's managed.roles references it.
   - 07-authentik-role.sops.yaml
