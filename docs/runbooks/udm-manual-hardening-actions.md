@@ -106,3 +106,38 @@ FRR config in the UniFi BGP section (Settings → Routing → BGP, or the FRR co
 `neighbor <peer> password <secret>`, and set the matching password on the MetalLB `BGPPeer`
 (`platform/kubernetes/metallb/`). Keep the git-stored FRR config in sync. Low urgency (the BGP
 fabric is internal/LAN).
+
+---
+
+## 8. M71 — kill the standing static AWS keys on the mini (+ rotate)
+
+The **devbox** is already clean (M82 removed its standing key; TF is CI-only). What's left is
+the **mini's** standing plaintext keys in `~/.aws/credentials` — a mini/admin action (the agent
+can't reach it headlessly). Two standing profiles today:
+- `[homelab]` = terraform-homelab — **bounded** (6 `terraform-*` policies, no IAM, M97-tightened).
+- `[claude-admin]` = **PowerUserAccess** break-glass — the high-blast-radius one.
+
+**Interim win (a) — biggest cut, ~0 effort (do first):** remove the `[claude-admin]` block from
+the mini's standing `~/.aws/credentials`. Use it only when break-glass is actually needed, pulled
+from SOPS / your laptop on demand. CI doesn't need it (CI is OIDC since H29). On the mini:
+```bash
+aws configure --profile claude-admin list 2>/dev/null   # confirm it's there
+# edit ~/.aws/credentials and delete the [claude-admin] block (keep [homelab] for now)
+```
+
+**Interim win (b) — rotate the never-rotated keys + set a cadence:** both keys predate 2026-01.
+terraform-homelab can't rotate itself (no IAM) — rotate from `claude-admin`/`gs_admin`:
+```bash
+# as an admin (claude-admin/gs_admin), for each user (terraform-homelab, claude-admin):
+aws iam create-access-key --user-name <user>           # note the new key
+# update the SOPS ops bundle (aws_access_key_id/secret) so render-aws-credentials + the
+# mini's [homelab] use the new key:  sops set infra/ansible/playbooks/secrets/homelab-ops.sops.yaml ...
+# re-render on the mini + devbox-on-demand; verify a terraform plan still works; then:
+aws iam delete-access-key --user-name <user> --access-key-id <OLD>
+```
+Set a reminder cadence (e.g. quarterly). NB the `terraform-homelab` IAM **user/key must not be
+deleted outright** — it's the shared local-ops key (H29); only **rotate** it.
+
+**Target architecture (the proper fix, when ready):** mini → **IAM Roles Anywhere** (X.509 trust
+anchor + `aws_signing_helper` `credential_process` → short-lived creds, zero standing key);
+human laptops → **IAM Identity Center (SSO)**. See M71 in `outstanding-work.md` for the rationale.
