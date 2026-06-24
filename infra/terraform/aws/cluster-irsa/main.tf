@@ -99,7 +99,7 @@ locals {
     cloudwatch-read = {
       subs = [
         "system:serviceaccount:auto-remediation:remediation-controller",
-        "system:serviceaccount:cloudwatch-to-loki:default",
+        "system:serviceaccount:cloudwatch-to-loki:cloudwatch-to-loki",
       ]
       policy = jsonencode({
         Version = "2012-10-17"
