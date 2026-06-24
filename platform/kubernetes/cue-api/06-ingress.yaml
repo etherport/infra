@@ -5,7 +5,8 @@
 # CONTEXT at https://cue.<tailnet>.ts.net — REQUIRED for the PWA's browser Geolocation
 # ("share my location"): browsers silently deny geolocation on plain-HTTP origins (no prompt).
 # Also a cleaner URL (no :3000). Same tailnet-ACL trust model; the public cloudflared tunnel
-# (/health + /telegram/webhook only) is unchanged. tag:cluster-ingress is the dedicated
+# (CF Access per-path: SSO for the app, service token for /ingest, bypass for /health) is the
+# other reach. tag:cluster-ingress is the dedicated
 # K8s-operator ingress tag (in infra/tailscale/policy.hujson).
 apiVersion: networking.k8s.io/v1
 kind: Ingress

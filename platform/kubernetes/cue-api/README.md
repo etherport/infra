@@ -35,14 +35,17 @@ local Docker build — CI is the source of truth.
   cred. Created from a `read:packages` PAT; currently commented out in
   `kustomization.yaml` until the PAT is provided.
 
-## Public access — cloudflared tunnel (path-restricted)
-`cue.etherport.net` is served by the existing wind-cluster cloudflared tunnel
-(`infra/terraform/cloudflare/main.tf`). The tunnel ingress rule for this hostname
-restricts public reach to **`/health` + `/telegram/webhook` only**
-(`path = "^/health$|^/telegram/webhook/?$"`); every other path falls through to
-the tunnel's 404 catch-all. There is **no** CF Access/SSO app on this hostname
-(SSO would break the Telegram webhook); the webhook is protected by the path
-restriction plus the app's `TELEGRAM_WEBHOOK_SECRET` header check.
+## Public access — cloudflared tunnel + CF Access (per-path)
+`cue.etherport.net` is served by the wind-cluster cloudflared tunnel
+(`infra/terraform/cloudflare/main.tf`), which now passes the **whole app** to the
+origin; **Cloudflare Access gates per path** (`infra/terraform/cloudflare/cue-access.tf`):
+- `/health` → **bypass** (public liveness, no login)
+- `/ingest/healthkit` → **service token** (the Apple Health Auto Export client; `CF-Access-Client-*`)
+- everything else → **Google SSO**, allow-list = `var.cue_tester_emails`
+
+The app additionally verifies the injected `Cf-Access-Jwt-Assertion` JWT
+(`CUE_CF_ACCESS_*`) and maps the email → Cue user. **Telegram is retired**, so the old
+`/health + /telegram/webhook` path-restriction is gone.
 
 All other routes (`/coach/*`, `/meals/*`, `/onboarding`, `/progress/*`,
 `/digestion/*`) are reachable only **in-cluster / over Tailscale** (the Service
