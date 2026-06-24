@@ -57,6 +57,21 @@ spec:
   monitoring:
     enablePodMonitor: true
 
+  # M75 IRSA: barman-cloud assumes wind-irsa-barman via web identity (no static
+  # key). Operator-managed pods → inject the projected SA token (mounted at
+  # /projected) + AWS web-identity env. Instance pods run as SA cue-db (role trust).
+  env:
+    - name: AWS_ROLE_ARN
+      value: "arn:aws:iam::830881980142:role/wind-irsa-barman"
+    - name: AWS_WEB_IDENTITY_TOKEN_FILE
+      value: "/projected/token"
+  projectedVolumeTemplate:
+    sources:
+      - serviceAccountToken:
+          audience: sts.amazonaws.com
+          expirationSeconds: 3600
+          path: token
+
   # Continuous WAL archiving + scheduled full backups to S3 via Barman, same as
   # the shared postgres-cluster. Reuses the existing postgres-barman bucket —
   # CNPG isolates each cluster under its own serverName (= cluster name), so
@@ -67,13 +82,9 @@ spec:
   backup:
     barmanObjectStore:
       destinationPath: s3://postgres-barman.wind.etherport.net
+      # M75 IRSA — no static key; use the instance pod's assumed role (env above).
       s3Credentials:
-        accessKeyId:
-          name: barman-s3-credentials
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: barman-s3-credentials
-          key: SECRET_ACCESS_KEY
+        inheritFromIAMRole: true
       wal:
         compression: gzip
         encryption: AES256

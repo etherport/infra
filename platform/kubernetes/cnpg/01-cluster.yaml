@@ -87,16 +87,28 @@ spec:
   # Cloud. Pairs with the daily ScheduledBackup CR in 06-scheduled-backup.yaml.
   # Restore via `bootstrap.recovery` referencing an externalCluster
   # — see docs/runbooks/postgres-barman.md for the full restore flow.
+  # M75 IRSA: barman-cloud assumes wind-irsa-barman via web identity instead of a
+  # static key. The pods are operator-managed, so we inject the projected SA token
+  # (CNPG mounts projectedVolumeTemplate at /projected) + the AWS web-identity env;
+  # boto3 picks them up. Instance pods run as SA postgres-cluster (role trust).
+  env:
+    - name: AWS_ROLE_ARN
+      value: "arn:aws:iam::830881980142:role/wind-irsa-barman"
+    - name: AWS_WEB_IDENTITY_TOKEN_FILE
+      value: "/projected/token"
+  projectedVolumeTemplate:
+    sources:
+      - serviceAccountToken:
+          audience: sts.amazonaws.com
+          expirationSeconds: 3600
+          path: token
+
   backup:
     barmanObjectStore:
       destinationPath: s3://postgres-barman.wind.etherport.net
+      # M75 IRSA — no static key; use the instance pod's assumed role (env above).
       s3Credentials:
-        accessKeyId:
-          name: barman-s3-credentials
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: barman-s3-credentials
-          key: SECRET_ACCESS_KEY
+        inheritFromIAMRole: true
       wal:
         compression: gzip
         encryption: AES256
