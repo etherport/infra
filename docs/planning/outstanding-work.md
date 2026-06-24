@@ -42,6 +42,7 @@ shipped this session:
 | **AB-L4** | Mutable `:main` image tag for a delete-capable workload | ⏳ deferred (sha-pin after tonight's approved run; `:main` kept so tonight gets the fixes) |
 | **AB-H3b** | Fuller manifest-driven delete (drive deletes from the measured set) | ⏳ deferred follow-up to the conservative re-assert |
 | **AB-L6** | "Object Lock" claimed in README but no `object_lock_configuration` in TF | ⏳ operator verifying out-of-band (believed enabled) |
+| **AB-H5** | Verify path (GNU parallel `{1} {2}` column substitution) mangled keys with spaces+special/multibyte chars → bogus `--bucket` → `HeadObjectFailed` → run FALSELY marked FAILED (9/20,813 on the 2026-06-24 backups run; **all 9 objects present in S3, no data loss**) | ✅ fixed `a700b3f` — pass whole `bucket<TAB>key` as one opaque arg + `IFS=$'\t' read` split; validated 9/9. See session-log cont.8 |
 
 ---
 

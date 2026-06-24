@@ -13,6 +13,16 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-24 (cont. 8) — backup verification false-negative fixed (special-char keys)
+
+**Symptom:** overnight the `backups` share's s3-sync ran FAILED — `homelab_backup_last_run_success{share="backups"}=0`, **9 of 20,813 files "failed verification"** (the run that mirrored yesterday's 20,813-file mini iCloud push incl. 19,951 Messages attachments). The `S3SyncFailed` alert fired; the **AI advisor handled it correctly** — diagnosed once then `Cooldown active … skipping action` (H39 dedup working, no email flood).
+
+**Root cause (NOT data loss):** pulled the consolidated report (`s3://logs.archive…/reports/backups/20260624T080019Z/report.json`) — the 9 were `checksumMismatches:0`, `errorCode:HeadObjectFailed`, message *"…bucket name must match the regex…"*. That's botocore's **--bucket** validation: the GNU-parallel verify path used unquoted column substitution (`parallel --colsep '\t' verify-one.sh {1} {2} …`), which **mangled the args for keys with spaces+special/multibyte chars** (curly apostrophe U+2019, `!`, parens, odd spacing) → a bogus `--bucket` → HeadObjectFailed. The 20,804 plain keys passed; only the 9 awkward ones failed. **All 9 objects confirmed present in S3** (head-object OK with proper quoting) → pure verification false-negative.
+
+**Fix (`a700b3f`):** pass the whole tab-delimited `bucket<TAB>key` line as ONE opaque arg (`{}` in parallel; `"$REC"` in the bash fallback) and split byte-exact with `IFS=$'\t' read` inside `verify-one.sh` — robust to any key. **Validated against all 9 real keys → 9/9 now pass.** The image rebuilds on push (`aws-s3-sync-image.yml`, path-filtered) + `imagePullPolicy: Always`, so the next run uses it. The alert clears on the next successful run (a no-change re-run has 0 uploads → verification skipped → success; the fix matters next time a batch of special-char files uploads).
+
+---
+
 ## 2026-06-23 (cont. 5) — mini observability restored (VIP fix verified) + size metric + mini_health heartbeat
 
 **VIP fix verified from the mini.** Infra restored the mini→Traefik-VIP route (Cilium `traefik-tier` was allowing the LB *service* ports :80/:443 from world but enforces on the DNAT'd *container* ports :8000/:8443 — commit 1a98eee). From the mini: `nc 10.10.201.70:443` connects, end-to-end pushgateway POST works (PUSH_OK), Alloy→Loki clean since restart (was timing out until 23:07Z). Re-pushed all backup metrics: messages/notes/safari/drive/photos green+fresh. **contacts/calendars rc=1 = transient iCloud DAV throttle** from my dozens of debug runs (manual `discover` succeeds; data safe, master intact) — left to self-heal on the 21:00 nightly; do NOT keep re-running (worsens the throttle).
