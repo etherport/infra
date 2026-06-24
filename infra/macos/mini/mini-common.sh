@@ -20,6 +20,17 @@ _MINI_TIMEOUT_BIN="$(command -v timeout 2>/dev/null || command -v gtimeout 2>/de
 # the --exclude trick rather than -d.
 nas_readable(){ mini_run_timeout 15 /usr/bin/rsync -n --exclude='/*/*' "$1/" "${TMPDIR:-/tmp}/.nasprobe/" >/dev/null 2>&1; }
 
+# nas_du_bytes <dir> [timeout_s] — size-on-disk of <dir> in BYTES (du -sk × 1024), bounded by a
+# timeout (du traverses every file → slow over SMB on big dirs). Echoes -1 on timeout/failure so
+# callers can skip emitting (never zero) a metric on a failed measurement. Needs FDA on net vols
+# (covered by the job's /bin/bash grant under launchd).
+nas_du_bytes(){
+  local kb
+  kb="$(mini_run_timeout "${2:-600}" du -sk "$1" 2>/dev/null | awk 'NR==1{print $1}')"
+  [ -n "${kb}" ] 2>/dev/null && [ "${kb}" -ge 0 ] 2>/dev/null && { echo $(( kb * 1024 )); return; }
+  echo -1
+}
+
 # mini_run_timeout <secs> <cmd...> — run cmd with a wall-clock cap, stdout passed through so
 # `out="$(mini_run_timeout 30 find ...)"` works. Returns the command's rc, or non-zero
 # (124 via timeout(1), or 143/137 via the fallback) if it was killed for exceeding <secs>.

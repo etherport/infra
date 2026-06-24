@@ -27,6 +27,13 @@ ${job}_items ${items}
 # TYPE ${job}_info gauge
 ${job}_info{label=\"${label}\"} 1
 "
+  # size-on-disk (bytes) — emitted when the caller sets BACKUP_BYTES (>=0); skipped if unset or
+  # -1 (a du that timed out), so a transient measurement failure can't zero the panel.
+  if [ -n "${BACKUP_BYTES:-}" ] && [ "${BACKUP_BYTES}" -ge 0 ] 2>/dev/null; then
+    body="${body}# TYPE ${job}_bytes gauge
+${job}_bytes ${BACKUP_BYTES}
+"
+  fi
   if curl -fsS --max-time 10 --data-binary "${body}" \
        "${PUSHGATEWAY}/metrics/job/${job}/instance/mini" >/dev/null 2>&1; then
     echo "$(date '+%F %T') metrics: pushed ${job} (rc=${rc} items=${items} dur=${dur}s)"

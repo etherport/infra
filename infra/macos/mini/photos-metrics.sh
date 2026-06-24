@@ -98,6 +98,12 @@ ${job}_info{mode=\"${mode}\"} 1
 ${job}_orphans ${PHOTOS_ORPHANS}
 "
   fi
+  # size-on-disk of the export dir (bytes) — emitted when the caller sets PHOTOS_BYTES (>=0).
+  if [ -n "${PHOTOS_BYTES:-}" ] && [ "${PHOTOS_BYTES}" -ge 0 ] 2>/dev/null; then
+    body="${body}# TYPE ${job}_bytes gauge
+${job}_bytes ${PHOTOS_BYTES}
+"
+  fi
   if curl -fsS --max-time 10 --data-binary "${body}" \
        "${PUSHGATEWAY}/metrics/job/${job}/instance/mini" >/dev/null 2>&1; then
     echo "$(date '+%F %T') metrics: pushed ${job} (rc=${rc} exported=${exported} missing=${missing} unavail=${m_unavail} resolvable=${m_resolv})"

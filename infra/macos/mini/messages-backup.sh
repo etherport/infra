@@ -165,8 +165,8 @@ att_count="$(mini_run_timeout 600 find "${DEST_BASE}/Attachments" -type f 2>/dev
 
 # Report DB and ATTACHMENTS as SEPARATE metric groups so the dashboard shows both sync/success
 # states independently (messages_backup = the chat.db; messages_attachments_backup = the media).
-push_backup_metrics messages_backup            "${db_rc}"  "${dur}" "${msg_count}"
-push_backup_metrics messages_attachments_backup "${att_rc}" "${dur}" "${att_count}"
+BACKUP_BYTES="$(nas_du_bytes "${DEST_BASE}/chat.db" 60)"        push_backup_metrics messages_backup            "${db_rc}"  "${dur}" "${msg_count}"
+BACKUP_BYTES="$(nas_du_bytes "${DEST_BASE}/Attachments")"       push_backup_metrics messages_attachments_backup "${att_rc}" "${dur}" "${att_count}"
 
 if [ "${db_rc}" -eq 0 ] && [ "${att_rc}" -eq 0 ]; then
   echo "${msg_count}" > "${CNT_STATE}"   # record baseline for the regression guard (only on a clean run)

@@ -120,8 +120,8 @@ c_rc="$(mirror_service contacts  "${contacts_items}"  "${STAGING}/Contacts"  "${
 v_rc="$(mirror_service calendars "${calendars_items}" "${STAGING}/Calendars" "${DEST_BASE}/Calendars")"
 
 dur="$(( $(date +%s) - START ))"
-push_backup_metrics contacts_backup  "${c_rc}" "${dur}" "${contacts_items}"
-push_backup_metrics calendars_backup "${v_rc}" "${dur}" "${calendars_items}"
+BACKUP_BYTES="$(nas_du_bytes "${DEST_BASE}/Contacts")"  push_backup_metrics contacts_backup  "${c_rc}" "${dur}" "${contacts_items}"
+BACKUP_BYTES="$(nas_du_bytes "${DEST_BASE}/Calendars")" push_backup_metrics calendars_backup "${v_rc}" "${dur}" "${calendars_items}"
 
 if [ "${c_rc}" -eq 0 ] && [ "${v_rc}" -eq 0 ]; then
   log "✓ sync complete (contacts=${contacts_items} vcf, calendars=${calendars_items} ics)"

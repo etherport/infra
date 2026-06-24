@@ -54,7 +54,7 @@ mirror_dir(){  # <job> <src-dir> <dst-dir> <maxdel> <item-count>
   mkdir -p "${dst}"
   log "mirror ${job}: ${src} → ${dst}"
   if mini_run_timeout "${MAX_RUNTIME}" /usr/bin/rsync -a --delete --max-delete="${maxdel}" "${src}/" "${dst}/" >>"${RUNOUT}" 2>&1; then
-    dur="$(( $(date +%s) - START ))"; push_backup_metrics "${job}" 0 "${dur}" "${items}"; log "✓ ${job} (${items} items)"; return 0
+    dur="$(( $(date +%s) - START ))"; BACKUP_BYTES="$(nas_du_bytes "${dst}")" push_backup_metrics "${job}" 0 "${dur}" "${items}"; log "✓ ${job} (${items} items)"; return 0
   fi
   local r=$?; dur="$(( $(date +%s) - START ))"
   push_backup_metrics "${job}" 1 "${dur}" "${items}" "rsync-rc${r}"; log "✗ ${job} rsync rc=${r}"; overall=1; return 1
@@ -79,7 +79,7 @@ fi
 if [ -f "${SAFARI_SRC}" ]; then
   mkdir -p "${DEST_BASE}/Safari"
   if mini_run_timeout 120 /usr/bin/rsync -a "${SAFARI_SRC}" "${DEST_BASE}/Safari/Bookmarks.plist" >>"${RUNOUT}" 2>&1; then
-    push_backup_metrics safari_backup 0 "$(( $(date +%s) - START ))" 1; log "✓ safari_backup (Bookmarks.plist)"
+    BACKUP_BYTES="$(nas_du_bytes "${DEST_BASE}/Safari" 60)" push_backup_metrics safari_backup 0 "$(( $(date +%s) - START ))" 1; log "✓ safari_backup (Bookmarks.plist)"
   else
     push_backup_metrics safari_backup 1 "$(( $(date +%s) - START ))" 0 rsync-failed; log "✗ safari_backup"; overall=1
   fi

@@ -164,6 +164,8 @@ read -r m_unavail m_resolv < <(classify_missing "${REPORT}")
 # Orphan guard metric: files on disk not in the ledger (untracked dups). Should stay flat;
 # growth = something produced new dups. (Walks DEST over SMB — once-nightly is fine.)
 export PHOTOS_ORPHANS="$(count_orphans "${DEST}" "${EXPORTDB}")"
+# size-on-disk of the export (bytes); du over SMB → bounded timeout, skip-on-fail (mini-common).
+export PHOTOS_BYTES="$(nas_du_bytes "${DEST}")"
 push_photos_metrics "${rc}" "$(( $(date +%s) - START ))" "${m_photos:-0}" "${m_exported:-0}" "${m_missing:-0}" "${m_unavail:-0}" "${m_resolv:-0}" "${MODE}"
 
 if [ "${rc}" -eq 0 ]; then
