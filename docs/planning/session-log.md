@@ -13,6 +13,31 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-24 (cont. 11) — M82: Terraform → CI-only, devbox drops standing AWS/PVE creds
+
+Owner chose **CI-only** for M82 (over keep-on-devbox / re-home). Most of the path was
+already there (M92 dispatch PAT done; ~every TF stack has a workflow). Executed:
+- **Added `terraform-proxmox-firewall.yml`** — the one TF stack lacking CI (the H37 host
+  firewall). Modeled on terraform-proxmox-sdn (self-hosted `lifecycle` runner,
+  `PROXMOX_TOKEN_*` secrets, S3/OIDC backend) but **TF 1.15.5** — the state was written by
+  1.15.5 (devbox), and 1.14.3 (what the sibling proxmox workflows pin) would refuse it.
+  Pushing it auto-triggers a plan → validates runner/secrets/state (check Actions UI).
+- **Removed the standing `~/.aws/[homelab]` key from the devbox.** The AWS key remains only
+  SOPS-encrypted (verified still in the bundle) + as GH secrets; no plaintext at rest on the
+  devbox disk. `~/.aws/config` kept (no secret). On-demand re-render via
+  `scripts/render-aws-credentials.sh` for rare local debug (throwaway, not standing).
+- **CLAUDE.md §4 updated** to the new model: devbox = Actions:write PAT (M92, dispatch CI) +
+  SOPS age key (headless `sops -d`), **no standing AWS/PVE creds**; TF via CI.
+- **Latent finding:** sibling proxmox workflows pin TF **1.14.3** but the firewall state is
+  1.15.5 — if the devbox ever applied the other proxmox stacks at 1.15.5, their CI would
+  break on the version skew. Worth aligning the proxmox workflows to 1.15.5 (follow-up).
+
+**Verify (owner):** firewall workflow plan run green + `PROXMOX_TOKEN_*` GH secrets present.
+**Next ZT:** M71 — the devbox is now clean; remaining standing keys are on the **mini**
+(`[homelab]` + `[claude-admin]` PowerUser) + the never-rotated keys — mini/admin actions.
+
+---
+
 ## 2026-06-24 (cont. 10) — UDM/network hardening cleanup (VPN-zone tighten + audit)
 
 Network-hardening tidy-up pass on the UDM. **Done + verified:**

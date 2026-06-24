@@ -94,13 +94,19 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   2026-06-18). No FileVault gate → sessions auto-resume on reboot (systemd user unit
   `claude-sessions.service` + `loginctl enable-linger`; per-repo tmux running
   `claude --continue`, see `infra/devbox/`). **Has:** `kubectl` (cluster-admin),
-  `sops`+age, `git`, `claude`, **and (since 2026-06-19) `terraform` 1.15.5 + `aws` CLI** —
-  TF runs headlessly here: `scripts/render-aws-credentials.sh` writes the `~/.aws`
-  `[homelab]` profile from SOPS (S3 backend) + `scripts/tf-proxmox.sh <stack> <args>`
-  injects the PVE token. ⚠️ **This put the homelab AWS profile + PVE token on devbox — a ZT
-  blast-radius expansion from the original "no TF/creds" design; accepted for now, revisit
-  (re-home to mini/CI or keep).** **Still lacks:** a browser (headless-Chrome verification →
-  mini/CI) and `gh` CLI (can't dispatch GH Actions from here). Auth: Claude OAuth is broken
+  `sops`+age, `git`, `claude`, `terraform` 1.15.5 + `aws` CLI.
+  ✅ **TF is CI-only (M82, decided 2026-06-24): the devbox holds NO standing AWS/PVE creds.**
+  Every TF stack runs via a GitHub Actions workflow (AWS via OIDC; proxmox/unifi/cloudflare
+  on the self-hosted `lifecycle` runner with PVE/CF/UDM creds as **GH secrets**) — incl. the
+  new `terraform-proxmox-firewall` workflow that closed the last gap. The devbox **dispatches**
+  runs via the **Actions:write PAT (M92)** — small blast radius. The standing `~/.aws`
+  `[homelab]` key was **removed 2026-06-24**; the AWS key + PVE token live only in SOPS
+  (encrypted) + GH secrets. **Rare local-debug TF only:** re-render on demand with
+  `scripts/render-aws-credentials.sh` (writes `~/.aws/[homelab]` from SOPS) +
+  `scripts/tf-proxmox.sh <stack> <args>` (injects the PVE token) — then it's a throwaway, not
+  standing. (The SOPS **age key** stays on the devbox — needed for headless `sops -d`.)
+  **Still lacks:** a browser (headless-Chrome verification → mini/CI) and `gh` CLI (dispatch
+  GH Actions via the M92 PAT/API, not `gh`). Auth: Claude OAuth is broken
   on headless Linux (GitHub #47152) → token transplanted from the mini's Keychain into
   `~/.claude/.credentials.json`. Provisioning: `infra/ansible/playbooks/devbox.yml`
   (+ `infra/devbox/README.md`).
