@@ -16,6 +16,7 @@ stringData:
         - targets:
             - '10.10.201.6:9100'   # dns-fallback
             - '10.10.201.15:9100'  # vpn-local
+            - '10.10.201.45:9100'  # devbox (Claude Code dev-session host; node_exporter via base.yml)
           labels:
             location: 'local'
             environment: 'production'
@@ -34,6 +35,10 @@ stringData:
           regex: '10\.10\.201\.15:.*'
           target_label: instance
           replacement: 'vpn-local'
+        - source_labels: [__address__]
+          regex: '10\.10\.201\.45:.*'
+          target_label: instance
+          replacement: 'devbox'
         - source_labels: [__address__]
           regex: '10\.10\.100\.5:.*'
           target_label: instance
