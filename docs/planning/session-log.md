@@ -31,6 +31,36 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-25 — Post-M75 fallout: multus outage + SES email gap + email consolidation
+
+Two M75 follow-on incidents + a consolidation, all the morning after the IRSA cutover.
+
+- **🔴 Multus CNI outage (issuer-collapse fallout).** Collapsing the apiserver to a
+  single issuer (dropping `cluster.local`) invalidated **multus's cached
+  `multus.kubeconfig` token** (written once at pod start, never refreshed) → `multus …
+  Unauthorized` on every new pod's CNI add → **no pod could schedule cluster-wide for
+  ~7h**; cascaded into a KubeJobFailed/KubePodNotReady/VeleroBackupPartial + AI-advisor
+  alert storm. **Fix: `kubectl -n kube-system rollout restart ds/kube-multus-ds-amd64`**
+  (regenerates the kubeconfig from the current `iss=bucket` token). Cleaned stuck pods +
+  failed job records, re-ran the 3 outage-window velero backups. **Single-issuer kept**
+  (it's production-standard/EKS model; multus was the only token-cacher — now fixed); the
+  RULE (restart multus on any issuer change) is in the runbook/CLAUDE.md/memory.
+- **🔴 SES email gap (IRSA migration miss).** The old `kubernetes-s3-backup` static key
+  had `ses:SendEmail`; the `wind-irsa-s3-sync` role didn't → daily-report + delete-approval
+  emails failed `AccessDenied`. Fixed (`ses:SendEmail`/`SendRawEmail`, `Resource:"*"` — v1
+  SendEmail doesn't honor identity-ARN scoping). Re-sent today's report.
+- **📧 Email-sender consolidation (was piecemeal).** Standardized all 4 system senders:
+  **consistent From** `Etherport <Service> <<service>@wind.etherport.net>` (backups /
+  ai-advisor / alertmanager / service-status) + **API-maximal transport**: backups +
+  ai-advisor + service-status now send via **SES API on IRSA** (no static creds —
+  ai-advisor smtplib→boto3 send_raw_email; service-status smtplib→boto3 on the
+  cloudwatch-read role); **only alertmanager stays SMTP** (no API path). Deleted the
+  `ai-advisor-smtp` static secret; the static SES SMTP key now has just 1 consumer
+  (alertmanager) instead of 3. (etherport.net SES domain identity + DKIM cover the
+  `*.wind.etherport.net` senders; SES still sandbox → recipients verified.)
+
+---
+
 ## 2026-06-24 (cont. 15) — M75 IRSA workload identity (Phase 1+2: foundation live + verified)
 
 Started M75 — kill the long-lived static AWS IAM keys in-cluster (self-hosted IRSA).
