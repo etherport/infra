@@ -135,7 +135,11 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   touch this:** (1) `--api-audiences` defaults to the FIRST `--service-account-issuer` → changing the
   issuer without pinning api-audiences 401s every in-cluster token; (2) after a kubespray run, confirm
   the apiserver issuer is the bucket URL + IRSA still assumes a role; (3) aws-CLI workloads need
-  `HOME=/tmp` (uid-1000 `/.aws` cache); (4) velero Kopia-maintenance Jobs need `AWS_REGION`. ⏳ Only
+  `HOME=/tmp` (uid-1000 `/.aws` cache); (4) velero Kopia-maintenance Jobs need `AWS_REGION`;
+  **(5) ⚠️ changing `--service-account-issuer` BREAKS MULTUS** — it bakes its kubeconfig token to a
+  file once at pod start + never refreshes, so the old `iss` is rejected → `multus … Unauthorized`
+  → no new pod schedules cluster-wide (2026-06-25 incident, ~7h). **FIX: `kubectl -n kube-system
+  rollout restart ds/kube-multus-ds-amd64`** after ANY issuer change. ⏳ Only
   follow-up: deactivate/remove **4 orphaned dedicated IAM keys** (key material still in git history +
   Active in AWS) via their TF stacks. **SES SMTP secrets stay static** (protocol). **etcd-backup is
   host-level (CP systemd), NOT an IRSA target** → [[M71]]. Full detail: `docs/runbooks/irsa-workload-identity.md`.

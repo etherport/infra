@@ -125,6 +125,33 @@ gated kubespray run reproduces the working config, no drift.
 landmine). After any kubespray run, confirm the apiserver issuer is the bucket URL
 (not the kubeadm default) and IRSA still assumes a role.
 
+### ⚠️⚠️ Changing the issuer breaks Multus → restart it (2026-06-25 incident)
+
+**Multus CNI writes `/etc/cni/net.d/multus.d/multus.kubeconfig` ONCE at pod start and
+never refreshes that token.** The collapse to single issuer (dropping `cluster.local`)
+invalidated Multus's cached `iss=cluster.local` token → every new pod's CNI add failed
+`multus … error waiting for pod: Unauthorized` → **no pod could schedule on any node
+for ~7 h** (existing pods kept running; the symptom was cronjobs/backups stuck in
+`ContainerCreating`, cascading into a storm of KubeJobFailed / KubePodNotReady /
+VeleroBackupPartial / stale-metric alerts and AI-advisor traffic).
+
+**Fix (no apiserver change needed):**
+```bash
+kubectl -n kube-system rollout restart ds/kube-multus-ds-amd64
+```
+The new Multus pods rewrite the kubeconfig from their CURRENT kubelet-refreshed
+(`iss=bucket`) mounted token. Then delete any pods stuck `ContainerCreating` so they
+re-create, and clear stale Failed/Partial job+backup records.
+
+**RULE: whenever you change `--service-account-issuer`, restart the Multus DaemonSet**
+(it was the ONLY component that bakes a token into a file at startup — no other auth
+errors were observed, the projected-token consumers refresh automatically). A future
+kubespray run also restarts Multus, so it self-heals there. **More robust option if
+issuer changes become routine:** keep `cluster.local` as a permanent SECONDARY accepted
+issuer (dual-issuer) so this class of break can't occur — but that needs `kubeadm_patches`
+to persist (v1beta3 extraArgs is a single-value map; bucket must stay FIRST = the minting
+issuer, so append cluster.local via a patch).
+
 ### ⚠️ Gotcha — pin `--api-audiences` or you break ALL in-cluster auth
 
 `--api-audiences` was **unset** (it defaults to the FIRST `--service-account-issuer`).
