@@ -54,9 +54,21 @@ jobs:
           # Strip the explicit profile from the backend so it falls through to env vars.
           AWS_PROFILE: ""
         run: |
-          terraform init \
-            -backend-config="profile=" \
-            -reconfigure
+          # Persistent provider cache on the self-hosted runner ($HOME survives across
+          # runs; the workspace .terraform/ is wiped by checkout). Once a provider is
+          # downloaded it's reused → immune to registry.terraform.io slowness. Plus a
+          # retry loop for the first download / a transient registry blip (2026-06-25:
+          # the cloudflare v5 provider metadata went ~20s TTFB registry-side and tripped
+          # terraform's init timeout, failing this apply).
+          export TF_PLUGIN_CACHE_DIR="$HOME/.terraform.d/plugin-cache"
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          n=0
+          until terraform init -backend-config="profile=" -reconfigure; do
+            n=$((n+1))
+            [ "$n" -ge 5 ] && { echo "::error::terraform init failed after $n attempts"; exit 1; }
+            echo "init attempt $n failed (transient provider download?); retrying in $((n*15))s..."
+            sleep $((n*15))
+          done
 
       - name: Terraform Plan
         if: github.event.inputs.action != 'apply'
