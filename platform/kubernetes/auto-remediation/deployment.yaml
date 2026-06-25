@@ -86,7 +86,7 @@ spec:
         - name: EMAIL_TO
           value: "graham.m.smith@me.com"
         - name: EMAIL_FROM
-          value: "Wind AI Advisor <ai-advisor@wind.etherport.net>"
+          value: "Etherport AI Advisor <ai-advisor@wind.etherport.net>"
         # Email sends via the SES API (boto3 + IRSA role wind-irsa-cloudwatch-read),
         # not SMTP — no static SMTP creds. Region from AWS_REGION_PRIMARY above.
         - name: LOKI_URL
