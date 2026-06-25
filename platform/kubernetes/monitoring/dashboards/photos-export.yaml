@@ -1,5 +1,5 @@
 # Grafana dashboard — Mac mini off-cluster Photos backup pipeline.
-# Metrics: photos_export_* pushed to Pushgateway by the mini after each run.
+# Metrics: cairn_photos_* / cairn_backup_*{job="photos"} pushed to Pushgateway by the mini after each run.
 # Logs: {host="mini"} shipped to Loki by Grafana Alloy on the mini.
 # Picked up by the Grafana sidecar via the grafana_dashboard="1" label.
 apiVersion: v1
@@ -26,7 +26,7 @@ data:
           "title": "Coverage — available files",
           "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "description": "Share of FETCHABLE originals that are backed up. 100% = every file a re-download (DOWNLOAD_MISSING=1) could retrieve is present (photos_export_missing_resolvable = 0). Structurally-unavailable items (edited Live-Photo clips Apple won't serve) are excluded from the denominator concept and shown separately.",
+          "description": "Share of FETCHABLE originals that are backed up. 100% = every file a re-download (DOWNLOAD_MISSING=1) could retrieve is present (cairn_photos_missing_resolvable = 0). Structurally-unavailable items (edited Live-Photo clips Apple won't serve) are excluded from the denominator concept and shown separately.",
           "fieldConfig": { "defaults": {
             "unit": "percent",
             "decimals": 2,
@@ -36,7 +36,7 @@ data:
             ] } }, "overrides": [] },
           "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
           "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "100 * (1 - max(photos_export_missing_resolvable) / clamp_min(max(photos_export_photos_total), 1))" } ]
+            "expr": "100 * (1 - max(cairn_photos_missing_resolvable) / clamp_min(max(cairn_photos_total), 1))" } ]
         },
         {
           "type": "stat",
@@ -52,7 +52,7 @@ data:
             ] } }, "overrides": [] },
           "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
           "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "time() - max(photos_export_last_success_timestamp_seconds)" } ]
+            "expr": "time() - max(cairn_backup_last_success_timestamp_seconds{job=\"photos_lastsuccess\"})" } ]
         },
         {
           "type": "stat",
@@ -66,7 +66,7 @@ data:
             ] } }, "overrides": [] },
           "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
           "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "max(photos_export_last_rc)" } ]
+            "expr": "max(cairn_backup_last_rc{job=\"photos\"})" } ]
         },
         {
           "type": "stat",
@@ -76,7 +76,7 @@ data:
           "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "green" } }, "overrides": [] },
           "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
           "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "max(photos_export_exported)" } ]
+            "expr": "max(cairn_photos_exported)" } ]
         },
         {
           "type": "stat",
@@ -92,7 +92,7 @@ data:
             ] } }, "overrides": [] },
           "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
           "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "max(photos_export_missing_resolvable)" } ]
+            "expr": "max(cairn_photos_missing_resolvable)" } ]
         },
         {
           "type": "stat",
@@ -103,7 +103,7 @@ data:
           "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "blue" } }, "overrides": [] },
           "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
           "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "max(photos_export_missing_unavailable)" } ]
+            "expr": "max(cairn_photos_missing_unavailable)" } ]
         },
         {
           "type": "stat",
@@ -114,7 +114,7 @@ data:
           "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "blue" } }, "overrides": [] },
           "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
           "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "max(photos_export_orphans)" } ]
+            "expr": "max(cairn_photos_orphans)" } ]
         },
         {
           "type": "timeseries",
@@ -131,9 +131,9 @@ data:
             ]
           },
           "targets": [
-            { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(photos_export_exported)", "legendFormat": "exported" },
-            { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(photos_export_missing_resolvable)", "legendFormat": "missing (resolvable)" },
-            { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(photos_export_missing_unavailable)", "legendFormat": "unavailable (edited clips)" }
+            { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(cairn_photos_exported)", "legendFormat": "exported" },
+            { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(cairn_photos_missing_resolvable)", "legendFormat": "missing (resolvable)" },
+            { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(cairn_photos_missing_unavailable)", "legendFormat": "unavailable (edited clips)" }
           ]
         },
         {
@@ -143,7 +143,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "bars", "fillOpacity": 40 } }, "overrides": [] },
           "targets": [
-            { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(photos_export_duration_seconds)", "legendFormat": "duration" }
+            { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "max(cairn_backup_duration_seconds{job=\"photos\"})", "legendFormat": "duration" }
           ]
         },
         {

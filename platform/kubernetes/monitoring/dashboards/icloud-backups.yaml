@@ -1,13 +1,15 @@
 # Grafana dashboard — Mac mini off-cluster iCloud backups (Contacts, Calendars,
-# and future categories). Metrics: <category>_backup_* pushed to Pushgateway by
-# the mini after each run (instance="mini"); *_last_success_timestamp_seconds is
-# pushed under its own job group (<category>_backup_lastsuccess).
+# and future categories). Metrics: cairn_backup_*{job="<category>"} pushed to
+# Pushgateway by cairn on the mini after each run (instance="mini");
+# cairn_backup_last_success_timestamp_seconds is pushed under its own job group
+# (job="<category>_lastsuccess").
 #
-# Templated: the `cat` variable = label_values({__name__=~".+_backup_last_rc"}, job),
-# and the per-category row REPEATS over it — so new categories (messages_backup,
-# drive_backup, …) appear automatically once the mini starts pushing them. The
-# richer photos pipeline keeps its own "Mac mini — Photos backup" board (it uses
-# the photos_export_* schema, not <x>_backup_*, so it is intentionally excluded).
+# Templated: the `cat` variable = label_values(cairn_backup_last_rc{instance="mini",
+# job!~".+_lastsuccess"}, job), and the per-category row REPEATS over it — so new
+# categories appear automatically once cairn starts pushing them. The richer photos
+# pipeline keeps its own "Mac mini — Photos backup" board (cairn_photos_* schema),
+# so it is intentionally excluded here (the _lastsuccess pseudo-jobs are filtered
+# out of the template var so only real categories repeat).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -32,7 +34,7 @@ data:
           "label": "Category",
           "type": "query",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "query": "label_values({__name__=~\".+_backup_last_rc\"}, job)",
+          "query": "label_values(cairn_backup_last_rc{instance=\"mini\",job!~\".+_lastsuccess\"}, job)",
           "refresh": 2,
           "includeAll": true,
           "multi": true,
@@ -66,7 +68,7 @@ data:
             ] } }, "overrides": [] },
           "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
           "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "time() - max(${cat}_last_success_timestamp_seconds)" } ]
+            "expr": "time() - max(cairn_backup_last_success_timestamp_seconds{job=\"${cat}_lastsuccess\"})" } ]
         },
         {
           "type": "stat",
@@ -81,7 +83,7 @@ data:
             ] } }, "overrides": [] },
           "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
           "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "max(${cat}_last_rc)" } ]
+            "expr": "max(cairn_backup_last_rc{job=\"$cat\"})" } ]
         },
         {
           "type": "stat",
@@ -97,7 +99,7 @@ data:
             ] } }, "overrides": [] },
           "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
           "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "max(${cat}_items)" } ]
+            "expr": "max(cairn_backup_items{job=\"$cat\"})" } ]
         },
         {
           "type": "stat",
@@ -107,7 +109,7 @@ data:
           "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
           "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
           "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "max(${cat}_duration_seconds)" } ]
+            "expr": "max(cairn_backup_duration_seconds{job=\"$cat\"})" } ]
         }
       ]
     }

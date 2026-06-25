@@ -1,13 +1,15 @@
 # Alerts for the Mac mini's off-cluster iCloud category backups (Contacts,
-# Calendars, and future categories like Messages/Drive). The mini pushes
-# <category>_backup_* metrics to the cluster Pushgateway after each run
-# (instance="mini"); *_last_success_timestamp_seconds is pushed under its own
-# group (job="<category>_backup_lastsuccess") so a failed run can't wipe the
-# last-success marker.
+# Calendars, and future categories like Messages/Drive). cairn pushes
+# cairn_backup_* metrics to the cluster Pushgateway after each run, with the
+# category in the job LABEL (job="<category>", instance="mini");
+# cairn_backup_last_success_timestamp_seconds is pushed under its own group
+# (job="<category>_lastsuccess") so a failed run can't wipe the last-success
+# marker.
 #
-# Templated by metric-name regex (.+_backup_*) + `by (job)`, so EVERY current and
-# future *_backup category is covered automatically — no per-category rules. The
-# richer photos pipeline (photos_export_* schema) has its own alerts in
+# Templated by `by (job)` over the cairn_backup_* family (excluding the
+# _lastsuccess pseudo-jobs), so EVERY current and future category is covered
+# automatically — no per-category rules. The richer photos pipeline
+# (cairn_photos_* schema, job="photos") has its own alerts in
 # 09-photos-export-alerts.yaml and is intentionally not matched here.
 #
 # Severity note: these secondary metadata backups use `warning` (incl. Stale),
@@ -32,7 +34,7 @@ spec:
           expr: |
             time() - max by (job) (
               label_replace(
-                {__name__=~".+_backup_last_success_timestamp_seconds", instance="mini"},
+                cairn_backup_last_success_timestamp_seconds{instance="mini"},
                 "job", "$1", "job", "(.+)_lastsuccess"
               )
             ) > 93600
@@ -52,7 +54,7 @@ spec:
         - alert: ICloudBackupFailed
           # Last run returned non-zero (rc persists in Pushgateway until the next
           # push). One alert per category via by (job).
-          expr: max by (job) ({__name__=~".+_backup_last_rc", instance="mini"}) > 0
+          expr: max by (job) (cairn_backup_last_rc{instance="mini", job!~".+_lastsuccess"}) != 0
           for: 30m
           labels:
             severity: warning
@@ -61,15 +63,18 @@ spec:
           annotations:
             summary: "iCloud backup {{ $labels.job }} last run failed (rc={{ $value }})"
             description: |
-              {{ $labels.job }}_last_rc={{ $value }} (>0) for >30m — the last run
-              failed. Logs: Loki {host="mini"}; "Mac mini — iCloud backups"
-              dashboard.
+              cairn_backup_last_rc{job="{{ $labels.job }}"}={{ $value }} (!=0) for
+              >30m — the last run failed. Logs: Loki {host="mini"}; "Mac mini —
+              iCloud backups" dashboard.
 
         - alert: ICloudBackupEmpty
           # Last run backed up 0 items — usually a broken sync (auth/permissions,
           # empty source listing) even when rc=0. Held 1h so a transient mid-run
-          # snapshot doesn't flap it.
-          expr: max by (job) ({__name__=~".+_backup_items", instance="mini"}) == 0
+          # snapshot doesn't flap it. rc-gated (and on(job) last_rc == 0) so a
+          # not_ready/failed run (items=0, rc!=0) pages Failed only, not Empty too.
+          expr: |
+            cairn_backup_items{instance="mini", job!~".+_lastsuccess"} == 0
+              and on(job) cairn_backup_last_rc{instance="mini"} == 0
           for: 1h
           labels:
             severity: warning
@@ -78,7 +83,8 @@ spec:
           annotations:
             summary: "iCloud backup {{ $labels.job }} backed up 0 items"
             description: |
-              {{ $labels.job }}_items=0 for >1h — the last run captured nothing
-              (likely a broken sync: auth/permission failure or an empty source
-              listing), even if the return code looked clean. Investigate on the
-              mini. Logs: Loki {host="mini"}; "Mac mini — iCloud backups" dashboard.
+              cairn_backup_items{job="{{ $labels.job }}"}=0 for >1h (with rc=0) —
+              the last run captured nothing (likely a broken sync: auth/permission
+              failure or an empty source listing), even though the return code
+              looked clean. Investigate on the mini. Logs: Loki {host="mini"};
+              "Mac mini — iCloud backups" dashboard.
