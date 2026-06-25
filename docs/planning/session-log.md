@@ -30,9 +30,9 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 **Why permissive first:** going straight to DROP risked breaking dns-fallback (a resolver others depend on) or the SIP/WG paths via a source/port I mis-scoped — exactly the incident pattern H37 hit twice.
 
-**State:** both stacks `terraform validate` + `fmt` clean (`-backend=false`, devbox holds no creds — M82). Committed; push triggers plan-only on both `terraform-proxmox-firewall` + `terraform-proxmox-standalone-vms` workflows (apply is dispatch-only). **NOT yet applied.**
+**State — STAGE 1 APPLIED + VERIFIED 2026-06-25.** Both stacks `validate`+`fmt` clean (`-backend=false`; devbox holds no creds — M82). Plans reviewed = exactly the change: firewall **11 add** (1 group + 5 options + 5 rules, 0 change/destroy), standalone-vms **5 in-place NIC toggles** (`firewall false→true`, 0 replace/reboot — M91 watchdog untouched). Applied via CI dispatch (M92 PAT): firewall run `28196232091` ✅ then standalone-vms run `28196405267` ✅ (the NIC apply was classifier-gated → **user-authorized** explicitly). **Post-apply data-plane verified from the devbox:** all 5 VMs SSH-reachable with **uptimes intact** (no reboot — clean live toggle); DNS resolves through dns-fallback `:53` (`auth.wind.etherport.net`→`10.10.201.70`); node_exporter `:9100` scrape returns 200 on dns-fallback + gh-runner. Permissive (ACCEPT) so nothing is denied — confirmed nothing broke. (PVE-host firewall-log inspection deferred to Stage 2; reading `/var/log/pve-firewall.log` needs PVE root SSH, which is separately gated.)
 
-**Next (Stage 2):** dispatch `apply` — firewall stack FIRST (rules), then standalone-vms (NIC flag) — review each plan is exactly this change → watch the PVE firewall log a while → scope the external sources (Twilio SIP/media; AWS VPN peer IP) → flip `local.vm_input_policy` ACCEPT→DROP per VM, starting with gh-runner & dns-fallback (safest). Remaining security-arc items after M77: L24 (BGP auth), M76 (SSH short-lived certs).
+**Next (Stage 2):** watch the PVE firewall log a while → scope the external sources (Twilio SIP/media; AWS VPN peer IP) → flip `local.vm_input_policy` ACCEPT→DROP per VM, starting with gh-runner & dns-fallback (safest). Remaining security-arc items after M77: L24 (BGP auth), M76 (SSH short-lived certs).
 
 ---
 
