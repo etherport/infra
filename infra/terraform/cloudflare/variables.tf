@@ -60,8 +60,8 @@ variable "cue_tester_emails" {
     Add a tester = append their email here + `terraform apply`. For higher churn,
     switch the cue Access policy (cue-access.tf) to a Google Group include.
   EOT
-  type    = list(string)
-  default = ["grahamsm@gmail.com"]
+  type        = list(string)
+  default     = ["grahamsm@gmail.com", "aidan.eichman@gmail.com"]
 }
 
 variable "cf_tunnel_services" {
