@@ -1,0 +1,43 @@
+# Flux Image Automation for cue (sparked-diamond/cue) — the deploy mechanism.
+#
+# cue is an active-dev app deployed as ghcr.io/sparked-diamond/cue:latest. A
+# `kubectl rollout restart` does NOT work (the Deployment is Flux-managed; Flux's
+# SSA re-apply strips the restartedAt annotation and reverts the rollout — proven
+# 2026-06-25). So instead, automation tracks the moving :latest tag and pins its
+# REFLECTED DIGEST onto the Deployment image lines ($imagepolicy markers), which
+# Flux then rolls. Net: a code-only push to cue's main → CI builds + pushes :latest
+# → this ImagePolicy reflects the new digest → the (existing) ImageUpdateAutomation
+# commits it → Flux rolls the new digest. No manual step; the deployed digest is
+# recorded in git (auditable). This intentionally supersedes the earlier
+# "exempt from digest-pinning / roll by delete-pod" stance (which couldn't give
+# reliable hands-off deploys). Private image → pull secret cue-ghcr (this dir).
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: cue
+  namespace: flux-system
+spec:
+  image: ghcr.io/sparked-diamond/cue
+  interval: 5m          # active dev — scan often so deploys land within ~minutes
+  secretRef:
+    name: cue-ghcr      # ghcr read:packages pull secret (private package)
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: cue-api
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: cue
+  interval: 5m
+  # cue's tags are sha-<commit> (unsortable) + the moving :latest. Track :latest and
+  # reflect its current digest, so every new build (which re-points :latest) is picked
+  # up even though the tag name is unchanged.
+  filterTags:
+    pattern: '^latest$'
+  policy:
+    alphabetical:
+      order: asc        # single filtered tag (latest) — selection is trivial
+  digestReflectionPolicy: Always

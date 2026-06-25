@@ -3,6 +3,9 @@ kind: Kustomization
 resources:
   # Automation controller config
   - automation.yaml
+  # cue (active-dev app) — image automation IS the deploy trigger (private image)
+  - cue-ghcr-secret.sops.yaml
+  - cue.yaml
   # LLM Services
   - ollama.yaml
   - open-webui.yaml

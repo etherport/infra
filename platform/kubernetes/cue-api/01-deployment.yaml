@@ -31,13 +31,14 @@ spec:
       # Same image, idempotent (`node dist/db/migrate.js`), safe every deploy.
       initContainers:
         - name: migrate
-          # INTENTIONALLY unpinned :latest + imagePullPolicy:Always — cue is an active
-          # dev project pushing multiple builds/day; deploys = push :latest then
-          # `kubectl rollout restart deploy/cue-api -n cue`. Do NOT add a Flux
-          # `$imagepolicy` setter / ImagePolicy here (it would auto-pin to a digest +
-          # commit, breaking the workflow). cue is deliberately excluded from H30
-          # image-automation. (Removed a dangling cue-api setter marker 2026-06-25.)
-          image: ghcr.io/sparked-diamond/cue:latest
+          # Flux image automation (ImagePolicy flux-system:cue-api, digestReflectionPolicy
+          # :Always tracking :latest): a code push → new :latest → ImageUpdateAutomation
+          # commits the reflected digest onto this line → Flux rolls it (no manual step,
+          # the deployed digest is recorded in git). `kubectl rollout restart` does NOT
+          # work here (Flux SSA strips the annotation); image automation is the trigger.
+          # BOTH image lines (migrate init + app) carry the marker so they pin the SAME
+          # digest — migration + serving code stay in lockstep (no schema-ahead-of-code).
+          image: ghcr.io/sparked-diamond/cue:latest # {"$imagepolicy": "flux-system:cue-api"}
           imagePullPolicy: Always
           command: ['node', 'dist/db/migrate.js']
           env:
@@ -55,13 +56,14 @@ spec:
               memory: 512Mi
       containers:
         - name: cue-api
-          # INTENTIONALLY unpinned :latest + imagePullPolicy:Always — cue is an active
-          # dev project pushing multiple builds/day; deploys = push :latest then
-          # `kubectl rollout restart deploy/cue-api -n cue`. Do NOT add a Flux
-          # `$imagepolicy` setter / ImagePolicy here (it would auto-pin to a digest +
-          # commit, breaking the workflow). cue is deliberately excluded from H30
-          # image-automation. (Removed a dangling cue-api setter marker 2026-06-25.)
-          image: ghcr.io/sparked-diamond/cue:latest
+          # Flux image automation (ImagePolicy flux-system:cue-api, digestReflectionPolicy
+          # :Always tracking :latest): a code push → new :latest → ImageUpdateAutomation
+          # commits the reflected digest onto this line → Flux rolls it (no manual step,
+          # the deployed digest is recorded in git). `kubectl rollout restart` does NOT
+          # work here (Flux SSA strips the annotation); image automation is the trigger.
+          # BOTH image lines (migrate init + app) carry the marker so they pin the SAME
+          # digest — migration + serving code stay in lockstep (no schema-ahead-of-code).
+          image: ghcr.io/sparked-diamond/cue:latest # {"$imagepolicy": "flux-system:cue-api"}
           imagePullPolicy: Always
           ports:
             - name: http
