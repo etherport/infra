@@ -13,6 +13,45 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-25 (cont.) — L24 + M76 fully scoped (multi-agent), decisions made, plans drafted
+
+**What:** ran 3 background scoping workflows (ultracode) and turned the results into two decided,
+phased plan docs. **No infra changed** — this was research + design + handoff artifacts.
+
+**L24 (BGP auth) → [`l24-metallb-frr-migration-plan.md`](l24-metallb-frr-migration-plan.md), path A.**
+Key finding that corrects the tracker: **L24 is NOT "Effort S, add a password."** MetalLB runs in
+**native BGP mode** (v0.14.8) which **cannot do TCP-MD5** (FRR-mode-only; MetalLB #1125, Go 1.24
+MPTCP lacks `TCP_MD5SIG`), and it's the **kubespray addon** (no FRR toggle) → FRR mode requires
+**migrating MetalLB onto the official Helm chart** (Flux-managed). So L24 = a backend migration
+(MED/M). Decided to do it (path A) framed as a **resilience upgrade** — FRR mode also buys
+graceful-restart + BFD, fixing today's VIP-blackhole-on-speaker-restart exposure. Blast radius is
+severe (the one session carries Traefik .70 + Technitium DNS .5/.71/.72, no GR/BFD/L2, silent to
+the existing alert), so the plan uses a temporary L2 safety net + 2 windows + tcpdump-verify-MD5
+(FRR #6921 one-sided-up) + a new `metallb_bgp_session_up` alert. UDM side is UI-only/no-API.
+
+**M76 (short-lived SSH) → [`m76-ssh-shortlived-plan.md`](m76-ssh-shortlived-plan.md), step-ca hybrid.**
+Chose **step-ca SSH CA** over Tailscale-SSH-for-fleet. Deciders: the heavy consumers are HEADLESS
+(devbox agent + CI ansible) but the live TS ACL is `action: check` (interactive) and the **fleet
+isn't on the tailnet**; and **TS SSH only governs the tailnet transport** so **LAN-IP SSH bypasses
+it** — whereas **step-ca certs are transport-agnostic** (the explicit "local/no-TS access" the owner
+asked about). Hybrid: step-ca for the **13 Ubuntu hosts** (Authentik OIDC for humans, JWK renew-loop
+for headless), TS-SSH `check` for interactive remote, **PVE console + IPMI break-glass** (step-ca runs
+OFF-cluster; set console break-glass passwords). **Appliances are a hard carve-out** (vendor firmware,
+keep scoped legacy keys). Honest: a *partial* "kill standing creds" win (trades the key for a CA
+crown-jewel + a standing JWK-provisioner password). The static `automation@homelab` key sits on 3
+disks + 4 hardcoded deploy points — removed only at Phase-5 cutover after the cert path is proven e2e.
+
+**Execution sequencing (recommended):** M76 Phases 1–4 are **safe/incremental** (stand up step-ca +
+push CA trust IN PARALLEL with the existing key — nothing breaks until the key is removed), so they
+can proceed any time. **L24 path A needs a deliberate maintenance window** (VIP+DNS flap). Both are
+real M-effort projects — start when ready; neither was begun.
+
+**Next:** pick one to execute. For M76, Phase 1 (stand up step-ca off-cluster) is the natural start.
+For L24, Phase 0 (author the Flux HelmRelease + confirm frr-k8s-vs-embedded-FRR + the v0.14.8/0.13.9
+version question) is prep with no traffic impact; Phases 2–3 are the windowed flaps.
+
+---
+
 ## 2026-06-25 — M77 Stage 1: per-VM PVE firewall on the standalone VMs (permissive/observe)
 
 **What:** built **M77 Stage 1** — selective PVE firewall for the 5 standalone VMs (k8s nodes stay EXCLUDED; Cilium/UDM own those). New `infra/terraform/proxmox/firewall/standalone-vms.tf` + NIC `firewall = true` in `infra/terraform/proxmox/standalone-vms/main.tf`.
