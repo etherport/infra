@@ -31,6 +31,38 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-25 — cue deploy mechanism fixed (Flux image automation) + CF apply runner blip
+
+- **cue-api deploy was broken: Flux silently reverted `kubectl rollout restart`.** Root cause
+  (empirically proven + adversarially verified via a workflow): the Flux-managed cue-api
+  Deployment has `spec.template` owned by kustomize-controller (SSA, force-conflicts); every
+  reconcile re-applies the Git template (no `restartedAt`), pruning the annotation → the
+  rollout RS scales to 0 and the Git-template RS is re-promoted. So deploys depended on a
+  manual `kubectl delete pod`, the deploy history was unauditable, and the migrate
+  initContainer running before the revert created a real schema-ahead-of-code window
+  (the goal→goalBody rename). Audit: 0 provably-phantom but only the W9/goalBody deploy is
+  digest-confirmed; 3 high-profile 06-24 claims (W8, swap/sets/location, external-tester)
+  are unverifiable (their code IS in the serving image — ancestors — but the specific
+  `54c07489` deploys never demonstrably served). **Fix (owner chose image automation, reversing
+  the digest-pinning exemption):** ImageRepository(cue) + ImagePolicy(cue-api, filterTags
+  `^latest$` + `digestReflectionPolicy:Always`) track the moving :latest and reflect its
+  digest; the existing ImageUpdateAutomation (path ./platform/kubernetes) commits it onto BOTH
+  cue-api image lines ($imagepolicy markers re-added) → Flux rolls it. Private image → ghcr
+  pull secret `cue-ghcr` in flux-system (SOPS; new `clusters/wind/` sops rule). **Verified
+  end-to-end:** scan(179 tags)→reflect(bcc8f249)→automation commit(`8f3811f`)→Flux applied→new
+  digest-pinned RS `5c89fdbd4b` 1/1, migrate exit 0. A code-only push to cue's main now
+  auto-rolls within minutes, no manual step, deployed digest recorded in git. `commit 573b467`.
+- **CF Terraform apply failed at `terraform init`** (owner added a cue-tester email to
+  cloudflare variables.tf). Root cause: transient `registry.terraform.io` slowness for the
+  cloudflare v5 provider (~20s TTFB, aws/random instant) tripped terraform's init timeout on
+  the self-hosted lifecycle runner. Recovered on its own; re-ran plan (clean: 1 in-place,
+  adds the email) + applied. Hardened the workflow init (retry loop + persistent
+  TF_PLUGIN_CACHE_DIR) so a future registry blip can't fail it (`13a397f`). NB the runner's
+  eth0 MTU 9000 (intentional, for internal PVE jumbo) drops jumbo to the internet, but MSS
+  clamping handles TCP (aws downloaded fine) — not the cause; left as-is.
+
+---
+
 ## 2026-06-25 — Post-M75 fallout: multus outage + SES email gap + email consolidation
 
 Two M75 follow-on incidents + a consolidation, all the morning after the IRSA cutover.
