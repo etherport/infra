@@ -31,7 +31,13 @@ spec:
       # Same image, idempotent (`node dist/db/migrate.js`), safe every deploy.
       initContainers:
         - name: migrate
-          image: ghcr.io/sparked-diamond/cue:latest # {"$imagepolicy": "flux-system:cue-api"}
+          # INTENTIONALLY unpinned :latest + imagePullPolicy:Always — cue is an active
+          # dev project pushing multiple builds/day; deploys = push :latest then
+          # `kubectl rollout restart deploy/cue-api -n cue`. Do NOT add a Flux
+          # `$imagepolicy` setter / ImagePolicy here (it would auto-pin to a digest +
+          # commit, breaking the workflow). cue is deliberately excluded from H30
+          # image-automation. (Removed a dangling cue-api setter marker 2026-06-25.)
+          image: ghcr.io/sparked-diamond/cue:latest
           imagePullPolicy: Always
           command: ['node', 'dist/db/migrate.js']
           env:
@@ -49,7 +55,13 @@ spec:
               memory: 512Mi
       containers:
         - name: cue-api
-          image: ghcr.io/sparked-diamond/cue:latest # {"$imagepolicy": "flux-system:cue-api"}
+          # INTENTIONALLY unpinned :latest + imagePullPolicy:Always — cue is an active
+          # dev project pushing multiple builds/day; deploys = push :latest then
+          # `kubectl rollout restart deploy/cue-api -n cue`. Do NOT add a Flux
+          # `$imagepolicy` setter / ImagePolicy here (it would auto-pin to a digest +
+          # commit, breaking the workflow). cue is deliberately excluded from H30
+          # image-automation. (Removed a dangling cue-api setter marker 2026-06-25.)
+          image: ghcr.io/sparked-diamond/cue:latest
           imagePullPolicy: Always
           ports:
             - name: http
