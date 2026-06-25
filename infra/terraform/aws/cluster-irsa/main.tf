@@ -274,10 +274,17 @@ resource "aws_iam_role_policy" "s3_sync_ses" {
     Version = "2012-10-17"
     Statement = [
       {
+        # The backup-email paths (daily-report summary, delete-guard approval link,
+        # per-share sync alerts) send from/through several verified SES identities
+        # (alerts@wind.etherport.net under the etherport.net domain + the
+        # graham.m.smith@me.com address identity). Scope to all verified identities in
+        # the region — acceptable for a backup-notification role (can only send mail as
+        # an already-verified identity; no escalation). SES SMTP creds (alertmanager/
+        # ai-advisor) are unaffected — they don't use this API.
         Sid      = "SendBackupEmails"
         Effect   = "Allow"
         Action   = ["ses:SendEmail", "ses:SendRawEmail"]
-        Resource = "arn:aws:ses:us-west-2:${local.account_id}:identity/etherport.net"
+        Resource = "arn:aws:ses:us-west-2:${local.account_id}:identity/*"
       },
     ]
   })
