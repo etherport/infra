@@ -1898,11 +1898,9 @@ data:
         return ''.join(parts)
 
     def _send_email(subject, body, html_body=None):
-        """Send via SMTP using the same SES creds as alertmanager.
-        If html_body provided, sends as multipart text+html."""
-        if not (SMTP_USER and SMTP_PASS):
-            logger.warning("SMTP creds not configured; skipping email send")
-            return False
+        """Send via the SES API (boto3) using the pod's IRSA role — no static SMTP
+        creds (M75 / email-transport consolidation). If html_body provided, sends as
+        multipart text+html via SendRawEmail (preserves the approve-button HTML)."""
         try:
             if html_body:
                 msg = MIMEMultipart('alternative')
@@ -1917,11 +1915,13 @@ data:
                 msg['From'] = EMAIL_FROM
                 msg['To'] = EMAIL_TO
                 msg.set_content(body)
-            ctx = ssl.create_default_context()
-            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as s:
-                s.starttls(context=ctx)
-                s.login(SMTP_USER, SMTP_PASS)
-                s.send_message(msg)
+            import boto3  # type: ignore
+            ses = boto3.client('ses', region_name=AWS_REGION_PRIMARY)
+            ses.send_raw_email(
+                Source=EMAIL_FROM,
+                Destinations=[EMAIL_TO],
+                RawMessage={'Data': msg.as_string()},
+            )
             return True
         except Exception as e:
             logger.error(f"Email send failed: {e}")

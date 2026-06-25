@@ -86,11 +86,9 @@ spec:
         - name: EMAIL_TO
           value: "graham.m.smith@me.com"
         - name: EMAIL_FROM
-          value: "Etherport AI Advisor <ai-advisor@etherport.net>"
-        - name: SMTP_HOST
-          value: "email-smtp.us-west-2.amazonaws.com"
-        - name: SMTP_PORT
-          value: "587"
+          value: "Wind AI Advisor <ai-advisor@wind.etherport.net>"
+        # Email sends via the SES API (boto3 + IRSA role wind-irsa-cloudwatch-read),
+        # not SMTP — no static SMTP creds. Region from AWS_REGION_PRIMARY above.
         - name: LOKI_URL
           value: "http://loki.monitoring.svc.cluster.local:3100"
         - name: PROMETHEUS_URL
@@ -115,16 +113,6 @@ spec:
               name: ai-advisor-github
               key: token
               optional: true
-        - name: SMTP_USER
-          valueFrom:
-            secretKeyRef:
-              name: ai-advisor-smtp
-              key: smtp_auth_username
-        - name: SMTP_PASS
-          valueFrom:
-            secretKeyRef:
-              name: ai-advisor-smtp
-              key: smtp_auth_password
         volumeMounts:
         - name: script
           mountPath: /scripts
