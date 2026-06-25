@@ -39,7 +39,6 @@ PrometheusRule → Alertmanager → webhook (this controller)
   - `ai-advisor-prompt` (`advisor-prompt-configmap.yaml`) — system prompt, action-type taxonomy, guardrails
 - **Secrets** (all SOPS):
   - `ai-advisor-anthropic-key` — Anthropic API key
-  - `ai-advisor-smtp` — SES SMTP creds (alertmanager mirror)
   - `ai-advisor-approval-hmac` — HMAC signing key for Approve URLs
   - `ai-advisor-aws-cloudwatch` — read-only CW Logs (M45 Phase B)
   - `advisor-ssh-key` — Tier 3 SSH key (deployed to dns-aws/dns-fallback/vpn-local/vpn-aws)
