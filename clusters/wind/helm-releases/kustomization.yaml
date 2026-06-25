@@ -19,3 +19,8 @@ resources:
   - loki.yaml
   - alloy.yaml
   # Note: cilium is managed by kubespray, not Flux
+  # L24 Phase 2 (windowed): uncomment to migrate MetalLB off the kubespray addon
+  # onto the Helm chart in FRR mode (enables BGP TCP-MD5 + graceful-restart/BFD).
+  # Do NOT uncomment outside the maintenance window — see the migration mechanics
+  # in metallb.yaml + docs/planning/l24-metallb-frr-migration-plan.md.
+  # - metallb.yaml

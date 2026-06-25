@@ -109,3 +109,15 @@ metadata:
 spec:
   interval: 1h
   url: https://kyverno.github.io/kyverno/
+---
+# Source for the MetalLB chart (L24 — native→FRR migration so the BGP session can
+# use TCP-MD5). Harmless until a HelmRelease references it; metallb.yaml is NOT yet
+# wired into the kustomization (inert prep — see clusters/wind/helm-releases/metallb.yaml).
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: metallb
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: https://metallb.github.io/metallb
