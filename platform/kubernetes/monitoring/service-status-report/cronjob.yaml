@@ -35,7 +35,9 @@ spec:
             - name: report
               image: python:3.14-slim@sha256:63a4c7f612a00f92042cbdcc7cdc6a306f38485af0a200b9c89de7d9b1607d15 # {"$imagepolicy": "flux-system:python-slim"}
               imagePullPolicy: IfNotPresent
-              command: ["python3", "/work/service-status-report.py"]
+              # python:3.14-slim has no boto3 → install at start (same pattern as the
+              # ai-advisor controller), then run the report (sends via SES API/IRSA).
+              command: ["/bin/sh", "-c", "pip install --quiet boto3 && python3 /work/service-status-report.py"]
               env:
                 - name: PROM_URL
                   value: "http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
@@ -43,32 +45,23 @@ spec:
                   value: "http://monitoring-kube-prometheus-alertmanager.monitoring.svc.cluster.local:9093"
                 - name: REPORT_TITLE
                   value: "Homelab status"
-                - name: SMTP_SMARTHOST
-                  valueFrom:
-                    secretKeyRef:
-                      name: alertmanager-smtp-config
-                      key: smtp_smarthost
-                - name: SMTP_FROM
-                  valueFrom:
-                    secretKeyRef:
-                      name: alertmanager-smtp-config
-                      key: smtp_from
-                - name: SMTP_AUTH_USERNAME
-                  valueFrom:
-                    secretKeyRef:
-                      name: alertmanager-smtp-config
-                      key: smtp_auth_username
-                - name: SMTP_AUTH_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      name: alertmanager-smtp-config
-                      key: smtp_auth_password
+                # SES API via IRSA (role wind-irsa-cloudwatch-read trusts this SA) — no
+                # static SMTP creds. From/To/Subject come from service-status-email.
+                - name: AWS_REGION
+                  value: "us-west-2"
+                - name: AWS_ROLE_ARN
+                  value: "arn:aws:iam::830881980142:role/wind-irsa-cloudwatch-read"
+                - name: AWS_WEB_IDENTITY_TOKEN_FILE
+                  value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
               envFrom:
                 - configMapRef:
                     name: service-status-email
               volumeMounts:
                 - name: script
                   mountPath: /work
+                - name: aws-iam-token
+                  mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+                  readOnly: true
               resources:
                 requests:
                   cpu: 50m
@@ -80,3 +73,11 @@ spec:
               configMap:
                 name: service-status-report-script
                 defaultMode: 0755
+            # M75 IRSA: projected SA token (aud sts.amazonaws.com) for web identity.
+            - name: aws-iam-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      audience: sts.amazonaws.com
+                      expirationSeconds: 3600
+                      path: token

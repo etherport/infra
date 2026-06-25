@@ -25,8 +25,7 @@ Env (optional):
 
 import json
 import os
-import smtplib
-import ssl
+import boto3
 import sys
 import urllib.parse
 import urllib.request
@@ -53,8 +52,7 @@ if not PROM_URL:
     sys.exit(2)
 
 if not STDOUT_ONLY:
-    for k in ("SMTP_SMARTHOST", "SMTP_AUTH_USERNAME", "SMTP_AUTH_PASSWORD",
-              "SMTP_FROM", "EMAIL_TO", "EMAIL_SUBJECT"):
+    for k in ("EMAIL_FROM", "EMAIL_TO", "EMAIL_SUBJECT"):
         if not os.environ.get(k):
             print(f"ERROR: {k} is required (or set STDOUT_ONLY=1)", file=sys.stderr)
             sys.exit(2)
@@ -562,16 +560,9 @@ if STDOUT_ONLY:
     sys.stdout.write(html)
     sys.exit(0)
 
-smarthost = os.environ["SMTP_SMARTHOST"]
-if ":" in smarthost:
-    host, port_str = smarthost.rsplit(":", 1)
-    port = int(port_str)
-else:
-    host, port = smarthost, 587
-
 msg = EmailMessage()
 msg["Subject"] = subject
-msg["From"] = os.environ["SMTP_FROM"]
+msg["From"] = os.environ["EMAIL_FROM"]
 msg["To"] = os.environ["EMAIL_TO"]
 # Set a plain-text fallback so non-HTML clients still get something useful.
 plain = (
@@ -588,12 +579,13 @@ if firing:
 msg.set_content(plain)
 msg.add_alternative(html, subtype="html")
 
-context = ssl.create_default_context()
-with smtplib.SMTP(host, port, timeout=30) as smtp:
-    smtp.ehlo()
-    smtp.starttls(context=context)
-    smtp.ehlo()
-    smtp.login(os.environ["SMTP_AUTH_USERNAME"], os.environ["SMTP_AUTH_PASSWORD"])
-    smtp.send_message(msg)
+# Send via the SES API (boto3) using the pod's IRSA role — no static SMTP creds
+# (email-transport consolidation).
+ses = boto3.client("ses", region_name=os.environ.get("AWS_REGION", "us-west-2"))
+ses.send_raw_email(
+    Source=os.environ["EMAIL_FROM"],
+    Destinations=[os.environ["EMAIL_TO"]],
+    RawMessage={"Data": msg.as_string()},
+)
 
 print(f"[service-status-report] sent: {subject}")

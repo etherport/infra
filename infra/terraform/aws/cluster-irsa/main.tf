@@ -102,6 +102,9 @@ locals {
       subs = [
         "system:serviceaccount:auto-remediation:remediation-controller",
         "system:serviceaccount:cloudwatch-to-loki:cloudwatch-to-loki",
+        # service-status-report (monitoring) sends its daily email via SES API on
+        # this role (it does not read CloudWatch; reuses the role for the SES grant).
+        "system:serviceaccount:monitoring:service-status-report",
       ]
       policy = jsonencode({
         Version = "2012-10-17"
