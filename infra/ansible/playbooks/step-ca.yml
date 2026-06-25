@@ -1,0 +1,497 @@
+---
+# =============================================================================
+# step-ca — smallstep SSH Certificate Authority  (M76 Phase 1)
+# =============================================================================
+# Stands up a dedicated smallstep `step-ca` host that acts as an **SSH
+# Certificate Authority** for the homelab. This is the foundation of M76:
+# replace long-lived `~/.ssh/authorized_keys` trust with **short-lived SSH
+# certificates**.
+#
+# Trust model this CA enables (Phase 1 — issuance only; sshd rollout is a
+# later phase):
+#   * HUMANS authenticate via Authentik SSO and run `step ssh login` /
+#     `step ssh certificate`, getting a short-lived (default 16h) **SSH user
+#     certificate** signed by this CA's *user* key.   -> OIDC provisioner.
+#   * HEADLESS / NON-INTERACTIVE flows (the devbox Claude-Code agent + CI
+#     ansible) mint short-lived SSH **user** certs without a browser, using a
+#     bootstrap JWK secret.                            -> JWK provisioner.
+#   * HOST keys get **SSH host certificates** and renew them without
+#     re-authenticating, by proving possession of the existing cert.
+#                                                      -> SSHPOP provisioner.
+#   * APPLIANCES (UDM / Protect / PDU / UPS / switches) are **NOT** covered by
+#     this CA — they have their own auth and can't run an sshd that trusts a
+#     user CA. Out of scope by design.
+#
+# The CA itself is a single Go binary (`step-ca`) reading a file-based
+# `ca.json` (no remote management / no DB-backed admin API in Phase 1), run as
+# an unprivileged `step` system user under systemd, listening on :8443.
+#
+# --- IDEMPOTENCY -------------------------------------------------------------
+# Safe to re-run. The expensive, key-generating `step ca init` runs ONLY when
+# `ca.json` is absent (stat guard); each provisioner is added ONLY when it is
+# not already present in `step ca provisioner list` (parsed + guarded). The CA
+# is SIGHUP/restarted (via a handler) only when the config actually changed —
+# `step ca provisioner add` edits ca.json on disk but the running process
+# needs a reload to pick it up.
+#
+# --- USAGE -------------------------------------------------------------------
+#   ansible-playbook -i inventory/wind/inventory.ini playbooks/step-ca.yml
+#
+# TODO(inventory): this playbook targets group `step_ca`, which does NOT yet
+# exist in infra/ansible/inventory/wind/inventory.ini. Before the first run,
+# add (NOT done here — inventory is authored separately):
+#     [step_ca]
+#     step-ca ansible_host=10.10.201.46
+# (and add `step_ca` under any `[all]` / `:children` rollups as appropriate).
+# =============================================================================
+
+- name: Provision step-ca SSH Certificate Authority (M76 Phase 1)
+  hosts: step_ca
+  become: true
+  remote_user: ubuntu
+
+  vars:
+    # --- Identity --------------------------------------------------------
+    ca_name: "wind Homelab CA"
+    ca_fqdn: "step-ca.wind.etherport.net"
+    ca_ip: "10.10.201.46"
+    ca_listen: ":8443"
+
+    # --- Pinned upstream versions (smallstep GitHub releases) ------------
+    # step-ca and step-cli version independently; pin both. Bump together
+    # after checking https://github.com/smallstep/{certificates,cli}/releases
+    # and refreshing the checksums below from that release's checksums.txt.
+    step_ca_version: "0.30.2"     # smallstep/certificates  (step-ca daemon)
+    step_cli_version: "0.30.6"    # smallstep/cli           (step CLI)
+    # sha256 of the .deb assets (from each release's checksums.txt).
+    step_ca_deb_sha256: "f8e43f0f2ba1e37121b75623993ea0bece5cc3a02b73eefc16e414d41c9fec71"
+    step_cli_deb_sha256: "5845c181251ffe43ca2331bc171e0b92324a71be9cf4ef76cd6fbbba4f2a3cc6"
+
+    # --- Layout ----------------------------------------------------------
+    step_user: step               # dedicated unprivileged system user
+    step_group: step
+    step_path: /etc/step-ca       # STEPPATH (data dir: certs/, secrets/, config/)
+    ca_config: /etc/step-ca/config/ca.json
+    ca_root_crt: /etc/step-ca/certs/root_ca.crt
+    ca_password_file: /etc/step-ca/.ca-password   # read by the systemd unit
+
+    # --- Provisioner integration parameters ------------------------------
+    # OIDC (human SSO) -> Authentik. The OIDC application `step-ca` + its
+    # client secret are authored separately (Authentik blueprint + SOPS).
+    oidc_provisioner_name: authentik
+    oidc_client_id: step-ca
+    oidc_configuration_endpoint: "https://auth.wind.etherport.net/application/o/step-ca/.well-known/openid-configuration"
+    oidc_listen_address: ":10000"   # local callback port for `step ssh login`
+    oidc_domain: wind.etherport.net
+    jwk_provisioner_name: headless  # non-interactive automation bootstrap
+    sshpop_provisioner_name: sshpop # host-cert renewal (created by --ssh init)
+
+    # --- Secrets (SOPS; authored separately) -----------------------------
+    # Decrypted headlessly via the age key deployed to this fleet. Keys:
+    #   ca_password         -> encrypts the CA signing keys (root/intermediate
+    #                          + SSH user/host keys); also the systemd run pwd.
+    #   jwk_password        -> encrypts the `headless` JWK provisioner key; the
+    #                          bootstrap secret the non-interactive flows use.
+    #   oidc_client_secret  -> the Authentik OIDC client secret for `step-ca`.
+    _secrets: "{{ lookup('pipe', 'sops -d ' ~ (playbook_dir | quote) ~ '/secrets/step-ca.sops.yaml') | from_yaml }}"
+
+  handlers:
+    # Reload (not hard-restart) so issuance in flight isn't disrupted — step-ca
+    # reloads ca.json on SIGHUP. `systemd: state=reloaded` sends SIGHUP for a
+    # simple unit without an ExecReload; we keep it explicit and resilient.
+    - name: Reload step-ca
+      ansible.builtin.systemd:
+        name: step-ca
+        state: reloaded
+      # If the unit is not yet started (very first run, before enable+start),
+      # a reload would fail — tolerate that; the start task below brings it up.
+      failed_when: false
+
+  tasks:
+    # =====================================================================
+    # 1. Install the step-ca daemon + step CLI from pinned .deb releases
+    # =====================================================================
+    - name: Pre-reqs (curl for any debug; ca-certificates for TLS to upstreams)
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Check installed step-ca version (idempotency guard)
+      ansible.builtin.command: step-ca version
+      register: _step_ca_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Download step-ca .deb (pinned + checksum-verified)
+      ansible.builtin.get_url:
+        url: "https://github.com/smallstep/certificates/releases/download/v{{ step_ca_version }}/step-ca_{{ step_ca_version }}-1_amd64.deb"
+        dest: "/tmp/step-ca_{{ step_ca_version }}-1_amd64.deb"
+        checksum: "sha256:{{ step_ca_deb_sha256 }}"
+        mode: "0644"
+      when: step_ca_version not in (_step_ca_installed.stdout | default(''))
+
+    - name: Install step-ca .deb
+      ansible.builtin.apt:
+        deb: "/tmp/step-ca_{{ step_ca_version }}-1_amd64.deb"
+        state: present
+      when: step_ca_version not in (_step_ca_installed.stdout | default(''))
+
+    - name: Check installed step CLI version (idempotency guard)
+      ansible.builtin.command: step version
+      register: _step_cli_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Download step CLI .deb (pinned + checksum-verified)
+      ansible.builtin.get_url:
+        url: "https://github.com/smallstep/cli/releases/download/v{{ step_cli_version }}/step-cli_{{ step_cli_version }}-1_amd64.deb"
+        dest: "/tmp/step-cli_{{ step_cli_version }}-1_amd64.deb"
+        checksum: "sha256:{{ step_cli_deb_sha256 }}"
+        mode: "0644"
+      when: step_cli_version not in (_step_cli_installed.stdout | default(''))
+
+    - name: Install step CLI .deb
+      ansible.builtin.apt:
+        deb: "/tmp/step-cli_{{ step_cli_version }}-1_amd64.deb"
+        state: present
+      when: step_cli_version not in (_step_cli_installed.stdout | default(''))
+
+    # =====================================================================
+    # 2. Dedicated system user + STEPPATH layout
+    # =====================================================================
+    - name: Create `step` system group
+      ansible.builtin.group:
+        name: "{{ step_group }}"
+        system: true
+
+    - name: Create `step` system user (no login shell, home = STEPPATH)
+      ansible.builtin.user:
+        name: "{{ step_user }}"
+        group: "{{ step_group }}"
+        system: true
+        create_home: false
+        home: "{{ step_path }}"
+        shell: /usr/sbin/nologin
+        comment: "smallstep step-ca service account"
+
+    - name: Create STEPPATH directory tree
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ step_user }}"
+        group: "{{ step_group }}"
+        # 0700 so only `step` can read the secrets/ keys; the systemd unit runs
+        # as `step`, and clients fetch the *public* root via the API, not disk.
+        mode: "0700"
+      loop:
+        - "{{ step_path }}"
+        - "{{ step_path }}/config"
+        - "{{ step_path }}/certs"
+        - "{{ step_path }}/secrets"
+
+    # =====================================================================
+    # 3. Secret password files
+    #    The CA-key password is needed both for `step ca init` AND at runtime
+    #    by the systemd unit (--password-file). The JWK + OIDC secrets are only
+    #    needed transiently while adding those provisioners, written to a
+    #    locked-down tmp dir and shredded afterwards.
+    # =====================================================================
+    - name: Write the CA-key password file (consumed by the systemd unit)
+      ansible.builtin.copy:
+        content: "{{ _secrets.ca_password }}"
+        dest: "{{ ca_password_file }}"
+        owner: "{{ step_user }}"
+        group: "{{ step_group }}"
+        mode: "0600"
+      no_log: true
+
+    - name: Create a private tmp dir for transient init/provisioner secrets
+      ansible.builtin.file:
+        path: "{{ step_path }}/.bootstrap"
+        state: directory
+        owner: "{{ step_user }}"
+        group: "{{ step_group }}"
+        mode: "0700"
+
+    - name: Stage CA-key password also as a bootstrap password file (for init)
+      # `step ca init` and `provisioner add --create` both want a --password-file
+      # we can hand them; reuse the CA password file content here under the
+      # bootstrap dir so init/provisioner steps don't depend on read order.
+      ansible.builtin.copy:
+        content: "{{ _secrets.ca_password }}"
+        dest: "{{ step_path }}/.bootstrap/ca-password"
+        owner: "{{ step_user }}"
+        group: "{{ step_group }}"
+        mode: "0600"
+      no_log: true
+
+    - name: Stage the JWK provisioner password (encrypts the `headless` JWK)
+      ansible.builtin.copy:
+        content: "{{ _secrets.jwk_password }}"
+        dest: "{{ step_path }}/.bootstrap/jwk-password"
+        owner: "{{ step_user }}"
+        group: "{{ step_group }}"
+        mode: "0600"
+      no_log: true
+
+    # =====================================================================
+    # 4. Initialise the CA as an SSH CA — ONCE (guarded on ca.json absence)
+    #    `--ssh` generates the SSH **user** and **host** signing keys and wires
+    #    the `ssh: { hostKey, userKey }` block in ca.json. `--deployment-type
+    #    standalone` keeps it file-based (no cloud KMS / no remote mgmt). This
+    #    also creates the default `admin` JWK provisioner and a default
+    #    `sshpop` provisioner.
+    # =====================================================================
+    - name: Check whether the CA is already initialised
+      ansible.builtin.stat:
+        path: "{{ ca_config }}"
+      register: _ca_json
+
+    - name: Initialise step-ca as an SSH CA (first run only)
+      # Run as the `step` user so every generated file lands owned by `step`
+      # under STEPPATH (avoids a later recursive chown). STEPPATH env points
+      # init at /etc/step-ca.
+      become_user: "{{ step_user }}"
+      ansible.builtin.command:
+        argv:
+          - step
+          - ca
+          - init
+          - --ssh
+          - --deployment-type=standalone
+          - --name={{ ca_name }}
+          - --dns={{ ca_fqdn }}
+          - --dns={{ ca_ip }}
+          - --address={{ ca_listen }}
+          - --provisioner=admin
+          - --password-file={{ step_path }}/.bootstrap/ca-password
+          - --provisioner-password-file={{ step_path }}/.bootstrap/ca-password
+      environment:
+        STEPPATH: "{{ step_path }}"
+      when: not _ca_json.stat.exists
+      no_log: true   # init echoes provisioner/key material to stdout
+      notify: Reload step-ca
+
+    # =====================================================================
+    # 5. systemd unit  (Type=simple, hardened, :8443)
+    #    Deploy before enabling provisioners so a config reload has something
+    #    to reload. ExecStart reads the CA password from ca_password_file.
+    # =====================================================================
+    - name: Install step-ca systemd unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/step-ca.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=smallstep step-ca — wind Homelab SSH Certificate Authority
+          Documentation=https://smallstep.com/docs/step-ca
+          After=network-online.target
+          Wants=network-online.target
+          StartLimitIntervalSec=30
+          StartLimitBurst=3
+
+          [Service]
+          Type=simple
+          User={{ step_user }}
+          Group={{ step_group }}
+          Environment=STEPPATH={{ step_path }}
+          ExecStart=/usr/bin/step-ca {{ ca_config }} --password-file {{ ca_password_file }}
+          # SIGHUP makes step-ca reload ca.json (provisioner changes) in place.
+          ExecReload=/bin/kill -HUP $MAINPID
+          Restart=on-failure
+          RestartSec=5
+          TimeoutStopSec=30
+
+          # --- Hardening -------------------------------------------------
+          NoNewPrivileges=true
+          ProtectSystem=strict
+          ProtectHome=true
+          PrivateTmp=true
+          PrivateDevices=true
+          ProtectKernelTunables=true
+          ProtectKernelModules=true
+          ProtectKernelLogs=true
+          ProtectControlGroups=true
+          ProtectClock=true
+          ProtectHostname=true
+          RestrictNamespaces=true
+          RestrictRealtime=true
+          RestrictSUIDSGID=true
+          LockPersonality=true
+          MemoryDenyWriteExecute=true
+          RemoveIPC=true
+          SystemCallArchitectures=native
+          SystemCallFilter=@system-service
+          SystemCallFilter=~@privileged @resources
+          CapabilityBoundingSet=
+          AmbientCapabilities=
+          RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+          # ProtectSystem=strict makes everything read-only except these:
+          ReadWritePaths={{ step_path }}
+          # Allow binding the privileged-ish listen port without root (we use
+          # 8443/10000 which are >1024, so no AF cap needed; listed for clarity)
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd to pick up the unit
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Enable + start step-ca
+      ansible.builtin.systemd:
+        name: step-ca
+        enabled: true
+        state: started
+
+    - name: Wait for step-ca to accept connections on :8443
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 8443
+        timeout: 30
+
+    # =====================================================================
+    # 6. Provisioners — added idempotently
+    #    `step ca provisioner add` edits ca.json on disk; the running process
+    #    needs a SIGHUP/reload (our handler) to apply. We query the current
+    #    provisioner list once and only add the ones that are missing.
+    #    NB: each add is run as `step` so the edited ca.json stays step-owned.
+    # =====================================================================
+    - name: List existing provisioners
+      become_user: "{{ step_user }}"
+      ansible.builtin.command:
+        argv: [step, ca, provisioner, list, --ca-config, "{{ ca_config }}"]
+      environment:
+        STEPPATH: "{{ step_path }}"
+      register: _prov_list
+      changed_when: false
+
+    # ----- 6a. OIDC `authentik` — human SSO -> short-lived SSH user certs ----
+    # The OIDC provisioner enables `step ssh login`: a human authenticates in
+    # the browser against Authentik and receives an SSH **user** certificate
+    # (default 16h, set by the provisioner's SSH user claims; left at default
+    # here). `--listen-address :10000` is the local loopback callback port the
+    # `step` client opens during the auth dance. `--domain` restricts which
+    # email domains may obtain certs. We do NOT need `--ssh` on OIDC — OIDC
+    # provisioners can sign SSH certs by default; SSH user/host claim tuning
+    # (principals, cert lifetime) lives in ca.json `claims` and can be layered
+    # in a follow-up without re-adding the provisioner.
+    - name: Add OIDC provisioner `{{ oidc_provisioner_name }}` (Authentik SSO)
+      become_user: "{{ step_user }}"
+      ansible.builtin.command:
+        argv:
+          - step
+          - ca
+          - provisioner
+          - add
+          - "{{ oidc_provisioner_name }}"
+          - --type=OIDC
+          - --ssh
+          - --client-id={{ oidc_client_id }}
+          - --client-secret={{ _secrets.oidc_client_secret }}
+          - --configuration-endpoint={{ oidc_configuration_endpoint }}
+          - --listen-address={{ oidc_listen_address }}
+          - --domain={{ oidc_domain }}
+          - --ca-config={{ ca_config }}
+      environment:
+        STEPPATH: "{{ step_path }}"
+      when: oidc_provisioner_name not in _prov_list.stdout
+      no_log: true   # carries the OIDC client secret
+      notify: Reload step-ca
+
+    # ----- 6b. JWK `headless` — non-interactive automation bootstrap --------
+    # `--create` generates a NEW JWK keypair and stores the encrypted private
+    # key in ca.json (the public key signs cert requests). `--password-file`
+    # supplies the passphrase that encrypts that private key — this passphrase
+    # (jwk_password in SOPS) IS the bootstrap secret the devbox agent / CI hand
+    # to `step ca token` to mint short-lived SSH **user** certs without a
+    # browser. JWK provisioners sign SSH certs by default (no `--ssh` needed).
+    - name: Add JWK provisioner `{{ jwk_provisioner_name }}` (headless automation)
+      become_user: "{{ step_user }}"
+      ansible.builtin.command:
+        argv:
+          - step
+          - ca
+          - provisioner
+          - add
+          - "{{ jwk_provisioner_name }}"
+          - --type=JWK
+          - --create
+          - --password-file={{ step_path }}/.bootstrap/jwk-password
+          - --ca-config={{ ca_config }}
+      environment:
+        STEPPATH: "{{ step_path }}"
+      when: jwk_provisioner_name not in _prov_list.stdout
+      no_log: true   # touches the JWK passphrase
+      notify: Reload step-ca
+
+    # ----- 6c. SSHPOP `sshpop` — host-cert renewal without re-auth ----------
+    # SSHPOP lets a host renew/rekey its SSH **host** certificate by proving
+    # possession of the existing cert key (an sshpop JWT), so a host can rotate
+    # its short-lived host cert from cron with no human/OIDC/JWK secret.
+    # `step ca init --ssh` already creates a default `sshpop` provisioner, so
+    # this add normally NO-OPs via the guard; it's kept so the playbook is
+    # correct even if init's default is ever removed. SSHPOP does not take
+    # `--ssh` (it is inherently an SSH-cert provisioner).
+    - name: Add SSHPOP provisioner `{{ sshpop_provisioner_name }}` (host renewal)
+      become_user: "{{ step_user }}"
+      ansible.builtin.command:
+        argv:
+          - step
+          - ca
+          - provisioner
+          - add
+          - "{{ sshpop_provisioner_name }}"
+          - --type=SSHPOP
+          - --ca-config={{ ca_config }}
+      environment:
+        STEPPATH: "{{ step_path }}"
+      when: sshpop_provisioner_name not in _prov_list.stdout
+      notify: Reload step-ca
+
+    # Apply any provisioner changes now (flush handlers) before we verify.
+    - name: Apply pending CA config reloads
+      ansible.builtin.meta: flush_handlers
+
+    # =====================================================================
+    # 7. Clean up transient bootstrap secrets
+    #    The CA-key password file (ca_password_file) STAYS — the systemd unit
+    #    needs it. Only the transient bootstrap copies are shredded.
+    # =====================================================================
+    - name: Shred + remove the transient bootstrap secrets dir
+      ansible.builtin.command: "shred -u {{ step_path }}/.bootstrap/ca-password {{ step_path }}/.bootstrap/jwk-password"
+      args:
+        removes: "{{ step_path }}/.bootstrap/ca-password"
+      no_log: true
+
+    - name: Remove the (now empty) bootstrap dir
+      ansible.builtin.file:
+        path: "{{ step_path }}/.bootstrap"
+        state: absent
+
+    # =====================================================================
+    # 8. Surface the root CA fingerprint — clients need it to bootstrap trust
+    #    e.g.  step ca bootstrap --ca-url https://step-ca.wind.etherport.net:8443 \
+    #          --fingerprint <this value>
+    # =====================================================================
+    - name: Read the root CA fingerprint
+      become_user: "{{ step_user }}"
+      ansible.builtin.command: "step certificate fingerprint {{ ca_root_crt }}"
+      environment:
+        STEPPATH: "{{ step_path }}"
+      register: _root_fp
+      changed_when: false
+
+    - name: Show the root CA fingerprint (clients bootstrap trust with this)
+      ansible.builtin.debug:
+        msg: >-
+          step-ca is up at https://{{ ca_fqdn }}:8443 — root CA fingerprint:
+          {{ _root_fp.stdout }}
+          (bootstrap clients: `step ca bootstrap --ca-url
+          https://{{ ca_fqdn }}:8443 --fingerprint {{ _root_fp.stdout }}`)

@@ -112,6 +112,23 @@ locals {
       description = "Dev box — persistent tmux/Claude Code remote workstation"
       tags        = ["terraform", "devbox", "standalone"]
     }
+    step-ca = {
+      vm_id    = 1006
+      ip       = "10.10.201.46"
+      bridge   = "servers" # SDN VNet (VLAN 201)
+      vlan_tag = null      # VNet handles VLAN tagging
+      # M76 Phase 1: smallstep step-ca SSH Certificate Authority. Deliberately a
+      # DEDICATED OFF-CLUSTER host so a k8s outage can't strand node SSH (the CA
+      # that authorizes SSH must not live inside the thing you SSH in to fix).
+      # Lightweight service (a Go CA + small badger DB). Provisioned by
+      # infra/ansible/playbooks/step-ca.yml. NB: this host still bootstraps with the
+      # automation key via cloud-init; the M76 cutover (Phase 5) handles that later.
+      vcpus       = 1
+      memory_mb   = 1024
+      disk_gb     = 15
+      description = "step-ca — SSH Certificate Authority (M76 short-lived SSH)"
+      tags        = ["terraform", "step-ca", "ssh-ca", "standalone"]
+    }
   }
 
   # Imported VMs - pre-existing VMs adopted into Terraform (no clone block)

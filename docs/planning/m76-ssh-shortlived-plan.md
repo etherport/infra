@@ -62,9 +62,29 @@ Authentik** (`auth.wind.etherport.net`) for humans; **JWK** for headless (devbox
 cert TTLs (user ~8–16 h interactive, ~minutes for headless renew-loop; host certs long with SSHPOP
 renewal).
 
-**Phase 1 — stand up step-ca.** Deploy step-ca on the chosen host (systemd). Init the **SSH CA**
-(user CA + host CA keys). Protect the CA key (encrypted; password via SOPS). Add the OIDC (Authentik)
-+ JWK + SSHPOP provisioners. *No host touched yet — zero impact.*
+**Phase 1 — stand up step-ca. 🟡 IaC BUILT 2026-06-25 (not yet deployed).** Host = a **dedicated
+off-cluster standalone VM `step-ca` (1006, 10.10.201.46)**. Built + validated:
+- `infra/terraform/proxmox/standalone-vms/main.tf` — VM 1006 (1 vCPU / 1 GB / 15 GB). `validate` OK.
+- `infra/terraform/proxmox/firewall/standalone-vms.tf` — M77 firewall for 1006 (baseline SSH/9100 +
+  CA API `:8443` from the Servers VLAN cert-clients + tailnet). `validate` OK.
+- `infra/ansible/playbooks/step-ca.yml` — idempotent step-ca standup (step-ca 0.30.2 / step-cli
+  0.30.6, sha256-pinned `.deb`; `step` system user; hardened systemd `:8443`; `step ca init --ssh`
+  guarded on ca.json; 3 provisioners: **`authentik` OIDC** human path, **`headless` JWK** automation,
+  **`sshpop`** host-cert renewal; SIGHUP reload; shreds transient pw files; prints root-CA
+  fingerprint). `--syntax-check` PASSED.
+- `infra/ansible/playbooks/secrets/step-ca.sops.yaml` — SOPS-encrypted `ca_password` / `jwk_password`
+  / `oidc_client_secret` (generated).
+- `platform/kubernetes/authentik/40-blueprints.yaml` — `step-ca` OIDC app (redirect = the `step` CLI
+  loopback `:10000`); secret `AUTHENTIK_STEPCA_CLIENT_SECRET` added to `30-authentik-secret.sops.yaml`
+  (matches the SOPS `oidc_client_secret`). kustomize builds.
+- `infra/ansible/inventory/wind/inventory.ini` — `step-ca` host + `[step_ca]` group.
+
+  **DEPLOY (the authorized next step — provisions a new VM):** (1) TF apply `standalone-vms` (provision
+  VM 1006) — like M77, a CI dispatch needing authorization; (2) TF apply `firewall` (its rules); (3)
+  add DNS `step-ca.wind.etherport.net A 10.10.201.46` (cluster Technitium); (4) Flux reconcile so the
+  Authentik blueprint applies (creates the OIDC app); (5) run `ansible-playbook -i inventory/wind
+  playbooks/step-ca.yml` → step-ca up, capture the **root-CA fingerprint** (clients bootstrap trust
+  with it). *No existing host is touched — additive.* Then Phase 2.
 
 **Phase 2 — trust the CA on ONE proof host (additive, in parallel with the existing key).** New
 ansible role pushes `TrustedUserCAKeys` + `HostKey` + `HostCertificate` (sshd drop-in) to one host

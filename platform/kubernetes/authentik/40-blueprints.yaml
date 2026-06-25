@@ -40,6 +40,42 @@ data:
           slug: grafana
           provider: !KeyOf grafana-provider
           meta_launch_url: https://grafana.wind.etherport.net
+  # M76: OIDC for `step ssh login` (human path to the step-ca SSH CA). The redirect
+  # is the local listener the `step` CLI opens (provisioner --listen-address :10000).
+  # Headless automation does NOT use this — it uses step-ca's JWK provisioner.
+  step-ca.yaml: |
+    version: 1
+    metadata:
+      name: step-ca-oidc
+    entries:
+      - model: authentik_providers_oauth2.oauth2provider
+        id: step-ca-provider
+        identifiers:
+          name: step-ca
+        attrs:
+          name: step-ca
+          client_type: confidential
+          client_id: step-ca
+          client_secret: !Env AUTHENTIK_STEPCA_CLIENT_SECRET
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+          redirect_uris:
+            - matching_mode: strict
+              url: http://127.0.0.1:10000
+          property_mappings:
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, email]]
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, profile]]
+          signing_key: !Find [authentik_crypto.certificatekeypair, [name, "authentik Self-signed Certificate"]]
+      - model: authentik_core.application
+        id: step-ca-app
+        identifiers:
+          slug: step-ca
+        attrs:
+          name: step-ca SSH CA
+          slug: step-ca
+          provider: !KeyOf step-ca-provider
+          meta_description: "SSH certificate authority — `step ssh login` for short-lived node/VM SSH (M76)"
   open-webui.yaml: |
     version: 1
     metadata:

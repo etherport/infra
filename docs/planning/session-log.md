@@ -13,6 +13,44 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-25 (cont. 2) — L24 Phase-0 prep + M76 Phase-1 IaC built (both safe/inert; deploy = authorized apply)
+
+**What:** executed the safe, no-impact parts of both arc items. Two commits; **no live infra changed**.
+
+**L24 Phase 0 (commit `2267680`):** authored the FRR-mode MetalLB **Flux HelmRelease**
+(`clusters/wind/helm-releases/metallb.yaml`) + the `metallb` HelmRepository, but left it **INERT** —
+NOT wired into `helm-releases/kustomization.yaml` (a commented `# - metallb.yaml` with a "Phase 2,
+windowed only" note), so Flux can't apply it. Key discovery during prep: **MetalLB is the kubespray
+addon and kubespray's metallb role has NO FRR toggle** (native-only template, default v0.13.9 though
+live runs 0.14.8) → FRR mode requires **migrating MetalLB onto the Helm chart** (Flux-managed). The
+HelmRelease header documents the Phase-2 migration mechanics (delete kubespray workloads first, keep
+CRDs/CRs, L2 net up, `crds.enabled:false`). `kubectl kustomize` verified the HelmRelease is correctly
+excluded. helm-template render deferred to mini/CI (helm not on devbox).
+
+**M76 Phase 1 (commit pending):** built the **complete step-ca standup IaC** for a dedicated
+off-cluster VM, validated, NOT deployed (additive — touches no existing host):
+- TF: VM `step-ca` (1006, 10.10.201.46) in `standalone-vms` + its M77 firewall (`:8443` from the
+  cert-client VLAN + tailnet). Both stacks `terraform validate` OK.
+- Ansible: `playbooks/step-ca.yml` (drafted via a subagent + reviewed) — step-ca 0.30.2 / step-cli
+  0.30.6 sha256-pinned `.deb`; `step` system user; hardened systemd unit `:8443`; idempotent
+  `step ca init --ssh` (guarded on ca.json); 3 provisioners (**`authentik` OIDC** human path,
+  **`headless` JWK** automation, **`sshpop`** host-cert renewal); SIGHUP reload; shreds transient
+  pw files; prints the root-CA fingerprint. `ansible-playbook --syntax-check` PASSED.
+- Secrets: `playbooks/secrets/step-ca.sops.yaml` (ca/jwk/oidc generated, SOPS-encrypted) +
+  `AUTHENTIK_STEPCA_CLIENT_SECRET` added to the Authentik secret (matches).
+- Authentik: `step-ca` OIDC blueprint (redirect = the `step` CLI loopback `:10000`). kustomize builds.
+- Inventory: `step-ca` host + `[step_ca]` group.
+
+**Deploy of M76 Phase 1 (the authorized next apply):** TF apply standalone-vms (provision VM 1006) +
+firewall; add DNS `step-ca.wind.etherport.net A 10.10.201.46`; Flux reconcile (Authentik OIDC app);
+run the step-ca playbook → capture the root-CA fingerprint. Then Phase 2 (push `TrustedUserCAKeys`
+in parallel with the existing key — still no cutover).
+
+**Arc status:** M72/M73/M75 ✅ · M77 Stage 1 live · L24 📋 (prep done, FRR migration = windowed) ·
+M76 🟡 (Phase 1 IaC built, deploy pending).
+
+---
+
 ## 2026-06-25 (cont.) — L24 + M76 fully scoped (multi-agent), decisions made, plans drafted
 
 **What:** ran 3 background scoping workflows (ultracode) and turned the results into two decided,

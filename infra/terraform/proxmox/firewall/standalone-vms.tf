@@ -23,6 +23,7 @@
 #   gh-runner    1003: baseline only (outbound-only runner)
 #   asterisk-sbc 1004: SIP 5060/5061 + RTP range (Twilio+LAN — scope at Stage 2), + baseline
 #   devbox       1005: tailscale udp + baseline (Claude session lives here — Stage 2 with care)
+#   step-ca      1006: step-ca API :8443 (cert clients + tailnet) + baseline (M76 SSH CA)
 # =============================================================================
 
 locals {
@@ -222,5 +223,46 @@ resource "proxmox_virtual_environment_firewall_rules" "devbox" {
     proto   = "udp"
     log     = "nolog"
     comment = "Tailscale (tailnet CGNAT range) — direct WireGuard/DERP. Keep for Stage 2."
+  }
+}
+
+# ---- step-ca (1006): SSH Certificate Authority (M76) ------------------------
+# Clients that mint certs = the whole Ubuntu fleet (k8s nodes + standalone VMs +
+# the devbox agent + the gh-runner CI) — all on the Servers/K8s VLAN — plus remote
+# humans doing `step ssh login` over the tailnet. CA API listens on :8443.
+resource "proxmox_virtual_environment_firewall_options" "step_ca" {
+  node_name     = var.node_name
+  vm_id         = 1006
+  enabled       = true
+  input_policy  = local.vm_input_policy
+  output_policy = "ACCEPT"
+  log_level_in  = "info"
+}
+resource "proxmox_virtual_environment_firewall_rules" "step_ca" {
+  node_name  = var.node_name
+  vm_id      = 1006
+  depends_on = [proxmox_virtual_environment_firewall_options.step_ca]
+
+  rule {
+    security_group = proxmox_virtual_environment_cluster_firewall_security_group.vm_baseline.name
+    comment        = "M77 baseline (SSH + node_exporter)"
+  }
+  rule {
+    type    = "in"
+    action  = "ACCEPT"
+    source  = var.ipmi_scrape_cidr # 10.10.201.0/24 — the cert-minting fleet (nodes + VMs + devbox + gh-runner)
+    proto   = "tcp"
+    dport   = "8443"
+    log     = "nolog"
+    comment = "step-ca API (:8443) from the Servers/K8s VLAN cert clients"
+  }
+  rule {
+    type    = "in"
+    action  = "ACCEPT"
+    source  = "100.64.0.0/10"
+    proto   = "tcp"
+    dport   = "8443"
+    log     = "nolog"
+    comment = "step-ca API (:8443) for remote human `step ssh login` over the tailnet"
   }
 }
