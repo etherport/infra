@@ -261,3 +261,24 @@ resource "aws_iam_role_policy" "irsa" {
   role     = aws_iam_role.irsa[each.key].id
   policy   = each.value.policy
 }
+
+# The s3-sync family also sends email via the SES API (`aws ses send-email`): the
+# daily-report summary + the delete-guard approval link. The old kubernetes-s3-backup
+# static user carried this; the IRSA migration missed it → daily-report + approval
+# emails failed `AccessDenied ses:SendEmail` (2026-06-25). Scoped to the etherport.net
+# identity. (ai-advisor/alertmanager email via SES *SMTP* with static creds, not this.)
+resource "aws_iam_role_policy" "s3_sync_ses" {
+  name = "wind-irsa-s3-sync-ses"
+  role = aws_iam_role.irsa["s3-sync"].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "SendBackupEmails"
+        Effect   = "Allow"
+        Action   = ["ses:SendEmail", "ses:SendRawEmail"]
+        Resource = "arn:aws:ses:us-west-2:${local.account_id}:identity/etherport.net"
+      },
+    ]
+  })
+}
