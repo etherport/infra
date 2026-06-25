@@ -16,7 +16,9 @@ source "${HERE}/mini-common.sh"   # nas_readable
 now="$(date +%s)"
 
 # 1. Expected LaunchAgents loaded (a backup silently won't run if its agent got unloaded).
-EXPECT=(net.wind.mount-nas net.wind.alloy net.wind.photos-export net.wind.icloud-dav net.wind.messages-backup net.wind.icloud-files)
+#    2026-06-25: the bash backup agents (icloud-dav/files, messages-backup, photos-export) were
+#    retired — all categories now run via cairn (net.wind.cairn = scheduler, net.wind.cairn.health).
+EXPECT=(net.wind.mount-nas net.wind.alloy net.wind.cairn net.wind.cairn.health)
 loaded=0
 for a in "${EXPECT[@]}"; do launchctl print "gui/$(id -u)/${a}" >/dev/null 2>&1 && loaded=$((loaded+1)); done
 agents_ok=$([ "${loaded}" -eq "${#EXPECT[@]}" ] && echo 1 || echo 0)
