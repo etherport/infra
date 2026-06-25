@@ -13,6 +13,29 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-25 — M77 Stage 1: per-VM PVE firewall on the standalone VMs (permissive/observe)
+
+**What:** built **M77 Stage 1** — selective PVE firewall for the 5 standalone VMs (k8s nodes stay EXCLUDED; Cilium/UDM own those). New `infra/terraform/proxmox/firewall/standalone-vms.tf` + NIC `firewall = true` in `infra/terraform/proxmox/standalone-vms/main.tf`.
+
+**Approach (lock-out-safe, mirrors H37):** per-VM firewall **ENABLED but PERMISSIVE** — `proxmox_virtual_environment_firewall_options{enabled=true, input_policy="ACCEPT", log_level_in="info"}`. Nothing is denied yet; inbound is just logged. This is deliberate: it lets us confirm each allow-list against the **real** PVE firewall log before flipping to DROP, so we don't repeat the H37 Ceph/IPMI latent-break class (a needed allow missing from a default-deny that only bites on a later fresh connection).
+
+**Allow-lists** (from live `ss -tlnp/-ulnp` on each VM, 2026-06-25):
+- Shared `vm-baseline` security group: **SSH 22** from the `mgmt-admin` IPset (reused from H37) + **node_exporter 9100** from the Servers/K8s VLAN (`var.ipmi_scrape_cidr` = 10.10.201.0/24).
+- dns-fallback (1001): + **53 tcp/udp** (resolver) + **5380** (Technitium admin, mgmt-only).
+- vpn-local (1002): + **WG udp 9820-9821** (source TBD-scoped at Stage 2 = AWS peer).
+- gh-runner (1003): baseline only (outbound-only runner).
+- asterisk-sbc (1004): + **SIP 5060/udp, 5061/tcp** + **RTP 10000-20000/udp** (sources TBD = Twilio ranges + LAN at Stage 2).
+- devbox (1005): + **tailscale udp** from 100.64.0.0/10. ⚠️ the Claude session lives on this VM — Stage 2 needs care (keep SSH+tailnet).
+- `rpcbind:111` (exposed on every VM by default) is intentionally **not** allowed → the eventual default-deny closes that latent NFS-portmapper exposure.
+
+**Why permissive first:** going straight to DROP risked breaking dns-fallback (a resolver others depend on) or the SIP/WG paths via a source/port I mis-scoped — exactly the incident pattern H37 hit twice.
+
+**State:** both stacks `terraform validate` + `fmt` clean (`-backend=false`, devbox holds no creds — M82). Committed; push triggers plan-only on both `terraform-proxmox-firewall` + `terraform-proxmox-standalone-vms` workflows (apply is dispatch-only). **NOT yet applied.**
+
+**Next (Stage 2):** dispatch `apply` — firewall stack FIRST (rules), then standalone-vms (NIC flag) — review each plan is exactly this change → watch the PVE firewall log a while → scope the external sources (Twilio SIP/media; AWS VPN peer IP) → flip `local.vm_input_policy` ACCEPT→DROP per VM, starting with gh-runner & dns-fallback (safest). Remaining security-arc items after M77: L24 (BGP auth), M76 (SSH short-lived certs).
+
+---
+
 ## 2026-06-24 (cont. 16) — cairn native backup agent: M1–M5 + M6-half built; photos network-fragility designed out
 
 **What:** built out **`cairn`** (M103; repo [sparked-diamond/cairn](https://github.com/sparked-diamond/cairn), `~/code/cairn`) from skeleton to nearly-deployable. **27 tests green**, all pushed. Decisions + code live in the cairn repo; infra got a deploy runbook ([`../runbooks/cairn-deployment.md`](../runbooks/cairn-deployment.md)).

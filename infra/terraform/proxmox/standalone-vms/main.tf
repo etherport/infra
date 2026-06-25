@@ -156,6 +156,12 @@ resource "proxmox_virtual_environment_vm" "standalone" {
     bridge  = each.value.bridge
     model   = "virtio"
     vlan_id = each.value.vlan_tag
+    # M77: route this NIC through the PVE firewall so the per-VM rules in
+    # ../firewall/standalone-vms.tf take effect. Apply the firewall stack FIRST
+    # (rules exist) before this flips on. Harmless until then — Stage 1 sets
+    # input_policy = ACCEPT (nothing denied; inbound just logged). The k8s nodes
+    # are a SEPARATE stack and are intentionally NOT firewalled here.
+    firewall = true
     # Jumbo frames to match bond0/vmbr0/SDN-zone MTU. Without this, the
     # tap device defaults to MTU 1500, becoming the path bottleneck even
     # though every other hop is 9000. Caught 2026-05-18 when gh-runner
@@ -240,6 +246,12 @@ resource "proxmox_virtual_environment_vm" "imported" {
     bridge  = each.value.bridge
     model   = "virtio"
     vlan_id = each.value.vlan_tag
+    # M77: route this NIC through the PVE firewall so the per-VM rules in
+    # ../firewall/standalone-vms.tf take effect. Apply the firewall stack FIRST
+    # (rules exist) before this flips on. Harmless until then — Stage 1 sets
+    # input_policy = ACCEPT (nothing denied; inbound just logged). The k8s nodes
+    # are a SEPARATE stack and are intentionally NOT firewalled here.
+    firewall = true
     # Jumbo frames to match bond0/vmbr0/SDN-zone MTU. Without this, the
     # tap device defaults to MTU 1500, becoming the path bottleneck even
     # though every other hop is 9000. Caught 2026-05-18 when gh-runner
