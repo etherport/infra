@@ -452,6 +452,42 @@
       changed_when: _oidc_add.rc | default(1) == 0
       notify: Reload step-ca
 
+    # ----- 6a-ii. OIDC SSH cert template — grant `ubuntu`/`root` login principals
+    # By default an OIDC SSH user cert's principals = the user's email, which won't
+    # match the shared `ubuntu`/`root` logins. This template APPENDS ubuntu+root to
+    # the default principals so `step ssh login` (Authentik SSO) yields a cert usable
+    # on every host. WHO can use it is gated at Authentik (the step-ca app is bound
+    # to the Admins group — only operators, not Plex/HA users which use other auth).
+    - name: Install the OIDC SSH user-cert template (adds ubuntu/root principals)
+      ansible.builtin.copy:
+        src: files/step-ca/oidc_user.tpl
+        dest: "{{ step_path }}/templates/ssh/oidc_user.tpl"
+        owner: "{{ step_user }}"
+        group: "{{ step_user }}"
+        mode: "0644"
+      register: _oidc_ssh_tpl
+
+    - name: Set the SSH template on the OIDC provisioner
+      become_user: "{{ step_user }}"
+      ansible.builtin.command:
+        argv:
+          - step
+          - ca
+          - provisioner
+          - update
+          - "{{ oidc_provisioner_name }}"
+          - --ssh-template
+          - "{{ step_path }}/templates/ssh/oidc_user.tpl"
+          - --ca-config
+          - "{{ ca_config }}"
+      environment:
+        STEPPATH: "{{ step_path }}"
+      # Run when the template changed OR the OIDC provisioner was just added; both
+      # require the provisioner to exist (skip if the OIDC add was best-effort-skipped).
+      when: oidc_provisioner_name in _prov_names or (_oidc_add is changed)
+      changed_when: _oidc_ssh_tpl is changed
+      notify: Reload step-ca
+
     # ----- 6b. JWK `headless` — non-interactive automation bootstrap --------
     # `--create` generates a NEW JWK keypair and stores the encrypted private
     # key in ca.json (the public key signs cert requests). `--password-file`

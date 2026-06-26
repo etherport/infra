@@ -76,6 +76,15 @@ data:
           slug: step-ca
           provider: !KeyOf step-ca-provider
           meta_description: "SSH certificate authority — `step ssh login` for short-lived node/VM SSH (M76)"
+      # GATE: only the Admins group may use step-ca SSO (its cert grants ubuntu/root
+      # on every host). Plex/HA/etc. users authenticate elsewhere and are NOT admins.
+      - model: authentik_policies.policybinding
+        identifiers:
+          target: !KeyOf step-ca-app
+          group: !Find [authentik_core.group, [name, "authentik Admins"]]
+          order: 0
+        attrs:
+          enabled: true
   open-webui.yaml: |
     version: 1
     metadata:
