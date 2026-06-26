@@ -62,8 +62,25 @@ Authentik** (`auth.wind.etherport.net`) for humans; **JWK** for headless (devbox
 cert TTLs (user ~8–16 h interactive, ~minutes for headless renew-loop; host certs long with SSHPOP
 renewal).
 
-**Phase 1 — stand up step-ca. 🟡 IaC BUILT 2026-06-25 (not yet deployed).** Host = a **dedicated
-off-cluster standalone VM `step-ca` (1006, 10.10.201.46)**. Built + validated:
+**Phase 1 — stand up step-ca. ✅ DEPLOYED 2026-06-26.** VM 1006 provisioned (CI), playbook run →
+**step-ca is `active` on `https://10.10.201.46:8443`**, provisioners **`admin`/`sshpop`/`headless`(JWK)**,
+SSH user+host CA keys present. **Root CA fingerprint (clients bootstrap trust with this — NOT secret):**
+`a37b7b1622157ecd6687dc953f95cbb49d152fe9819ed0b54aa56f4f9689cf67`
+(`step ca bootstrap --ca-url https://step-ca.wind.etherport.net:8443 --fingerprint a37b7b16…89cf67`).
+Two understood follow-ups (neither blocks the headless path):
+- **OIDC human provisioner deferred** — `step ca provisioner add --type OIDC` validates the Authentik
+  discovery endpoint at add-time, but **a VLAN-201 host can't reach the MetalLB BGP VIP `10.10.201.70`
+  (Traefik, where `auth.wind.etherport.net` lives) on its own subnet** — `no route to host` (BGP-only,
+  no L2/ARP same-subnet; the grafana endpoint is equally unreachable that way, so it's a network
+  constraint not a config bug). The playbook's OIDC add is **best-effort** and will land automatically
+  once step-ca can reach Authentik. Fix options: a `10.10.201.70/32 via 10.10.201.1` route on step-ca
+  (UDM hairpin), or reach Authentik via a non-VIP path. The Authentik `step-ca` OIDC app + secret are
+  already in IaC (blueprint applied).
+- **DNS** `step-ca.wind.etherport.net A 10.10.201.46` added to Technitium (status ok); propagation
+  across the HA pair + the VM resolver cache still settling — clients can use the `.46` IP meanwhile
+  (the CA cert carries the IP SAN).
+
+Host = a **dedicated off-cluster standalone VM `step-ca` (1006, 10.10.201.46)**. Built + validated:
 - `infra/terraform/proxmox/standalone-vms/main.tf` — VM 1006 (1 vCPU / 1 GB / 15 GB). `validate` OK.
 - `infra/terraform/proxmox/firewall/standalone-vms.tf` — M77 firewall for 1006 (baseline SSH/9100 +
   CA API `:8443` from the Servers VLAN cert-clients + tailnet). `validate` OK.

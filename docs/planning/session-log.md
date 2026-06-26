@@ -60,6 +60,36 @@ osxphotos `--update` confirmed working after the stall fix. **Next:** none requi
 
 ---
 
+## 2026-06-26 — M76 Phase 1 DEPLOYED: step-ca SSH CA live (headless JWK works; OIDC deferred on a network constraint)
+
+**What:** deployed M76 Phase 1 (user-authorized). step-ca is **`active` on VM 1006 (`https://10.10.201.46:8443`)**.
+
+**Deploy sequence:** dispatched `terraform-proxmox-standalone-vms` apply (provision VM 1006 — plan 1-add,
+0-destroy) → `terraform-proxmox-firewall` apply (its `:8443` rules — 2-add) → ran `playbooks/step-ca.yml`
+from the devbox. CA up; provisioners **`admin` / `sshpop` / `headless`(JWK)**; SSH user+host CA keys;
+**root-CA fingerprint `a37b7b1622157ecd6687dc953f95cbb49d152fe9819ed0b54aa56f4f9689cf67`**.
+
+**Playbook deploy-fixes (commit `9e4c78d`):** found against real step-cli 0.30.6 — (1) `provisioner list
+--ca-config` removed in 0.30 → enumerate provisioners by parsing ca.json; (2) no bare `--ssh` on OIDC
+`provisioner add`; (3) OIDC made best-effort.
+
+**Key finding — VLAN-201 hosts can't reach the MetalLB BGP VIPs same-subnet.** The OIDC provisioner add
+failed: `auth.wind.etherport.net` → `10.10.201.70` (Traefik VIP) gives `no route to host` FROM the
+step-ca VM. MetalLB is **BGP-only (no L2/ARP)**, so a host ON VLAN 201 (10.10.201.0/24) treats the VIP as
+on-link, ARPs, gets no reply → unreachable. Off-subnet clients (routed via the UDM) reach VIPs fine; this
+only bites a VLAN-201 host trying to reach a VIP. The grafana discovery endpoint is equally unreachable
+that way — confirming a network constraint, not a config bug. **Impact: only the OIDC human path** (step-ca
+needs to reach Authentik); the **headless JWK path is unaffected** (served inbound to step-ca) and is the
+M76 driver. Fix options for OIDC: a `10.10.201.70/32 via 10.10.201.1` route on step-ca (UDM hairpin) or a
+non-VIP Authentik path. Playbook auto-adds OIDC once reachable. DNS `step-ca A .46` added to Technitium
+(HA propagation settling; clients can use the IP — cert has the SAN). Authentik `step-ca` OIDC app + secret
+are in IaC + applied.
+
+**NEXT = M76 Phase 2** (push `TrustedUserCAKeys` to hosts IN PARALLEL with the existing key — additive, no
+cutover). Saved a memory on the VLAN-201→VIP constraint.
+
+---
+
 ## 2026-06-25 (cont. 2) — L24 Phase-0 prep + M76 Phase-1 IaC built (both safe/inert; deploy = authorized apply)
 
 **What:** executed the safe, no-impact parts of both arc items. Two commits; **no live infra changed**.
