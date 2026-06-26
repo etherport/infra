@@ -159,12 +159,27 @@ resource "aws_s3_bucket_lifecycle_configuration" "archive" {
 
     filter {}
 
-    # Recovery window for accidental object deletion. Was 1 day (tight,
-    # set when testing/churn was high and Deep Archive storage cost was
-    # the concern). At steady state the archive bucket is write-once-
-    # read-rarely; bumping to 30 days gives a real "oh no I deleted that"
-    # recovery window at negligible additional cost (Deep Archive is
-    # ~$1/TB/month and noncurrent versions inherit that storage class).
+    # Move superseded (noncurrent) versions to Deep Archive after 1 day. Without
+    # this, the current-version `transition` above does NOT touch noncurrent
+    # versions (AWS: "the Transition action applies to the current object version;
+    # to manage noncurrent versions, Amazon S3 defines NoncurrentVersionTransition"),
+    # so a daily-overwritten file (e.g. the iMessage chat.db on the `backups` share)
+    # would leave ~180 noncurrent versions sitting in STANDARD ($0.023/GB-mo) for the
+    # full 180-day Object-Lock window — ~20x more than Deep Archive ($0.00099/GB-mo;
+    # ~$2.2/mo vs ~$0.1/mo for a 550MB/day file). Object Lock is MAINTAINED across
+    # transitions and does NOT block them (only expiration), so the version stays
+    # WORM-protected the whole time. The ~1-2 day shortfall vs Deep Archive's 180-day
+    # minimum on the eventual delete is a negligible early-deletion fee.
+    noncurrent_version_transition {
+      noncurrent_days = 1
+      storage_class   = "DEEP_ARCHIVE"
+    }
+
+    # Recovery window for accidental object deletion: keep noncurrent versions then
+    # delete. NB Object Lock GOVERNANCE 180d DEFERS this expiration — a locked
+    # noncurrent version is NOT removed at 30 days; lifecycle waits until its
+    # retain-until (upload + 180d) passes, then deletes it. So effective retention
+    # is ~180 days, spent in Deep Archive (per the transition above), not STANDARD.
     noncurrent_version_expiration {
       noncurrent_days           = 30
       newer_noncurrent_versions = 1
