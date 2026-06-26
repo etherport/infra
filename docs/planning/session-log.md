@@ -85,8 +85,16 @@ non-VIP Authentik path. Playbook auto-adds OIDC once reachable. DNS `step-ca A .
 (HA propagation settling; clients can use the IP — cert has the SAN). Authentik `step-ca` OIDC app + secret
 are in IaC + applied.
 
-**NEXT = M76 Phase 2** (push `TrustedUserCAKeys` to hosts IN PARALLEL with the existing key — additive, no
-cutover). Saved a memory on the VLAN-201→VIP constraint.
+**UPDATE (same day, cont.):** finished the two follow-ups — **OIDC FIXED** with a persistent netplan
+route `10.10.201.70/32 via 10.10.201.1` baked into the playbook (commit `a4a52c7`; UDM hairpin → step-ca
+reaches Authentik, http 200, OIDC provisioner added); **DNS resolves** via the `.5` service (earlier
+NXDOMAIN was stale negative cache; NB the two cluster Technitium pods have independent per-pod PVCs, so
+the record was added per-pod). **Headless minting PROVEN** — `step ssh certificate --provisioner headless`
+issued a 10-min ECDSA user cert non-interactively. **All 4 provisioners live; M76 Phase 1 COMPLETE.**
+
+**NEXT = M76 Phase 2** (build the ansible role to push `TrustedUserCAKeys`/host-certs to hosts IN PARALLEL
+with the existing key — additive, no cutover; then prove cert-SSH per host; Phase 5 cutover = remove the
+standing key, the risky step). Saved a memory on the VLAN-201→VIP constraint.
 
 ---
 

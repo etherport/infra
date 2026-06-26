@@ -67,18 +67,20 @@ renewal).
 SSH user+host CA keys present. **Root CA fingerprint (clients bootstrap trust with this — NOT secret):**
 `a37b7b1622157ecd6687dc953f95cbb49d152fe9819ed0b54aa56f4f9689cf67`
 (`step ca bootstrap --ca-url https://step-ca.wind.etherport.net:8443 --fingerprint a37b7b16…89cf67`).
-Two understood follow-ups (neither blocks the headless path):
-- **OIDC human provisioner deferred** — `step ca provisioner add --type OIDC` validates the Authentik
-  discovery endpoint at add-time, but **a VLAN-201 host can't reach the MetalLB BGP VIP `10.10.201.70`
-  (Traefik, where `auth.wind.etherport.net` lives) on its own subnet** — `no route to host` (BGP-only,
-  no L2/ARP same-subnet; the grafana endpoint is equally unreachable that way, so it's a network
-  constraint not a config bug). The playbook's OIDC add is **best-effort** and will land automatically
-  once step-ca can reach Authentik. Fix options: a `10.10.201.70/32 via 10.10.201.1` route on step-ca
-  (UDM hairpin), or reach Authentik via a non-VIP path. The Authentik `step-ca` OIDC app + secret are
-  already in IaC (blueprint applied).
-- **DNS** `step-ca.wind.etherport.net A 10.10.201.46` added to Technitium (status ok); propagation
-  across the HA pair + the VM resolver cache still settling — clients can use the `.46` IP meanwhile
-  (the CA cert carries the IP SAN).
+All 4 provisioners live: `admin` / `sshpop` / **`headless` (JWK)** / **`authentik` (OIDC)**. The two
+earlier follow-ups are RESOLVED:
+- **OIDC path FIXED** — root cause was that **a VLAN-201 host can't reach the MetalLB BGP VIP
+  `10.10.201.70`** (Traefik, where `auth.wind.etherport.net` lives) on its own subnet (`no route to
+  host`; BGP-only/no-L2 — saved to memory `vlan201-host-cant-reach-metallb-vip`; the grafana endpoint
+  was equally unreachable, proving it's the network not the config). Fixed with a **persistent netplan
+  route `10.10.201.70/32 via 10.10.201.1`** (UDM hairpin) baked into the playbook (§5b, applied before
+  the OIDC add). Verified `http_code=200` to Authentik; OIDC provisioner added.
+- **DNS RESOLVES** — `step-ca.wind.etherport.net A 10.10.201.46` on the cluster Technitium; verified
+  resolving via the `.5` service (the earlier NXDOMAIN was stale negative cache). NB the two cluster
+  Technitium pods have **independent per-pod PVCs** (no shared zone DB) and `technitium-1`'s admin pw
+  differs — record served via `.5`; clients can also use the `.46` IP (cert carries the SAN).
+- **Headless minting PROVEN** — `step ssh certificate --provisioner headless` issued a 10-min ECDSA
+  SSH user cert (principal `ubuntu`) non-interactively. The M76 core capability works.
 
 Host = a **dedicated off-cluster standalone VM `step-ca` (1006, 10.10.201.46)**. Built + validated:
 - `infra/terraform/proxmox/standalone-vms/main.tf` — VM 1006 (1 vCPU / 1 GB / 15 GB). `validate` OK.
