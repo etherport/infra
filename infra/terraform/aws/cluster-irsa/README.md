@@ -24,6 +24,7 @@ mini — extended **into the cluster**.
   | `wind-irsa-s3-sync` | `backups:s3-sync-*`, `backups:unifi-backup`, `backups:daily-report` | archive / logs.archive / archive-test / infra (== `s3-backup-kubernetes-policy.json`) |
   | `wind-irsa-barman` | `postgres:postgres-cluster`, `cue:cue-db` | postgres-barman bucket RW |
   | `wind-irsa-cloudwatch-read` | `auto-remediation:remediation-controller`, `cloudwatch-to-loki:default` | CloudWatch Logs read |
+  | `wind-irsa-cue-media` | `cue:cue-api` | cue-media bucket RW (bug screenshots; workout media next) |
 
 ## Apply (CI-only, M82)
 
