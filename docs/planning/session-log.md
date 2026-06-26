@@ -13,6 +13,53 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-25 (cont. 3) — M103 cairn CUTOVER complete: all iCloud backups migrated off the bash suite
+
+**What:** cut the mini's entire iCloud backup suite over from the bash scripts to **cairn**, headless,
+one category at a time, and rewrote the cluster-side reporting to match. All 4 bash backup LaunchAgents
+(`icloud-dav`, `icloud-files`, `messages-backup`, `photos-export`) are retired (booted out + disabled,
+reversible); cairn (`net.wind.cairn` scheduler + `net.wind.cairn.health`) now owns everything. Docs
+fully refreshed: cairn `README.md` (install/config/metrics/gotchas), `DESIGN.md` (→ in production),
+infra `docs/runbooks/cairn-deployment.md` (post-cutover status + findings).
+
+**Cutover mechanics (how, since it's reusable):** drove it from the dev session via **launchd**
+(`launchctl bootstrap gui/$UID …`) because **FDA is attributed to the launchd responsible process, not
+the binary** — cairn run from a shell is attributed to the shell (FDA "denied"); via launchd it's its
+own responsible process and its `cairn.app` grant applies. Per category: staging-verify (cheap ones to
+a local dest first), then run to prod via launchd, verify the `cairn_backup_*{job}` metric, then
+`launchctl bootout`+`disable` the matching bash agent. contacts/calendars needed a one-time
+`max_delete` bump (native `.vcf` / sqlite store re-layout deletes the old bash files).
+
+**Findings that bit (now in code + README §6):** (1) calendars/reminders data is in the **group
+containers** (`group.com.apple.calendar/Calendar.sqlitedb`, `group.com.apple.reminders/Container_v1/
+Stores/Data-*.sqlite`), NOT `~/Library/{Calendars,Reminders}` (empty) — fixed the config paths. (2)
+Photos must run **local mode** — osxphotos `--use-photokit` needs the *System* Photo Library, but this
+is a secondary `(NAS)` library on a sparsebundle → download mode fails rc=1; cairn exports local
+originals, Photos.app's "Download Originals" populates the rest. (3) The supervised runner's
+**stall-watchdog was too aggressive** for osxphotos/rsync **silent SMB phases** (metadata processing /
+17k-file list-build go silent for >15 min) → it false-killed working photos + messages runs; fixed to
+rely on the overall timeout. (4) osxphotos **filename collisions** (two photos sharing a name →
+`IMG_x`/`IMG_x (1)`) throw benign `File exists` on `--update`; cairn now treats a run whose only errors
+are those as success. (5) The TCC FDA **probe** was reading `TCC.db` (protected above FDA on macOS 26 →
+false negative); fixed to probe `chat.db`. (6) `messages_attachments` count came back 0 (dest `find`
+timed out over SMB) → count the local source instead.
+
+**Reporting cutover:** chose a **clean label-based schema** (`cairn_backup_*{job,instance}` +
+`cairn_photos_*` + `cairn_health`) over the bash name-mangling — rewrote `dashboards/{icloud-backups,
+photos-export}.yaml` + `0{9,10}-*-alerts.yaml` via a verified workflow (incl. the `ICloudBackupEmpty`
+rc-gate), Flux reconciled, deleted the 18 stale bash Pushgateway groups, updated `mini-health.sh`.
+
+**S3 (the one hard constraint):** **zero churn** — photos reuse the existing osxphotos export DB + dir
+(byte-identical → only new originals upload); only contacts/calendars re-layout churned (~MB, free,
+still STANDARD).
+
+**State:** all metadata jobs rc=0; photos backup intact (417 GB+, ~93% complete) and cairn-owned —
+osxphotos `--update` confirmed working after the stall fix. **Next:** none required; cairn runs nightly
+(19:30/20:00/23:30) + heartbeats. Nice-to-have: CI signed-`.app`-release automation (build is manual
+`scripts/package.sh`). The seed tail (last few % of originals) fills in as Photos.app downloads them.
+
+---
+
 ## 2026-06-25 (cont. 2) — L24 Phase-0 prep + M76 Phase-1 IaC built (both safe/inert; deploy = authorized apply)
 
 **What:** executed the safe, no-impact parts of both arc items. Two commits; **no live infra changed**.
