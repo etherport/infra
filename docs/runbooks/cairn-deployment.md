@@ -71,6 +71,17 @@ scripts/package.sh         # builds release + assembles + SIGNS dist/cairn.app
 cairn README "Code signing" for one-time cert creation). **A stable signature is essential** — TCC
 grants are keyed to it, so an ad-hoc/changing signature resets permissions on every rebuild.
 
+**Or use a CI-signed release (no local build):** pushing a `vX.Y.Z` tag to the cairn repo runs
+`.github/workflows/release.yml` — builds, tests, **signs with the same `cairn-codesign` identity**
+(imported from repo secrets into an ephemeral keychain), verifies the signature pins the expected leaf
+(so TCC grants survive), and publishes a `cairn-vX.Y.Z-macos.zip` GitHub release. Redeploy on the mini:
+```bash
+cd ~/code/cairn && gh release download vX.Y.Z -p '*.zip' -D /tmp && \
+  ditto -x -k /tmp/cairn-vX.Y.Z-macos.zip dist/    # replaces dist/cairn.app; TCC persists (same leaf)
+```
+One-time secret setup (the signing key must be in GitHub Actions secrets) is `scripts/setup-ci-signing.sh`,
+**run in a VNC session** (the private-key export needs GUI approval). Full detail: cairn README §7.
+
 ## 3. Grant privacy permissions (TCC) — one-time, from a VNC GUI session
 
 cairn's sources read TCC-protected data, keyed to `cairn.app`'s signature. **Run from the VNC
