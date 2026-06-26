@@ -437,7 +437,10 @@
           - --client-secret={{ _secrets.oidc_client_secret }}
           - --configuration-endpoint={{ oidc_configuration_endpoint }}
           - --listen-address={{ oidc_listen_address }}
-          - --domain={{ oidc_domain }}
+          # NB: NO `--domain` email allowlist — operator identities are personal
+          # emails (e.g. gmail), not @wind.etherport.net, so a domain filter would
+          # 401 every login ("email is not allowed"). Access is gated at Authentik
+          # instead (the step-ca app is bound to the Admins group).
           - --ca-config={{ ca_config }}
       environment:
         STEPPATH: "{{ step_path }}"
