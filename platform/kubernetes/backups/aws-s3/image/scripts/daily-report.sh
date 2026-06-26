@@ -258,7 +258,10 @@ def get_s3_summary_metrics(share, start_time_epoch):
         if result.returncode != 0:
             return {}
 
-        summary = json.loads(result.stdout)
+        # strict=False tolerates raw control chars that can appear in a backed-up
+        # filename inside the report's file list (else the parse fails and the
+        # share falls back to a plain "completed" instead of "subject to approval").
+        summary = json.loads(result.stdout, strict=False)
 
         # Extract metrics from consolidated report
         # Report structure: {status, sync: {exitCode, filesTransferred, bytesTransferred}, summary: {...}, durationSeconds}
