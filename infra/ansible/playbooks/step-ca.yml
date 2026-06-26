@@ -55,6 +55,7 @@
     ca_name: "wind Homelab CA"
     ca_fqdn: "step-ca.wind.etherport.net"
     ca_ip: "10.10.201.46"
+    ca_iface: "eth0"   # primary NIC (for the MetalLB-VIP hairpin route, §5b)
     ca_listen: ":8443"
 
     # --- Pinned upstream versions (smallstep GitHub releases) ------------
@@ -355,6 +356,37 @@
         host: 127.0.0.1
         port: 8443
         timeout: 30
+
+    # =====================================================================
+    # 5b. Route to the MetalLB Traefik VIP via the UDM (M76 / VLAN-201→VIP fix)
+    #    The OIDC provisioner (and `step ssh login` at runtime) must reach
+    #    auth.wind.etherport.net = 10.10.201.70 (the Traefik MetalLB VIP). But a
+    #    host ON VLAN 201 can't reach a BGP-only VIP on its own subnet (no L2/ARP
+    #    → "no route to host"). A /32 route via the UDM (.1) hairpins it — the UDM
+    #    holds the BGP route to the VIP. Persistent netplan drop-in (survives
+    #    reboot); applied inline so it's up before the OIDC add below. See memory
+    #    "vlan201-host-cant-reach-metallb-vip".
+    # =====================================================================
+    - name: Persistent route to the Traefik VIP via the UDM (so step-ca can reach Authentik)
+      ansible.builtin.copy:
+        dest: /etc/netplan/99-metallb-vip-route.yaml
+        mode: "0600"
+        content: |
+          # M76: hairpin the MetalLB Traefik VIP via the UDM (a VLAN-201 host can't
+          # ARP a BGP-only VIP on its own subnet). Lets step-ca reach Authentik.
+          network:
+            version: 2
+            ethernets:
+              {{ ca_iface }}:
+                routes:
+                  - to: 10.10.201.70/32
+                    via: 10.10.201.1
+      register: _vip_route
+
+    - name: Apply netplan now if the VIP route changed (route must be up before the OIDC add)
+      ansible.builtin.command: netplan apply
+      when: _vip_route.changed
+      changed_when: true
 
     # =====================================================================
     # 6. Provisioners — added idempotently
