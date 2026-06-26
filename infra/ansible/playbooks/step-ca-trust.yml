@@ -1,0 +1,73 @@
+---
+# M76 Phase 2 — distribute step-ca SSH **user-CA trust** to the Ubuntu fleet.
+#
+# ADDITIVE + LOCK-OUT-SAFE: this only makes sshd ALSO accept short-lived SSH user
+# certificates signed by the step-ca user CA (TrustedUserCAKeys). The existing
+# `automation@homelab` authorized_keys is left UNTOUCHED, so both the static key
+# AND certs work in parallel. The static key is removed only at the M76 **cutover
+# (Phase 5)**, AFTER cert-SSH is proven fleet-wide and break-glass is confirmed.
+#
+# A bad sshd config can't lock anyone out here: we `sshd -t` BEFORE reloading, and
+# even a failed reload leaves the running sshd (and the static key) working.
+#
+# Proof first:  ansible-playbook -i inventory/wind playbooks/step-ca-trust.yml --limit k8s-w1
+# Then fleet:   ansible-playbook -i inventory/wind playbooks/step-ca-trust.yml
+#   (default target = all hosts EXCEPT step-ca itself; appliances aren't in inventory
+#    and can't trust a CA — they keep their scoped legacy keys, by design.)
+#
+# Host certs (sshd HostCertificate + client @cert-authority, to kill known_hosts
+# TOFU) are a deliberate Phase-2b follow-on — not done here to keep Phase 2 to the
+# user-auth path only.
+- name: Distribute step-ca SSH user-CA trust (M76 Phase 2)
+  hosts: "{{ target_hosts | default('all:!step_ca') }}"
+  become: true
+  vars:
+    user_ca_dest: /etc/ssh/step-ca_user_ca.pub
+  handlers:
+    - name: Reload sshd
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded
+
+  tasks:
+    - name: Install the step-ca user CA public key
+      ansible.builtin.copy:
+        src: files/step-ca/ssh_user_ca.pub
+        dest: "{{ user_ca_dest }}"
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload sshd
+
+    - name: Trust user certs signed by the step-ca user CA (sshd drop-in)
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/60-step-ca.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # M76 Phase 2: accept short-lived SSH user certs signed by the step-ca
+          # user CA. ADDITIVE — authorized_keys (incl. automation@homelab) still
+          # works until the M76 cutover removes the static key.
+          TrustedUserCAKeys {{ user_ca_dest }}
+      notify: Reload sshd
+
+    # Validate the FULL effective sshd config (incl. all drop-ins) BEFORE the
+    # handler reloads. If this fails the play aborts → no reload → nothing breaks.
+    - name: Validate the effective sshd config
+      ansible.builtin.command: sshd -t
+      changed_when: false
+
+    - name: Apply the reload now (so cert auth is live before we report success)
+      ansible.builtin.meta: flush_handlers
+
+    - name: Confirm TrustedUserCAKeys is in the effective config
+      ansible.builtin.command: sshd -T
+      changed_when: false
+      register: _sshd_eff
+
+    - name: Assert the user CA is trusted in the effective config
+      ansible.builtin.assert:
+        that: "'trustedusercakeys ' + user_ca_dest in (_sshd_eff.stdout | lower)"
+        success_msg: "step-ca user CA is trusted ({{ user_ca_dest }})"
+        fail_msg: "TrustedUserCAKeys not present in effective sshd config"
