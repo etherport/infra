@@ -1,5 +1,10 @@
 # Runbook — macOS iCloud Photos backup (M79, the mini pipeline)
 
+> ⚠️ **SUPERSEDED 2026-06-26 by cairn (M103).** The bash `photos-export*.sh` pipeline this runbook
+> describes was retired; iCloud Photos (and all other categories) now run on **cairn** — see
+> [`cairn-deployment.md`](cairn-deployment.md) and the cairn repo README. Kept for the M79 history
+> (sparsebundle rationale, the download-missing/SMB saga) which still informs the cairn photos source.
+
 **What:** backs up the iCloud Photos library as individual files + XMP sidecars to the NAS
 `Backups` share (→ S3 via the existing `s3-sync-backups` CronJob), with Prometheus metrics +
 Loki logs for observability. Runs **on a macOS host** (currently the Mac mini,
