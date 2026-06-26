@@ -25,6 +25,7 @@ spec:
         backup.velero.io/backup-volumes-excludes: ""
     spec:
       terminationGracePeriodSeconds: 15 # app does graceful SIGTERM <=10s
+      serviceAccountName: cue-api # M75 IRSA — assumes wind-irsa-cue-media (S3 media bucket)
       imagePullSecrets:
         - name: ghcr-cue # read-only ghcr pull cred (private package)
       # ---- DB migrations run to completion before the app container starts.
@@ -75,6 +76,17 @@ spec:
                 secretKeyRef:
                   name: cue-db-app
                   key: uri
+            # M75 IRSA — Cue media S3 bucket (bug screenshots now; workout media next).
+            # No static keys: the AWS SDK auto-assumes wind-irsa-cue-media from these
+            # vars using the cue-api SA's projected web-identity token (mounted below).
+            - name: AWS_ROLE_ARN
+              value: 'arn:aws:iam::830881980142:role/wind-irsa-cue-media'
+            - name: AWS_WEB_IDENTITY_TOKEN_FILE
+              value: /var/run/secrets/eks.amazonaws.com/serviceaccount/token
+            - name: AWS_REGION
+              value: us-west-2
+            - name: CUE_MEDIA_BUCKET
+              value: 'cue-media.etherport.net'
             # Cloudflare Access — the app verifies the injected Cf-Access-Jwt-Assertion
             # (signature + iss + aud against the team JWKS) and maps the Google email to
             # the Cue user, so a forwarded link can't impersonate. Non-secret identifiers
@@ -329,6 +341,11 @@ spec:
             - secretRef:
                 name: cue-app
                 optional: true
+          volumeMounts:
+            # M75 IRSA: projected SA token (aud sts.amazonaws.com) for web identity.
+            - name: aws-iam-token
+              mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+              readOnly: true
           resources:
             requests:
               cpu: 250m
@@ -358,3 +375,13 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ['ALL']
+      # M75 IRSA: projected SA token (aud sts.amazonaws.com) → the AWS SDK exchanges
+      # it for short-lived creds for wind-irsa-cue-media. No static keys on the pod.
+      volumes:
+        - name: aws-iam-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: sts.amazonaws.com
+                  expirationSeconds: 3600
+                  path: token

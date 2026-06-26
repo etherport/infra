@@ -808,3 +808,77 @@ resource "aws_s3_bucket_policy" "infra_protect" {
 # captures the desired policy text. Updating that file + running the
 # CLI above is the durable workflow until someone imports the policy
 # into TF state.
+
+# =============================================================================
+# Cue media storage — bug screenshots now, workout photos/video next.
+# Private (ALL public access blocked), SSE-S3 at rest, versioned; the
+# bug_screenshot/ prefix is pruned after 90d. Written by cue-api via the
+# wind-irsa-cue-media IRSA role (infra/terraform/aws/cluster-irsa) — no static
+# keys. NB dotted bucket name matches the other app buckets (SDK path-style).
+# =============================================================================
+resource "aws_s3_bucket" "cue_media" {
+  bucket = "cue-media.etherport.net"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Name    = "cue-media.etherport.net"
+    Purpose = "cue-media"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "cue_media" {
+  bucket                  = aws_s3_bucket.cue_media.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "cue_media" {
+  bucket = aws_s3_bucket.cue_media.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_versioning" "cue_media" {
+  bucket = aws_s3_bucket.cue_media.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "cue_media" {
+  bucket = aws_s3_bucket.cue_media.id
+
+  # Prune bug screenshots ~90d after upload (transient triage artifacts), plus
+  # their old versions shortly after. Workout media (other prefixes) is retained.
+  rule {
+    id     = "prune-bug-screenshots-90d"
+    status = "Enabled"
+    filter {
+      prefix = "bug_screenshot/"
+    }
+    expiration {
+      days = 90
+    }
+    noncurrent_version_expiration {
+      noncurrent_days = 7
+    }
+  }
+
+  # Housekeeping: drop failed/incomplete multipart uploads bucket-wide.
+  rule {
+    id     = "abort-incomplete-uploads"
+    status = "Enabled"
+    filter {}
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+}

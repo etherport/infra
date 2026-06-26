@@ -2,6 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: cue # namespace itself is created by cue-db (00-namespace.yaml)
 resources:
+  - 00-serviceaccount.yaml # cue-api SA — IRSA subject for wind-irsa-cue-media (S3 media)
   - 01-deployment.yaml
   - 02-service.yaml
   - 03-secret-app.sops.yaml # ANTHROPIC_API_KEY + CUE_WEB_TOKEN_SECRET + VAPID_* + CF healthkit token (SOPS-encrypted)

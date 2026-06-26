@@ -96,6 +96,30 @@ locals {
       })
     }
 
+    # cue-api media bucket (bug screenshots now; workout photos/video next). RW on
+    # the cue-media bucket ONLY — mirror of the barman role shape. cue-api assumes
+    # this via the cue:cue-api SA's web-identity token (no static keys).
+    cue-media = {
+      subs = ["system:serviceaccount:cue:cue-api"]
+      policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+          {
+            Sid      = "ListCueMediaBucket"
+            Effect   = "Allow"
+            Action   = ["s3:ListBucket", "s3:GetBucketLocation"]
+            Resource = "arn:aws:s3:::cue-media.etherport.net"
+          },
+          {
+            Sid      = "CueMediaObjects"
+            Effect   = "Allow"
+            Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"]
+            Resource = "arn:aws:s3:::cue-media.etherport.net/*"
+          },
+        ]
+      })
+    }
+
     # ai-advisor (auto-remediation) + cloudwatch-to-loki: read-only CloudWatch
     # Logs. Mirrors the ai-advisor-readonly user scope (Lambda + EC2-agent groups).
     cloudwatch-read = {
