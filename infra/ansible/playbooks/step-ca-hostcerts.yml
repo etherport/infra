@@ -1,0 +1,464 @@
+---
+# =============================================================================
+# step-ca SSH **HOST certificates** for the Ubuntu fleet   (M76 Phase 2b)
+# =============================================================================
+# Give every fleet host an sshd **host certificate** signed by the step-ca
+# *host* CA, so SSH clients (which already trust the host CA via the
+# `@cert-authority` line that `step ssh login` / `step ssh config` drops into
+# their `~/.ssh/known_hosts`) stop getting first-connect TOFU prompts and
+# step's ssh integration recognises the host.
+#
+# This is the host-side complement to step-ca-trust.yml (Phase 2, USER-CA
+# trust). Phase 2 made sshd *accept* user certs; Phase 2b makes sshd *present*
+# a host cert so clients can verify the host without a known_hosts pin.
+#
+# --- TRUST DIRECTION (don't confuse the two CAs) -----------------------------
+#   * USER  CA  (ssh_user_ca.pub)  -> sshd's `TrustedUserCAKeys`  (Phase 2):
+#       sshd trusts USER certs.   Installed by step-ca-trust.yml.
+#   * HOST  CA  (ssh_host_ca.pub)  -> client's `@cert-authority`  (this phase,
+#       client side, done once by `step ssh config`/login): the CLIENT trusts
+#       HOST certs.  Here we just MINT + SERVE the host cert; sshd presents it
+#       via `HostCertificate`.
+#
+# --- ADDITIVE + LOCK-OUT-SAFE (a host cert must NEVER break sshd or auth) -----
+#   * We do NOT generate a new host key — we sign the host's EXISTING ed25519
+#     host key (`/etc/ssh/ssh_host_ed25519_key.pub`). sshd keeps presenting the
+#     SAME public key, so any legacy known_hosts *pin* that already trusts this
+#     host still matches; we only ADD a cert alongside it.
+#   * The sshd drop-in only ADDS a `HostCertificate` line. The default
+#     `HostKey` lines are untouched (we never remove a host key). A client that
+#     doesn't trust the host CA simply ignores the cert and falls back to the
+#     raw-key path — nothing regresses.
+#   * We run `sshd -t` to validate the FULL effective config BEFORE the handler
+#     reloads. If validation fails the play aborts -> no reload -> the running
+#     sshd (and all current sessions / auth methods) keep working.
+#   * We `reload` (SIGHUP), never `restart`, so in-flight SSH sessions survive.
+#
+# --- PROVISIONERS ------------------------------------------------------------
+#   * INITIAL mint  -> `headless` (JWK) provisioner. Non-interactive: we mint a
+#     one-shot SSH **host** token offline with the JWK passphrase
+#     (jwk_password, from SOPS) and feed it to `step ssh certificate`.
+#   * RENEWAL       -> `sshpop` provisioner. A systemd timer proves possession
+#     of the existing host cert (SSHPOP) and renews WITHOUT any secret — so the
+#     JWK passphrase only ever touches the box transiently at first mint.
+#
+# --- USAGE -------------------------------------------------------------------
+#   Proof first:  ansible-playbook -i inventory/wind/inventory.ini \
+#                   playbooks/step-ca-hostcerts.yml --limit k8s-w1
+#   Then fleet:   ansible-playbook -i inventory/wind/inventory.ini \
+#                   playbooks/step-ca-hostcerts.yml
+#     (default target = all hosts EXCEPT step-ca itself — step-ca self-manages
+#      its own host cert during init, and appliances aren't in inventory / can't
+#      run an sshd that trusts this CA.)
+#
+# TODO(inventory): the host's FQDN + IP principals come from inventory vars:
+#   * short hostname / FQDN stem = `inventory_hostname`
+#       -> FQDN principal = "{{ inventory_hostname }}.wind.etherport.net"
+#   * host IP                    = `ansible_host` (falls back to `ip`, then to
+#       the resolved `ansible_default_ipv4.address`). NB `pve` is defined with
+#       only an FQDN `ansible_host` (no numeric IP / no `ip=`), so the IP
+#       principal is omitted for any host whose address isn't an IPv4 literal —
+#       guarded below so the mint never fails on such hosts.
+# =============================================================================
+
+# NB: pve is EXCLUDED by default. It's on the mgmt VLAN (10.10.200.x) and the UDM
+# zone firewall blocks mgmt->Servers(201), so pve can't reach the CA at
+# 10.10.201.46:8443 to mint/renew (i/o timeout). The 13 Servers-VLAN hosts are
+# same-zone as the CA and reach it fine. To cert pve too, first add a UDM rule
+# allowing mgmt -> 10.10.201.46:8443, then run with `-e target_hosts=pve`. Until
+# then pve keeps a one-time host-key TOFU (harmless — pinned after first connect).
+- name: Issue step-ca SSH host certificates to the fleet (M76 Phase 2b)
+  hosts: "{{ target_hosts | default('all:!step_ca:!pve') }}"
+  become: true
+
+  vars:
+    # --- step-ca coordinates (must match step-ca.yml / the live CA) ------
+    ca_url: "https://10.10.201.46:8443"
+    ca_fingerprint: "a37b7b1622157ecd6687dc953f95cbb49d152fe9819ed0b54aa56f4f9689cf67"
+    ca_domain: "wind.etherport.net"
+
+    # System-wide step context. Distinct from any per-user ~/.step so a human's
+    # `step ssh login` state never collides with the host's CA trust.
+    step_path: /etc/step
+
+    # --- Provisioner names (must match those created in step-ca.yml) -----
+    jwk_provisioner_name: headless   # JWK — initial, non-interactive host mint
+    sshpop_provisioner_name: sshpop  # SSHPOP — secretless renewal
+
+    # --- Pinned step-cli .deb (identical pin to step-ca.yml) -------------
+    # Bump together with step-ca.yml after checking the smallstep/cli releases
+    # and refreshing the sha256 from that release's checksums.txt.
+    step_cli_version: "0.30.6"
+    step_cli_deb_url: "https://github.com/smallstep/cli/releases/download/v0.30.6/step-cli_0.30.6-1_amd64.deb"
+    step_cli_deb_sha256: "5845c181251ffe43ca2331bc171e0b92324a71be9cf4ef76cd6fbbba4f2a3cc6"
+
+    # --- sshd / host-key paths -------------------------------------------
+    # We sign the host's EXISTING ed25519 key — do NOT generate a new one.
+    host_key_pub: /etc/ssh/ssh_host_ed25519_key.pub
+    host_key_priv: /etc/ssh/ssh_host_ed25519_key
+    host_cert: /etc/ssh/ssh_host_ed25519_key-cert.pub
+    sshd_dropin: /etc/ssh/sshd_config.d/61-step-ca-hostcert.conf
+
+    # --- Cert lifetime / renewal cadence ---------------------------------
+    # 720h (30d) validity with a WIDE 168h (7d) renewal window: the daily timer's
+    # ExecCondition fires `step ssh renew` once the cert is within 7 days of
+    # expiry, giving ~7 daily chances to renew before it lapses — so several
+    # missed timer fires (host offline) still can't let the cert expire (after
+    # which SSHPOP renewal, which needs a still-valid cert, couldn't self-heal).
+    host_cert_validity: "720h"
+    # Idempotency (playbook) + renewal trigger (timer): (re)mint/renew only when
+    # the cert is missing OR within this window of expiry; a re-run on a fresh
+    # cert is a no-op.
+    host_cert_min_remaining: "168h"
+
+    # --- Secrets (SOPS; same bundle as step-ca.yml) ----------------------
+    # jwk_password = the passphrase that decrypts the `headless` JWK provisioner
+    # key. Used ONLY transiently here to mint the very first host token; staged
+    # to a 0600 file and shredded immediately after. SSHPOP renewal needs no
+    # secret, so this passphrase never persists on the fleet host.
+    _secrets: "{{ lookup('pipe', 'sops -d ' ~ (playbook_dir | quote) ~ '/secrets/step-ca.sops.yaml') | from_yaml }}"
+
+  handlers:
+    # Reload (SIGHUP) — never restart — so live SSH sessions are not torn down
+    # when sshd picks up the new HostCertificate drop-in.
+    - name: Reload sshd
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded
+
+  tasks:
+    # =====================================================================
+    # 0. Derive this host's certificate principals from inventory vars.
+    #    Principals = short hostname + FQDN + (if it's an IPv4 literal) the IP.
+    #    Clients connect by any of these, so the cert must list all of them or
+    #    verification fails for the form the client used.
+    #    NB: `ansible_host` may be an FQDN (e.g. pve) rather than a numeric IP;
+    #    we only add an IP principal when we actually have an IPv4 literal.
+    # =====================================================================
+    - name: Derive the host's IP candidate (prefer a real IPv4 over an FQDN ansible_host)
+      ansible.builtin.set_fact:
+        # Use ansible_host only when it's an IPv4 literal (true for the k8s/VM
+        # hosts, e.g. 10.10.201.53). When ansible_host is an FQDN (e.g. pve =
+        # pve.wind.etherport.net), fall through to the inventory `ip` var, then
+        # the gathered default-route IP — so pve's cert still gets its IP principal.
+        _host_ip_candidate: >-
+          {{ ansible_host if (ansible_host | ansible.utils.ipv4)
+             else (hostvars[inventory_hostname].ip
+                   | default(ansible_default_ipv4.address | default(''), true)) }}
+
+    - name: Build the principal list (short host + FQDN [+ IPv4 literal])
+      ansible.builtin.set_fact:
+        # `inventory_hostname` is the short name (e.g. k8s-w1). The FQDN is that
+        # under the homelab zone. The IP is appended only if it parses as IPv4
+        # (the `ansible.utils.ipv4` test rejects FQDN-only ansible_host values).
+        _cert_principals: >-
+          {{ ([inventory_hostname,
+               inventory_hostname ~ '.' ~ ca_domain]
+              + ([_host_ip_candidate]
+                 if (_host_ip_candidate | ansible.utils.ipv4) else []))
+             | unique }}
+
+    - name: Build the `--principal=<p>` flag list for step argv
+      ansible.builtin.set_fact:
+        # step accepts the single-token `--principal=<value>` form, one per
+        # principal — avoids the interleaved-arg pitfall (a `map|split` idiom that
+        # fuses '--principal\n<value>' into one bad token, which made the mint fail
+        # on every host — caught in adversarial review).
+        _principal_flags: "{{ _cert_principals | map('regex_replace', '^', '--principal=') | list }}"
+
+    - name: Show the principals this host's cert will carry
+      ansible.builtin.debug:
+        msg: "host cert principals for {{ inventory_hostname }}: {{ _cert_principals }}"
+
+    # =====================================================================
+    # 1. Install step-cli from the pinned, checksum-verified .deb (skip if
+    #    already present at the pinned version). Same pin as step-ca.yml.
+    # =====================================================================
+    - name: Check installed step CLI version (idempotency guard)
+      ansible.builtin.command: step version
+      register: _step_cli_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Download step CLI .deb (pinned + checksum-verified)
+      ansible.builtin.get_url:
+        url: "{{ step_cli_deb_url }}"
+        dest: "/tmp/step-cli_{{ step_cli_version }}-1_amd64.deb"
+        checksum: "sha256:{{ step_cli_deb_sha256 }}"
+        mode: "0644"
+      when: step_cli_version not in (_step_cli_installed.stdout | default(''))
+
+    - name: Install step CLI .deb
+      ansible.builtin.apt:
+        deb: "/tmp/step-cli_{{ step_cli_version }}-1_amd64.deb"
+        state: present
+      when: step_cli_version not in (_step_cli_installed.stdout | default(''))
+
+    # =====================================================================
+    # 2. Bootstrap a SYSTEM step context that trusts the CA (idempotent).
+    #    Writes {{ step_path }}/config/defaults.json + the pinned root CA, so
+    #    later `step ssh certificate/renew` can validate the CA's TLS without a
+    #    per-invocation --ca-url/--fingerprint and without TOFU. Guarded on
+    #    defaults.json so a re-run is a no-op.
+    # =====================================================================
+    - name: Ensure the system STEPPATH exists
+      ansible.builtin.file:
+        path: "{{ step_path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Check whether the system step context is already bootstrapped
+      ansible.builtin.stat:
+        path: "{{ step_path }}/config/defaults.json"
+      register: _step_defaults
+
+    - name: Bootstrap the system step context (trust the wind CA) — first run only
+      ansible.builtin.command:
+        argv:
+          - step
+          - ca
+          - bootstrap
+          - --ca-url={{ ca_url }}
+          - --fingerprint={{ ca_fingerprint }}
+          - --force          # overwrite any partial/stale context non-interactively
+      environment:
+        STEPPATH: "{{ step_path }}"
+      when: not _step_defaults.stat.exists
+      changed_when: true
+
+    # =====================================================================
+    # 3. Decide whether we need to (re)mint the host cert.
+    #    Mint when: the cert file is MISSING, OR it expires within
+    #    host_cert_min_remaining. `step ssh inspect` of the existing cert tells
+    #    us validity; `--validity-window` lets `inspect` exit non-zero if the
+    #    cert is already inside its (about-to-expire) window, which we use as the
+    #    "needs mint" signal. Always-converge tasks (sshd drop-in + timer) run
+    #    regardless of this decision.
+    # =====================================================================
+    - name: Stat the existing host certificate
+      ansible.builtin.stat:
+        path: "{{ host_cert }}"
+      register: _host_cert_stat
+
+    - name: Inspect the existing host cert's remaining validity (if present)
+      # `step ssh inspect` prints "Valid: ... to <expiry>". We don't parse the
+      # date; instead we ask step whether the cert would be considered renewable
+      # NOW by checking it is still valid for at least host_cert_min_remaining.
+      # `step ssh needs-renewal` exits 0 when renewal IS needed (cert missing
+      # from its perspective or inside the expiry window), non-zero otherwise.
+      ansible.builtin.command:
+        argv:
+          - step
+          - ssh
+          - needs-renewal
+          - "{{ host_cert }}"
+          - --expires-in={{ host_cert_min_remaining }}
+      environment:
+        STEPPATH: "{{ step_path }}"
+      register: _needs_renewal
+      changed_when: false
+      failed_when: false
+      when: _host_cert_stat.stat.exists
+
+    - name: Decide whether to mint a host cert now
+      ansible.builtin.set_fact:
+        # Mint if the cert is absent, OR `needs-renewal` did NOT return rc==1
+        # ("fresh, no renewal needed"). rc==0 = inside the expiry window; rc==2/255
+        # = missing/corrupt from step's view — both should (re)mint so a damaged
+        # cert self-heals. Only a clean rc==1 skips the mint (idempotent no-op).
+        _must_mint: >-
+          {{ (not _host_cert_stat.stat.exists)
+             or ((_needs_renewal.rc | default(1)) != 1) }}
+
+    # =====================================================================
+    # 4. INITIAL mint via the `headless` JWK provisioner (only when needed).
+    #    Flow:
+    #      a) stage the JWK passphrase to a 0600 tmpfile (no_log),
+    #      b) `step ca token --ssh --host` mints a one-shot host token offline,
+    #      c) `step ssh certificate --host --sign` signs the EXISTING ed25519
+    #         host pubkey into {{ host_cert }} with our principal list,
+    #      d) shred the passphrase file.
+    #    We SIGN the existing key (`--sign <pub>`) and never let step generate a
+    #    new keypair, so sshd keeps its current host key (known_hosts pins hold).
+    # =====================================================================
+    - name: Stage the JWK provisioner passphrase (transient; shredded below)
+      ansible.builtin.copy:
+        content: "{{ _secrets.jwk_password }}"
+        dest: "{{ step_path }}/.jwk-password"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+      when: _must_mint
+
+    - name: Sign the EXISTING ed25519 host key into a host certificate
+      # DIRECT form: pass the `headless` JWK provisioner + its password FILE
+      # straight to `step ssh certificate` (proven working; the separate
+      # `step ca token` + `--token` round-trip was unnecessary and errored).
+      # `--host --sign <pub>` signs the supplied PUBLIC key as a HOST cert — does
+      # NOT touch the private key and does NOT generate a new key, so sshd keeps
+      # its current host identity (legacy known_hosts pins still match). The cert
+      # is written next to the key as <key>-cert.pub (where sshd's HostCertificate
+      # points). The provisioner password is in the FILE, never in argv.
+      ansible.builtin.command:
+        argv: >-
+          {{ ['step', 'ssh', 'certificate', '--host', '--sign',
+              '--provisioner=' ~ jwk_provisioner_name,
+              '--provisioner-password-file=' ~ step_path ~ '/.jwk-password',
+              '--not-after=' ~ host_cert_validity,
+              '--force']
+             + _principal_flags
+             + [inventory_hostname ~ '.' ~ ca_domain, host_key_pub] }}
+      environment:
+        STEPPATH: "{{ step_path }}"
+      register: _host_cert_signed
+      changed_when: true
+      when: _must_mint
+      notify: Reload sshd
+
+    - name: Fix ownership/permissions on the freshly-minted host cert
+      # The cert is PUBLIC (it's served to every connecting client) — root:root
+      # 0644, matching the host pubkey's perms. sshd reads it as root at reload.
+      ansible.builtin.file:
+        path: "{{ host_cert }}"
+        owner: root
+        group: root
+        mode: "0644"
+      when: _must_mint
+
+    # sshd -t does NOT validate the cert itself (a bad/empty/mismatched cert is
+    # non-fatal — sshd just falls back to the raw key, which is the lock-out-safe
+    # behaviour). So validate the minted cert HERE, loudly, with ssh-keygen: a
+    # non-zero exit (unparseable) fails the task, and we assert it's a host cert.
+    - name: Sanity-check the freshly-minted host cert (parses + is a host cert)
+      ansible.builtin.command: "ssh-keygen -L -f {{ host_cert }}"
+      register: _cert_inspect
+      changed_when: false
+      when: _must_mint
+
+    - name: Assert the minted cert is a valid HOST certificate
+      ansible.builtin.assert:
+        that: "'host certificate' in _cert_inspect.stdout"
+        success_msg: "minted a valid host cert for {{ inventory_hostname }}"
+        fail_msg: "{{ host_cert }} is malformed or not a host certificate"
+      when: _must_mint
+
+    - name: Shred + remove the transient JWK passphrase file
+      ansible.builtin.command: "shred -u {{ step_path }}/.jwk-password"
+      args:
+        removes: "{{ step_path }}/.jwk-password"
+      no_log: true
+      when: _must_mint
+
+    # =====================================================================
+    # 5. sshd drop-in: present the host cert (ALWAYS converge).
+    #    ADDITIVE — only adds `HostCertificate`; the default HostKey lines stay,
+    #    so a client that doesn't trust the host CA still gets the raw key.
+    # =====================================================================
+    - name: Install the sshd HostCertificate drop-in
+      ansible.builtin.copy:
+        dest: "{{ sshd_dropin }}"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # M76 Phase 2b: present an SSH host certificate signed by the step-ca
+          # host CA so clients that trust the host CA (@cert-authority) skip the
+          # known_hosts TOFU prompt. ADDITIVE: the default HostKey lines are
+          # untouched — the raw ed25519 host key still works for clients that
+          # don't trust the CA. Managed by playbooks/step-ca-hostcerts.yml.
+          HostCertificate {{ host_cert }}
+      notify: Reload sshd
+
+    # Validate the FULL effective sshd config (all drop-ins) BEFORE any reload.
+    # If this fails the play aborts -> the handler never runs -> sshd keeps its
+    # current, working config. This is the lock-out guard.
+    - name: Validate the effective sshd config (lock-out guard)
+      ansible.builtin.command: sshd -t
+      changed_when: false
+
+    - name: Apply the reload now (so the host cert is live before we report)
+      ansible.builtin.meta: flush_handlers
+
+    - name: Confirm the HostCertificate is in the effective sshd config
+      ansible.builtin.command: sshd -T
+      changed_when: false
+      register: _sshd_eff
+
+    - name: Assert the host certificate is configured in the effective config
+      ansible.builtin.assert:
+        that: "'hostcertificate ' + host_cert in (_sshd_eff.stdout | lower)"
+        success_msg: "sshd presents the step-ca host cert ({{ host_cert }})"
+        fail_msg: "HostCertificate not present in effective sshd config"
+
+    # =====================================================================
+    # 6. RENEWAL via SSHPOP — systemd timer + service (ALWAYS converge).
+    #    `step ssh renew` proves possession of the CURRENT host cert+key (SSHPOP)
+    #    and gets a fresh cert with NO secret on the box. The service's
+    #    ExecCondition gates it to the renewal window, so the daily timer keeps the
+    #    720h cert fresh (renews once it's within 7d of expiry).
+    #    On a successful rotation we reload sshd so it serves the new cert.
+    # =====================================================================
+    - name: Install the host-cert renewal service unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/step-ssh-hostcert-renew.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Renew the step-ca SSH host certificate (M76 Phase 2b)
+          Documentation=https://smallstep.com/docs/step-cli/reference/ssh/renew
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=oneshot
+          Environment=STEPPATH={{ step_path }}
+          # Gate on need: `step ssh needs-renewal --expires-in=<window>` exits 0
+          # only when the cert is within its renewal window -> the service runs.
+          # Outside the window it exits non-zero -> systemd SKIPS the unit (clean,
+          # not failed) so we don't pointlessly re-sign + reload every day.
+          # (NB: `--expires-in` is a needs-renewal flag, NOT a `step ssh renew`
+          # flag — passing it to `renew` errors "flag not defined" and the cert
+          # would silently never renew. Caught in adversarial review.)
+          ExecCondition=/usr/bin/step ssh needs-renewal --expires-in={{ host_cert_min_remaining }} {{ host_cert }}
+          # SSHPOP renewal: prove possession of the current cert+key, get a fresh
+          # cert. No password/secret on the box. --force = non-interactive overwrite.
+          ExecStart=/usr/bin/step ssh renew --force {{ host_cert }} {{ host_key_priv }}
+          # Reload sshd only after a successful renewal (ExecStartPost runs only if
+          # ExecStart succeeded); SIGHUP never tears down live sessions, and
+          # Ubuntu's ssh ExecReload itself runs `sshd -t` first, so a bad reload
+          # can't take sshd down.
+          ExecStartPost=/bin/systemctl reload ssh
+
+    - name: Install the host-cert renewal timer unit (daily)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/step-ssh-hostcert-renew.timer
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Daily renewal of the step-ca SSH host certificate (M76 Phase 2b)
+
+          [Timer]
+          OnCalendar=daily
+          # Spread the fleet's renewals so they don't all hit the CA at once.
+          RandomizedDelaySec=3600
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+
+    - name: Reload systemd to pick up the renewal units
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Enable + start the host-cert renewal timer
+      ansible.builtin.systemd:
+        name: step-ssh-hostcert-renew.timer
+        enabled: true
+        state: started
