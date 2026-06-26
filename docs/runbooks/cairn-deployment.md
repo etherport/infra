@@ -13,6 +13,37 @@ mini**, and how to cut over from the bash suite. Tracker: M103 in
 > (Contacts) + osxphotos + consistent SQLite snapshots, **no secrets** (reporting is
 > Pushgateway-only; Alertmanager routes), and one consistent, supervised, self-healing engine.
 
+## ✅ STATUS: cut over 2026-06-25 — cairn is the active backup; bash suite retired
+
+All categories run on cairn via launchd; the 4 bash backup agents (`net.wind.icloud-dav`,
+`icloud-files`, `messages-backup`, `photos-export`) are **booted out + `launchctl disable`d**
+(reversible). Grafana dashboards + Prometheus alerts were rewritten to the `cairn_*` label schema;
+the stale bash Pushgateway groups were deleted; `mini-health.sh` EXPECT was updated to the cairn
+agents. **Step-by-step install / config / metrics / gotchas now live in the cairn repo
+[`README.md`](https://github.com/sparked-diamond/cairn/blob/main/README.md)** — this runbook keeps
+the infra-specific deployment + the cutover record + rollback.
+
+### Operational findings that bit during cutover (don't relearn these)
+- **FDA is attributed to the launchd *responsible process*, not the binary.** cairn run from a
+  Terminal is attributed to Terminal (FDA "not granted"); run via **launchd** it's its own
+  responsible process and its `cairn.app` FDA grant applies. So drive runs via launchd
+  (`launchctl bootstrap gui/$UID …`), or grant Terminal.app FDA to test from a shell.
+- **Calendars/Reminders are in the group containers** (`group.com.apple.calendar/Calendar.sqlitedb`,
+  `group.com.apple.reminders/Container_v1/Stores/Data-*.sqlite`) — `~/Library/{Calendars,Reminders}`
+  are empty. The config points at the group containers.
+- **Photos runs in LOCAL mode** (`download_missing: false`) — osxphotos `--use-photokit` needs the
+  *System* Photo Library, and this is a secondary `(NAS)` library on a sparsebundle, so download mode
+  fails rc=1. cairn exports whatever's local; Photos.app's own "Download Originals" populates the rest.
+- **osxphotos filename collisions** (two photos sharing a name → `IMG_x` / `IMG_x (1)`) throw a benign
+  `File exists` on `--update`; cairn tolerates a run whose only errors are those (photo already backed
+  up) so it doesn't false-`PhotosExportFailed`. Cleared one-off by deleting the affected dest files.
+- **Silent SMB scans** — the supervised runner uses the overall timeout (not a tight stall-watchdog)
+  for osxphotos/rsync, which go silent for many minutes scanning the NAS. A tight stall false-killed
+  working photos + messages runs before this was tuned.
+- **Byte-identical export = zero S3 churn** — cairn reuses the existing osxphotos export DB + dir, so
+  the offsite sync only ships genuinely-new files. The contacts/calendars re-layout was the only churn
+  (~MB, free, still STANDARD). Don't change export filenames.
+
 ## 1. Architecture on the mini (what cairn drives)
 
 - **Sources:** `contacts` (Contacts framework → vCards), `notes`/`calendars`/`reminders`
