@@ -1,0 +1,33 @@
+# THROWAWAY validation for M76 CI cert-minting (setup-ssh-cert composite action).
+# Proves: STEP_JWK_PASSWORD is set + correct, the runner can mint a cert via the
+# headless JWK provisioner, and cert-auth + host-cert trust work end-to-end from CI.
+# Read-only (just SSHes + runs `id`/`hostname`). Delete once the real ansible
+# workflows are switched to certs.
+name: Test SSH cert (M76)
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: [self-hosted, lifecycle]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Mint SSH cert
+        id: cert
+        uses: ./.github/actions/setup-ssh-cert
+        with:
+          jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}
+
+      - name: SSH to k8s-w1 (ubuntu) + pve (root) with the cert, strict host check
+        run: |
+          set -euo pipefail
+          echo "== ubuntu@k8s-w1 =="
+          ssh -o IdentitiesOnly=yes -i "${{ steps.cert.outputs.key-file }}" \
+            -o StrictHostKeyChecking=yes -o BatchMode=yes \
+            ubuntu@10.10.201.53 'echo "  CI-CERT-OK on $(hostname) as $(id -un)"'
+          echo "== ubuntu@dns-fallback =="
+          ssh -o IdentitiesOnly=yes -i "${{ steps.cert.outputs.key-file }}" \
+            -o StrictHostKeyChecking=yes -o BatchMode=yes \
+            ubuntu@10.10.201.6 'echo "  CI-CERT-OK on $(hostname) as $(id -un)"'

@@ -1,0 +1,57 @@
+name: Setup SSH cert
+description: >-
+  Mint a short-lived step-ca SSH **user** certificate for ansible/CI (replaces the
+  static ANSIBLE_SSH_KEY) and trust the step-ca **host** CA so connections need no
+  known_hosts TOFU. M76 cutover: CI no longer holds a standing SSH key — it mints a
+  ≤1h cert per run via the headless JWK provisioner.
+inputs:
+  jwk-password:
+    description: step-ca headless JWK provisioner password (pass secrets.STEP_JWK_PASSWORD)
+    required: true
+  principals:
+    description: Comma-separated cert principals (the login users the cert is valid for)
+    required: false
+    default: "ubuntu,root"
+  not-after:
+    description: Certificate validity window
+    required: false
+    default: "1h"
+outputs:
+  key-file:
+    description: Path to the minted cert private key — pass to `ansible-playbook --private-key`
+    value: ${{ steps.mint.outputs.key-file }}
+runs:
+  using: composite
+  steps:
+    - id: mint
+      shell: bash
+      env:
+        JWK_PASSWORD: ${{ inputs.jwk-password }}
+        PRINCIPALS: ${{ inputs.principals }}
+        NOT_AFTER: ${{ inputs.not-after }}
+      run: |
+        set -euo pipefail
+        mkdir -p ~/.ssh && chmod 700 ~/.ssh
+        # Job-local step context (no dependency on the runner's /etc/step perms).
+        export STEPPATH="${RUNNER_TEMP}/step-ci"
+        step ca bootstrap --ca-url https://10.10.201.46:8443 \
+          --fingerprint a37b7b1622157ecd6687dc953f95cbb49d152fe9819ed0b54aa56f4f9689cf67 --force
+        # Mint a short-lived user cert for the shared logins via the headless JWK
+        # provisioner. The passphrase is in a temp FILE (never in argv), shredded after.
+        pflags=()
+        IFS=',' read -ra _ps <<< "${PRINCIPALS}"
+        for p in "${_ps[@]}"; do pflags+=( "--principal=${p}" ); done
+        pwfile="$(mktemp)"
+        printf '%s' "${JWK_PASSWORD}" > "${pwfile}"
+        step ssh certificate ci "${HOME}/.ssh/id_ci" \
+          --provisioner headless --provisioner-password-file "${pwfile}" \
+          "${pflags[@]}" --not-after="${NOT_AFTER}" --no-password --insecure -f
+        shred -u "${pwfile}"
+        chmod 600 "${HOME}/.ssh/id_ci"
+        # Trust the step-ca HOST CA (Phase 2b) so strict host-key checking passes
+        # without TOFU / ssh-keyscan. The pubkey is committed (public).
+        hostca="$(awk 'NF{print $1, $2}' "${GITHUB_WORKSPACE}/infra/ansible/playbooks/files/step-ca/ssh_host_ca.pub")"
+        touch ~/.ssh/known_hosts && chmod 600 ~/.ssh/known_hosts
+        grep -qF "${hostca}" ~/.ssh/known_hosts || echo "@cert-authority * ${hostca}" >> ~/.ssh/known_hosts
+        echo "key-file=${HOME}/.ssh/id_ci" >> "${GITHUB_OUTPUT}"
+        echo "Minted SSH cert (principals: ${PRINCIPALS}, ttl: ${NOT_AFTER})"
