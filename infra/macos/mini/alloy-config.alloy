@@ -11,15 +11,10 @@
 // Discover the log files (globs are re-evaluated, so rotating run-*.out files are picked up).
 local.file_match "mini_logs" {
   path_targets = [
-    {__path__ = "/Users/grahamsmith/Library/Logs/photos-export.log",   job = "photos-export"},
-    {__path__ = "/Users/grahamsmith/Library/Logs/photos-export/*.out", job = "photos-export"},
-    {__path__ = "/Users/grahamsmith/Library/Logs/photos-export/*.log", job = "photos-export"},
-    {__path__ = "/Users/grahamsmith/Library/Logs/icloud-dav.log",      job = "icloud-dav"},
-    {__path__ = "/Users/grahamsmith/Library/Logs/icloud-dav/*.out",    job = "icloud-dav"},
-    {__path__ = "/Users/grahamsmith/Library/Logs/messages-backup.log", job = "messages-backup"},
-    {__path__ = "/Users/grahamsmith/Library/Logs/messages-backup/*.out", job = "messages-backup"},
-    {__path__ = "/Users/grahamsmith/Library/Logs/icloud-files.log", job = "icloud-files"},
-    {__path__ = "/Users/grahamsmith/Library/Logs/icloud-files/*.out", job = "icloud-files"},
+    // cairn — the native iCloud backup agent (replaced the bash suite 2026-06-26). host="mini"
+    // is added below, so the photos-export dashboard's {host="mini"} Loki panel sees these.
+    {__path__ = "/Users/grahamsmith/Library/Logs/cairn/cairn.log",  job = "cairn"},
+    {__path__ = "/Users/grahamsmith/Library/Logs/cairn/health.log", job = "cairn-health"},
     {__path__ = "/Users/grahamsmith/Library/Logs/mini-health.log", job = "mini-health"},
     {__path__ = "/Users/grahamsmith/Library/Logs/mount-nas.log",       job = "mount-nas"},
     {__path__ = "/Users/grahamsmith/Library/Logs/alloy.log",           job = "alloy"},
