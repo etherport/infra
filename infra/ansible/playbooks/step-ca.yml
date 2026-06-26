@@ -363,14 +363,20 @@
     #    provisioner list once and only add the ones that are missing.
     #    NB: each add is run as `step` so the edited ca.json stays step-owned.
     # =====================================================================
-    - name: List existing provisioners
+    # step-cli 0.30 dropped --ca-config from `provisioner list` (it now only
+    # queries a RUNNING CA over --ca-url). For an offline idempotency guard we
+    # read ca.json directly and extract the provisioner names. (`provisioner add`
+    # still supports --ca-config for offline edits, so the adds below are fine.)
+    - name: Read ca.json to enumerate existing provisioners
       become_user: "{{ step_user }}"
-      ansible.builtin.command:
-        argv: [step, ca, provisioner, list, --ca-config, "{{ ca_config }}"]
-      environment:
-        STEPPATH: "{{ step_path }}"
-      register: _prov_list
+      ansible.builtin.slurp:
+        src: "{{ ca_config }}"
+      register: _ca_json_raw
       changed_when: false
+
+    - name: Compute existing provisioner names
+      ansible.builtin.set_fact:
+        _prov_names: "{{ (_ca_json_raw.content | b64decode | from_json).authority.provisioners | map(attribute='name') | list }}"
 
     # ----- 6a. OIDC `authentik` — human SSO -> short-lived SSH user certs ----
     # The OIDC provisioner enables `step ssh login`: a human authenticates in
@@ -392,7 +398,9 @@
           - add
           - "{{ oidc_provisioner_name }}"
           - --type=OIDC
-          - --ssh
+          # NB: NO bare `--ssh` flag here — OIDC provisioners sign SSH certs by
+          # default; step-cli 0.30 only exposes --ssh-template[-data]. Adding
+          # `--ssh` errors with "flag provided but not defined".
           - --client-id={{ oidc_client_id }}
           - --client-secret={{ _secrets.oidc_client_secret }}
           - --configuration-endpoint={{ oidc_configuration_endpoint }}
@@ -401,8 +409,15 @@
           - --ca-config={{ ca_config }}
       environment:
         STEPPATH: "{{ step_path }}"
-      when: oidc_provisioner_name not in _prov_list.stdout
+      when: oidc_provisioner_name not in _prov_names
       no_log: true   # carries the OIDC client secret
+      # Best-effort: `add` validates the OIDC discovery endpoint at add-time, so
+      # the Authentik `step-ca` app MUST exist first (blueprint reconciled). If it
+      # isn't live yet this is skipped-with-warning so the critical headless JWK
+      # provisioner below still lands; re-run the playbook once Authentik is ready.
+      register: _oidc_add
+      failed_when: false
+      changed_when: _oidc_add.rc | default(1) == 0
       notify: Reload step-ca
 
     # ----- 6b. JWK `headless` — non-interactive automation bootstrap --------
@@ -427,7 +442,7 @@
           - --ca-config={{ ca_config }}
       environment:
         STEPPATH: "{{ step_path }}"
-      when: jwk_provisioner_name not in _prov_list.stdout
+      when: jwk_provisioner_name not in _prov_names
       no_log: true   # touches the JWK passphrase
       notify: Reload step-ca
 
@@ -452,7 +467,7 @@
           - --ca-config={{ ca_config }}
       environment:
         STEPPATH: "{{ step_path }}"
-      when: sshpop_provisioner_name not in _prov_list.stdout
+      when: sshpop_provisioner_name not in _prov_names
       notify: Reload step-ca
 
     # Apply any provisioner changes now (flush handlers) before we verify.
