@@ -1,5 +1,12 @@
 # cluster-irsa (M75)
 
+> **Status: ✅ DONE + e2e-verified 2026-06-24.** The kube-apiserver
+> `--service-account-issuer` is the bucket issuer URL, all in-cluster workloads
+> assume their roles via `AssumeRoleWithWebIdentity` (short-lived web-identity
+> creds), and the static-key Secrets have been removed (no static AWS keys in
+> etcd). Injection is via **manual projected SA tokens — no pod-identity webhook**.
+> The rollout phases below are kept as a historical record.
+
 In-cluster workload identity for AWS — the self-hosted (non-EKS) **IRSA** pattern.
 Replaces the long-lived static IAM keys that in-cluster workloads carry in K8s
 Secrets/etcd with short-lived, per-pod creds via `AssumeRoleWithWebIdentity`.
@@ -44,9 +51,12 @@ issuer URL AND (Phase 4) a ServiceAccount is annotated with a role ARN.
    `issuer_url` (keep `https://kubernetes.default.svc.cluster.local` as a secondary
    accepted issuer so existing tokens keep validating). Rolling restart cp2/cp3,
    cp1 LAST (no HA API VIP).
-3. **Phase 4:** deploy the pod-identity webhook, annotate each SA with its
-   `role_arns` output, drop the static-key secret refs, verify per-workload, delete
-   the static-key secrets, then **rotate** (not delete — [[H29]]) the shared key.
+3. **Phase 4 (no webhook — manual token projection):** per workload, mount a
+   projected SA token (audience `sts.amazonaws.com`) and set `AWS_ROLE_ARN`
+   (from the `role_arns` output) + `AWS_WEB_IDENTITY_TOKEN_FILE` to the projected
+   token path; for CNPG, do this via the Cluster CR's `projectedVolumeTemplate` +
+   `env`. Then drop the static-key secret refs, verify per-workload, delete the
+   static-key secrets, and **rotate** (not delete — [[H29]]) the shared key.
 
 ## Maintenance
 

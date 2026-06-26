@@ -1,5 +1,12 @@
 # Infra-agent prompt — cairn metrics cutover (M103)
 
+> ✅ **COMPLETE / archived (2026-06-25).** This one-time hand-off prompt has been fully executed —
+> the cairn cutover is done: all categories migrated, the 4 bash LaunchAgents retired, the Grafana
+> dashboards + Prometheus alerts rewritten to the `cairn_*` label schema and Flux-reconciled, the 18
+> stale bash Pushgateway groups deleted, Alloy repointed at `~/Library/Logs/cairn/`, and `mini-health`
+> EXPECT updated. **Do NOT re-run these steps.** Kept for historical reference. See
+> [`../outstanding-work.md`](../outstanding-work.md) M103 and [`../../runbooks/cairn-deployment.md`](../../runbooks/cairn-deployment.md).
+
 > Hand this to the infra agent **when ready to cut the mini's backups over from the bash suite to
 > cairn**. It covers the **infra-repo + cluster** work (Grafana dashboards, Prometheus alerts, Alloy
 > log shipping, Pushgateway cleanup). The **mini-side** work (build/sign cairn, grant TCC, `cairn

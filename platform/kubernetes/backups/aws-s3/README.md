@@ -93,9 +93,6 @@ platform/kubernetes/backups/aws-s3/
 │       ├── sync-and-verify.sh        # Main backup orchestration
 │       ├── send-email.sh             # SES email sending
 │       └── daily-report.sh           # Daily summary report generator
-├── secrets/                           # AWS credentials
-│   ├── 01-aws-secret.sops.yaml       # Encrypted AWS credentials (SOPS)
-│   └── 01-aws-secret.local.yaml      # Local template (not committed)
 └── shares/                            # Per-share configurations
     ├── archive/
     ├── backups/
@@ -302,11 +299,12 @@ Built and published automatically via GitHub Actions:
 
 ### Prerequisites
 
-1. **AWS IAM User** (`kubernetes-s3-backup`) with appropriate permissions (see IAM Policy section below)
+1. **IRSA role** (`wind-irsa-s3-sync`, account `830881980142`) with the
+   permissions in the IAM Policy section below. The jobs assume it via
+   `AssumeRoleWithWebIdentity` using a projected SA token (no static AWS keys) —
+   see [`docs/runbooks/irsa-workload-identity.md`](../../../../docs/runbooks/irsa-workload-identity.md).
 
-2. **SOPS encryption key** configured for secrets
-
-3. **NFS shares** accessible from Kubernetes cluster
+2. **NFS shares** accessible from Kubernetes cluster
 
 ### IAM Policies
 
@@ -681,21 +679,20 @@ image: ghcr.io/sparked-diamond/aws-s3-sync:sha-{commit-hash}
 
 ### Rotate AWS Credentials
 
-1. Update `secrets/01-aws-secret.sops.yaml`:
-   ```bash
-   # Decrypt, edit, re-encrypt
-   sops secrets/01-aws-secret.sops.yaml
-   ```
+There is **no static AWS key to rotate** (M75 IRSA). The jobs assume the
+`wind-irsa-s3-sync` role via `AssumeRoleWithWebIdentity` using a short-lived,
+auto-renewing projected SA token — credentials rotate themselves on every run.
+To change AWS access, edit the role/trust policy in its Terraform stack
+(`infra/terraform/aws/cluster-irsa/`); see
+[`docs/runbooks/irsa-workload-identity.md`](../../../../docs/runbooks/irsa-workload-identity.md).
 
-2. Apply updated secret:
-   ```bash
-   kubectl apply -f secrets/01-aws-secret.sops.yaml
-   ```
+The only secret these jobs still consume via `envFrom` is `approval-hmac`
+(`APPROVAL_HMAC_SECRET`, shared with the approval server). To rotate it:
 
-3. Restart running pods (if any):
-   ```bash
-   kubectl -n backups delete pods -l app=aws-s3-sync
-   ```
+```bash
+# Decrypt, edit, re-encrypt the approval-hmac secret, then apply via Flux
+sops ../approval-server/01-hmac-secret.sops.yaml
+```
 
 ## Best Practices
 

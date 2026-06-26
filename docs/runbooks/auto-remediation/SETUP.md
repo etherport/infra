@@ -21,7 +21,7 @@ For everything else, use the canonical docs:
 - **Static-rule coverage matrix**:
   [`platform/kubernetes/auto-remediation/COVERAGE.md`](../../../platform/kubernetes/auto-remediation/COVERAGE.md)
 - **Enable AI advisor Phase 1 / 2 / 3**: see `../archive/ai-advisor-phase{1,2,3}-enable.md`
-- **AWS CloudWatch context**: see `../ai-advisor-phase-b-cloudwatch.md`
+- **AWS CloudWatch context**: see `../archive/ai-advisor-phase-b-cloudwatch.md`
 
 ## Adding a new static rule (still relevant)
 

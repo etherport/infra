@@ -13,8 +13,16 @@ cluster is currently in a "broken backups" state, not just a stale one.
 
 ## Verified root cause(s)
 
-- Operator/network/storage path to S3 (Backblaze B2 endpoint) broken:
-  expired access key, B2 outage, MTU/SDN regression on egress path.
+- Operator/network/storage path to AWS S3 broken (bucket
+  `postgres-barman.wind.etherport.net`). Barman authenticates via M75
+  IRSA (role `wind-irsa-barman`, `AssumeRoleWithWebIdentity` using the
+  projected SA token at `/projected/token`, `inheritFromIAMRole: true`)
+  — there is NO static access key. Failure modes: web-identity assume
+  fails (OIDC issuer mismatch — see the §M75 issuer gotchas in
+  `../irsa-workload-identity.md`), projected token not refreshed/expired,
+  `wind-irsa-barman` IAM policy regression, S3 4xx (AccessDenied /
+  NoSuchBucket), S3 outage, or an MTU/SDN regression on the egress path.
+  Restore flow + bucket layout: `../postgres-barman.md`.
 - Barman backup pod scheduled on a node without egress (rare; SDN
   misconfig).
 - Underlying postgres cluster bug — primary unhealthy, WAL archive

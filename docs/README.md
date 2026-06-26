@@ -42,10 +42,10 @@ docs/
 | [operations-guide.md](runbooks/operations-guide.md) | Command reference for all operations |
 | [kubernetes-upgrade.md](runbooks/kubernetes-upgrade.md) | Kubernetes version upgrade procedures |
 | [disaster-recovery.md](runbooks/disaster-recovery.md) | Recovery procedures for failure scenarios |
-| [macos-photos-backup.md](runbooks/macos-photos-backup.md) | iCloud Photos backup on the mini (M79): operate, replicate to a new host, monitor, troubleshoot |
+| [macos-photos-backup.md](runbooks/macos-photos-backup.md) | ⚠️ **Superseded 2026-06-26 by cairn (M103)** — historical: the retired bash iCloud Photos pipeline (M79; sparsebundle/download-missing/SMB rationale). Live backup deploy: [cairn-deployment.md](runbooks/cairn-deployment.md) |
 | [cairn-deployment.md](runbooks/cairn-deployment.md) | Deploy the `cairn` native iCloud→NAS backup agent on the mini (M103): build/sign, TCC, launchd, monitor, cut over from the bash suite |
 | [dns-resolution-issues.md](runbooks/dns-resolution-issues.md) | DNS troubleshooting |
-| [mini-photos-export-observability.md](runbooks/mini-photos-export-observability.md) | Cluster-side metrics/logs/alerts for the Mac mini photos backup |
+| [mini-photos-export-observability.md](runbooks/mini-photos-export-observability.md) | ⚠️ **Superseded 2026-06-26 by cairn (M103)** — historical: the old `photos_export_*` cluster-side metrics/alerts (rewritten to the `cairn_*` label schema). See [cairn-deployment.md](runbooks/cairn-deployment.md) + cairn README §5 |
 | [gpu-dcgm-exporter-wedge.md](runbooks/gpu-dcgm-exporter-wedge.md) | Empty GPU dashboard / `TargetDown` dcgm — driver wedge on gpu1, reboot VM 120 |
 | [unas-nvme-cache-apst-hang.md](runbooks/unas-nvme-cache-apst-hang.md) | UNAS pool "At Risk"/SSD cache "Repairing" while drives show healthy — NVMe cache member dropped off the bus (APST hang); reboot + md rebuild |
 | [vlan-interfaces-netplan.md](runbooks/vlan-interfaces-netplan.md) | VLAN interface configuration |

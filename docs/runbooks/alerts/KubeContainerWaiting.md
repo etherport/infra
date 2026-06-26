@@ -16,7 +16,7 @@ ContainerCreating that never completes.
   missing/rotated, or registry rate-limit hit.
 - ConfigMap / Secret referenced by the pod doesn't exist (typo,
   missing SOPS decrypt, Flux failed to apply).
-- PVC pending — storage class missing or backend (longhorn / NFS) down.
+- PVC pending — storage class missing or backend (ceph-rbd / NFS) down.
 - Init container that never completes (waiting on a dependency
   service that's also down).
 - Node tainted / unschedulable + pod has no matching toleration.

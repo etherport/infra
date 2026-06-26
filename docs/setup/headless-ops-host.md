@@ -1,10 +1,18 @@
 # Headless ops host setup (Claude Code Remote Control box)
 
+> **⚠️ STATUS (M81, 2026-06-18): the Claude Code dev sessions now run on the
+> Linux `devbox` (`10.10.201.45`), not the mini.** The Linux OAuth bug below was
+> worked around by transplanting a token (no native interactive login needed) —
+> see `infra/devbox/README.md`. The mini was **repurposed, not retired**: it is
+> kept for macOS-only iCloud/cairn backups (M79/M80/M103) and as the
+> TF/AWS-capable ops box. This page remains a valid **headless-macOS** setup
+> reference; the migration is described in past tense in [Migration](#migration).
+
 How to provision a machine to run **Claude Code headless** against this repo —
 full `kubectl` / `terraform` / `sops` / `ansible` access — with **no 1Password
-dependency at runtime**. Today that machine is the always-on **Mac mini**
-(`10.10.202.101`, tailnet `100.79.165.113`); the same procedure applies to the
-dev box or any future ops host.
+dependency at runtime**. The procedure here targets the always-on **Mac mini**
+(`10.10.202.101`, tailnet `100.79.165.113`); it is host-agnostic and applies to
+the devbox or any future ops host.
 
 ## Why a Mac mini (and not the Linux dev box)
 
@@ -215,7 +223,12 @@ Three independent layers — don't conflate them:
 
 ## Migration
 
-When the Linux full-scope OAuth bug is fixed, repeat this procedure on the dev
-box (steps 1–7 are host-agnostic), move the `claude --remote-control` session
-there, and retire the mini. The age key + SSH keys + SOPS render path are
-identical; only the host changes.
+**Done (M81, 2026-06-18).** Rather than wait for the Linux full-scope OAuth bug
+to be fixed, we worked around it by **transplanting a token** from the mini's
+Keychain into the devbox's `~/.claude/.credentials.json`, then repeated this
+procedure on the devbox (steps 1–7 are host-agnostic) and moved the Claude Code
+dev sessions there. The age key + SSH keys + SOPS render path are identical; only
+the host changed. The mini was **repurposed, not retired** — it still runs the
+macOS-only iCloud/cairn backups and stays a TF/AWS-capable ops box. Devbox
+provisioning + the token-transplant detail: `infra/devbox/README.md` (and the
+`devbox.yml` playbook).

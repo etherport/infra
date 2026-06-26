@@ -90,17 +90,34 @@ spec:
               value: "830881980142"
             - name: PARALLEL_WORKERS
               value: "50"
-          envFrom:
-            - secretRef:
-                name: aws-backup-credentials
+            # M75 IRSA — short-lived creds via web identity (replaces the
+            # aws-backup-credentials static key). aws CLI v2 uses the default chain.
+            - name: AWS_ROLE_ARN
+              value: "arn:aws:iam::830881980142:role/wind-irsa-s3-sync"
+            - name: AWS_WEB_IDENTITY_TOKEN_FILE
+              value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
+            # aws CLI v2 web-identity cache needs a writable \$HOME (pod HOME=/).
+            - name: HOME
+              value: "/tmp"
           volumeMounts:
             - name: nfs-src
               mountPath: /src
+              readOnly: true
+            - name: aws-iam-token
+              mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
               readOnly: true
           resources:
             requests: {memory: "512Mi", cpu: "200m"}
             limits: {memory: "4Gi", cpu: "2000m"}
       volumes:
+        # M75 IRSA: projected SA token (aud sts.amazonaws.com) for web identity.
+        - name: aws-iam-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: sts.amazonaws.com
+                  expirationSeconds: 3600
+                  path: token
         - name: nfs-src
           nfs:
             server: sequoia.wind.etherport.net
@@ -178,17 +195,34 @@ spec:
               value: "830881980142"
             - name: PARALLEL_WORKERS
               value: "50"
-          envFrom:
-            - secretRef:
-                name: aws-backup-credentials
+            # M75 IRSA — short-lived creds via web identity (replaces the
+            # aws-backup-credentials static key). aws CLI v2 uses the default chain.
+            - name: AWS_ROLE_ARN
+              value: "arn:aws:iam::830881980142:role/wind-irsa-s3-sync"
+            - name: AWS_WEB_IDENTITY_TOKEN_FILE
+              value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
+            # aws CLI v2 web-identity cache needs a writable \$HOME (pod HOME=/).
+            - name: HOME
+              value: "/tmp"
           volumeMounts:
             - name: nfs-src
               mountPath: /src
+              readOnly: true
+            - name: aws-iam-token
+              mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
               readOnly: true
           resources:
             requests: {memory: "512Mi", cpu: "200m"}
             limits: {memory: "4Gi", cpu: "2000m"}
       volumes:
+        # M75 IRSA: projected SA token (aud sts.amazonaws.com) for web identity.
+        - name: aws-iam-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: sts.amazonaws.com
+                  expirationSeconds: 3600
+                  path: token
         - name: nfs-src
           nfs:
             server: sequoia.wind.etherport.net
@@ -205,7 +239,12 @@ kubectl get jobs -n backups -l 'job-name=~s3-validation-.*' -w
 
 ### Option 2: Run Locally (Advanced)
 
-If you want to run validation from your local machine or a specific server:
+If you want to run validation from your local machine or a specific server.
+
+> **Note:** As of M75 IRSA the in-cluster Jobs no longer use static AWS keys (the
+> `aws-backup-credentials` secret was removed). The static `AWS_ACCESS_KEY_ID`/
+> `AWS_SECRET_ACCESS_KEY` below are **ad-hoc debug only** — for a quick local run with
+> credentials you already hold. The supported path is the Kubernetes Job (Option 1).
 
 ```bash
 # Set environment variables
@@ -215,8 +254,8 @@ export DEST_BUCKET="archive.wind.etherport.net"
 export DEST_PREFIX="objects/graham"
 export METADATA_BUCKET="logs.archive.wind.etherport.net"
 export AWS_REGION="us-west-2"
-export AWS_ACCESS_KEY_ID="your-key"
-export AWS_SECRET_ACCESS_KEY="your-secret"
+export AWS_ACCESS_KEY_ID="your-key"      # ad-hoc debug only
+export AWS_SECRET_ACCESS_KEY="your-secret"  # ad-hoc debug only
 
 # Run validation (100% of files)
 ./validate-existing-backups.sh graham 100
@@ -456,8 +495,12 @@ kubectl describe job -n backups s3-validation-graham-TIMESTAMP
 # 1. Service account missing
 kubectl get sa -n backups s3-sync
 
-# 2. Secret missing
-kubectl get secret -n backups aws-backup-credentials
+# 2. IRSA auth (M75) — the preflight runs `aws sts get-caller-identity`; it should
+#    assume wind-irsa-s3-sync (no static aws-backup-credentials secret anymore).
+#    Verify the assumed identity from a running/just-finished pod:
+kubectl logs -n backups job/s3-validation-graham-TIMESTAMP | grep -i 'caller-identity\|AWS Account'
+#    Or check directly: the assumed-role ARN should contain "wind-irsa-s3-sync".
+kubectl exec -n backups job/s3-validation-graham-TIMESTAMP -- aws sts get-caller-identity --query Arn --output text
 
 # 3. NFS mount issues
 kubectl logs -n backups job/s3-validation-graham-TIMESTAMP

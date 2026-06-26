@@ -26,7 +26,7 @@ appliances; the in-cluster variant pages on the StatefulSet replicas.
   start due to no space. Pairs with the disk alert.
 - (In-cluster) Node tainted / drained while the StatefulSet pods
   were on it; topology-spread didn't relocate them.
-- (In-cluster) PVC / longhorn issue preventing pod startup.
+- (In-cluster) PVC / ceph-rbd issue (rbd.csi.ceph.com — check ceph -s on pve, stale RBD watchers, osd blocklist) preventing pod startup.
 
 ## Fix history
 

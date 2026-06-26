@@ -13,7 +13,39 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
-## 2026-06-26 (cont. 2) — M76 SSO + host certs + headless consumers switched to certs (cutover prep)
+## 2026-06-26 (cont. 3) — cairn CI signed release (M7) + Grafana photos totals + full docs sweep
+
+**What:** (1) shipped cairn's **CI signed-release** automation, (2) fixed a Grafana Photos-board gap, (3)
+ran a fan-out **audit of all live docs** (both repos) and applied the fixes. cairn commits `92dba96`,
+`88e5009`, `60d7bed`, `a94aa32`; infra commits the photos-dashboard fix + this docs-sweep batch.
+
+- **cairn CI signed release (cairn repo M7):** `.github/workflows/release.yml` — a `vX.Y.Z` tag →
+  ephemeral keychain (cert from repo secrets) → `swift test` → `stamp-version.sh` → `package.sh` sign →
+  **verify the signature pins leaf `541075…`** (TCC-compatible, so a CI build drops onto the mini without
+  re-granting) → publish the zip+`.sha256` GitHub release. `scripts/setup-ci-signing.sh` (one-time, **VNC**
+  — private-key export is GUI-gated, hangs headless) sets `CAIRN_CERT_P12`/`CAIRN_CERT_PASSWORD`/
+  `KEYCHAIN_PASSWORD`. **Decision:** full CI signing (key in GH secrets) over mini-signed — owner chose it
+  for hands-off releases; self-signed cert, limited blast radius. Two snags hit + fixed: validate the
+  `.p12` via `security import` not `openssl pkcs12` (Homebrew OpenSSL 3 can't read macOS's legacy .p12);
+  `gh release create` isn't idempotent + `--target` clashes with an existing tag → now `upload --clobber`
+  if the release exists. **`v0.1.0` shipped + verified.** Detail: cairn README §7.
+- **Grafana Photos board** (`dashboards/photos-export.yaml`): added a totals row — **Photos backed up**
+  (`cairn_photos_total − missing_resolvable`), **Files backed up** (`cairn_backup_items{job=photos}`),
+  **Backup size** (`cairn_backup_bytes`). The board previously showed only "Exported (last run)" (=0 on a
+  steady-state incremental night), so there was no headline for how much is actually backed up.
+- **Docs sweep:** audited 147 live docs/READMEs across infra+cairn (12 parallel auditors) → 39 findings
+  (6 high, 19 med, 14 low), then applied them (23 via a fan-out fix-workflow + the high-judgment ones by
+  hand). Most were **pre-existing rot, not cairn**: kopia/icloudpd refs after their removal
+  (kustomize-patterns, aws-infrastructure), Route53→Cloudflare DNS-01 (ingress-traefik), **M75 IRSA** not
+  reflected in the velero / aws-s3 / cluster-irsa backup READMEs (still described static-key secrets),
+  Backblaze-B2/Longhorn references that were never true (alert runbooks), broken `archive/` links,
+  devbox dispatch "NOT yet set up" (done at M92), headless-ops-host still naming the mini as the dev host
+  (it's the devbox since M81), and aws-security-best-practices recommending Level 2 (we're on Level 4 OIDC+
+  IRSA). cairn-side: `mount_smbfs`→`open smb://`, DESIGN §6 metric schema, example source types. Archived
+  the executed `cairn-cutover-infra-prompt.md`; renumbered the duplicate **M103→M105** (switch-port item);
+  marked M103's last item (CI release) DONE; bannered the two superseded photos runbooks in the index.
+
+
 
 **What:** took M76 from "cert infra live" to "both headless consumers + the operator on certs" — only
 the static-key *removal* (and 2 container CI workflows) remain. Commits `19ef435`, `aa3fb33`, `e23332f`,

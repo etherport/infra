@@ -1,5 +1,21 @@
 # Terraform AWS Security Best Practices
 
+> **⚠️ Current state (2026-06-26):** This homelab has moved well past the "Level 1
+> long-lived keys" framing below — it now runs **Level 4 (CI/CD + OIDC)** for Terraform
+> *plus* **IRSA** for in-cluster workloads:
+> - **CI Terraform → GitHub→AWS OIDC** (H29): no static AWS keys in CI; the OIDC provider +
+>   deployer role live in [`infra/terraform/aws/github-oidc/`](../../../infra/terraform/aws/github-oidc/).
+> - **In-cluster workloads → IRSA** (M75): velero, the s3-sync family, CNPG barman, and
+>   cloudwatch-read get short-lived creds via `AssumeRoleWithWebIdentity` (projected SA token,
+>   aud `sts.amazonaws.com`) — **no static AWS keys in etcd**. See
+>   [`docs/runbooks/irsa-workload-identity.md`](../../runbooks/irsa-workload-identity.md).
+> - **Devbox holds NO standing AWS creds** (M82) — TF is CI-only; rare local debug re-renders a
+>   throwaway profile from SOPS on demand.
+> - The `terraform-homelab` access key still exists but is **rare-local-debug only** (rotate, never delete).
+>
+> The "Level 1 (Current Setup)" and "I recommend Level 2" sections below are kept for their
+> educational value, but no longer describe reality.
+
 How to securely manage AWS infrastructure with Terraform, from homelab to production.
 
 ## The Security Challenge
@@ -288,7 +304,14 @@ aws cloudtrail lookup-events \
 
 ## Recommended Setup for This Homelab
 
-Given single-user homelab context, I recommend **Level 2** (MFA-protected role assumption):
+> **Update:** The recommendation below (Level 2, MFA role assumption) was the original plan, but
+> the homelab has since gone further — it now runs **Level 4 (CI/CD + OIDC)** for Terraform
+> ([`infra/terraform/aws/github-oidc/`](../../../infra/terraform/aws/github-oidc/), H29) **plus
+> IRSA** for in-cluster AWS workloads (M75, [`docs/runbooks/irsa-workload-identity.md`](../../runbooks/irsa-workload-identity.md)).
+> Standing long-lived keys are no longer the deploy path; the Level 2 architecture below is
+> retained for reference only.
+
+Given single-user homelab context, the original plan was **Level 2** (MFA-protected role assumption):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -377,4 +400,6 @@ aws iam delete-access-key --user-name terraform-homelab --access-key-id AKIA...O
 | AWS SSO (Level 3) | High | Medium | Medium |
 | CI/CD + OIDC (Level 4) | Highest | Lower | High |
 
-For a homelab, **Level 2 with good credential hygiene** provides reasonable security without excessive complexity.
+Level 2 with good credential hygiene is a reasonable middle ground for a homelab, but this homelab
+runs **Level 4 (CI/CD + OIDC)** for Terraform plus **IRSA** for in-cluster workloads (see the banner
+at the top) — the highest tier, with zero standing long-lived keys in the deploy path.

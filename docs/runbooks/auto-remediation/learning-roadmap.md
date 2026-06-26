@@ -103,7 +103,9 @@ Independent of learning, but related to "make actions more reliable." Listed for
 
 ### R5 — Backfill `docs/runbooks/alerts/*.md` for recurring alerts
 
-**Problem.** Today only `VeleroLastBackupAgeHigh.md` exists. `read_runbook` returns "not found" for everything else, making the tool nearly inert.
+**Status: DONE** — ~18 seed runbooks backfilled under `docs/runbooks/alerts/`; `read_runbook` is now exercised for most recurring alerts.
+
+**Problem.** The backfill has landed: ~18 runbooks now exist under `docs/runbooks/alerts/` (previously only `VeleroLastBackupAgeHigh.md`), so `read_runbook` resolves for most recurring alerts instead of returning "not found".
 
 **Solution.** Write seed runbooks for every alert that has fired more than once in the last 90 days. Use a Prom query to enumerate. Template each as:
 

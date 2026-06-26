@@ -14,4 +14,4 @@ That file enumerates:
 For the AI advisor layer (which sits behind the same webhook and
 handles alerts that don't match static rules), see
 [`platform/kubernetes/auto-remediation/README.md`](../../../platform/kubernetes/auto-remediation/README.md)
-and the per-phase enable runbooks in `docs/runbooks/ai-advisor-phase*`.
+and the per-phase enable runbooks in `docs/runbooks/archive/ai-advisor-phase*`.

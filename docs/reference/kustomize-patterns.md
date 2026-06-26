@@ -8,7 +8,7 @@ This repository uses Kustomize to manage Kubernetes manifests. Kustomize allows 
 
 ## Pattern 1: Simple Application (Single Directory)
 
-**Used by**: Plex, iCloudPD, Kopia
+**Used by**: Plex
 
 **Structure**:
 ```
@@ -209,7 +209,7 @@ spec:
 
 ## Pattern 4: Excluding Resources from Kustomization
 
-**Used by**: Kopia, iCloudPD (for secrets not in git)
+**Used by**: AWS S3 Backups / Authentik (for SOPS-encrypted / manually-created secrets)
 
 **kustomization.yaml**:
 ```yaml
@@ -233,9 +233,9 @@ resources:
 
 ## Pattern 5: Shared Namespace (Multiple Apps, One Namespace)
 
-**Used by**: Kopia + AWS S3 Backups (both in `backups` namespace)
+**Used by**: AWS S3 Backups + Approval Server (both in `backups` namespace)
 
-**Problem**: Both apps define `00-namespace.yaml` → duplicate resource error in Flux.
+**Problem**: Both apps define a `Namespace` resource → duplicate resource error in Flux.
 
 **Solution**: Only one app defines the namespace, others comment it out:
 
@@ -247,15 +247,15 @@ resources:
   - rbac.yaml
 ```
 
-**kopia/kustomization.yaml** (references namespace but doesn't define it):
+**approval-server/kustomization.yaml** (references namespace but doesn't define it):
 ```yaml
 namespace: backups  # Uses backups namespace
 
 resources:
-  # Note: namespace already defined by aws-s3/base
-  # - 00-namespace.yaml
-  - 01-pvc-repo.yaml
-  - 02-pvc-config.yaml
+  # Note: namespace already defined by aws-s3
+  - deployment.yaml
+  - service.yaml
+  - ingressroute.yaml
 ```
 
 **When to use**: Multiple apps sharing the same namespace in Flux.
@@ -404,8 +404,8 @@ kubectl kustomize path/to/overlay/ | grep -A 20 "kind: CronJob"
 | Simple App | Plex | `platform/kubernetes/plex/` |
 | ConfigMap Generator | Home Automation | `platform/kubernetes/home-automation/` |
 | Base + Overlays | AWS S3 Backups | `platform/kubernetes/backups/aws-s3/` |
-| Excluded Secrets | Kopia | `platform/kubernetes/kopia/` |
-| Shared Namespace | Kopia + S3 | `platform/kubernetes/{kopia,backups/aws-s3}` |
+| Excluded Secrets | AWS S3 Backups | `platform/kubernetes/backups/aws-s3/` |
+| Shared Namespace | S3 + Approval Server | `platform/kubernetes/backups/{aws-s3,approval-server}` |
 | Infrastructure | MetalLB | `platform/kubernetes/metallb/` |
 
 ## Related Documentation

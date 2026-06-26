@@ -12,8 +12,9 @@ backup as a whole did not complete.
 
 ## Verified root cause(s)
 
-- BackupStorageLocation unavailable: B2 / S3 endpoint unreachable,
-  expired credentials, bucket policy regression.
+- BackupStorageLocation unavailable: AWS S3 endpoint unreachable, IRSA
+  web-identity assumption failure (wind-irsa-velero), or bucket policy
+  regression.
 - Velero pod itself unhealthy mid-backup (rare; usually pairs with
   `VeleroDown`).
 - DefaultVolumesToFsBackup / kopia uploader failure when restic / kopia

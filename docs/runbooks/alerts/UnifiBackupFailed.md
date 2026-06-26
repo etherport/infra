@@ -15,10 +15,11 @@ UniFi Protect config to NFS/S3 failed.
 - UDM / Protect API credential expired or scope changed (UniFi tends
   to rotate session tokens; the backup script uses a long-lived
   credential that occasionally needs refresh).
-- Network path to UDM (10.10.1.1) broken — pairs with `VPNGatewayDown`
+- Network path to UDM (10.10.200.1) broken — pairs with `VPNGatewayDown`
   or a broader SDN regression.
-- NFS / S3 destination unwritable (mount unhealthy, B2 endpoint down,
-  credential rotated).
+- NFS / S3 destination unwritable (mount unhealthy, AWS S3
+  endpoint/credential issue — S3 unwritable, IRSA role-assumption
+  failure).
 - The backup pod itself crashing (image issue, missing secret) —
   pairs with `PodCrashLooping`.
 
@@ -34,7 +35,7 @@ UniFi Protect config to NFS/S3 failed.
 2. Recent Job runs:
    `kubectl -n backups get jobs -l app=unifi-backup --sort-by=.metadata.creationTimestamp`
 3. Test UDM reachability from the cluster:
-   `kubectl -n backups run test --rm -it --image=curlimages/curl -- curl -ksv https://10.10.1.1`
+   `kubectl -n backups run test --rm -it --image=curlimages/curl -- curl -ksv https://10.10.200.1`
 4. After fix, watch the next scheduled run (04:00 PT) or trigger
    manually:
    `kubectl -n backups create job --from=cronjob/unifi-backup manual-$(date +%s)`

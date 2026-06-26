@@ -274,7 +274,7 @@ The next reconcile in ~30s should re-sync.
 
 - [`platform/kubernetes/traefik/README.md`](../../platform/kubernetes/traefik/README.md)
 - [`docs/architecture/overview.md`](../architecture/overview.md) — ingress / TLS row
-- [`docs/runbooks/archive/aws-private-dns.md`](aws-private-dns.md) — Route53 plumbing
+- [`docs/runbooks/archive/aws-private-dns.md`](archive/aws-private-dns.md) — Route53 plumbing
 - [`platform/kubernetes/unifi-cert-sync/README.md`](../../platform/kubernetes/unifi-cert-sync/README.md) — UniFi push job
 
 ## Last reviewed

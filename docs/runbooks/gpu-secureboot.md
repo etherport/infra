@@ -14,7 +14,8 @@ the Canonical UEFI CA, so Ubuntu's Secure Boot lockdown rejects them.
 
 ## Root cause
 
-`/Users/grahamsmith/code/infra/infra/terraform/proxmox/k8s-vms/main.tf:248`
+The `efi_disk` block of the `k8s_gpu1` resource in
+`infra/terraform/proxmox/k8s-vms/main.tf`
 declares `pre_enrolled_keys = false` on the GPU node's EFI disk, but the
 `bpg/proxmox` provider does not expose a `secure_boot` toggle. The EFI
 vars layer in the cloud image still has SB enabled.

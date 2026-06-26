@@ -15,7 +15,7 @@ DNS + kube-apiserver + host/remote-node probes, `allow-monitoring-scrape` = ingr
 from the `monitoring` ns) **plus** that tier's own allowlist (`1x-tier-<ns>.yaml`).
 Everything else is dropped. Unlabelled namespaces are unaffected (allow-all).
 
-**Enforced tiers (2026-06):** `postgres`, `cue`, `dns`, `traefik` (in progress).
+**Enforced tiers (2026-06):** `postgres`, `cue`, `dns`, `traefik`, `monitoring` (all 5 enforced).
 Never label `kube-system`, `flux-system`, `wireguard`, `metallb-system`.
 
 ## ⚠️ Adding a new service WILL need NetworkPolicy work if it touches an enforced tier

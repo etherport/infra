@@ -11,13 +11,13 @@ live with the code:
 
 Phase-enablement runbooks live one level up in `docs/runbooks/`:
 
-- [`ai-advisor-phase1-enable.md`](../ai-advisor-phase1-enable.md) —
+- [`ai-advisor-phase1-enable.md`](../archive/ai-advisor-phase1-enable.md) —
   advisory-only diagnosis email path
-- [`ai-advisor-phase2-enable.md`](../ai-advisor-phase2-enable.md) —
+- [`ai-advisor-phase2-enable.md`](../archive/ai-advisor-phase2-enable.md) —
   approve-via-email (HMAC-signed buttons)
-- [`ai-advisor-phase3-enable.md`](../ai-advisor-phase3-enable.md) —
+- [`ai-advisor-phase3-enable.md`](../archive/ai-advisor-phase3-enable.md) —
   opt-in autonomous execute (`ai_remediation: "auto"` label)
-- [`ai-advisor-phase-b-cloudwatch.md`](../ai-advisor-phase-b-cloudwatch.md) —
+- [`ai-advisor-phase-b-cloudwatch.md`](../archive/ai-advisor-phase-b-cloudwatch.md) —
   M45 Phase B (AWS CloudWatch log context for AWS-side alerts)
 
 Design spec:

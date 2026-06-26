@@ -112,7 +112,8 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   (+ `infra/devbox/README.md`).
 - **Mac mini** (`10.10.202.101`, tailnet `100.79.165.113`) = always-on headless
   ops/RC host: full kubectl/terraform/sops/ansible, **no 1P at runtime**. Retained for
-  macOS-only iCloud backups (M79/M80) + as the TF/AWS-capable ops box. Procedure:
+  macOS-only iCloud backups (the **cairn** agent, M103 — replaced the bash suite 2026-06-25;
+  `docs/runbooks/cairn-deployment.md`) + as the TF/AWS-capable ops box. Procedure:
   `docs/setup/headless-ops-host.md`.
 - **Appliances:** UDM Pro `10.10.200.1` (Network v2 API via `udm_api_key` `X-API-KEY`,
   or `udm_tfadmin_*` login). UniFi Protect = **`Windprotect` `10.10.212.10`** (SSH via

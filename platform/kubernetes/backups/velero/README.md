@@ -9,7 +9,7 @@ Velero is our Kubernetes backup solution for disaster recovery and data protecti
 - **Method**: File-system backup using Kopia
 - **Backup Frequency**: Daily at 2 AM
 - **Retention**: 30 days
-- **Credentials**: Separate IAM user `velero-backup`
+- **Credentials**: IRSA — assumes IAM role `wind-irsa-velero` via `AssumeRoleWithWebIdentity` + a projected SA token (no static-key secret). See [docs/runbooks/irsa-workload-identity.md](../../../../docs/runbooks/irsa-workload-identity.md).
 
 ## Architecture
 
@@ -136,9 +136,12 @@ velero server + node-agent set **resource `requests` only, no limits** (in
    - Versioning: Enabled
    - Encryption: SSE-S3
 
-2. **IAM User**
-   - User: `velero-backup`
+2. **IAM Role (IRSA)**
+   - Role: `wind-irsa-velero` (account `830881980142`)
+   - Trust: `system:serviceaccount:velero:velero-server` via web identity
    - Policy: See [IAM Policy](#iam-policy) below
+   - Provisioned by the `infra/terraform/aws/cluster-irsa/` stack — see
+     [docs/runbooks/irsa-workload-identity.md](../../../../docs/runbooks/irsa-workload-identity.md).
 
 ### Helm Installation
 
@@ -150,18 +153,21 @@ helm repo update
 # Create namespace
 kubectl create namespace velero
 
-# Create credentials secret
-cat > /tmp/velero-credentials <<EOF
-[default]
-aws_access_key_id=<ACCESS_KEY>
-aws_secret_access_key=<SECRET_KEY>
-EOF
-
-kubectl create secret generic cloud-credentials \
-  --namespace velero \
-  --from-file=cloud=/tmp/velero-credentials
-
-rm /tmp/velero-credentials
+# NOTE: no static-key secret is created — auth is IRSA (AssumeRoleWithWebIdentity
+# via role wind-irsa-velero + a projected SA token; the live HelmRelease sets
+# credentials.useSecret=false). See docs/runbooks/irsa-workload-identity.md.
+#
+# Manual-bootstrap-only fallback (NOT used in prod): if you ever need to run
+# velero against static keys (e.g. off-cluster debugging where IRSA is
+# unavailable), create the secret and set credentials.useSecret=true:
+#   cat > /tmp/velero-credentials <<EOF
+#   [default]
+#   aws_access_key_id=<ACCESS_KEY>
+#   aws_secret_access_key=<SECRET_KEY>
+#   EOF
+#   kubectl create secret generic cloud-credentials \
+#     --namespace velero --from-file=cloud=/tmp/velero-credentials
+#   rm /tmp/velero-credentials
 
 # Install Velero
 helm install velero vmware-tanzu/velero \
@@ -444,7 +450,10 @@ Managed via Velero CLI or can be defined as Kubernetes manifests in `schedules/`
 
 ## IAM Policy
 
-**Policy Name:** `VeleroBackupPolicy`
+This least-privilege policy is attached to the **`wind-irsa-velero`** IAM role
+(IRSA — velero assumes it via `AssumeRoleWithWebIdentity`, no static user). It is
+managed by the `infra/terraform/aws/cluster-irsa/` stack; see
+[docs/runbooks/irsa-workload-identity.md](../../../../docs/runbooks/irsa-workload-identity.md).
 
 ```json
 {
@@ -519,8 +528,15 @@ velero backup-location get
 # Check Velero logs
 kubectl logs -n velero deployment/velero --tail=50
 
-# Verify AWS credentials
-kubectl get secret cloud-credentials -n velero -o yaml
+# Verify IRSA auth (no static-key secret — see docs/runbooks/irsa-workload-identity.md).
+# Confirm the projected SA token + role env are wired into the server pod:
+kubectl get pod -n velero -l app.kubernetes.io/name=velero \
+  -o jsonpath='{.items[0].spec.containers[0].env[?(@.name=="AWS_ROLE_ARN")].value}{"\n"}'
+kubectl exec -n velero deploy/velero -c velero -- \
+  cat /var/run/secrets/eks.amazonaws.com/serviceaccount/token | head -c 20
+
+# Confirm the role actually assumes (look for AssumeRoleWithWebIdentity / 403s):
+kubectl logs -n velero deployment/velero --tail=50 | grep -iE 'webidentity|assume|403|accessdenied'
 ```
 
 ## Maintenance
@@ -577,9 +593,12 @@ helm upgrade velero vmware-tanzu/velero \
 
 ### Credentials
 
-- ✅ Separate IAM user for Velero (not shared with other services)
-- ✅ Least-privilege S3 policy (bucket-specific access only)
-- ✅ Kubernetes secret for AWS credentials (not hardcoded)
+- ✅ IRSA — velero assumes the dedicated `wind-irsa-velero` role via
+  `AssumeRoleWithWebIdentity`; **no static AWS keys in etcd** (no
+  `cloud-credentials` secret). See [docs/runbooks/irsa-workload-identity.md](../../../../docs/runbooks/irsa-workload-identity.md).
+- ✅ Least-privilege S3 policy (bucket-specific access only), attached to that role
+- ✅ Short-lived creds — projected SA token (aud `sts.amazonaws.com`, 1h expiry),
+  auto-rotated; nothing long-lived to leak or rotate
 
 ### Future Improvements
 
