@@ -1078,16 +1078,15 @@ JSON
   # Push metrics (success = 1 if sync exit code was 0)
   success_flag=0
   if [[ ${SYNC_RC:-0} -eq 0 ]]; then success_flag=1; fi
-  # A held deletion is "needs action" even with no uploads this pass.
-  if is_true "${DELETIONS_PENDING}"; then success_flag=0; fi
+  # A held deletion is NORMAL (success subject to approval), NOT a failure —
+  # leave success_flag=1 so it doesn't trip S3SyncFailed / the AI advisor.
   pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" 0 0 "${PENDING_DELETE_STATUS}"
 
   # Upload consolidated report
   s3_put_object "${METADATA_BUCKET}" "${CONSOLIDATED_REPORT_KEY}" "${CONSOLIDATED_REPORT}"
   echo "Consolidated report uploaded to: s3://${METADATA_BUCKET}/${CONSOLIDATED_REPORT_KEY}"
   if is_true "${DELETIONS_PENDING}"; then
-    echo "No new uploads; ${PENDING_DELETE_COUNT} deletion(s) held for approval (${PENDING_DELETE_STATUS})"
-    exit 1
+    echo "No new uploads; ${PENDING_DELETE_COUNT} deletion(s) awaiting approval (SUCCESS subject to approval)"
   fi
   exit 0
 fi
@@ -1508,10 +1507,12 @@ elif [[ "${verified_failed}" -gt 0 ]]; then
   # Send failure notification email
   send_failure_email "Verification failed: ${verified_failed} of ${VERIFY_COUNT:-0} files failed verification (HEAD object check)"
 elif is_true "${DELETIONS_PENDING}"; then
-  # Uploads + verification succeeded, but a deletion is HELD for approval — the
-  # full mirror isn't complete, so mark needs-action (not a hard failure). New
-  # files were still backed up this pass.
-  success_flag=0
+  # Uploads + verification succeeded and a deletion is HELD for approval. This is
+  # NORMAL operation, not a failure — report it as SUCCESS (subject to approval)
+  # so it does NOT trip S3SyncFailed (success==0) / KubeJobFailed / the AI advisor.
+  # The approval email is the actionable signal; the report status
+  # (APPROVAL_PENDING) + deletionsPendingApproval count keep it distinguishable.
+  success_flag=1
   OVERALL_STATUS="APPROVAL_PENDING"
 else
   success_flag=1
@@ -1520,7 +1521,11 @@ fi
 
 # Push metrics to Pushgateway if configured
 if [[ -n "${PUSHGATEWAY_URL:-}" ]]; then
-  pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" "${UPLOAD_COUNT}" 0 "${VERIFICATION_STATUS}" "${verified_succeeded}" "${verified_failed}"
+  # success=1 even when a deletion is pending; expose the pending state via the
+  # status label (not via a failure metric) so Grafana can show it without alerting.
+  metric_status="${VERIFICATION_STATUS}"
+  if is_true "${DELETIONS_PENDING}"; then metric_status="approval_pending"; fi
+  pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" "${UPLOAD_COUNT}" 0 "${metric_status}" "${verified_succeeded}" "${verified_failed}"
 fi
 
 #
@@ -1812,8 +1817,8 @@ if [[ ${WARNING_COUNT} -gt 0 ]]; then
 fi
 
 if is_true "${DELETIONS_PENDING}"; then
-  echo "=== [$RUN_ID] Done — uploads complete; ${PENDING_DELETE_COUNT} deletion(s) HELD for approval (${PENDING_DELETE_STATUS}); run marked needs-action ==="
-  exit 1
+  echo "=== [$RUN_ID] Done — uploads complete + verified; ${PENDING_DELETE_COUNT} deletion(s) awaiting approval (SUCCESS subject to approval; not a failure) ==="
+  exit 0
 fi
 
 echo "=== Done ==="

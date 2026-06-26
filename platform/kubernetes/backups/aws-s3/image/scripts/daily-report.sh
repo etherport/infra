@@ -266,15 +266,18 @@ def get_s3_summary_metrics(share, start_time_epoch):
         sync_data = summary.get('sync', {})
         summary_data = summary.get('summary', {})
 
-        # Check both top-level status field AND sync exitCode
-        # Report status should be "SUCCESS" and sync exitCode should be 0
+        # Check both top-level status field AND sync exitCode. APPROVAL_PENDING is
+        # a SUCCESS subject to approval (a deletion is held for operator review),
+        # NOT a failure — treat it as success so it isn't counted/rendered as error.
         is_success = (
-            report_status == 'SUCCESS' and
+            report_status in ('SUCCESS', 'APPROVAL_PENDING') and
             sync_data.get('exitCode', 1) == 0
         )
 
         return {
             'success': 1 if is_success else 0,
+            'status': report_status,
+            'pending_deletions': summary.get('deletionsPendingApproval', 0),
             'files': summary_data.get('filesTransferred', 0),
             'bytes': summary_data.get('bytesTransferred', 0),
             'duration': summary.get('durationSeconds', 0),
@@ -339,6 +342,8 @@ for job in jobs_json:
         'end_time': completion_time,
         'job_status': job_status,
         'success': metrics.get('success', 0),
+        'status': metrics.get('status', ''),
+        'pending_deletions': metrics.get('pending_deletions', 0),
         'files': metrics.get('files', 0),
         'bytes': metrics.get('bytes', 0),
         'duration': metrics.get('duration', 0),
@@ -381,9 +386,14 @@ for execution in sorted_executions:
     share = execution['share']
     job_status = execution.get('job_status', 'unknown')
     success = execution.get('success', 0)
+    rep_status = execution.get('status', '')
+    pend = execution.get('pending_deletions', 0)
 
     if job_status == 'running':
         status_text, status_class = 'in progress', 'warn'
+    elif rep_status == 'APPROVAL_PENDING' and job_status == 'succeeded':
+        status_text = f'subject to approval ({pend:,} to delete)' if pend else 'subject to approval'
+        status_class = 'warn'
     elif job_status == 'succeeded' and success == 1:
         status_text, status_class = 'completed', 'ok'
     else:

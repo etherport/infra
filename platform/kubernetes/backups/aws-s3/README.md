@@ -201,8 +201,13 @@ instead of hand-editing env. Flow:
 
 1. Guard 2 trips → the sync writes `approvals/pending/<share>/<run_id>.json`
    (rollup + sample) and `…/<run_id>.manifest.csv` (every key) to the metadata
-   bucket, mints an HMAC-signed token, and emails the approve button. Then it
-   exits (no deletion).
+   bucket, mints an HMAC-signed token, and emails the approve button. It still
+   runs the sync **uploads-only** (no `--delete`) so new/changed files are backed
+   up, then finishes **SUCCESS (subject to approval)** — `exit 0`, `success=1`,
+   report `status: APPROVAL_PENDING` with a `deletionsPendingApproval` count. This
+   is normal operation, **not** a failure: it does not trip `S3SyncFailed` /
+   `KubeJobFailed` / the AI advisor, and the daily report shows it as
+   "subject to approval" rather than an error. The held deletions wait.
 2. You click **Review & approve** → `backup-approve.wind.etherport.net` (behind
    **Cloudflare Access**, restricted to the operator email). The page shows the
    full manifest + a **Download CSV** link; clicking **Confirm** (a POST, so
@@ -239,7 +244,13 @@ instantly); `.sync-locks` is excluded from the sync.
 
 - A run is only **FAILED** on: a non-zero `aws s3 sync` exit, an actual
   checksum **mismatch** (data corruption), HEAD verification that produced no
-  successful results at all, or a tripped delete guard.
+  successful results at all, or **Guard 1** (empty/unmounted source — never
+  approvable).
+- A **Guard 2** trip (deletion volume awaiting approval) is **SUCCESS subject to
+  approval**, NOT a failure: uploads still run, the run exits 0 with `success=1`
+  and report `status: APPROVAL_PENDING` (+ `deletionsPendingApproval` count). It
+  doesn't alert (`S3SyncFailed`/`KubeJobFailed`/advisor); the approval email is
+  the signal. (Before 2026-06-26 it exited non-zero and read as a failed sync.)
 - Objects that exist (HEAD 200) but return **no checksum metadata** —
   typically files rewritten at the source mid-run — are **not** a failure.
   They get one re-HEAD after a short settle (`CHECKSUM_RETRY_DELAY_SECONDS`,
