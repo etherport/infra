@@ -92,9 +92,20 @@ NXDOMAIN was stale negative cache; NB the two cluster Technitium pods have indep
 the record was added per-pod). **Headless minting PROVEN** — `step ssh certificate --provisioner headless`
 issued a 10-min ECDSA user cert non-interactively. **All 4 provisioners live; M76 Phase 1 COMPLETE.**
 
-**NEXT = M76 Phase 2** (build the ansible role to push `TrustedUserCAKeys`/host-certs to hosts IN PARALLEL
-with the existing key — additive, no cutover; then prove cert-SSH per host; Phase 5 cutover = remove the
-standing key, the risky step). Saved a memory on the VLAN-201→VIP constraint.
+**UPDATE 2 — Phases 2–4 DONE (commit `51400c7`): cert-SSH LIVE fleet-wide (additive).** Built
+`step-ca-trust.yml` (pushes `TrustedUserCAKeys` = the step-ca user CA pubkey as an sshd drop-in;
+`sshd -t`-validated before reload; the `automation@homelab` key untouched → both work in parallel).
+Proven e2e: installed step-cli on the devbox + bootstrapped, minted a 10-min cert via the JWK `headless`
+provisioner, SSHed **cert-only** (`-F /dev/null`) to k8s-w1/cp1 + dns-fallback + gh-runner → CERT-AUTH OK.
+Rolled to **all 14 fleet hosts** (8 k8s nodes + 5 standalone VMs + pve), failed=0. CA pubkeys committed
+under `files/step-ca/`.
+
+**NEXT = M76 Phase 5 CUTOVER (the risky step — deliberate):** switch the headless consumers to certs
+first (CI ansible `ANSIBLE_SSH_KEY` → mint a JWK cert in-workflow; the devbox agent ssh-config/renew-loop),
+verify cert-only for every flow, THEN remove `automation@homelab` from authorized_keys + the 4 hardcoded
+deploy points (TF/Packer/ansible/AWS cloud-init) + 3 holders (mini/devbox/GH secret). Break-glass = PVE
+console + IPMI. Follow-ups: persist step-cli+bootstrap in `devbox.yml`; optional host-certs (Phase 2b).
+Saved a memory on the VLAN-201→VIP constraint. **L24 FRR-migration window deferred (owner picked M76 first).**
 
 ---
 

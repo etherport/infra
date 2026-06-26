@@ -82,6 +82,13 @@ earlier follow-ups are RESOLVED:
 - **Headless minting PROVEN** — `step ssh certificate --provisioner headless` issued a 10-min ECDSA
   SSH user cert (principal `ubuntu`) non-interactively. The M76 core capability works.
 
+> **✅ Phases 2–4 DONE 2026-06-26 (commit `51400c7`).** `infra/ansible/playbooks/step-ca-trust.yml`
+> pushed `TrustedUserCAKeys` (the step-ca user CA pubkey, `files/step-ca/ssh_user_ca.pub`, as sshd
+> drop-in `60-step-ca.conf`) to **all 14 fleet hosts** (8 k8s nodes + 5 standalone VMs + pve) —
+> ADDITIVE, `sshd -t`-validated before reload, the static key untouched. Proven e2e: the devbox
+> (step-cli bootstrapped) mints a JWK cert and SSHes cert-only (`-F /dev/null`) to several hosts.
+> **Only Phase 5 (cutover) remains** — see below.
+
 Host = a **dedicated off-cluster standalone VM `step-ca` (1006, 10.10.201.46)**. Built + validated:
 - `infra/terraform/proxmox/standalone-vms/main.tf` — VM 1006 (1 vCPU / 1 GB / 15 GB). `validate` OK.
 - `infra/terraform/proxmox/firewall/standalone-vms.tf` — M77 firewall for 1006 (baseline SSH/9100 +
