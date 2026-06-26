@@ -117,9 +117,42 @@ data:
             "expr": "max(cairn_photos_orphans)" } ]
         },
         {
+          "type": "stat",
+          "title": "Photos backed up",
+          "gridPos": { "h": 4, "w": 8, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Total photo/video ASSETS backed up = library assets minus any resolvable-missing (cairn_photos_total − cairn_photos_missing_resolvable). This is the steady-state 'how much is in the backup' headline; 'Exported (last run)' is just the per-run delta (0 on a no-op incremental night).",
+          "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "green" } }, "overrides": [] },
+          "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "max(cairn_photos_total) - max(cairn_photos_missing_resolvable)" } ]
+        },
+        {
+          "type": "stat",
+          "title": "Files backed up",
+          "gridPos": { "h": 4, "w": 8, "x": 8, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Total FILES in the export (originals + edited + XMP sidecars + Live-Photo motion clips) — each asset expands to ~3 files. cairn_backup_items{job=\"photos\"}.",
+          "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "green" } }, "overrides": [] },
+          "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "max(cairn_backup_items{job=\"photos\"})" } ]
+        },
+        {
+          "type": "stat",
+          "title": "Backup size",
+          "gridPos": { "h": 4, "w": 8, "x": 16, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Total size of the Photos export on the NAS. cairn_backup_bytes{job=\"photos\"}.",
+          "fieldConfig": { "defaults": { "unit": "decbytes", "color": { "mode": "fixed", "fixedColor": "blue" } }, "overrides": [] },
+          "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "expr": "max(cairn_backup_bytes{job=\"photos\"})" } ]
+        },
+        {
           "type": "timeseries",
           "title": "Exported / missing (resolvable vs unavailable)",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": {
             "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10 } },
@@ -139,7 +172,7 @@ data:
         {
           "type": "timeseries",
           "title": "Run duration",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "bars", "fillOpacity": 40 } }, "overrides": [] },
           "targets": [
@@ -149,7 +182,7 @@ data:
         {
           "type": "logs",
           "title": "Mini logs ({host=\"mini\"})",
-          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 16 },
+          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 20 },
           "datasource": { "type": "loki", "uid": "loki" },
           "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" },
           "targets": [
