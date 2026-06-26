@@ -1,0 +1,10 @@
+[Unit]
+Description=Renew the devbox step-ca SSH user cert every 6h (M76)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=6h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

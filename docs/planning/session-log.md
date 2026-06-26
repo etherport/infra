@@ -13,6 +13,42 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-26 (cont. 2) — M76 SSO + host certs + headless consumers switched to certs (cutover prep)
+
+**What:** took M76 from "cert infra live" to "both headless consumers + the operator on certs" — only
+the static-key *removal* (and 2 container CI workflows) remain. Commits `19ef435`, `aa3fb33`, `e23332f`,
+`cab1c46`, `6462f0d` (+ this docs/devbox commit).
+
+- **SSO (`step ssh login` via Authentik):** added an OIDC SSH cert template granting `ubuntu`/`root`
+  principals + gated the step-ca Authentik app to the **Admins** group (only graham/akadmin; Plex/HA
+  users auth elsewhere). Hit + fixed: the OIDC provisioner's `--domain wind.etherport.net` filter 401'd
+  the operator's gmail identity (`email … is not allowed`) — removed it (gating is the app binding).
+  Operator's Mac now cert-auths; the fix on their side was `IdentityAgent SSH_AUTH_SOCK` on homelab
+  `Host` blocks placed **above** the global `Host * → 1Password` block (first IdentityAgent match wins),
+  so the step cert (in the default agent) is offered, 1P retained for everything else.
+- **Phase 2b host certs** (`step-ca-hostcerts.yml`): each Servers-VLAN host signs its existing ed25519
+  host key into a 30d host cert (host CA) + serves it via `HostCertificate`; SSHPOP systemd timer renews.
+  Clients trusting the host CA (`@cert-authority`) skip TOFU — verified. Built via a design+adversarial
+  workflow that caught 2 blockers (a Jinja principal-flag builder that fused tokens; `step ssh renew
+  --expires-in` which that subcommand rejects). Direct `step ssh certificate --host --sign --provisioner`
+  form (not token→sign). pve excluded (mgmt VLAN can't reach the CA — UDM zone firewall).
+- **CI consumer-switch:** `.github/actions/setup-ssh-cert` composite action mints a ≤1h cert from the
+  new **`STEP_JWK_PASSWORD`** repo secret (operator added it — the M92 PAT lacks Secrets scope) + trusts
+  the host CA. The **4 host-context** ansible workflows switched off `ANSIBLE_SSH_KEY`; proven via a
+  throwaway `test-ssh-cert.yml` + a real `service-status-inventory-drift` run (both green).
+- **devbox consumer-switch:** `infra/devbox/step-ssh-renew.{sh,service,timer}` (user timer, 6h) mints a
+  13h cert to `~/.ssh/id_homelab_cert`; `devbox.yml` ssh-config offers it ahead of the static key. The
+  **agent now authenticates with the cert** (`Server accepts key: id_homelab_cert ECDSA-CERT`).
+
+**REMAINING before the static-key removal (Phase 5):** (1) the **2 CONTAINER** ansible workflows
+(`ansible-vm-fleet`, `ansible-proxmox`) — `step` isn't in their container; need step-in-container or
+de-containerize. (2) **packer** keeps the static key by design (it SSHes to the ephemeral build VM).
+(3) Then remove `automation@homelab` from authorized_keys (cloud-init) + the 4 hardcoded deploy points
+(TF/Packer/ansible/AWS cloud-init) + 3 holders (mini, devbox, GH `ANSIBLE_SSH_KEY`). The static key
+stays live as the safety net until then. Break-glass = PVE console + IPMI (`10.10.200.21`).
+
+---
+
 ## 2026-06-25 (cont. 3) — M103 cairn CUTOVER complete: all iCloud backups migrated off the bash suite
 
 **What:** cut the mini's entire iCloud backup suite over from the bash scripts to **cairn**, headless,

@@ -87,6 +87,28 @@ systemctl --user is-enabled claude-sessions.service     # enabled
 loginctl show-user ubuntu | grep Linger                 # Linger=yes
 sudo reboot                                             # then: tmux ls  (cue, personal-web, infra)
 ```
+
+## step-ca SSH cert renew-loop (M76)
+
+So the agent SSHes to the homelab with a short-lived **step-ca cert** instead of the
+standing `id_ed25519_homelab` key:
+- `step-ssh-renew.sh` — mints a 13h user cert (principals `ubuntu`,`root`) to
+  `~/.ssh/id_homelab_cert` via the headless JWK provisioner (jwk_password from SOPS).
+- `step-ssh-renew.{service,timer}` — user units; the timer renews every 6h.
+- `devbox.yml` adds `id_homelab_cert` to `~/.ssh/config` **ahead of** the static key
+  (key stays as fallback until the M76 cutover removes it).
+
+Install on devbox (one-time):
+```bash
+ln -sf ~/code/infra/infra/devbox/step-ssh-renew.service ~/.config/systemd/user/step-ssh-renew.service
+ln -sf ~/code/infra/infra/devbox/step-ssh-renew.timer   ~/.config/systemd/user/step-ssh-renew.timer
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+systemctl --user daemon-reload
+systemctl --user enable --now step-ssh-renew.timer
+~/code/infra/infra/devbox/step-ssh-renew.sh             # mint the first cert now
+```
+Verify: `ssh -v 10.10.201.53 2>&1 | grep -E 'Offering|Authenticated'` → offers
+`id_homelab_cert ECDSA-CERT`, `Authenticated … using "publickey"`.
 **Reboot test PASSED 2026-06-18:** all three sessions auto-resumed ~8s after boot, each
 in the correct repo cwd. ⚠️ The scripts **must stay executable in git** (`0755`) — they
 were once committed `0644` and only ran from a hand-`chmod`'d live copy, a latent

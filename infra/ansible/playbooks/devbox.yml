@@ -265,7 +265,7 @@
         mode: "0600"
       no_log: true
 
-    - name: SSH config — use the homelab key for homelab hosts
+    - name: SSH config — prefer the step-ca cert for homelab hosts, key as fallback
       ansible.builtin.blockinfile:
         path: "{{ dev_home }}/.ssh/config"
         create: true
@@ -273,8 +273,12 @@
         group: "{{ dev_user }}"
         mode: "0600"
         marker: "# {mark} ANSIBLE homelab"
+        # M76: the renew-loop (below) keeps a short-lived step-ca user cert at
+        # id_homelab_cert; offer it FIRST. The static homelab key stays as a
+        # fallback until the M76 cutover removes it (drop that line at cutover).
         block: |
           Host 10.10.* pve.wind.etherport.net *.wind.etherport.net
+            IdentityFile {{ dev_home }}/.ssh/id_homelab_cert
             IdentityFile {{ homelab_key_path }}
             IdentitiesOnly yes
             StrictHostKeyChecking accept-new
