@@ -60,16 +60,11 @@ jobs:
             git curl jq \
             build-essential libffi-dev libssl-dev
 
-      - name: Setup SSH key for cluster access
-        run: |
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          # Pre-trust host keys (idempotent) so ansible doesn't fail on
-          # first-contact prompts.
-          for ip in 10.10.201.50 10.10.201.51 10.10.201.52 10.10.201.53 10.10.201.54 10.10.201.55 10.10.201.56 10.10.201.60; do
-            ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts 2>/dev/null || true
-          done
+      - name: Mint SSH cert (step-ca)
+        id: sshcert
+        uses: ./.github/actions/setup-ssh-cert
+        with:
+          jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}
 
       - name: Clean stale venv from prior failed runs
         run: rm -rf kubespray/venv
@@ -80,6 +75,8 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
 
       - name: Run kubespray playbook
+        env:
+          KUBESPRAY_SSH_KEY: ${{ steps.sshcert.outputs.key-file }}
         run: |
           ARGS="${{ inputs.extra_args }}"
           if [ -n "${{ inputs.limit }}" ]; then

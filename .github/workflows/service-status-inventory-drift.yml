@@ -43,16 +43,17 @@ jobs:
             rm /tmp/kubectl
           fi
 
+      - name: Mint SSH cert (step-ca)
+        id: sshcert
+        uses: ./.github/actions/setup-ssh-cert
+        with:
+          jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}
+
       - name: Fetch kubeconfig from k8s-cp1
-        env:
-          ANSIBLE_SSH_KEY: ${{ secrets.ANSIBLE_SSH_KEY }}
         run: |
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$ANSIBLE_SSH_KEY" > ~/.ssh/k8s_key
-          chmod 600 ~/.ssh/k8s_key
           CP1_IP="${CP1_IP:-10.10.201.50}"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-              -i ~/.ssh/k8s_key ubuntu@"$CP1_IP" 'sudo cat /etc/kubernetes/admin.conf' \
+          ssh -o BatchMode=yes \
+              -i ${{ steps.sshcert.outputs.key-file }} ubuntu@"$CP1_IP" 'sudo cat /etc/kubernetes/admin.conf' \
               > /tmp/wind-kubeconfig
           sed -i "s|https://127.0.0.1:6443|https://${CP1_IP}:6443|g" /tmp/wind-kubeconfig
           chmod 600 /tmp/wind-kubeconfig
@@ -77,7 +78,7 @@ jobs:
 
       - name: Cleanup kubeconfig + SSH key
         if: always()
-        run: rm -f /tmp/wind-kubeconfig ~/.ssh/k8s_key
+        run: rm -f /tmp/wind-kubeconfig ~/.ssh/id_ci
 
   report:
     name: Open / refresh drift issue

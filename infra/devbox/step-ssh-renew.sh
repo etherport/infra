@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# M76: keep a fresh step-ca SSH **user** cert on the devbox so the Claude agent
+# (and any interactive use) authenticates to the homelab with a short-lived cert
+# instead of the standing id_ed25519_homelab key. Run by a user systemd timer
+# (~/.config/systemd/user/step-ssh-renew.timer) every few hours.
+#
+# The devbox already holds the jwk_password (SOPS) + a bootstrapped ~/.step CA
+# context, so it mints non-interactively via the headless JWK provisioner.
+# Cert -> ~/.ssh/id_homelab_cert (+ -cert.pub); ssh_config offers it ahead of the
+# static key. 13h validity, renewed well inside that window.
+set -euo pipefail
+
+REPO="${HOMELAB_REPO:-/home/ubuntu/code/infra}"
+SOPS_FILE="${REPO}/infra/ansible/playbooks/secrets/step-ca.sops.yaml"
+export SOPS_AGE_KEY_FILE="${SOPS_AGE_KEY_FILE:-/home/ubuntu/.config/sops/age/keys.txt}"
+CERT_KEY="${HOME}/.ssh/id_homelab_cert"
+
+pwfile="$(mktemp)"
+trap 'shred -u "$pwfile" 2>/dev/null || rm -f "$pwfile"' EXIT
+sops -d "$SOPS_FILE" 2>/dev/null | sed -n 's/^jwk_password:[[:space:]]*//p' | tr -d '"' > "$pwfile"
+[ -s "$pwfile" ] || { echo "step-ssh-renew: failed to read jwk_password from SOPS" >&2; exit 1; }
+
+# Mint a 13h user cert valid for the shared ubuntu/root logins. --insecure +
+# --no-password = no passphrase on the cert key (it's short-lived + local).
+step ssh certificate ubuntu "$CERT_KEY" \
+  --provisioner headless --provisioner-password-file "$pwfile" \
+  --principal ubuntu --principal root \
+  --not-after 13h --no-password --insecure --force >/dev/null
+chmod 600 "$CERT_KEY"
+echo "step-ssh-renew: minted $(ssh-keygen -L -f "${CERT_KEY}-cert.pub" 2>/dev/null | awk '/Valid:/{$1="";print "valid"$0}')"

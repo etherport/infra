@@ -8,7 +8,9 @@ name: Post-Bootstrap (Flux + Velero restore)
 # fully automatable DR path once the PAT has `Secrets: write`.
 #
 # REQUIRED SECRETS (some not yet provisioned — see TODOs):
-#   ANSIBLE_SSH_KEY    SSH private key for ubuntu@k8s-* nodes (existing)
+#   STEP_JWK_PASSWORD  step-ca headless JWK provisioner password — mints a
+#                      short-lived SSH user cert for ubuntu@k8s-* (M76 cutover,
+#                      replaces the static ANSIBLE_SSH_KEY)
 #   FLUX_DEPLOY_KEY    SSH private key for the Flux GitOps deploy key   (TODO)
 #   SOPS_AGE_KEY       Age private key for SOPS decryption              (TODO)
 #
@@ -70,15 +72,18 @@ jobs:
             rm -rf "velero-${VELERO_VERSION}-linux-amd64" "velero-${VELERO_VERSION}-linux-amd64.tar.gz"
           fi
 
-      - name: Write SSH key for K8s + Flux + SOPS age key
+      - name: Mint SSH cert (step-ca)
+        id: sshcert
+        uses: ./.github/actions/setup-ssh-cert
+        with:
+          jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}
+
+      - name: Write Flux deploy key + SOPS age key
         env:
-          ANSIBLE_SSH_KEY: ${{ secrets.ANSIBLE_SSH_KEY }}
           FLUX_DEPLOY_KEY: ${{ secrets.FLUX_DEPLOY_KEY }}
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$ANSIBLE_SSH_KEY" > ~/.ssh/k8s_key
-          chmod 600 ~/.ssh/k8s_key
 
           # These secrets need Secrets:write on the PAT (Task #6).
           # Workflow fails fast if they aren't set — that's intentional.
@@ -94,14 +99,10 @@ jobs:
           printf '%s\n' "$SOPS_AGE_KEY" > ~/.config/sops/age/keys.txt
           chmod 600 ~/.config/sops/age/keys.txt
 
-          for ip in 10.10.201.50 10.10.201.51 10.10.201.52; do
-            ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts 2>/dev/null || true
-          done
-
       - name: Run post-bootstrap
         working-directory: ${{ env.WORKING_DIR }}
         env:
-          ANSIBLE_KEY: /home/runner/.ssh/k8s_key
+          ANSIBLE_KEY: ${{ steps.sshcert.outputs.key-file }}
           FLUX_DEPLOY_KEY: /home/runner/.ssh/flux_key
           SOPS_AGE_KEY_FILE: /home/runner/.config/sops/age/keys.txt
         run: |

@@ -64,14 +64,11 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
             python3 python3-pip python3-venv ansible
 
-      - name: Setup SSH key for cluster access
-        run: |
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          echo "${{ secrets.ANSIBLE_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          for ip in 10.10.201.50 10.10.201.51 10.10.201.52 10.10.201.53 10.10.201.54 10.10.201.55 10.10.201.56 10.10.201.60; do
-            ssh-keyscan -H "$ip" >> ~/.ssh/known_hosts 2>/dev/null || true
-          done
+      - name: Mint SSH cert (step-ca)
+        id: sshcert
+        uses: ./.github/actions/setup-ssh-cert
+        with:
+          jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}
 
       - name: Run k8s-node-fixes playbook
         working-directory: ${{ env.WORKING_DIR }}
@@ -84,7 +81,7 @@ jobs:
             -i ../kubespray/inventory/inventory.ini \
             playbooks/k8s-node-fixes.yml \
             --limit "${{ inputs.limit || 'k8s_cluster' }}" \
-            --private-key ~/.ssh/id_ed25519 \
+            --private-key ${{ steps.sshcert.outputs.key-file }} \
             -u ubuntu \
             --become \
             $CHECK
