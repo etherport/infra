@@ -13,6 +13,50 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-27 — step-ca cert principals pinned + doc-sweep verification & fixes
+
+**What:** (1) tightened the step-ca headless cert principals (security hygiene), (2) independently
+verified the prior doc sweep (`1cb7d82`) and fixed its one defect + ~18 sweep-missed stale docs +
+56 dead `flux`-CLI refs. Commits `071cebd` (principals), `20e841e` (stale-doc fixes), `0fbe57f`
+(flux-CLI refs).
+
+- **step-ca headless cert principals pinned (`071cebd`).** The devbox/CI automation certs were being
+  minted with an EMPTY principals list (= valid for ANY username) — root cause: step-cli 0.30.6 does
+  NOT flow `--principal` flags through for JWK provisioner SSH certs. Fixed with a CA-side SSH template
+  `files/step-ca/headless_user.tpl` that HARD-CODES `principals=[ubuntu,root]` (vs the OIDC template's
+  `concat`, which duplicated). Wired into `step-ca.yml` (6b-ii: install template + `provisioner update
+  headless --ssh-template`). Applied live (provisioner update + SIGHUP reload, no downtime) + verified:
+  devbox renew-loop AND CI-style mint both now yield exactly `ubuntu,root`; SSH still works as both.
+  ⚠️ A CA rebuild / `step-ca.yml` re-run MUST re-apply this template or certs revert to any-user.
+- **Doc-sweep verification (workflow, 10 agents).** Checked all 39 fixes in `1cb7d82` against live
+  manifests/kubectl/git. **Verdict: the sweep is accurate** — all 10 M75 IRSA rewrites (velero/aws-s3/
+  VALIDATION/cluster-irsa: `useSecret:false`, `wind-irsa-*` roles, projected token aud `sts.amazonaws.com`,
+  ZERO identity webhooks → "manual token projection" correct), alert runbooks (B2→S3, Longhorn→ceph,
+  UDM `.1.1`→`.200.1`), removed-component claims (kopia/icloudpd gone), env-drift, archive links — all
+  confirmed. **ONE defect:** the M103→M105 renumber was incomplete (7 switch-port refs left as M103,
+  colliding with cairn = the new canonical M103).
+- **Fixes applied (`20e841e`, fix workflow ×6 agents + verify).** (a) M103→M105 completed (udm-manual-
+  hardening ×5, README.md:55, session-log.md:635; cairn M103 refs untouched); (b) Route53→Cloudflare
+  (cert-manager-wildcard.md solver/files-of-record→`cert-manager-issuer/cloudflare-credentials.sops.yaml`/
+  troubleshooting, traefik-values comment); (c) kopia/icloudpd residue removed across 8 docs, image count
+  13→14; (d) dedicated bucket names (`velero.`/`postgres-barman.wind.etherport.net`); (e) `photos_export_*`
+  →`cairn_*` (matches live `09-photos-export-alerts.yaml`); (f) making-changes.md flux-CLI→annotate +
+  icloudpd→rclone-gdrive example; (g) SOPS-SETUP Route53→Cloudflare + `aws-backup-credentials` IRSA-banner.
+- **flux-CLI sprawl (`0fbe57f`, ×5 agents).** A grep surfaced ~11 non-archive docs still telling readers
+  to run a `flux` CLI that isn't on the hosts. Replaced 56 invocations with the kubectl-annotate reconcile
+  pattern (CLAUDE.md §3) / `kubectl get` on Flux CRs / `kubectl patch` suspend-resume. Beyond the map: DR
+  `flux bootstrap`→`kubectl apply -k clusters/wind/flux-system/` (verified the gotk manifests + kustomization
+  exist), `flux install`→`kubectl apply -f` versioned install.yaml, removed `flux` from operations-guide
+  brew prereqs. Conceptual/historical "Flux" prose left intact. Zero hosts-side flux invocations remain.
+- **Judgment items reported to operator:** (1) DON'T rename `09-photos-export-alerts.yaml` (name still
+  accurate; cairn family alerted in `10-icloud-backups-alerts.yaml`). (2) Dashboard panels "Files backed
+  up"/"Backup size" (commit `0617954`) use per-RUN cairn_backup_items/_bytes → read 0 on no-op nights;
+  recommend `max_over_time([30d])` or a cumulative metric — left for operator (cairn metric semantics live
+  in the cairn repo). (3) headless-ops-host.md body still describes mini-RC/static-key/standing-AWS-creds
+  (M76/M82 superseded) — banner added, deeper body reconcile deferred (low priority).
+- **Next:** M71 (kill standing static AWS keys on mini/terminals — also drop the mini's residual
+  `automation@homelab` copy). User is deleting the GH `ANSIBLE_SSH_KEY` secret.
+
 ## 2026-06-26 (cont. 4) — M76 CUTOVER: the running fleet is SSH cert-only (static key removed)
 
 **What:** finished M76 — switched the last 2 consumers to certs, removed the standing
