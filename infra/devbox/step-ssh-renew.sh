@@ -22,6 +22,11 @@ sops -d "$SOPS_FILE" 2>/dev/null | sed -n 's/^jwk_password:[[:space:]]*//p' | tr
 
 # Mint a 13h user cert valid for the shared ubuntu/root logins. --insecure +
 # --no-password = no passphrase on the cert key (it's short-lived + local).
+# NB: the cert's PRINCIPALS are pinned to [ubuntu,root] by the `headless`
+# provisioner's CA-side SSH template (files/step-ca/headless_user.tpl) — step-cli
+# 0.30.6 does NOT flow these --principal flags through for JWK certs (they'd come
+# out empty = valid for ANY user), so the template is what actually constrains it.
+# The flags are kept as documentation of intent (harmless; the template wins).
 step ssh certificate ubuntu "$CERT_KEY" \
   --provisioner headless --provisioner-password-file "$pwfile" \
   --principal ubuntu --principal root \

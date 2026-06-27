@@ -517,6 +517,42 @@
       no_log: true   # touches the JWK passphrase
       notify: Reload step-ca
 
+    # ----- 6b-ii. JWK headless SSH cert template — PIN ubuntu/root principals
+    # Without a template, the JWK `headless` provisioner's default SSH user cert
+    # comes out with an EMPTY principals list (the `--principal` CLI flags do not
+    # flow through for JWK in step-cli 0.30.6) — and an empty-principals OpenSSH
+    # user cert is valid for ANY username. This template HARD-CODES the principals
+    # to exactly [ubuntu,root] (unlike the OIDC template's `concat .Principals …`,
+    # which would also inherit — and duplicate — the CLI-requested principals).
+    # Result: every devbox/CI automation cert is deterministically usable only as
+    # those two shared accounts, independent of the (broken) flag passing.
+    - name: Install the headless JWK SSH user-cert template (pins ubuntu/root principals)
+      ansible.builtin.copy:
+        src: files/step-ca/headless_user.tpl
+        dest: "{{ step_path }}/templates/ssh/headless_user.tpl"
+        owner: "{{ step_user }}"
+        group: "{{ step_user }}"
+        mode: "0644"
+      register: _headless_ssh_tpl
+
+    - name: Set the SSH template on the JWK headless provisioner
+      become_user: "{{ step_user }}"
+      ansible.builtin.command:
+        argv:
+          - step
+          - ca
+          - provisioner
+          - update
+          - "{{ jwk_provisioner_name }}"
+          - --ssh-template
+          - "{{ step_path }}/templates/ssh/headless_user.tpl"
+          - --ca-config
+          - "{{ ca_config }}"
+      environment:
+        STEPPATH: "{{ step_path }}"
+      changed_when: _headless_ssh_tpl is changed
+      notify: Reload step-ca
+
     # ----- 6c. SSHPOP `sshpop` — host-cert renewal without re-auth ----------
     # SSHPOP lets a host renew/rekey its SSH **host** certificate by proving
     # possession of the existing cert key (an sshpop JWT), so a host can rotate
