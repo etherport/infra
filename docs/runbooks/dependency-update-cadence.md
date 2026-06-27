@@ -41,12 +41,12 @@ These images are excluded from Renovate because Flux handles them via `ImagePoli
 `ollama`, `open-webui`, `technitium/dns-server`, `requarks/wiki`, `plexinc/pms-docker`, `rclone/rclone`, `home-assistant`, `python`, `busybox`, `sparked-diamond/*`.
 
 ```bash
-flux get image policy -A
+kubectl get imagepolicy -n flux-system
 # Each policy should show a recent LATEST IMAGE. If LAST UPDATED is
 # weeks/months old, the policy isn't matching new tags — check
 # the regex against the registry tags page.
 
-flux get image update -A
+kubectl get imageupdateautomation -n flux-system
 # ImageUpdateAutomation must be Ready=True. If not, Flux is finding
 # new images but failing to commit the bumps to git.
 ```

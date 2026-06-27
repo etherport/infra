@@ -143,16 +143,18 @@ velero restore create restore-monitoring --from-backup monitoring-daily-<latest>
 #     are wired into the kustomization and ordered before 01-cluster.yaml.
 #     See platform/kubernetes/cnpg/README.md §Disaster Recovery.
 
-# 8. Deploy Flux to resume GitOps
-flux bootstrap github \
-  --owner=sparked-diamond \
-  --repository=infra \
-  --branch=main \
-  --path=clusters/wind
+# 8. Deploy Flux to resume GitOps (no flux CLI on the hosts — apply the
+#    committed bootstrap manifests, then point Flux at clusters/wind).
+#    These are the gotk-components + gotk-sync that `flux bootstrap` commits.
+kubectl apply -k clusters/wind/flux-system/
+#    (gotk-sync.yaml already targets owner=sparked-diamond repo=infra
+#     branch=main path=clusters/wind; reconcile to pull the rest)
+kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 
 # 9. Verify applications
 kubectl get pods -A
-flux get all -A
+kubectl get gitrepository,kustomization,helmrelease -A
 ```
 
 ---
@@ -401,8 +403,9 @@ ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-local
 If both K8s and vpn-local are down, restore K8s first (faster recovery):
 
 ```bash
-# Restore K8s WireGuard
-flux reconcile kustomization flux-system --with-source
+# Restore K8s WireGuard (reconcile source git + the flux-system kustomization)
+kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 
 # Or apply manually
 kubectl apply -k platform/kubernetes/wireguard/
@@ -490,7 +493,7 @@ After any recovery, verify:
 
 - [ ] `kubectl get nodes` - All nodes Ready
 - [ ] `kubectl get pods -A | grep -v Running` - No stuck pods
-- [ ] `flux get all -A` - All kustomizations synced
+- [ ] `kubectl get gitrepository,kustomization,helmrelease -A` - All kustomizations synced
 - [ ] `dig @10.10.201.5 google.com` - DNS working
 - [ ] `ping 10.255.255.1` - VPN tunnel up
 - [ ] `curl https://grafana.wind.etherport.net` - Ingress working

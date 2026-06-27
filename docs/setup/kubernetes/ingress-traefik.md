@@ -26,8 +26,8 @@ files have been removed.
 Both the controller and the IngressRoutes are Flux-managed:
 
 ```bash
-flux reconcile helmrelease traefik -n flux-system
-flux reconcile kustomization flux-system   # picks up IngressRoute changes
+kubectl annotate --overwrite -n flux-system helmrelease/traefik reconcile.fluxcd.io/requestedAt="$(date +%s)"
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"   # picks up IngressRoute changes
 ```
 
 ## Verify

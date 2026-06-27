@@ -76,8 +76,9 @@ git commit -am "secrets: rotate age key (phase 1: add new recipient)"
 #    GitHub:  gh secret set SOPS_AGE_KEY < /tmp/new-primary.txt
 #    cluster: kubectl create secret generic sops-age -n flux-system \
 #               --from-file=age.agekey=/tmp/new-primary.txt --dry-run=client -o yaml | kubectl apply -f -
-#             flux reconcile kustomization flux-system --with-source
-# 5. verify all three decrypt (a CI run, a flux reconcile, a sops -d on the mini)
+#             kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
+#             kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
+# 5. verify all three decrypt (a CI run, a Flux reconcile, a sops -d on the mini)
 # 6. remove the OLD public key from .sops.yaml + nested, updatekeys again, commit.
 #    Update the recipient string in docs/setup/headless-ops-host.md + SOPS-SETUP.md.
 rm -P /tmp/new-primary.txt
@@ -113,7 +114,7 @@ python3 scripts/sync-secrets.py
 git commit -am "secrets: post-incident rotation (1P-managed)"
 ```
 **5. Re-encrypt the hand-edited standalone files** — `sops <file>` each (paste new value, save).
-**6. Reconcile/redeploy:** `flux reconcile kustomization --with-source <names>`; re-apply WireGuard via ansible; re-apply `udm-firewall.yml` from the laptop.
+**6. Reconcile/redeploy:** `kubectl annotate --overwrite -n flux-system kustomization/<name> reconcile.fluxcd.io/requestedAt="$(date +%s)"` (annotate `gitrepository/flux-system` too to pull the source); re-apply WireGuard via ansible; re-apply `udm-firewall.yml` from the laptop.
 **7. Re-provision a clean ops host** from `docs/setup/headless-ops-host.md` with the NEW primary key only.
 
 ---

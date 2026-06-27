@@ -29,7 +29,7 @@ Before any upgrade:
 - [ ] Check for pending pods: `kubectl get pods -A | grep -v Running`
 - [ ] Verify Velero backups are current: `velero backup get`
 - [ ] Create manual backup: `velero backup create pre-upgrade-$(date +%Y%m%d)`
-- [ ] Check Flux reconciliation: `flux get all -A`
+- [ ] Check Flux reconciliation: `kubectl get gitrepository,kustomization,helmrelease -A`
 - [ ] Review deprecated APIs: `kubectl api-resources --api-group=<deprecated-group>`
 - [ ] Notify users of maintenance window
 - [ ] Ensure Proxmox has VM snapshots (optional safety net)
@@ -180,7 +180,7 @@ kubectl get nodes -o wide
 kubectl get pods -A | grep -v Running | grep -v Completed
 
 # Flux reconciliation healthy
-flux get all -A
+kubectl get gitrepository,kustomization,helmrelease -A
 
 # Test application access
 curl -k https://grafana.wind.etherport.net
@@ -227,15 +227,15 @@ helm upgrade monitoring prometheus-community/kube-prometheus-stack \
 ### 3.3 Flux Upgrade
 
 ```bash
-# Check current version
-flux --version
+# Check current controller versions (no flux CLI on the hosts)
+kubectl get pods -n flux-system -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
 
-# Upgrade Flux controllers
-flux install --version=v2.x.x
+# Upgrade Flux controllers by applying the versioned install manifest
+# (the components used in clusters/wind/flux-system/gotk-components.yaml)
+kubectl apply -f https://github.com/fluxcd/flux2/releases/download/v2.x.x/install.yaml
 
-# Or via CLI upgrade
-brew upgrade fluxcd/tap/flux
-flux install
+# Verify the controllers came back Ready
+kubectl get pods -n flux-system
 ```
 
 ---

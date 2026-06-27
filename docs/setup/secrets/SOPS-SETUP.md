@@ -99,20 +99,19 @@ export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
 
 ```bash
 # Create a new encrypted secret
-cat > cloudflare-ddns/base/secret.enc.yaml <<'EOF'
+cat > cloudflare-ddns/base/cloudflare-credentials.sops.yaml <<'EOF'
 apiVersion: v1
 kind: Secret
 metadata:
-  name: cloudflare-ddns-credentials
+  name: cloudflare-credentials
   namespace: cloudflare-ddns
 type: Opaque
 stringData:
-  AWS_ACCESS_KEY_ID: ""
-  AWS_SECRET_ACCESS_KEY: ""
+  CF_API_TOKEN: ""
 EOF
 
 # Encrypt and edit in one step
-sops cloudflare-ddns/base/secret.enc.yaml
+sops cloudflare-ddns/base/cloudflare-credentials.sops.yaml
 
 # This opens your editor with the secret file
 # Fill in the values, save, and exit
@@ -123,13 +122,13 @@ sops cloudflare-ddns/base/secret.enc.yaml
 
 ```bash
 # Export existing secret from Kubernetes
-kubectl get secret cloudflare-ddns-credentials -n cloudflare-ddns -o yaml > secret.yaml
+kubectl get secret cloudflare-credentials -n cloudflare-ddns -o yaml > secret.yaml
 
 # Remove managed fields
 yq eval 'del(.metadata.managedFields, .metadata.creationTimestamp, .metadata.resourceVersion, .metadata.uid)' secret.yaml > clean-secret.yaml
 
 # Encrypt it
-sops -e clean-secret.yaml > cloudflare-ddns/base/secret.enc.yaml
+sops -e clean-secret.yaml > cloudflare-ddns/base/cloudflare-credentials.sops.yaml
 
 # Clean up
 rm secret.yaml clean-secret.yaml
@@ -138,12 +137,11 @@ rm secret.yaml clean-secret.yaml
 ### Method 3: One-Liner from kubectl
 
 ```bash
-kubectl create secret generic cloudflare-ddns-credentials \
+kubectl create secret generic cloudflare-credentials \
   --namespace=cloudflare-ddns \
-  --from-literal=AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE \
-  --from-literal=AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY \
+  --from-literal=CF_API_TOKEN=REPLACE_WITH_CF_TOKEN \
   --dry-run=client -o yaml | \
-  sops -e /dev/stdin > cloudflare-ddns/base/secret.enc.yaml
+  sops -e /dev/stdin > cloudflare-ddns/base/cloudflare-credentials.sops.yaml
 ```
 
 ## Using Encrypted Secrets
@@ -151,7 +149,7 @@ kubectl create secret generic cloudflare-ddns-credentials \
 ### View Encrypted File (Raw)
 
 ```bash
-cat cloudflare-ddns/base/secret.enc.yaml
+cat cloudflare-ddns/base/cloudflare-credentials.sops.yaml
 ```
 
 Output shows encrypted content:
@@ -159,12 +157,11 @@ Output shows encrypted content:
 apiVersion: v1
 kind: Secret
 metadata:
-    name: cloudflare-ddns-credentials
+    name: cloudflare-credentials
     namespace: cloudflare-ddns
 type: Opaque
 stringData:
-    AWS_ACCESS_KEY_ID: ENC[AES256_GCM,data:...,iv:...,tag:...,type:str]
-    AWS_SECRET_ACCESS_KEY: ENC[AES256_GCM,data:...,iv:...,tag:...,type:str]
+    CF_API_TOKEN: ENC[AES256_GCM,data:...,iv:...,tag:...,type:str]
 sops:
     kms: []
     age:
@@ -179,10 +176,10 @@ sops:
 
 ```bash
 # Decrypt to stdout
-sops -d cloudflare-ddns/base/secret.enc.yaml
+sops -d cloudflare-ddns/base/cloudflare-credentials.sops.yaml
 
 # Decrypt to file
-sops -d cloudflare-ddns/base/secret.enc.yaml > secret.yaml
+sops -d cloudflare-ddns/base/cloudflare-credentials.sops.yaml > secret.yaml
 ```
 
 ### Edit Encrypted Secret
@@ -190,14 +187,14 @@ sops -d cloudflare-ddns/base/secret.enc.yaml > secret.yaml
 ```bash
 # Opens decrypted version in editor
 # Automatically re-encrypts on save
-sops cloudflare-ddns/base/secret.enc.yaml
+sops cloudflare-ddns/base/cloudflare-credentials.sops.yaml
 ```
 
 ### Deploy to Kubernetes
 
 ```bash
 # Decrypt and apply
-sops -d cloudflare-ddns/base/secret.enc.yaml | kubectl apply -f -
+sops -d cloudflare-ddns/base/cloudflare-credentials.sops.yaml | kubectl apply -f -
 
 # Or add to kustomization.yaml with SOPS generator (requires KSOPS)
 ```
@@ -208,7 +205,7 @@ sops -d cloudflare-ddns/base/secret.enc.yaml | kubectl apply -f -
 
 ```bash
 # Encrypted files are SAFE to commit
-git add cloudflare-ddns/base/secret.enc.yaml
+git add cloudflare-ddns/base/cloudflare-credentials.sops.yaml
 git add cloudflare-ddns/.sops.yaml
 git commit -m "Add SOPS-encrypted Cloudflare credentials"
 git push
@@ -257,7 +254,7 @@ creation_rules:
       age1vzaqy5qrqmwmx5vlcf6nq7gdwzq6y8w8s8vn8e4z8w7s5v6n8e4z8w7s5v
 
 # Re-encrypt existing secrets for new recipients
-sops updatekeys cloudflare-ddns/base/secret.enc.yaml
+sops updatekeys cloudflare-ddns/base/cloudflare-credentials.sops.yaml
 ```
 
 ### Adding New Team Member
@@ -280,30 +277,49 @@ git commit -m "Add new team member to SOPS encryption"
 
 ## Flux/GitOps Integration
 
-If using Flux for GitOps, install SOPS support:
+Flux is already bootstrapped against `main` → `./clusters/wind` (the
+controllers + GitRepository/Kustomization manifests live under
+`clusters/wind/flux-system/`). To wire SOPS decryption into it:
 
 ```bash
-# Install SOPS controller
-flux bootstrap github \
-  --owner=sparked-diamond \
-  --repository=infra \
-  --path=./clusters/production \
-  --personal
-
-# Create age secret in flux-system namespace
+# Create the age secret in the flux-system namespace (decryption key).
+# This is a one-time step; the controllers consume it via decryption.secretRef.
 cat ~/.config/sops/age/keys.txt | \
   kubectl create secret generic sops-age \
   --namespace=flux-system \
   --from-file=age.agekey=/dev/stdin
+```
 
-# Configure Kustomization to decrypt SOPS secrets
-flux create kustomization cloudflare-ddns \
-  --source=GitRepository/flux-system \
-  --path="./platform/kubernetes/cloudflare-ddns/base" \
-  --prune=true \
-  --interval=5m \
-  --decryption-provider=sops \
-  --decryption-secret=sops-age
+Then enable SOPS decryption **declaratively** in the Kustomization manifest
+(GitOps — there is no `flux` CLI on the ops hosts). Add a `decryption` block
+to the relevant Kustomization (e.g. `clusters/wind/flux-system/gotk-sync.yaml`
+or a per-app Kustomization), commit, and let Flux reconcile:
+
+```yaml
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cloudflare-ddns
+  namespace: flux-system
+spec:
+  interval: 5m
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./platform/kubernetes/cloudflare-ddns/base
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
+```
+
+```bash
+# Commit + push, then trigger a reconcile (annotation — no flux CLI on hosts):
+git add clusters/wind/flux-system/gotk-sync.yaml
+git commit -m "Enable SOPS decryption for cloudflare-ddns"
+git push
+kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ## Security Best Practices
@@ -491,7 +507,7 @@ light:
 git add .sops.yaml secrets.sops.yaml kustomization.yaml
 git commit -m "Add encrypted secrets for home-assistant"
 git push
-flux reconcile source git flux-system
+kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ### How Decryption Works
@@ -533,7 +549,7 @@ sops platform/kubernetes/home-automation/secrets.sops.yaml
 git add secrets.sops.yaml
 git commit -m "Update home-assistant credentials"
 git push
-flux reconcile source git flux-system
+kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ### Viewing Decrypted Content

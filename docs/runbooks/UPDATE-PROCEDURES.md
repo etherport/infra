@@ -104,7 +104,7 @@ QUARTERLY (Manual - requires maintenance window)
 
 **Monitor:**
 ```bash
-flux get images policy -A                              # Current versions
+kubectl get imagepolicy -n flux-system                 # Current versions
 kubectl get imageupdateautomation -n flux-system       # Automation status
 git log --oneline --author="Flux" -10                  # Recent auto-commits
 ```
@@ -112,7 +112,8 @@ git log --oneline --author="Flux" -10                  # Recent auto-commits
 **Rollback:**
 ```bash
 git revert <commit-sha> && git push
-flux reconcile kustomization flux-system --with-source
+kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ---
@@ -263,7 +264,7 @@ helm upgrade gpu-operator nvidia/gpu-operator \
 ```bash
 kubectl describe imageupdateautomation flux-system -n flux-system
 kubectl logs -n flux-system deployment/image-automation-controller
-flux reconcile image update flux-system -n flux-system
+kubectl annotate --overwrite -n flux-system imageupdateautomation/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ### Kured Not Rebooting

@@ -65,10 +65,10 @@ Monitoring is deployed automatically via Flux GitOps. Manual changes should be m
 
 ```bash
 # Reconcile the HelmRelease
-flux reconcile helmrelease monitoring -n flux-system
+kubectl annotate --overwrite -n flux-system helmrelease/monitoring reconcile.fluxcd.io/requestedAt="$(date +%s)"
 
 # Reconcile additional monitoring resources
-flux reconcile kustomization flux-system
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ### Verify Installation
@@ -78,7 +78,7 @@ flux reconcile kustomization flux-system
 kubectl get pods -n monitoring
 
 # Check HelmRelease status
-flux get helmrelease monitoring -n flux-system
+kubectl get helmrelease monitoring -n flux-system
 
 # Check Alertmanager config
 kubectl get alertmanagerconfig -n monitoring

@@ -105,8 +105,8 @@ git push
 
 # 4. Flux detects the change (within 1 minute)
 # 5. Flux applies the change (within 10 minutes, or force with reconcile)
-flux reconcile source git flux-system
-flux reconcile kustomization flux-system
+kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 
 # 6. Verify the change was applied
 kubectl get pods -n home-automation
@@ -151,14 +151,14 @@ configMapGenerator:
 ### Check Flux Status
 
 ```bash
-# Check if Flux is healthy
-flux check
+# Check if Flux is healthy (controllers Ready = healthy)
+kubectl get pods -n flux-system
 
 # View all GitRepositories Flux is watching
-flux get sources git
+kubectl get gitrepository -n flux-system
 
 # View all Kustomizations Flux is applying
-flux get kustomizations
+kubectl get kustomizations -n flux-system
 
 # View detailed status of main kustomization
 kubectl get kustomizations -n flux-system -o yaml
@@ -170,14 +170,14 @@ When you don't want to wait for Flux's automatic sync:
 
 ```bash
 # Force Flux to pull from git NOW
-flux reconcile source git flux-system
+kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 
 # Force Flux to apply changes NOW
-flux reconcile kustomization flux-system
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 
 # Or do both in one command:
-flux reconcile source git flux-system && \
-flux reconcile kustomization flux-system
+kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)" && \
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ### Suspend/Resume Reconciliation
@@ -186,13 +186,13 @@ Useful when you need to make manual changes temporarily:
 
 ```bash
 # Suspend automatic reconciliation
-flux suspend kustomization flux-system
+kubectl patch kustomization/flux-system -n flux-system --type=merge -p '{"spec":{"suspend":true}}'
 
 # Make manual changes...
 kubectl apply -f /tmp/emergency-fix.yaml
 
 # Resume automatic reconciliation
-flux resume kustomization flux-system
+kubectl patch kustomization/flux-system -n flux-system --type=merge -p '{"spec":{"suspend":false}}'
 ```
 
 ## Troubleshooting
@@ -204,7 +204,7 @@ flux resume kustomization flux-system
 **Steps**:
 1. Check if Flux detected the git change:
    ```bash
-   flux get sources git
+   kubectl get gitrepository -n flux-system
    # Look for "Applied revision: main@sha1:XXXXXX"
    ```
 
@@ -316,8 +316,8 @@ kubectl logs -n flux-system deploy/notification-controller -f
 
 7. **Force reconciliation and verify**:
    ```bash
-   flux reconcile source git flux-system
-   flux reconcile kustomization flux-system
+   kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
+   kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
    kubectl get pods -n my-app
    ```
 
@@ -353,7 +353,7 @@ git push
 - **Test kustomizations locally** with `kubectl kustomize` before pushing
 - **Use SOPS for secrets** - never commit plaintext secrets
 - **Write descriptive commit messages** - they're your audit trail
-- **Use `flux reconcile` after pushing** - don't wait 10 minutes for automatic sync
+- **Trigger a reconcile after pushing** (annotate the GitRepository/Kustomization with `reconcile.fluxcd.io/requestedAt`) - don't wait 10 minutes for automatic sync
 
 ### Don'ts ❌
 
@@ -369,7 +369,7 @@ If you need to make emergency changes that can't wait for git:
 
 ```bash
 # 1. Suspend Flux
-flux suspend kustomization flux-system
+kubectl patch kustomization/flux-system -n flux-system --type=merge -p '{"spec":{"suspend":true}}'
 
 # 2. Make your emergency change
 kubectl edit deployment my-app -n my-namespace
@@ -380,10 +380,10 @@ git commit -am "Emergency fix: increase memory limit"
 git push
 
 # 4. Resume Flux
-flux resume kustomization flux-system
+kubectl patch kustomization/flux-system -n flux-system --type=merge -p '{"spec":{"suspend":false}}'
 
 # 5. Force reconcile to ensure git is in sync
-flux reconcile kustomization flux-system
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ## Related Documentation
@@ -397,7 +397,7 @@ flux reconcile kustomization flux-system
 
 If you run into issues:
 
-1. Check Flux status: `flux check`
+1. Check Flux status: `kubectl get pods -n flux-system` (controllers Ready = healthy)
 2. Check kustomization errors: `kubectl describe kustomization flux-system -n flux-system`
 3. Test locally: `kubectl kustomize path/to/app/`
 4. Check Flux logs: `kubectl logs -n flux-system deploy/kustomize-controller -f`

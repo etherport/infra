@@ -63,7 +63,7 @@ High-level overview of the homelab infrastructure with links to detailed runbook
 # Kubernetes
 kubectl get nodes -o wide
 kubectl get pods -A | grep -v Running | grep -v Completed
-flux get all -A
+kubectl get gitrepository,kustomization,helmrelease -A
 
 # Standalone VMs
 for host in 10.10.201.6 10.10.201.15 10.10.100.5 10.10.100.10; do
@@ -154,7 +154,7 @@ The infrastructure is designed to self-heal:
 
 ### Weekly
 - [ ] Review Grafana dashboards for anomalies
-- [ ] Check `flux get all -A` for failed reconciliations
+- [ ] Check `kubectl get gitrepository,kustomization,helmrelease -A` for failed reconciliations
 - [ ] Review and merge Renovate PRs
 
 ### Monthly

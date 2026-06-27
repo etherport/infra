@@ -8,14 +8,15 @@ Quick reference for managing the homelab infrastructure without Claude Code.
 
 ```bash
 # macOS (via Homebrew)
-brew install ansible terraform kubectl helm flux sops age 1password-cli
+# NB: no `flux` CLI — this homelab reconciles Flux via kubectl annotations
+# (reconcile.fluxcd.io/requestedAt), not the flux CLI. See CLAUDE.md §3.
+brew install ansible terraform kubectl helm sops age 1password-cli
 
 # Verify installations
 ansible --version
 terraform --version
 kubectl version --client
 helm version
-flux --version
 sops --version
 op --version
 ```
@@ -271,31 +272,32 @@ kubectl get <resource> <name> -n <namespace> -o yaml
 ### Check Flux Status
 
 ```bash
-# Overall status
-flux get all -A
+# Overall status (no flux CLI on the hosts — query the CRs directly)
+kubectl get gitrepository,kustomization,helmrelease,imagerepository,imagepolicy,imageupdateautomation -A
 
 # Kustomizations
-flux get kustomizations -A
+kubectl get kustomizations -A
 
 # Helm releases
-flux get helmreleases -A
+kubectl get helmrelease -A
 
 # Sources
-flux get sources all -A
+kubectl get gitrepository,helmrepository,ocirepository -A
 ```
 
 ### Reconcile Resources
 
 ```bash
-# Force reconcile kustomization
-flux reconcile kustomization flux-system --with-source
+# Force reconcile kustomization (annotate the source first, then the kustomization)
+kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 
 # Force reconcile helm release
-flux reconcile helmrelease <name> -n <namespace>
+kubectl annotate --overwrite -n <namespace> helmrelease/<name> reconcile.fluxcd.io/requestedAt="$(date +%s)"
 
 # Suspend/resume
-flux suspend kustomization <name>
-flux resume kustomization <name>
+kubectl patch kustomization/<name> -n flux-system --type=merge -p '{"spec":{"suspend":true}}'
+kubectl patch kustomization/<name> -n flux-system --type=merge -p '{"spec":{"suspend":false}}'
 ```
 
 ### Troubleshooting Flux
@@ -304,8 +306,10 @@ flux resume kustomization <name>
 # Check Flux controllers
 kubectl get pods -n flux-system
 
-# Flux logs
-flux logs --all-namespaces
+# Flux logs (per-controller — no flux CLI on the hosts)
+kubectl logs -n flux-system deploy/source-controller
+kubectl logs -n flux-system deploy/kustomize-controller
+kubectl logs -n flux-system deploy/helm-controller
 
 # Specific controller logs
 kubectl logs -n flux-system deployment/source-controller
@@ -442,11 +446,11 @@ kubectl describe pvc <pvc-name> -n <namespace>
 
 ```bash
 # Check why resource not deploying
-flux get kustomization <name> -n <namespace>
+kubectl get kustomization <name> -n flux-system
 kubectl describe kustomization <name> -n flux-system
 
 # Check source fetch
-flux get source git flux-system
+kubectl get gitrepository flux-system -n flux-system
 ```
 
 ## Monitoring & Alerting
@@ -496,8 +500,8 @@ kubectl get secret alertmanager-smtp-config -n monitoring
 ### Force Reconcile Monitoring
 
 ```bash
-flux reconcile helmrelease monitoring -n flux-system
-flux reconcile kustomization flux-system
+kubectl annotate --overwrite -n flux-system helmrelease/monitoring reconcile.fluxcd.io/requestedAt="$(date +%s)"
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ## GPU Operations
@@ -560,7 +564,7 @@ kubectl describe pod -n plex -l app=plex
 kubectl exec -n gpu-operator-system -l app=nvidia-driver-daemonset -- nvidia-smi
 
 # Restart GPU operator
-flux reconcile helmrelease gpu-operator -n flux-system
+kubectl annotate --overwrite -n flux-system helmrelease/gpu-operator reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ## Platform Features (Quick Reference)
