@@ -54,12 +54,13 @@ High-level infrastructure design for the homelab environment.
 | Traefik | LoadBalancer on 10.10.201.70; serves `*.wind.etherport.net` via cert-manager wildcard + TLSStore default |
 | AWS ALB | **Decommissioned 2026-05-27** — the public edge is now CF Tunnel + Access (previously a public `*.wind.etherport.net` reverse-proxy through VPN). |
 | Cloudflare Tunnel | **Public edge.** `cloudflared` deploy (`platform/kubernetes/cloudflared/`) outbound-only; routes public traffic through CF Access. DNS authoritative on Cloudflare since 2026-05-25 (Route53 deleted 2026-05-27). |
+| Authentik SSO | IdP at `auth.wind.etherport.net` gating internal apps via OIDC + a Traefik forward-auth middleware (H38). |
 | Tailscale | Per-service ingresses managed by the Tailscale operator (e.g. `remediation-approve.<tailnet>.ts.net`) for tailnet-only access |
 
 ## Cluster automation (auto-remediation namespace)
 
-- Static rule-based remediation (`platform/kubernetes/auto-remediation/configmap.yaml`) — 22 rules.
-- AI advisor (Phases 1/2/3 all live) — 18 action types across 3 tiers including SSH-based host actions. Closed-loop verification + cross-session memory + deep-mode tool-use. See [`README.md`](../../README.md#ai-alert-advisor-auto-remediation-namespace) at repo root for architecture summary; per-phase runbooks under [`docs/runbooks/ai-advisor-phase*`](../runbooks/).
+- Static rule-based remediation (`platform/kubernetes/auto-remediation/configmap.yaml`) — 21 rules.
+- AI advisor (Phases 1/2/3 all live) — 19 action types across 3 tiers including SSH-based host actions. Closed-loop verification + cross-session memory + deep-mode tool-use. See [`README.md`](../../README.md#ai-alert-advisor-auto-remediation-namespace) at repo root for architecture summary; per-phase runbooks under [`docs/runbooks/ai-advisor-phase*`](../runbooks/).
 
 ## Related Documentation
 

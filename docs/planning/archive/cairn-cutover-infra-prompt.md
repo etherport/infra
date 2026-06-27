@@ -11,7 +11,7 @@
 > cairn**. It covers the **infra-repo + cluster** work (Grafana dashboards, Prometheus alerts, Alloy
 > log shipping, Pushgateway cleanup). The **mini-side** work (build/sign cairn, grant TCC, `cairn
 > install`, unload the bash LaunchAgents) is done separately on the mini via the cairn session/VNC —
-> see [`../runbooks/cairn-deployment.md`](../runbooks/cairn-deployment.md). Backed by a verified
+> see [`../runbooks/cairn-deployment.md`](../../runbooks/cairn-deployment.md). Backed by a verified
 > cross-repo audit (every consumer series accounted for).
 
 ## Context

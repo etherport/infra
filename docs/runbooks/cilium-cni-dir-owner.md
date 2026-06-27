@@ -37,16 +37,19 @@ undetected until the next agent restart.
 
 Restore root ownership on all k8s nodes, then bounce any crashlooping agents:
 
+The simplest fix is to **re-run the wrapper's pre-flight step** — `infra/kubespray/kubespray.sh`
+auto-runs `pre-flight.yml` after any cluster run, which does exactly this chown. To fix
+without a full run:
+
 ```bash
-# from infra/kubespray/kubespray (venv: ~/.kubespray-venv — see "Running kubespray" below)
+# from infra/kubespray/kubespray (venv: ~/.kubespray-venv). SSH cert is auto-presented
+# via ssh-config (M76 cert-only) — no --private-key needed.
 ~/.kubespray-venv/bin/ansible -i ../inventory/inventory.ini 'kube_control_plane:kube_node' \
-  -m file -a 'path=/opt/cni/bin owner=root group=root' \
-  -b -u ubuntu --private-key ~/.ssh/id_ed25519_homelab
-# (equivalently: re-run pre-flight.yml, which does exactly this)
+  -m file -a 'path=/opt/cni/bin owner=root group=root' -b -u ubuntu
 
 # verify ALL nodes (don't trust a truncated run — one missed node = one stuck pod):
 ~/.kubespray-venv/bin/ansible -i ../inventory/inventory.ini 'kube_control_plane:kube_node' \
-  -m shell -a 'stat -c "%U:%G" /opt/cni/bin' -b -u ubuntu --private-key ~/.ssh/id_ed25519_homelab
+  -m shell -a 'stat -c "%U:%G" /opt/cni/bin' -b -u ubuntu
 
 # force crashlooping agents to retry:
 kubectl -n kube-system delete pod <crashlooping-cilium-pods>
@@ -67,19 +70,24 @@ kubectl -n kube-system rollout status ds/cilium
 3. `kube_owner: root` was **rejected** — `/etc/kubernetes` + `/etc/cni/net.d` are genuinely
    `kube`-owned, so flipping it would broadly re-chown system paths.
 
-## Running kubespray from the mini (the actual, current path)
+## Running kubespray (the actual, current path)
 
-The committed `kubespray.sh`/`setup.sh` wrappers are **stale** (they expect a venv +
-`inventory/wind/` inside the submodule that don't exist). The working invocation:
+**Always run via `infra/kubespray/kubespray.sh`** — it auto-runs `pre-flight.yml`
+afterward (the whole point of this runbook). One-time setup:
 
 ```bash
 git submodule update --init infra/kubespray/kubespray      # v2.30.0
 python3 -m venv ~/.kubespray-venv
 ~/.kubespray-venv/bin/pip install -r infra/kubespray/kubespray/requirements.txt  # ansible 10.7.0 (core 2.17)
-cd infra/kubespray/kubespray
-~/.kubespray-venv/bin/ansible-playbook -i ../inventory/inventory.ini <playbook> \
-  -b -u ubuntu --private-key ~/.ssh/id_ed25519_homelab
 ```
-Note: the system ansible (core 2.21) is too new for kubespray v2.30 — use the venv.
-`--tags=cilium` alone fails ("`/tmp/releases/cilium` not found") — the binary download
-is in a `download`-tagged play; use `--tags=cilium,download`.
+
+Then:
+
+```bash
+infra/kubespray/kubespray.sh <playbook> [--limit ...]      # SSH cert auto-presented (M76)
+```
+
+Notes: the system ansible (core 2.21) is too new for kubespray v2.30 — the wrapper
+uses the `~/.kubespray-venv`. `--tags=cilium` alone fails ("`/tmp/releases/cilium`
+not found") — the binary download is in a `download`-tagged play; use
+`--tags=cilium,download`.

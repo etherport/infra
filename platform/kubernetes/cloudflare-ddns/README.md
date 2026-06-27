@@ -5,11 +5,10 @@ A records in sync with the homelab's current active-WAN public IP via
 the Cloudflare API.
 
 > **Migration note (2026-05-27):** this module was renamed from
-> `route53-ddns` and rewritten to call the Cloudflare API instead of
-> Route53. The image (`ghcr.io/sparked-diamond/cloudflare-ddns:main`)
-> still bundles aws-cli for transitional reasons — image trim is a
-> follow-up. See `docs/runbooks/cloudflare-ddns-cf-migration.md` for
-> the migration record.
+> `route53-ddns` and rewritten to call the Cloudflare API (curl) instead
+> of aws-cli + Route53; the image (`ghcr.io/sparked-diamond/cloudflare-ddns:main`)
+> no longer bundles aws-cli. See
+> `docs/runbooks/archive/cloudflare-ddns-migration.md` for the record.
 
 **Deployment Method**: managed via **Flux GitOps**. Changes are
 deployed automatically from git commits.
@@ -155,4 +154,4 @@ curl -s http://pushgateway.monitoring.svc.cluster.local:9091/metrics \
 
 - [Cloudflare DNS Records API](https://developers.cloudflare.com/api/operations/dns-records-for-a-zone-list-dns-records)
 - [Kubernetes CronJobs](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/)
-- Migration runbook: `docs/runbooks/cloudflare-ddns-cf-migration.md`
+- Migration runbook: `docs/runbooks/archive/cloudflare-ddns-migration.md`

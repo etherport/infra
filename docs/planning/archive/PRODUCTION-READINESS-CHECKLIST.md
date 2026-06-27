@@ -353,11 +353,11 @@
 
 ## 🔗 Related Documentation
 
-- [Architecture Overview](../architecture/overview.md)
-- [Operations Guide](../runbooks/operations-guide.md)
-- [Update Procedures](../runbooks/UPDATE-PROCEDURES.md)
-- [AWS S3 Backup System](../../platform/kubernetes/backups/aws-s3/README.md)
-- [Terraform Proxmox VMs](../setup/terraform/proxmox-k8s-vms.md)
+- [Architecture Overview](../../architecture/overview.md)
+- [Operations Guide](../../runbooks/operations-guide.md)
+- [Update Procedures](../../runbooks/UPDATE-PROCEDURES.md)
+- [AWS S3 Backup System](../../../platform/kubernetes/backups/aws-s3/README.md)
+- [Terraform Proxmox VMs](../../setup/terraform/proxmox-k8s-vms.md)
 
 ---
 

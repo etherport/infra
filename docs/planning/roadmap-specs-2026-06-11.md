@@ -1,3 +1,5 @@
+> **Dated snapshot (2026-06-11).** Several of these specs have since shipped. Kept for the design detail; `outstanding-work.md` is the live status.
+
 # Roadmap implementation specs — 2026-06-11
 
 Ready-to-execute specs for the top Wave-2 [dev-roadmap](dev-roadmap-2026-06-11.md)

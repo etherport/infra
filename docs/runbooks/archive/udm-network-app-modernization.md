@@ -2,7 +2,7 @@
 
 ## Status: scoping doc (M47), 2026-05-26
 
-This is the research output for [outstanding-work M47](../planning/outstanding-work.md#-m47-udm-network-app-modernization--api-key--integration-api).
+This is the research output for [outstanding-work M47](../../planning/outstanding-work.md#-m47-udm-network-app-modernization--api-key--integration-api).
 It scopes how to migrate `infra/ansible/playbooks/udm-firewall.yml` off the
 username/password + cookie + CSRF login dance onto the official UniFi
 **Integration API** (`/proxy/network/integration/v1/...`) with an

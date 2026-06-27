@@ -164,8 +164,8 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 - **Config stored in**: `platform/wireguard/servers/vpn-local.sops.yaml`
 
 > **C2 done (2026-05).** vpn-local was rebuilt from the current Packer
-> template (VM 9001) and now uses `ubuntu` + `/tmp/auto-key` like the
-> K8s nodes. Updated SSH examples below.
+> template (VM 9001) and uses `ubuntu` like the K8s nodes. SSH is
+> cert-only (M76) — `ssh ubuntu@<host>` presents the cert via ssh-config.
 
 > **Watchdog reattach:** if you import this VM from a backup rather than
 > recreating via Terraform, the `i6300esb` hardware watchdog device is not
@@ -205,7 +205,7 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 
 3. **Verify tunnel reconnection**
    ```bash
-   ssh -i /tmp/auto-key ubuntu@10.10.201.15 "sudo wg show"
+   ssh ubuntu@10.10.201.15 "sudo wg show"
    # Check for recent handshake timestamp
    ```
 
@@ -228,8 +228,8 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 - **Config**: Part of DNS cluster, syncs automatically
 
 > **C2 done (2026-05).** dns-fallback was rebuilt from the current
-> Packer template (VM 9001) and now uses `ubuntu` + `/tmp/auto-key`
-> like the K8s nodes. Updated SSH examples below.
+> Packer template (VM 9001) and uses `ubuntu` like the K8s nodes.
+> SSH is cert-only (M76) — `ssh ubuntu@<host>` presents the cert.
 
 > **Watchdog reattach:** as with vpn-local, imported VMs need a full
 > stop+start (not just reboot) to reattach the `i6300esb` watchdog
@@ -239,8 +239,8 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 
 1. **Backup Technitium config** (optional - cluster will sync)
    ```bash
-   ssh -i /tmp/auto-key ubuntu@10.10.201.6 "sudo tar -czvf /tmp/technitium-backup.tar.gz -C /opt/technitium config/"
-   scp -i /tmp/auto-key ubuntu@10.10.201.6:/tmp/technitium-backup.tar.gz ./backups/technitium-local-$(date +%Y%m%d).tar.gz
+   ssh ubuntu@10.10.201.6 "sudo tar -czvf /tmp/technitium-backup.tar.gz -C /opt/technitium config/"
+   scp ubuntu@10.10.201.6:/tmp/technitium-backup.tar.gz ./backups/technitium-local-$(date +%Y%m%d).tar.gz
    ```
 
 ### Migration Steps

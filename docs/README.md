@@ -42,10 +42,10 @@ docs/
 | [operations-guide.md](runbooks/operations-guide.md) | Command reference for all operations |
 | [kubernetes-upgrade.md](runbooks/kubernetes-upgrade.md) | Kubernetes version upgrade procedures |
 | [disaster-recovery.md](runbooks/disaster-recovery.md) | Recovery procedures for failure scenarios |
-| [macos-photos-backup.md](runbooks/macos-photos-backup.md) | ⚠️ **Superseded 2026-06-26 by cairn (M103)** — historical: the retired bash iCloud Photos pipeline (M79; sparsebundle/download-missing/SMB rationale). Live backup deploy: [cairn-deployment.md](runbooks/cairn-deployment.md) |
+| [macos-photos-backup.md](runbooks/archive/macos-photos-backup.md) | ⚠️ **Superseded 2026-06-26 by cairn (M103)** — historical: the retired bash iCloud Photos pipeline (M79; sparsebundle/download-missing/SMB rationale). Live backup deploy: [cairn-deployment.md](runbooks/cairn-deployment.md) |
 | [cairn-deployment.md](runbooks/cairn-deployment.md) | Deploy the `cairn` native iCloud→NAS backup agent on the mini (M103): build/sign, TCC, launchd, monitor, cut over from the bash suite |
 | [dns-resolution-issues.md](runbooks/dns-resolution-issues.md) | DNS troubleshooting |
-| [mini-photos-export-observability.md](runbooks/mini-photos-export-observability.md) | ⚠️ **Superseded 2026-06-26 by cairn (M103)** — historical: the old `photos_export_*` cluster-side metrics/alerts (rewritten to the `cairn_*` label schema). See [cairn-deployment.md](runbooks/cairn-deployment.md) + cairn README §5 |
+| [mini-photos-export-observability.md](runbooks/archive/mini-photos-export-observability.md) | ⚠️ **Superseded 2026-06-26 by cairn (M103)** — historical: the old `photos_export_*` cluster-side metrics/alerts (rewritten to the `cairn_*` label schema). See [cairn-deployment.md](runbooks/cairn-deployment.md) + cairn README §5 |
 | [gpu-dcgm-exporter-wedge.md](runbooks/gpu-dcgm-exporter-wedge.md) | Empty GPU dashboard / `TargetDown` dcgm — driver wedge on gpu1, reboot VM 120 |
 | [unas-nvme-cache-apst-hang.md](runbooks/unas-nvme-cache-apst-hang.md) | UNAS pool "At Risk"/SSD cache "Repairing" while drives show healthy — NVMe cache member dropped off the bus (APST hang); reboot + md rebuild |
 | [vlan-interfaces-netplan.md](runbooks/vlan-interfaces-netplan.md) | VLAN interface configuration |
@@ -55,11 +55,12 @@ docs/
 | [udm-manual-hardening-actions.md](runbooks/udm-manual-hardening-actions.md) | Console-only UDM hardening: Security/205 isolation+DNS (M104), unused/exposed switch ports → Disabled + VLAN-min + 802.1X/MAB (M105/#18), UDM_API_KEY GH secret (M47), BGP auth (L24) |
 | [secrets-rotation.md](runbooks/secrets-rotation.md) | SOPS age-key rotation (routine + post-compromise) + offline backup recipient |
 | [irsa-workload-identity.md](runbooks/irsa-workload-identity.md) | M75 in-cluster AWS workload identity (self-hosted IRSA): architecture, the disruptive apiserver issuer flip (Phase 3) + per-workload migration (Phase 4) + rollback |
+| [aws-roles-anywhere-mini.md](runbooks/aws-roles-anywhere-mini.md) | M71 mini-side: mint short-lived AWS creds from a step-ca X.509 cert via IAM Roles Anywhere (no standing key) |
 | [ceph-vlan-migration.md](runbooks/archive/ceph-vlan-migration.md) | Ceph mon/OSD migration to VLAN 210 (2026-05-18, done) |
 | [regional-vpn-deployment.md](runbooks/regional-vpn-deployment.md) | Multi-region AWS spoke VPN deployment |
 | [grafana-admin-password.md](runbooks/grafana-admin-password.md) | Rotate/recover Grafana admin password |
 | [syslog-onboard-device.md](runbooks/syslog-onboard-device.md) | Add a new syslog-emitting device to Alloy |
-| [postgres-barman.md](runbooks/postgres-barman.md) | CNPG Barman backup config + tuning |
+| [postgres-barman-activation.md](runbooks/archive/postgres-barman-activation.md) | CNPG Barman backup config + tuning (activation done; archived) |
 | [etcd-backup-restore.md](runbooks/etcd-backup-restore.md) | etcd snapshot + restore (cluster-rebuild path) |
 | [image-pinning-policy.md](runbooks/image-pinning-policy.md) | Container image pinning + Renovate cadence |
 | [dependency-update-cadence.md](runbooks/dependency-update-cadence.md) | Renovate/Helm-release update cadence |
@@ -80,7 +81,7 @@ docs/
 | [ai-advisor-phase-b-cloudwatch.md](runbooks/archive/ai-advisor-phase-b-cloudwatch.md) | M45 Phase B — IAM + creds so advisor reads AWS CW Logs |
 | [cloudwatch-to-loki-enable.md](runbooks/archive/cloudwatch-to-loki-enable.md) | M45 Phase C — CW Logs → in-cluster Loki forwarder |
 | **Cloudflare cutover** | |
-| [cloudflare-access-enable.md](runbooks/cloudflare-access-enable.md) | Full-zone migration (Route53 → CF) + CF Access for approve.wind |
+| [cloudflare-access-enable.md](runbooks/archive/cloudflare-access-enable.md) | Full-zone migration (Route53 → CF) + CF Access for approve.wind |
 
 ## Operations
 
@@ -114,7 +115,7 @@ docs/
 | Document | Description |
 |----------|-------------|
 | [proxmox-k8s-vms.md](setup/terraform/proxmox-k8s-vms.md) | Proxmox VM provisioning |
-| [remote-state-backend.md](setup/terraform/remote-state-backend.md) | Terraform state in S3 (⚠️ body still describes the deleted DynamoDB lock table; locking is now S3-native `use_lockfile=true`) |
+| [remote-state-backend.md](setup/terraform/remote-state-backend.md) | Terraform state in S3 |
 | [aws-security-best-practices.md](setup/terraform/aws-security-best-practices.md) | TF AWS credential security practices |
 
 ### CI/CD & Hosts
@@ -139,7 +140,7 @@ docs/
 ### Network
 | Document | Description |
 |----------|-------------|
-| [ubiquiti-ddns.md](setup/network/ubiquiti-ddns.md) | ⚠️ **Superseded** — Route53-based UDM DDNS (Route53 retired 2026-05-27; DDNS moved to Cloudflare). Kept for history. |
+| [ubiquiti-ddns-route53.md](runbooks/archive/ubiquiti-ddns-route53.md) | ⚠️ **Superseded** — Route53-based UDM DDNS (Route53 retired 2026-05-27; DDNS moved to Cloudflare). Kept for history. |
 
 ## Reference
 
@@ -154,7 +155,7 @@ docs/
 | Document | Description |
 |----------|-------------|
 | [vpn-split-tunnel.md](guides/vpn-split-tunnel.md) | NordVPN + Tailscale split-tunnel setup |
-| [localtuya/](guides/localtuya/) | LocalTuya setup for IoT devices |
+| [localtuya/](guides/archive/localtuya-2026-01/) | LocalTuya setup for IoT devices (archived 2026-01) |
 
 ## Planning
 
@@ -174,7 +175,7 @@ captured yet.
 | [udm-audit-2026-05-23.md](planning/archive/udm-audit-2026-05-23.md) | UDM / UniFi config audit (M25) — ✅ archived 2026-06-24; live state in [architecture/firewall-zones.md](architecture/firewall-zones.md) |
 | [udm-config-drift-2026-05-17.md](planning/archive/udm-config-drift-2026-05-17.md) | UDM config drift snapshot |
 | [ubiquiti-config-as-code-2026-05-16.md](planning/archive/ubiquiti-config-as-code-2026-05-16.md) | UniFi config-as-code design (terraform-unifi) |
-| [VERSIONING-STRATEGY.md](planning/VERSIONING-STRATEGY.md) | Container image versioning approach |
+| [VERSIONING-STRATEGY.md](planning/archive/VERSIONING-STRATEGY.md) | Container image versioning approach |
 
 Older completed/superseded planning docs (kept for historical
 context only) live in [docs/planning/archive/](planning/archive/).
@@ -197,6 +198,11 @@ Configuration layer:
 ├── Helm                     Complex K8s apps via HelmRelease CRDs
 └── Tailscale ACL (TF)       infra/tailscale/, applied via tailscale-policy.yml
 
+Security / policy:
+├── policy-baseline + networkpolicies  Cilium NetworkPolicy tiers (H3, per-ns opt-in enforce)
+├── kyverno                 Audit-only admission policy (M73)
+└── tetragon                Observe-only eBPF runtime detection (M74)
+
 Observability:
 ├── Prometheus (kube-prometheus-stack, replicas=2 antiAffinity)
 ├── Alertmanager → SES email (+ webhook to auto-remediation)
@@ -211,7 +217,7 @@ AI alert advisor (auto-remediation namespace):
 ├── Phase 1                  Advisory-only diagnosis emails (live)
 ├── Phase 2                  Approve-via-email HMAC buttons (live)
 ├── Phase 3                  Opt-in autonomous execute via `ai_remediation: auto` label (live)
-├── 18 action types          3 tiers — pod/deploy, workload-aware, host-level via SSH
+├── 19 action types          3 tiers — pod/deploy, workload-aware, host-level via SSH
 ├── Closed-loop verification After-execute re-check; verification_passed/failed audit events
 ├── Cross-session memory     Prior-attempt outcomes surfaced to Claude prompt
 ├── Deep mode tool-use       Multi-turn promql/loki/kubectl tools (opt-in per alert)
@@ -219,7 +225,7 @@ AI alert advisor (auto-remediation namespace):
 
 Data layer:
 ├── Ceph (external on PVE, mon 10.10.210.41 VLAN 210) + ceph-csi
-├── Velero (10 schedules) → Kopia → S3 velero.wind.etherport.net
+├── Velero (12 schedules) → Kopia → S3 velero.wind.etherport.net
 ├── CNPG Barman              continuous WAL + nightly base → S3 postgres-barman.wind.etherport.net
 ├── unifi-backup CronJob     UDM controller-db + UDM/Protect core-config → S3 unifi/
 ├── s3-sync CronJobs (7)     per NAS share → per-share S3 buckets

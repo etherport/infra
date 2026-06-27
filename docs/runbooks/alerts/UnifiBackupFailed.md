@@ -30,10 +30,10 @@ UniFi Protect config to NFS/S3 failed.
 
 ## Verification steps
 
-1. Most recent pod logs:
-   `kubectl -n backups logs -l app=unifi-backup --tail=200`
+1. Most recent pod logs (no `app` label — target the latest Job by name):
+   `kubectl -n backups logs job/$(kubectl -n backups get jobs --sort-by=.metadata.creationTimestamp -o name | grep unifi-backup | tail -1 | cut -d/ -f2) --tail=200`
 2. Recent Job runs:
-   `kubectl -n backups get jobs -l app=unifi-backup --sort-by=.metadata.creationTimestamp`
+   `kubectl -n backups get jobs --sort-by=.metadata.creationTimestamp | grep unifi-backup`
 3. Test UDM reachability from the cluster:
    `kubectl -n backups run test --rm -it --image=curlimages/curl -- curl -ksv https://10.10.200.1`
 4. After fix, watch the next scheduled run (04:00 PT) or trigger

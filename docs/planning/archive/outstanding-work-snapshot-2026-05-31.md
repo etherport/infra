@@ -505,7 +505,7 @@ personal-web CI all landed this session (see "Recently completed" below).
 
 ### ⏳ M51. UniFi Talk IaC — DEFERRED pending public API
 - **Source:** 2026-05-26 research during Twilio Talk #22 work. Investigated whether UniFi Talk 3rd-party SIP provider config can be managed as IaC; conclusion = no public API exists today, and reverse-engineering the `/proxy/talk/...` endpoints is feasible (1-2 days) but undocumented (Ubiquiti can change them silently on any upgrade).
-- **Decision:** wait for Ubiquiti to ship a public Talk API. Track via the open community feature request. Until then, the SIP provider config in [twilio-talk.md](../runbooks/twilio-talk.md) is the source-of-truth (UI-managed, documented).
+- **Decision:** wait for Ubiquiti to ship a public Talk API. Track via the open community feature request. Until then, the SIP provider config in [twilio-talk.md](../../runbooks/twilio-talk.md) is the source-of-truth (UI-managed, documented).
 - **Trigger to revisit:** Ubiquiti announces Talk API support.
 - **Effort when unblocked:** ~1 day to write the playbook.
 

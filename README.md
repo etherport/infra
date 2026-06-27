@@ -9,7 +9,7 @@ survive a rebuild.
 ## What's here
 
 ```
-infra/terraform/     TF projects (proxmox/, aws/, unifi/, cloudflare/, aws-regional-vpn/)
+infra/terraform/     TF projects (proxmox/, aws/, unifi/, cloudflare/, aws-regional-vpn/, google/, aws/github-oidc/)
 infra/ansible/       Playbooks for Proxmox host + standalone VMs + UDM
 infra/kubespray/     Kubespray submodule + wind inventory
 infra/packer/        Ubuntu 24.04 cloud-init template build (VM 9001)
@@ -51,6 +51,8 @@ scripts/             Ad-hoc helpers (safety-check, service-status inventory drif
    │    dns-fallback .6   technitium (failover)            │
    │    vpn-local .15     WG VRRP backup                   │
    │    gh-runner   (VM 1003) self-hosted GH Actions       │
+   │    step-ca .46 (VM 1006) SSH cert authority (M76)     │
+   │    asterisk-sbc      Twilio⇄UniFi Talk SIP bridge     │
    │                                                       │
    │  Appliances (UniFi via terraform-unifi + UDM Ansible) │
    │    UDM Pro .200.1  ·  Protect .212.10  ·  UNAS .209.10│
@@ -88,7 +90,8 @@ cert-manager · cnpg (postgres operator) · gpu-operator · kured ·
 kube-prometheus-stack (`monitoring.yaml`) · loki (single-binary) ·
 alloy (log collector + syslog ingester) · pushgateway · traefik ·
 velero · tailscale-operator + tailscale-connector ·
-github-actions-runner.
+github-actions-runner · kyverno (audit-only admission policy, M73) ·
+tetragon (observe-only eBPF runtime detection, M74).
 
 **Kustomization-only** (no Helm): metallb · technitium · ceph-csi ·
 auto-remediation (+ auto-remediation-rbac) · cloudflared · blackbox-exporter ·
@@ -114,7 +117,7 @@ advisor that diagnoses + acts on alerts the static rules miss.
 | Phase 2 | Diagnosis email includes Approve/Reject buttons (HMAC-signed URL → controller executes) | Live |
 | Phase 3 | Autonomous execute for alerts opted in via `ai_remediation: "auto"` label | Live |
 
-**18 action types** across 3 tiers (declared in
+**19 action types** across 3 tiers (declared in
 `platform/kubernetes/auto-remediation/advisor-prompt-configmap.yaml`):
 
 - **Tier 1 — pod/deploy mechanics** (low-risk, executable):
@@ -182,7 +185,7 @@ via `docs/runbooks/grafana-admin-password.md`).
 
 | What | Tool | Destination | Schedule |
 |---|---|---|---|
-| K8s resources + PVs | Velero (10 schedules) | S3 `velero.wind.etherport.net` (dedicated bucket) via Kopia | daily |
+| K8s resources + PVs | Velero (12 schedules) | S3 `velero.wind.etherport.net` (dedicated bucket) via Kopia | daily |
 | Postgres | CNPG Barman (WAL + base) | S3 `postgres-barman.wind.etherport.net` (dedicated bucket) | continuous + daily base |
 | etcd | systemd timer per CP + Velero `kube-system-daily` ships `/var/lib/etcd-snapshots` | local + S3 | daily 02:00 PT |
 | UDM controller-db + UDM/Protect core-config | `unifi-backup` CronJob | S3 `infra.wind.etherport.net/unifi/` | daily 04:00 PT |
@@ -274,6 +277,7 @@ Project → workflow map:
 | `infra/terraform/proxmox/k8s-vms` | `terraform-proxmox-k8s-vms.yml` |
 | `infra/terraform/proxmox/standalone-vms` | `terraform-proxmox-standalone-vms.yml` |
 | `infra/terraform/proxmox/sdn` | `terraform-proxmox-sdn.yml` |
+| `infra/terraform/proxmox/firewall` | `terraform-proxmox-firewall.yml` |
 | `infra/terraform/unifi` | `terraform-unifi.yml` |
 | `infra/terraform/cloudflare` | `terraform-cloudflare.yml` |
 | `infra/terraform/google` | `terraform-google.yml` |
@@ -288,6 +292,9 @@ Project → workflow map:
 | `infra/terraform/aws/external-monitoring` | `terraform-external-monitoring.yml` |
 | `infra/terraform/aws/homeassistant-alexa` | `terraform-homeassistant-alexa.yml` |
 | `infra/terraform/aws/ai-advisor-iam` | `terraform-ai-advisor-iam.yml` |
+| `infra/terraform/aws/cluster-irsa` | `terraform-cluster-irsa.yml` |
+| `infra/terraform/aws/roles-anywhere` | `terraform-roles-anywhere.yml` |
+| `infra/terraform/aws/twilio-webhook` | `terraform-twilio-webhook.yml` |
 | `infra/terraform/aws-us-east-1` | `terraform-aws-us-east-1.yml` |
 | `infra/terraform/aws-regional-vpn` | `terraform-regional-vpn.yml` |
 | `infra/terraform/aws/github-oidc` | *(bootstrap once with admin; then CI uses OIDC — H29)* |

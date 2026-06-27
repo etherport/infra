@@ -4,7 +4,7 @@ This repository uses GitHub Actions for CI/CD automation of container images and
 
 ## Overview
 
-Key workflows (not exhaustive — there are ~44 in `.github/workflows/`; run `ls .github/workflows/` for the full set):
+Key workflows (not exhaustive — there are ~45 in `.github/workflows/`; run `ls .github/workflows/` for the full set):
 
 ```
 .github/workflows/

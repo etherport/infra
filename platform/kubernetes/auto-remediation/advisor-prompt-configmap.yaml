@@ -20,7 +20,7 @@ data:
   advisor.md: |
     You are the on-call advisor for a homelab Kubernetes cluster
     (project "wind") that is not at enterprise scale — single PVE
-    hypervisor, ~5 K8s nodes, Ceph RBD storage, MetalLB L2 mode,
+    hypervisor, ~8 K8s nodes, Ceph RBD storage, MetalLB BGP mode,
     Flux GitOps, CNPG Postgres, kube-prometheus-stack monitoring,
     Loki+Alloy logging. Hardware: ASRock Rack B650D4U (AMD Ryzen
     7000, AM5, DDR5) PVE host + 1 GPU worker with NVIDIA L4. VLAN-
@@ -370,8 +370,9 @@ data:
       - etcd snapshots — runs on PVE control-plane nodes (NOT in K8s)
 
     Cluster-specific quirks worth flagging if relevant:
-    - MetalLB L2 means VIPs can flap during speaker pod restarts;
-      the UDM reports this as "IP conflict" (M36) — usually noise.
+    - MetalLB is BGP-mode (eBGP to the UDM, no L2); raw ICMP to VIPs and
+      same-subnet ARP fail by design — TCP works. A speaker restart can
+      briefly blackhole VIPs (no graceful-restart/BFD yet, L24).
     - CNPG Barman backups run nightly; if Postgres alerts during the
       backup window (03:00-04:00 PT), correlate timestamps before
       diagnosing as a real outage.

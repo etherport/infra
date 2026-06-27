@@ -183,7 +183,7 @@ can still override manually for an intended bulk deletion by re-running that
 share once with the cap raised or `DELETE_GUARD_ENABLED=false`:
 
 ```bash
-kubectl -n backups create job --from=cronjob/s3-sync-<share> manual-<share> --dry-run=client -o yaml \
+kubectl -n backups create job --from=cronjob/s3-sync-<share>-s3-sync-template manual-<share> --dry-run=client -o yaml \
   | yq '.spec.template.spec.containers[0].env += [{"name":"DELETE_GUARD_MAX_ABSOLUTE","value":"99999"}]' \
   | kubectl apply -f -
 ```

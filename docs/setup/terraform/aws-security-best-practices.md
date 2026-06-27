@@ -263,7 +263,7 @@ Terraform state contains sensitive data (resource IDs, sometimes secrets):
 2. **S3 bucket policy restricts access:**
    - Only `terraform-homelab` user can read/write
 
-3. **DynamoDB locking prevents corruption:**
+3. **S3-native locking prevents corruption (use_lockfile=true, no DynamoDB):**
    - Concurrent applies are blocked
 
 4. **Never commit state to git:**
@@ -329,7 +329,7 @@ Given single-user homelab context, the original plan was **Level 2** (MFA-protec
 │      ├── TerraformCompute (when you migrate EC2)                        │
 │      └── ... (add as you migrate resources)                             │
 │                                                                         │
-│  State: S3 + DynamoDB (already configured)                              │
+│  State: S3 (native locking, use_lockfile=true)                                      │
 │  └── Encrypted at rest                                                  │
 │  └── Versioning enabled (recover from bad applies)                      │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -343,7 +343,7 @@ Instead of one giant policy, create modular policies per project:
 
 | Policy Name | Scope | Used By |
 |-------------|-------|---------|
-| `TerraformState` | S3 bucket + DynamoDB | All projects |
+| `TerraformState` | S3 bucket (S3-native lock) | All projects |
 | `TerraformDDNSLambda` | Lambda, API GW, Secrets Mgr (ddns-*) | ddns-lambda |
 | `TerraformNetworking` | VPC, subnets, route tables, NACLs | networking |
 | `TerraformSecurityGroups` | EC2 security groups | security-groups |
@@ -362,7 +362,7 @@ Instead of one giant policy, create modular policies per project:
 ```
 infra/terraform/aws/iam-policies/
 ├── terraform-ddns-lambda.json      # DDNS Lambda project
-├── terraform-state.json            # S3 + DynamoDB (shared)
+├── terraform-state.json            # S3 backend (shared; S3-native lock)
 ├── terraform-networking.json       # VPC resources (future)
 ├── terraform-compute.json          # EC2 resources (future)
 └── terraform-full.json             # Everything (use sparingly)

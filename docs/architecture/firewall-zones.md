@@ -144,7 +144,7 @@ The switch-routed fabric (Servers/201, Clients/202, vSAN/209, Ceph/210) is polic
 | VLAN | Name | Subnet | Live Zone | Purpose |
 |------|------|--------|-----------|---------|
 | (untagged) | Default | 10.10.199.0/24 | Internal | Untagged native — should be empty, but DHCP `.100-.254` is still on. Talk service listens on `10.10.199.1` (see `unifi-talk.md`). |
-| 200 | Management | 10.10.200.0/24 | Internal | Network equipment (UDM, switches, APs) |
+| 200 | Management | 10.10.200.0/24 | **Management (custom)** | Network equipment (UDM, switches, APs). Contained admin plane (M56). |
 | 204 | IoT | 10.10.204.0/24 | **IoT (custom)** | Smart home devices |
 | 205 | Security | 10.10.205.0/24 | Internal | SimpliSafe gear (cameras retired) — Network Isolation = ON (see §"Known anomalies") |
 | 206 | Guest | 10.10.206.0/24 | Hotspot (built-in) | Guest WiFi |
@@ -155,7 +155,7 @@ The switch-routed fabric (Servers/201, Clients/202, vSAN/209, Ceph/210) is polic
 
 | VLAN | Name | Subnet | Live Zone | Purpose |
 |------|------|--------|-----------|---------|
-| 201 | Servers | 10.10.201.0/24 | Internal | K8s nodes, DNS (MetalLB `.5/.6`), infra services |
+| 201 | Servers | 10.10.201.0/24 | **Trusted (custom)** | K8s nodes, DNS (MetalLB `.5/.6`), infra services. **North-south** is UDM-routed/zoned (Trusted) since the BGP migration (M56); **east-west** to 202/209/210 stays L3-switch-routed (switch ACLs). |
 | 202 | Clients | 10.10.202.0/24 | Internal | User laptops, phones |
 | 209 | vSAN | 10.10.209.0/24 | Internal | Storage network (Proxmox/NAS) |
 | 210 | Ceph | 10.10.210.0/24 | Internal | Dedicated Ceph storage (PVE mon `.41`, K8s nodes `.50-.60` via `enp6s22` MTU 9000). Migrated 2026-05-18 from VLAN 201. |
@@ -186,7 +186,9 @@ UniFi Network creates a fixed set of built-in zones; you can add custom zones on
 
 | Zone | Type | Member networks | Notes |
 |------|------|-----------------|-------|
-| **Internal** | built-in | Default, Management/200 | Default = `Allow All Traffic` within the zone. **Switch-routed VLANs (Servers/201, Clients/202, vSAN/209, Ceph/210, InterVLAN/4040) are NOT members of any UDM zone** — they're routed by the L3 switch and their inter-VLAN security is enforced by switch ACLs (see below). Only their north-south traffic transits to the UDM (via VLAN 4040). |
+| **Internal** | built-in | Default/199 | Default = `Allow All Traffic` within the zone. Now holds only the Default network (Management/200 moved to `Management`, Servers/201 to `Trusted` — M56). **Switch-routed VLANs (Clients/202, vSAN/209, Ceph/210, InterVLAN/4040) are NOT members of any UDM zone** — east-west security is enforced by switch ACLs (see below); only their north-south traffic transits the UDM (via VLAN 4040). Servers/201 is now north-south-zoned (`Trusted`) but still switch-routed east-west. |
+| **Trusted** | custom | Servers/201 | M56 (2026-05-31). Trusted workload tier; broad egress + ingress for fronted services. Behaviour-neutral vs the old `Internal`. |
+| **Management** | custom | Management/200 | M56 (2026-05-31). Contained admin plane; reaches only External/Gateway/`Trusted` (DNS + syslog). |
 | **IoT** | custom | IoT/204 | Default block to other zones; one explicit allow for DNS. |
 | **Infrastructure** | custom | Unifi/212 | M30 Phase 1. Protect/Talk/Access appliance fleet. Rules: Internal↔Infrastructure Allow All (broad — tightening deferred to a Phase 1.5 pass); Infrastructure→Gateway + →External auto-created by UDM. |
 | **Security** | custom | Security/205 | M30 Phase 3 (2026-05-29). SimpliSafe (wifi-primary + cell-backup). Default block to all other zones; →External + →Gateway allowed (internet monitoring + DHCP/DNS). No internal-DNS rule (resolves via gateway/public). Legacy `network_isolation_enabled` retired — zone model is sole enforcement. |

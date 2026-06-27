@@ -62,7 +62,8 @@ GPU-accelerated Plex Media Server deployment with hardware transcoding on Tesla 
 This application is managed by Flux. Changes are auto-deployed from git:
 
 ```bash
-# Edit any configuration (e.g., change image version, resources, etc.)
+# Edit any configuration (e.g., resources). The image is digest-pinned and
+# auto-bumped by Flux image automation (clusters/wind/image-automation/plex.yaml).
 vim platform/kubernetes/plex/02-deployment.yaml
 
 # Commit and push
@@ -238,37 +239,9 @@ Plex is configured for remote access via `https://plex.wind.etherport.net`.
 - Middleware for proper headers (X-Forwarded-Proto)
 - Buffering middleware for large requests
 
-**3. WAF Configuration (historical — N/A post 2026-05-27 ALB decom)**
-
-> **Note (2026-05-27):** the AWS ALB + WAF were decommissioned (see
-> `docs/runbooks/alb-decom.md`). Public Plex traffic now arrives via
-> Cloudflare Tunnel, which does not impose the 2048-byte query string
-> limit that the old WAF did. The section below is retained for
-> historical context only — none of these steps are required today.
-
-If using AWS ALB with WAF, Plex transcode URLs can exceed the default query string size limit (2048 bytes) and will return **403 Forbidden** errors when playing content.
-
-**Fix:** Add a WAF rule to allow Plex before the size restriction rules:
-
-In AWS WAF Web ACL (`CreatedByALB-private-infra-alb`):
-
-1. Go to **Rules** → **Add rules** → **Add my own rules and rule groups**
-2. Rule type: **Rule builder**
-3. Name: `AllowPlexLongURLs`
-4. Type: **Regular rule**
-5. If a request: **matches the statement**
-6. Statement:
-   - Inspect: **Header**
-   - Header field name: `host`
-   - Match type: **Exactly matches string**
-   - String to match: `plex.wind.etherport.net`
-   - Text transformation: **Lowercase**
-7. Action: **Allow**
-8. Priority: **0** (must be first, before managed rule groups)
-
-This bypasses the `SizeRestrictions_QUERYSTRING` rule from `AWSManagedRulesCommonRuleSet` for Plex.
-
-**Note:** Changes may take 1-2 minutes to propagate.
+Public Plex traffic arrives via Cloudflare Tunnel. (The AWS ALB + WAF were
+decommissioned 2026-05-27 — `docs/runbooks/archive/alb-decom.md`; the old
+WAF's 2048-byte query-string limit that broke transcode URLs no longer applies.)
 
 ### Verification
 
@@ -288,11 +261,6 @@ This bypasses the `SizeRestrictions_QUERYSTRING` rule from `AWSManagedRulesCommo
 - Verify custom connections: `customConnections="https://plex.wind.etherport.net:443/"`
 - Restart Plex pod: `kubectl rollout restart deployment/plex -n plex`
 
-**403 Errors When Playing Content**
-- Verify WAF rule is active and priority 0
-- Check WAF logs in CloudWatch for blocked requests
-- Temporarily disable managed rules to confirm WAF is the issue
-
 **Intermittent Connectivity**
 - Enable Relay in Plex Settings → Network
 - Relay acts as fallback when direct connection fails
@@ -303,7 +271,7 @@ This bypasses the `SizeRestrictions_QUERYSTRING` rule from `AWSManagedRulesCommo
 
 Check GPU node availability:
 ```bash
-kubectl get nodes -l gpu=true
+kubectl get nodes -l nvidia.com/gpu.present=true
 kubectl describe node k8s-gpu1
 ```
 
@@ -367,15 +335,10 @@ nslookup plex.wind.etherport.net
 
 ### Update Plex Version
 
-The deployment uses `plexinc/pms-docker:latest`. To update:
+The image is digest-pinned and auto-bumped by Flux image automation
+(`clusters/wind/image-automation/plex.yaml`). To force a redeploy of the
+current tag:
 
-```bash
-kubectl rollout restart deployment/plex -n plex
-```
-
-The image tag is managed by Renovate against `plexinc/pms-docker` —
-prefer letting Renovate open a PR rather than pinning manually here. To
-force a redeploy of the current tag:
 ```bash
 kubectl rollout restart deployment/plex -n plex
 ```
@@ -437,7 +400,7 @@ kubectl top pod -n plex
 
 - [NVIDIA GPU Operator Setup](../gpu-operator/values.yaml)
 - [GPU Worker Node Configuration](../../../infra/terraform/proxmox/k8s-vms/main.tf)
-- [Production Readiness Checklist](../../../docs/PRODUCTION-READINESS-CHECKLIST.md)
+- [Production Readiness Checklist](../../../docs/planning/archive/PRODUCTION-READINESS-CHECKLIST.md)
 
 ---
 

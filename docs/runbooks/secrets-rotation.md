@@ -7,12 +7,13 @@ secrets it protects. Addresses outstanding-work **H33**.
 
 One age recipient (`age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g`)
 decrypts **every** `*.sops.yaml` (all 5 `creation_rules` in `.sops.yaml` use it). Its
-**private** half is replicated to **three** places — these are what an attacker would
+**private** half is replicated to **four** places — these are what an attacker would
 need, and what rotation must cover:
 
 | Holder | Path / location | Used for |
 |---|---|---|
 | Mac mini (ops host) | `~/.config/sops/age/keys.txt` (un-passphrased) | headless `sops -d`, ansible, render scripts |
+| devbox (dev-session host) | `~/.config/sops/age/keys.txt` (deployed by `devbox.yml`) | headless `sops -d` in Claude Code dev sessions |
 | GitHub Actions | repo secret `SOPS_AGE_KEY` | CI workflows that decrypt (terraform-drift, post-bootstrap, aws-us-east-1, regional-vpn, ansible-vm-fleet) |
 | Flux (in-cluster) | secret `sops-age` in `flux-system` | decrypts `platform/kubernetes/**/*.sops.yaml` at reconcile |
 | **offline backup** ✅ (2026-06-15) | `age1phcm…3466` — 1Password "Homelab SOPS Age Key (BACKUP)" + paper in a safe — NEVER on the mini/CI/Flux | break-glass recovery + lockout-free re-key (added via H33a, below) |
@@ -62,7 +63,7 @@ No Flux/CI change needed — they still decrypt with the primary.
 ## Routine age-key rotation (periodic hygiene)
 
 Two-phase: **add the new key everywhere → verify → remove the old.** Never remove the
-old recipient before all three holders carry the new private key.
+old recipient before all four holders carry the new private key.
 
 ```bash
 # 1. new primary (laptop)
@@ -71,8 +72,9 @@ age-keygen -o /tmp/new-primary.txt
 # 3. re-key (old still present → no lockout):
 find . -name '*.sops.yaml' -not -name '.sops.yaml' -not -path './.git/*' -exec sops updatekeys -y {} \;
 git commit -am "secrets: rotate age key (phase 1: add new recipient)"
-# 4. distribute the NEW private key to the three holders:
+# 4. distribute the NEW private key to the four holders:
 #    mini:    write ~/.config/sops/age/keys.txt (chmod 600)
+#    devbox:  write ~/.config/sops/age/keys.txt (chmod 600) — or re-run devbox.yml
 #    GitHub:  gh secret set SOPS_AGE_KEY < /tmp/new-primary.txt
 #    cluster: kubectl create secret generic sops-age -n flux-system \
 #               --from-file=age.agekey=/tmp/new-primary.txt --dry-run=client -o yaml | kubectl apply -f -
@@ -106,7 +108,7 @@ the access-gating key first, then everything it could have decrypted.
 3. **UDM creds** (1P items `di4fnt6r…`, `6e3ceofu…`, `vohajmkz…`) — change in UniFi, update 1P.
 4. **WireGuard keys** — regenerate server+client keypairs (`platform/wireguard/**`, `platform/kubernetes/wireguard/01-secrets.sops.yaml`); update both tunnel ends.
 5. **Anthropic key** — rotate in console → `anthropic-api-key.sops.yaml`.
-6. **SMTP** (`smtp-credentials.sops.yaml`); **Ceph** (`ceph-k8s-secret.sops.yaml`, `ceph.sops.yaml`); **Cloudflare token** (1P `k4tmkn7t…`); **Twilio**, **approval-hmac**, **advisor-ssh-key**, **CNPG/barman**, **grafana-admin** — rotate each.
+6. **SMTP** (`platform/kubernetes/monitoring/alertmanager-secret.sops.yaml`); **Ceph** (`ceph-k8s-secret.sops.yaml`, `ceph.sops.yaml`); **Cloudflare token** (1P `k4tmkn7t…`); **Twilio**, **approval-hmac**, **advisor-ssh-key**, **CNPG/barman**, **grafana-admin** — rotate each.
 
 **4. Re-sync the 1P-managed half** (laptop, 1P unlocked):
 ```bash

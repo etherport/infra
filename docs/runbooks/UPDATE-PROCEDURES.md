@@ -11,7 +11,7 @@ Single source of truth for all infrastructure update procedures.
 │                    FULLY AUTOMATIC                               │
 │                    (no action needed)                            │
 ├──────────────────────────────────────────────────────────────────┤
-│  Container Images (13)    Flux scans hourly, commits to git      │
+│  Container Images (14)    Flux scans hourly, commits to git      │
 │  K8s Node OS Patches      unattended-upgrades runs daily         │
 │  K8s Node Reboots         Kured coordinates 2-6am Pacific        │
 │  Standalone VM OS         unattended-upgrades + auto-reboot      │
@@ -73,12 +73,12 @@ QUARTERLY (Manual - requires maintenance window)
 
 | Component | Count | Method | Frequency | Action |
 |-----------|-------|--------|-----------|--------|
-| Container Images | 13 | Flux ImageUpdateAutomation | Hourly scan | None |
-| K8s Node OS | 5 nodes | unattended-upgrades | Daily | None |
-| K8s Node Reboots | 5 nodes | Kured | 2-6am when needed | None |
+| Container Images | 14 | Flux ImageUpdateAutomation | Hourly scan | None |
+| K8s Node OS | 8 nodes | unattended-upgrades | Daily | None |
+| K8s Node Reboots | 8 nodes | Kured | 2-6am when needed | None |
 | Standalone VM OS | 4 VMs | unattended-upgrades | Daily | None |
 | Standalone VM Reboots | 4 VMs | Staggered cron | 02:00-04:00 | None |
-| Helm Charts | 7 releases | Renovate PRs | On release | Merge PR |
+| Helm Charts | 15 releases | Renovate PRs | On release | Merge PR |
 | Terraform Providers | 3 | Renovate PRs | On release | Merge PR |
 | GitHub Actions | varies | Renovate PRs | On release | Merge PR |
 | Proxmox Host | 1 | Ansible | Monthly | Run playbook |
@@ -120,7 +120,7 @@ kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.
 
 ### 1.2 Kubernetes Node OS
 
-**Nodes:** k8s-cp1, k8s-w1, k8s-w2, k8s-w3, k8s-gpu1
+**Nodes (8):** k8s-cp1/cp2/cp3, k8s-w1/w2/w3/w4, k8s-gpu1
 
 **How it works:**
 1. `unattended-upgrades` installs security patches daily
@@ -181,16 +181,10 @@ gh pr list --label renovate
 # Or: https://github.com/sparked-diamond/infra/pulls
 ```
 
-**Current Helm releases tracked:**
-| Release | Chart | Namespace |
-|---------|-------|-----------|
-| cert-manager | jetstack/cert-manager | cert-manager |
-| cnpg | cnpg/cloudnative-pg | cnpg-system |
-| gpu-operator | nvidia/gpu-operator | gpu-operator-system |
-| kured | kubereboot/kured | kube-system |
-| monitoring | prometheus-community/kube-prometheus-stack | monitoring |
-| traefik | traefik/traefik | traefik |
-| velero | vmware-tanzu/velero | velero |
+**Current Helm releases tracked** (HelmRelease CRs in `clusters/wind/helm-releases/`;
+list live with `kubectl get helmrelease -A`): alloy, arc-controller,
+arc-runner-homelab, cert-manager, cnpg, gpu-operator, kured, kyverno, loki,
+monitoring, pushgateway, tailscale-operator, tetragon, traefik, velero.
 
 ---
 
@@ -199,7 +193,7 @@ gh pr list --label renovate
 ### 3.1 Proxmox Host (Monthly)
 
 ```bash
-cd ~/Projects/homelab-infra/infra/ansible
+cd ~/code/infra/infra/ansible
 
 # Dry-run
 ansible-playbook -i inventory/wind/ playbooks/proxmox.yml --check --diff
@@ -220,15 +214,15 @@ ansible-playbook -i inventory/wind/ playbooks/proxmox.yml -e "allow_reboot=true"
 **Full procedure:** See [kubernetes-upgrade.md](kubernetes-upgrade.md)
 
 ```bash
-cd ~/Projects/homelab-infra/infra/kubespray
+cd ~/code/infra/infra/kubespray
 
 # Update Kubespray
 git submodule update --remote kubespray
 cd kubespray && git checkout v2.XX.X && cd ..
 
-# Run upgrade
-ansible-playbook -i ../ansible/inventory/wind/inventory.ini \
-  kubespray/upgrade-cluster.yml -b --become-user=root
+# Run upgrade via the wrapper (auto-runs pre-flight to restore the CNI dir owner —
+# NEVER raw ansible-playbook cluster.yml/upgrade-cluster.yml; see cilium-cni-dir-owner)
+cd infra/kubespray && ./kubespray.sh upgrade-cluster.yml
 
 # Verify
 kubectl get nodes

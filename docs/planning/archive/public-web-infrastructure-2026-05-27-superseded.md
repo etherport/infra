@@ -166,4 +166,4 @@ terraform import aws_acm_certificate.stopthecastle arn:aws:acm:us-east-1:ACCOUNT
 
 ## Related Documentation
 
-- [AWS Migration Plan](../../infra/terraform/aws/MIGRATION_PLAN.md) - Homelab migration (excludes these resources)
+- AWS Migration Plan — completed (see `infra/terraform/aws/archive/MIGRATION_PLAN-2026-04-completed.md`)

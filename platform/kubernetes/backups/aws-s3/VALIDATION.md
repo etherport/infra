@@ -467,7 +467,7 @@ This provides **ongoing continuous validation** without needing separate validat
 # After deploying source checksum computation
 # Validate all shares at 100% to establish baseline
 for share in graham archive backups mark media content scans; do
-  kubectl create job validate-${share}-initial --from=cronjob/s3-sync-${share}
+  kubectl create job validate-${share}-initial --from=cronjob/s3-sync-${share}-s3-sync-template
 done
 ```
 

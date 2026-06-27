@@ -1,3 +1,5 @@
+> **Dated snapshot (2026-06-11).** Several items have since landed (e.g. H29 CI→AWS OIDC ✅, audit-log→Loki, advisor right-sizing). Kept for the track-by-track rationale; `outstanding-work.md` is the live status.
+
 # Dev Roadmap — 2026-06-11
 
 Forward-looking "what to build next" for the `wind` homelab, distinct from the

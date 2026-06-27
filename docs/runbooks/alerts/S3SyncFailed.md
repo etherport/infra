@@ -36,8 +36,9 @@ configured NFS share. Daily-report CronJob aggregates these into the
 
 1. Identify the failing share(s):
    `homelab_backup_last_run_success == 0` in Prometheus, group by share.
-2. Find the most-recent failed Job:
-   `kubectl -n backups get jobs -l app=s3-sync --sort-by=.metadata.creationTimestamp | tail -10`
+2. Find the most-recent failed Job (no `app` label — grep by name; jobs are
+   `s3-sync-<share>-s3-sync-template-<ts>`):
+   `kubectl -n backups get jobs --sort-by=.metadata.creationTimestamp | grep s3-sync | tail -10`
 3. Pod logs:
    `kubectl -n backups logs job/<failed-job-name> --tail=200`
 4. NFS-side: from any pod with the mount, `ls /mnt/<share>` should

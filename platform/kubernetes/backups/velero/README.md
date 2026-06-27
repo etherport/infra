@@ -58,39 +58,30 @@ All namespaces with persistent data are backed up:
 | wikijs | wiki-js-data | 5Gi | ✅ |
 | monitoring | grafana, prometheus, alertmanager | 5-10Gi | ✅ |
 | traefik | traefik-ceph-pvc | 5Gi | ✅ |
-| backups | kopia-repo-pvc, kopia-config-pvc | 200Gi, 5Gi | ✅ |
 
 ## Current Backup Schedules
 
 All schedules use file-system backup (Kopia) with 30-day retention.
 
-| Schedule | Namespaces | Time (Local) | Purpose |
-|----------|------------|--------------|---------|
+| Schedule | Namespaces | Time (UTC) | Purpose |
+|----------|------------|------------|---------|
 | `critical-apps-daily` | home-automation, plex | 2am | Core applications with user data |
 | `postgres-daily` | postgres | 2am | CloudNativePG database (Wiki.js data) |
 | `traefik-daily` | traefik | 2am | Ingress controller, ACME certs |
+| `cue-daily` | cue | 3am | Cue app + its CNPG database |
 | `technitium-daily` | dns | 3am | DNS server configuration |
 | `plex-daily` | plex | 3am | Media server config/metadata |
 | `wikijs-daily` | wikijs | 3am | Wiki.js application |
 | `kube-system-daily` | kube-system | 3am | Core Kubernetes components |
-| `infrastructure-daily` | backups, cloudflare-ddns, monitoring, traefik, cert-manager, icloudpd, rclone, metallb-system | 4am | Infrastructure services |
+| `authentik-daily` | authentik | 4am | SSO IdP blueprints/config |
+| `infrastructure-daily` | cloudflare-ddns, monitoring, traefik, cert-manager, rclone, metallb-system | 4am | Infrastructure services |
 | `monitoring-daily` | monitoring | 4am | Prometheus, Grafana, Alertmanager |
+| `ollama-daily` | ollama | 5am | Ollama models/config |
 
 ### Schedule Files
 
-All 9 schedules are GitOps-managed in `schedules/` (since commit
-95b3755) and applied via a single `kustomization.yaml` in that directory:
-
-- `critical-apps-daily.yaml`
-- `infrastructure-daily.yaml`
-- `kube-system-daily.yaml`
-- `monitoring-daily.yaml`
-- `ollama-daily.yaml`
-- `plex-daily.yaml`
-- `postgres-daily.yaml`
-- `technitium-daily.yaml`
-- `traefik-daily.yaml`
-- `wikijs-daily.yaml`
+All 12 schedules are GitOps-managed in `schedules/` and applied via a single
+`kustomization.yaml` in that directory (one `<name>.yaml` per schedule).
 
 To add a new schedule, drop a `<name>.yaml` next to the others and add
 it to `schedules/kustomization.yaml` — Flux will reconcile it on the
@@ -265,29 +256,13 @@ velero restore create ha-restore-test \
 
 ### Manage Schedules
 
-**List schedules:**
-```bash
-velero schedule get
-```
+Schedules are **GitOps-managed** (`schedules/` → Flux). Do not mutate them with
+`velero schedule create/delete/pause` — Flux reverts live changes. To add/change/
+remove one, edit the `<name>.yaml` (and `schedules/kustomization.yaml`), commit,
+push, and reconcile. Inspect current state read-only with:
 
-**Create new schedule:**
 ```bash
-velero schedule create <name> \
-  --schedule="0 2 * * *" \
-  --include-namespaces=<namespace> \
-  --default-volumes-to-fs-backup \
-  --ttl=720h
-```
-
-**Delete schedule:**
-```bash
-velero schedule delete <name>
-```
-
-**Pause/unpause schedule:**
-```bash
-velero schedule pause <name>
-velero schedule unpause <name>
+kubectl get schedule -n velero      # (or: velero schedule get)
 ```
 
 ### Delete Backups
@@ -433,20 +408,23 @@ A successful file-system backup will show:
 
 ## Configuration Files
 
-### values.yaml
+### HelmRelease
 
-Location: `platform/kubernetes/backups/velero/values.yaml`
+Location: `clusters/wind/helm-releases/velero.yaml` (Flux-managed; the live
+Helm values live inline here — the `values.yaml` in this dir is legacy).
 
 Key settings:
 - S3 bucket configuration
-- AWS credentials reference
+- IRSA auth (`credentials.useSecret=false`)
 - Plugin configuration (AWS plugin only, CSI built-in)
 - Node agent settings (Kopia)
 - Kubectl image version override
 
 ### Backup Schedules
 
-Managed via Velero CLI or can be defined as Kubernetes manifests in `schedules/` directory.
+GitOps-only — defined as `Schedule` manifests in `schedules/` and reconciled by
+Flux. Do **not** use `velero schedule create/delete` (Flux would revert it); edit
+the YAML and commit.
 
 ## IAM Policy
 
@@ -543,16 +521,9 @@ kubectl logs -n velero deployment/velero --tail=50 | grep -iE 'webidentity|assum
 
 ### Lifecycle Management
 
-Backups are automatically deleted after TTL (30 days). To adjust:
-
-```bash
-# Update existing schedule
-velero schedule create home-assistant-daily \
-  --schedule="0 2 * * *" \
-  --include-namespaces=home-automation \
-  --default-volumes-to-fs-backup \
-  --ttl=1440h  # 60 days
-```
+Backups are automatically deleted after TTL (30 days). To adjust, edit the
+schedule's `<name>.yaml` in `schedules/` (`spec.template.ttl`, e.g. `1440h` for
+60 days) and commit — Flux reconciles it. Do not use `velero schedule create`.
 
 ### S3 Bucket Lifecycle
 

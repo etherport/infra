@@ -29,7 +29,7 @@ for the dispatch flow).
 
 ## Defined remediation rules (configmap.yaml)
 
-22 rules across 7 functional areas. All `action: restart_pods` unless
+21 rules across 7 functional areas. All `action: restart_pods` unless
 noted. All rules apply selector-based pod deletion (replicas come back
 automatically).
 
@@ -50,9 +50,8 @@ automatically).
 | `FluxHelmControllerDown` | flux-system | `app=helm-controller` | |
 | `FluxKustomizeControllerDown` | flux-system | `app=kustomize-controller` | |
 | `FluxSourceControllerDown` | flux-system | `app=source-controller` | |
-| `KopiaDown` | backups | `app=kopia` | |
 | `VeleroDown` | velero | `app.kubernetes.io/name=velero` | |
-| `MetalLBControllerDown` | metallb-system | `app=metallb,component=controller` | |
+| `MetalLBControllerDown` | metallb-system | `component=controller` | |
 | `PlexDown` | plex | `app=plex` | |
 | `PodCrashLooping` | (generic, label-driven) | restart matching | demoted to severity=info 2026-05-22 |
 | `PodOOMKilled` | (generic) | restart matching | demoted to severity=info 2026-05-22 |
@@ -65,7 +64,7 @@ automatically).
 - Monitoring: Grafana, Prometheus, Alertmanager
 - Ingress + TLS: Traefik, cert-manager (controller + webhook)
 - GitOps: Flux (helm/kustomize/source controllers)
-- Backup: Kopia, Velero
+- Backup: Velero
 - Network LB: MetalLB controller
 - Apps: Home Assistant (deep — restart + scale-down/up), Plex
 
@@ -104,7 +103,6 @@ Two independent layers prevent runaway loops on alerts that keep firing:
 
 ## To do — concrete follow-ups
 
-1. **Wire the webhook receiver** (above) — until then, all rules are dormant.
-2. Add rules for CNPG operator, ceph-csi-rbdplugin-provisioner, WireGuard, MetalLB speakers.
-3. Consider exponential backoff if cooldown alone isn't enough for flappy services.
-4. Wire a Prometheus `up` metric for the remediation controller itself — meta-monitoring.
+1. Add rules for CNPG operator, ceph-csi-rbdplugin-provisioner, WireGuard, MetalLB speakers.
+2. Consider exponential backoff if cooldown alone isn't enough for flappy services.
+3. Wire a Prometheus `up` metric for the remediation controller itself — meta-monitoring.

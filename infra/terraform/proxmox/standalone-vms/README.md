@@ -11,13 +11,18 @@ template) configured via cloud-init.
 | 1001  | dns-fallback   | 10.10.201.6    | Technitium DNS secondary (failover for K8s technitium .5)|
 | 1002  | vpn-local      | 10.10.201.15   | WireGuard site-to-site to AWS (VRRP BACKUP for the K8s WG pod) |
 | 1003  | gh-runner      | 10.10.201.30   | GitHub Actions `[self-hosted, lifecycle]` runner for K8s/Proxmox workflows |
+| 1004  | asterisk-sbc   | 10.10.201.40   | Asterisk PJSIP SBC — Twilio TLS+sRTP ⇄ UniFi Talk UDP bridge (task #80) |
+| 1005  | devbox         | 10.10.201.45   | Persistent tmux/Claude Code remote dev workstation (M81) |
+| 1006  | step-ca        | 10.10.201.46   | smallstep step-ca SSH Certificate Authority (M76) |
 
 Configuration baseline (applied to every standalone VM by the TF):
 
 - Clones from VM 9001 (Packer template — Ubuntu 24.04, qemu-guest-agent,
   netplan for VLAN parents, watchdog package preinstalled-but-disabled)
 - `initialization.user_account` user `ubuntu` with the `var.ssh_public_key`
-  authorized key (the homelab automation key from 1Password)
+  authorized key — the `automation@homelab` pubkey, now only a per-host
+  **bootstrap seed** (stripped post-enrolment by `step-ca-remove-static-key.yml`;
+  the fleet is SSH cert-only since M76)
 - `initialization.dns.servers = ["10.10.201.5", "10.10.201.6"]` — no public
   DNS fallback (see commit `85079ba` for context)
 - Hardware watchdog (`i6300esb`, `action: reset`) attached on initial CREATE
@@ -39,6 +44,9 @@ Per-service configuration is applied via Ansible playbooks in
 | dns-fallback | `technitium.yml` | Installs Technitium, sets admin password from SOPS, creates wind.etherport.net zone + forwarders. Idempotent. |
 | vpn-local    | `wireguard.yml`  | Installs WG + Keepalived; loads peer keys from SOPS. Idempotent.   |
 | gh-runner    | `gh-runner.yml`  | Installs the GH Actions runner binary, registers with the repo.    |
+| asterisk-sbc | `asterisk-sbc.yml` | Installs Asterisk PJSIP B2BUA bridging Twilio ⇄ UniFi Talk.       |
+| devbox       | `devbox.yml`     | Sets up Claude Code + tmux auto-resume sessions, age key, kubectl. |
+| step-ca      | `step-ca.yml`    | Installs smallstep step-ca (SSH user + host CA). Idempotent.       |
 
 ## Operator prerequisites
 
@@ -47,7 +55,7 @@ make sure these are in place on your workstation:
 
 | Prereq                            | Where it goes                          | Source                                                       |
 |-----------------------------------|----------------------------------------|--------------------------------------------------------------|
-| SSH private key                   | `/tmp/auto-key` (mode `0600`)          | 1Password — item "Homelab Automation SSH Key" → private key  |
+| SSH access (cert-only, M76)       | ssh-config presents a short-lived cert | devbox renew-loop / CI `setup-ssh-cert` — just `ssh ubuntu@<host>` |
 | SOPS age key                      | `~/.config/sops/age/keys.txt`          | 1Password — item "SOPS Age Key (homelab)" → key body         |
 | `sops` binary                     | on `$PATH`                             | `brew install sops`                                          |
 | `ansible-playbook` binary         | on `$PATH`                             | `brew install ansible` (or `pipx install ansible-core`)      |
@@ -59,7 +67,6 @@ make sure these are in place on your workstation:
 Quick verification:
 
 ```bash
-ls -la /tmp/auto-key                   # exists, mode 0600
 ls -la ~/.config/sops/age/keys.txt     # exists, mode 0600
 sops -d infra/ansible/playbooks/../../../platform/kubernetes/technitium/05-secret.sops.yaml >/dev/null && echo "sops ok"
 which ansible-playbook gh terraform
@@ -97,9 +104,9 @@ newly created VMs:
 ```bash
 cd infra/ansible
 ansible-playbook -i inventory/wind/inventory.ini playbooks/technitium.yml --limit dns-fallback \
-  --private-key /tmp/auto-key -u ubuntu --become
+  -u ubuntu --become
 ansible-playbook -i inventory/wind/inventory.ini playbooks/wireguard.yml --limit vpn-local \
-  --private-key /tmp/auto-key -u ubuntu --become
+  -u ubuntu --become
 ```
 
 (The Ansible playbooks set the technitium admin password, create zones, install WireGuard,
@@ -173,7 +180,7 @@ terraform apply -target='proxmox_virtual_environment_vm.standalone["gh-runner"]'
 # 7. If gh-runner stops as part of the change, give it ~60s to restart.
 #    qemu-guest-agent reports the IP back to PVE → TF considers the
 #    resource complete. SSH check:
-ssh -i /tmp/auto-key ubuntu@10.10.201.30 hostname
+ssh ubuntu@10.10.201.30 hostname   # cert auto-presented via ssh-config (M76)
 ```
 
 ## Force-unlock procedure (when a previous apply crashed)
@@ -210,7 +217,7 @@ in your shell history.
 
    ```hcl
    new-service = {
-     vm_id       = 1004           # next free in 1000-1099 range
+     vm_id       = 1007           # next free in 1000-1099 range
      ip          = "10.10.201.31"
      vcpus       = 2
      memory_mb   = 2048
@@ -234,7 +241,7 @@ in your shell history.
 ## See also
 
 - Per-service runbooks: `docs/runbooks/cert-manager-wildcard.md`,
-  `docs/runbooks/aws-private-dns.md`, etc.
+  `docs/runbooks/archive/aws-private-dns.md`, etc.
 - VM template Packer build: `infra/packer/ubuntu-cloud-init/`
 - Watchdog config: `docs/runbooks/vm-watchdog.md`
 - GH Actions runner setup: `infra/ansible/playbooks/gh-runner.yml`

@@ -119,7 +119,7 @@ Look for `k8s-homelab-router` and approve the advertised routes.
 | File | Description |
 |------|-------------|
 | `01-oauth-secret.sops.yaml` | OAuth credentials for operator (SOPS encrypted) |
-| `02-connector.yaml` | Subnet router configuration |
+| `connector/connector.yaml` | Subnet router configuration |
 
 ## Troubleshooting
 

@@ -148,11 +148,11 @@ task #80. See `docs/runbooks/twilio-talk.md`.
 > negotiates TLS+sRTP — otherwise inbound calls break. Enable server-side
 > first, test with a soft-phone, then flip the trunk.
 
-## Apply workflow (future)
+## Apply workflow
 
-Once stable, add `.github/workflows/terraform-twilio.yml` mirroring the
-`terraform-cloudflare.yml` pattern. Until then, run from your laptop with the
-env vars set as above.
+Via `.github/workflows/terraform-twilio.yml` (`workflow_dispatch`, mirrors
+`terraform-cloudflare.yml`). Reads the `TWILIO_*` GitHub repo secrets above.
+Local apply (env vars set as above) is the fallback.
 
 ## Rotation
 

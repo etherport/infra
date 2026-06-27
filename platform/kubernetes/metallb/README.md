@@ -6,7 +6,7 @@
 > describe Layer-2/ARP mode (and the "L2Advertisement Not Working" troubleshooting) are
 > HISTORICAL — they no longer reflect reality.** Consequence: **raw ICMP to a VIP fails by
 > design** (the VIP isn't ARP-owned by a node); TCP works. Authoritative detail: the live
-> manifest in this directory + `docs/runbooks/bgp-phase-{a,b,c}.md`. (UDM BGP is UI-managed
+> manifest in this directory + `docs/runbooks/archive/bgp-phase-{a,b,c}-*.md`. (UDM BGP is UI-managed
 > — no API — so it's durable via the FRR config in git + controller backup.)
 
 MetalLB configuration for bare-metal Kubernetes LoadBalancer services using **BGP mode**
@@ -223,7 +223,7 @@ kubectl logs -n metallb-system -l app.kubernetes.io/component=speaker -f
 # On the UDM (UI-managed FRR): confirm the eBGP neighbor is Established and
 # the VIP /32s appear as ECMP routes. UDM BGP has no API — it's configured in
 # the UI; durable via the FRR config in git + controller backup. See
-# docs/runbooks/bgp-phase-{a,b,c}.md.
+# docs/runbooks/archive/bgp-phase-{a,b,c}-*.md.
 ```
 
 ## Related Documentation

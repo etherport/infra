@@ -7,14 +7,14 @@ reservations, eventually static routes + firewall) as code.
 `reservations.tf`, `routes.tf` all shipped + imported. `terraform plan`
 should show `0 to add, 0 to change, 0 to destroy` against the live UDM.
 If you see diffs, edit HCL to match live state — don't apply blind.
-Phase 2 (firewall zones + zone matrix) deliberately deferred — see
-`docs/planning/firewall-zones-future-state.md`.
+Firewall zones + switch ACLs are NOT in this TF module — they're codified
+via Ansible (`infra/ansible/playbooks/udm-firewall.yml` + `usw-acls.yml`).
 
 ## Why this module exists
 
 - The UDM was hand-configured via the UI for years. The 2026-05-17 drift
   audit found a number of stale / undocumented resources (see
-  `docs/planning/udm-config-drift-2026-05-17.md`).
+  `docs/planning/archive/udm-config-drift-2026-05-17.md`).
 - The `gh-runner` footgun (VM landed without a VLAN tag) wouldn't have
   happened if the L2 zone definitions and the VM provisioning shared a
   source of truth. UniFi-as-code closes that gap.
@@ -85,8 +85,7 @@ plan shows changes → edit HCL to match live state, re-plan, loop.
 
 ### GitHub Actions (post-Phase-1 ongoing management)
 
-Workflow at `.github/workflows/terraform-unifi.yml` (not yet created;
-mirror `terraform-proxmox-standalone-vms.yml`):
+Workflow at `.github/workflows/terraform-unifi.yml`:
 - Push to main touching `infra/terraform/unifi/**` → automatic `plan`
 - Manual `workflow_dispatch` with `action: apply` → apply
 - Runs on `[self-hosted, lifecycle]` (gh-runner has L3 reach to the UDM)
@@ -123,10 +122,11 @@ terraform force-unlock <lock-id>     # from the error message
 
 ## Phase 2+ scope
 
-- Firewall policies + zone matrix (high-risk, own phase)
+- Firewall policies + zone matrix — now codified via Ansible
+  (`udm-firewall.yml` + `usw-acls.yml`), not this TF module
 - DDNS for `wan1.wind.etherport.net` integrated with Technitium (closes
   the stale-internal-DNS bug we hit on 2026-05-17)
 - UniFi Protect + UNAS — if user wants those in code (currently UI-only)
 
-See also: `docs/planning/udm-config-drift-2026-05-17.md` (the audit
+See also: `docs/planning/archive/udm-config-drift-2026-05-17.md` (the audit
 this module is the response to).

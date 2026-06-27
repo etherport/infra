@@ -93,6 +93,7 @@ SMTP user for Alertmanager to send email notifications via AWS SES.
 | terraform-core | Core infrastructure: secrets, IAM roles, CloudWatch logs |
 | terraform-compute | Compute resources: Lambda functions, EC2, security groups |
 | terraform-storage | Storage and DNS: S3 buckets, Route53, Terraform state |
+| terraform-network | Networking: VPC, subnets, route tables, security groups, NACLs |
 | terraform-integration | Integration services: EventBridge, SES, API Gateway |
 
 ## Policy Assignments
@@ -127,7 +128,7 @@ SMTP user for Alertmanager to send email notifications via AWS SES.
 |--------|-------------|
 | terraform-networking | VPC, subnets, route tables, security groups, NACLs |
 | terraform-compute | EC2 instances, EIPs, snapshots, CloudWatch alarms, SNS topics |
-| ~~terraform-loadbalancing~~ | ~~ALB, listeners, target groups, certificates~~ — REMOVED 2026-05-27 (ALB decom; see `docs/runbooks/alb-decom.md`) |
+| ~~terraform-loadbalancing~~ | ~~ALB, listeners, target groups, certificates~~ — REMOVED 2026-05-27 (ALB decom; see `docs/runbooks/archive/alb-decom.md`) |
 | ~~terraform-dns~~ | ~~Route53 hosted zones and DNS records~~ — REMOVED 2026-05-25 (Route53 → Cloudflare migration; CF is no-IAM) |
 
 ### terraform-integration
@@ -173,6 +174,7 @@ to `terraform-homelab`, so exact principal enumeration needs `claude-admin`/cons
 | File(s) | Live principal |
 |---|---|
 | `terraform-{storage,compute,networking,dns,cloudfront,twilio-webhook,state,iam-users,lambda-manage,snapshot-archive,ec2-security-groups,email-forward,eventbridge,external-monitoring,homeassistant-alexa,dns-restrict-ip,ddns-*}` | `terraform-homelab` user (directly and/or via the `terraform-*` groups above) |
+| `terraform-roles-anywhere` | `terraform-homelab` user — IAM Roles Anywhere trust-anchor/profile mgmt (M71) |
 | `gh-actions-terraform-iam` | `gh-actions-terraform` role (this repo's GitHub OIDC) |
 | `gh-actions-personal-web-iam` | the personal-web repo's GitHub OIDC role |
 | `s3-backup-kubernetes-policy` | `kubernetes-s3-backup` user (in-cluster S3 backup sync) |

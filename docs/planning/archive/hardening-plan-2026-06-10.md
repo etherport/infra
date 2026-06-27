@@ -3,7 +3,7 @@
 > **Status: Archived 2026-06-24.** Work complete; kept as an ADR/historical record. Current state: `docs/planning/outstanding-work.md`.
 
 Detailed, ready-to-execute plans for the HIGH items surfaced by the
-[full-repo review](outstanding-work.md#full-repo-review--2026-06-10)
+[full-repo review](../outstanding-work.md#full-repo-review--2026-06-10)
 (H3, H29–H34). Each section: **goal · verified facts · steps · verify · rollback ·
 effort**. Designed so each item is independently executable and reversible.
 

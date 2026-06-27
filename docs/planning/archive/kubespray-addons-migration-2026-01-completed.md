@@ -5,8 +5,8 @@
 > all of the add-ons described here (MetalLB, Multus, NFD, cert-manager)
 > are live and Flux- or kubespray-managed as documented. Keep this file
 > as a record of how we got here; do not use as a live runbook. For
-> current state see [`../kubespray/README.md`](../kubespray/README.md)
-> and [`../../docs/runbooks/PLATFORM-MANAGEMENT.md`](../../docs/runbooks/PLATFORM-MANAGEMENT.md).
+> current state see [`../kubespray/README.md`](../../../infra/kubespray/README.md)
+> and [`../../docs/runbooks/PLATFORM-MANAGEMENT.md`](../../runbooks/PLATFORM-MANAGEMENT.md).
 
 ## Overview
 

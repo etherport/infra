@@ -249,130 +249,9 @@ This allows the CloudWatch agent to publish metrics and logs.
 
 ### Required IAM Policy for Infrastructure Review
 
-Create a policy with read-only access for documentation/audit purposes:
-
-```json
-{
-    "Version": "2012-10-17",
-    "PolicyName": "HomelabInfraReadOnly",
-    "Statement": [
-        {
-            "Sid": "EC2ReadOnly",
-            "Effect": "Allow",
-            "Action": [
-                "ec2:Describe*",
-                "ec2:Get*"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "VPCReadOnly",
-            "Effect": "Allow",
-            "Action": [
-                "ec2:DescribeVpcs",
-                "ec2:DescribeSubnets",
-                "ec2:DescribeRouteTables",
-                "ec2:DescribeSecurityGroups",
-                "ec2:DescribeSecurityGroupRules",
-                "ec2:DescribeNetworkAcls",
-                "ec2:DescribeInternetGateways",
-                "ec2:DescribeNatGateways"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "LambdaReadOnly",
-            "Effect": "Allow",
-            "Action": [
-                "lambda:ListFunctions",
-                "lambda:GetFunction",
-                "lambda:GetFunctionConfiguration"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "ELBReadOnly",
-            "Effect": "Allow",
-            "Action": [
-                "elasticloadbalancing:Describe*"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "WAFReadOnly",
-            "Effect": "Allow",
-            "Action": [
-                "wafv2:List*",
-                "wafv2:Get*"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "DynamoDBReadOnly",
-            "Effect": "Allow",
-            "Action": [
-                "dynamodb:ListTables",
-                "dynamodb:DescribeTable"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "IAMReadOnly",
-            "Effect": "Allow",
-            "Action": [
-                "iam:GetUser",
-                "iam:GetRole",
-                "iam:GetPolicy",
-                "iam:ListUsers",
-                "iam:ListRoles",
-                "iam:ListPolicies",
-                "iam:ListAttachedUserPolicies",
-                "iam:ListAttachedRolePolicies"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "Route53ReadOnly",
-            "Effect": "Allow",
-            "Action": [
-                "route53:Get*",
-                "route53:List*"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "S3ReadOnly",
-            "Effect": "Allow",
-            "Action": [
-                "s3:GetBucketLocation",
-                "s3:GetBucketPolicy",
-                "s3:GetBucketAcl",
-                "s3:ListBucket",
-                "s3:ListAllMyBuckets"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "CloudWatchReadOnly",
-            "Effect": "Allow",
-            "Action": [
-                "cloudwatch:Describe*",
-                "cloudwatch:Get*",
-                "cloudwatch:List*",
-                "logs:Describe*",
-                "logs:Get*"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "STSGetCallerIdentity",
-            "Effect": "Allow",
-            "Action": "sts:GetCallerIdentity",
-            "Resource": "*"
-        }
-    ]
-}
-```
+The read-only audit policy (`homelab-review` user) is defined as IaC — see the
+JSON under `infra/terraform/aws/iam-policies/` (e.g. `terraform-iam-users.json`
+and the per-service `terraform-*.json` documents). Don't hand-author it here.
 
 ## Services Running
 
@@ -445,7 +324,7 @@ infra/ansible/inventory/aws/
 ## Backup Strategy
 
 - Configuration files in Git (this repo)
-- WireGuard keys in 1Password
+- WireGuard keys SOPS-encrypted in `platform/wireguard/servers/` (age)
 - Technitium zones synced via GitOps from YAML files
 - **EC2 instances are disposable** - no snapshots needed (Terraform + Ansible can recreate)
 - **CloudWatch agent** on EC2 instances now publishes only 2 metrics
@@ -496,15 +375,15 @@ Each health check has a corresponding CloudWatch alarm in us-east-1:
 External monitoring is managed via Terraform:
 ```
 infra/terraform/aws/external-monitoring/
-├── main.tf           # Health checks, alarms, SNS
-├── variables.tf      # Endpoint configuration schema
-├── terraform.tfvars  # Endpoint definitions
-└── outputs.tf        # Health check IDs
+├── main.tf                  # Health checks, alarms, SNS
+├── variables.tf             # Endpoint configuration schema
+├── terraform.tfvars.example # Endpoint definitions (template)
+└── outputs.tf               # Health check IDs
 ```
 
 ## Terraform Infrastructure Modules
 
-All AWS infrastructure is now managed via Terraform. See `infra/terraform/aws/MIGRATION_PLAN.md` for full details.
+All AWS infrastructure is managed via Terraform under `infra/terraform/aws/`.
 
 ### Module Overview
 
@@ -530,6 +409,16 @@ Deleted modules (2026-05-27):
 | `email-forward/` | `aws/email-forward/terraform.tfstate` | SES email forwarding |
 | `homeassistant-alexa/` | `aws/homeassistant-alexa/terraform.tfstate` | Home Assistant Alexa integration |
 | `external-monitoring/` | `aws/external-monitoring/terraform.tfstate` | Route53 health checks and alerting |
+| `twilio-webhook/` | `aws/twilio-webhook/terraform.tfstate` | Lambda (+API Gateway) handling Twilio status/webhook callbacks |
+
+### Identity / IAM Modules
+
+| Module | State File | Purpose |
+|--------|------------|---------|
+| `github-oidc/` | `aws/github-oidc/terraform.tfstate` | GitHub Actions → AWS OIDC federation; short-lived per-run CI creds (H29) |
+| `cluster-irsa/` | `aws/cluster-irsa/terraform.tfstate` | In-cluster IRSA — OIDC provider + per-workload roles for velero/s3-sync/barman/cloudwatch-read; public OIDC issuer bucket (M75) |
+| `roles-anywhere/` | `aws/roles-anywhere/terraform.tfstate` | IAM Roles Anywhere for the headless mini (step-ca leaf cert → STS, no standing key) (M71) |
+| `ai-advisor-iam/` | `aws/ai-advisor-iam/terraform.tfstate` | Read-only CloudWatch Logs IAM user for the in-cluster AI advisor (M45) |
 
 ### State Backend
 

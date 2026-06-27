@@ -62,9 +62,9 @@ A Saturday morning's work. Pick a quarter-aligned weekend.
 ```bash
 # Edit infra/kubespray/inventory/group_vars/k8s_cluster/k8s-cluster.yml
 # Bump `kube_version: v1.X.Y`
-# Run the upgrade playbook from infra/kubespray/:
-ansible-playbook -i ../ansible/inventory/wind/inventory.ini \
-  upgrade-cluster.yml --private-key /tmp/auto-key
+# Run via the wrapper (auto-runs pre-flight to restore the CNI dir owner — never
+# raw ansible-playbook; M76: cert-only, no --private-key):
+cd infra/kubespray && ./kubespray.sh upgrade-cluster.yml
 ```
 
 See `docs/runbooks/kubernetes-upgrade.md` for the full procedure (CP-then-workers, addon validation, smoke tests).

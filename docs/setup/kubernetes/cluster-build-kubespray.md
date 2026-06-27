@@ -11,7 +11,7 @@
 ## First-time Setup
 
 ```bash
-cd ~/Projects/homelab-infra/infra/kubespray
+cd infra/kubespray
 ./setup.sh
 ```
 
@@ -20,25 +20,25 @@ This initializes the submodule, creates a Python venv, installs dependencies, an
 ## Run Kubespray
 
 ```bash
-cd ~/Projects/homelab-infra/infra/kubespray
+cd infra/kubespray
 ./kubespray.sh cluster.yml
 ```
 
 ## Upgrade (example)
 
 ```bash
-cd ~/Projects/homelab-infra/infra/kubespray
+cd infra/kubespray
 ./kubespray.sh upgrade-cluster.yml
 ```
 
-## Kubeconfig on your Mac
+## Kubeconfig
 
 Preferred: store kubeconfig in repo *ignored* artifacts directory:
 - `infra/kubespray/inventory/artifacts/admin.conf` (ignored by .gitignore)
 
-Set:
+Set (path relative to the repo root):
 ```bash
-export KUBECONFIG=$HOME/Projects/homelab-infra/infra/kubespray/inventory/artifacts/admin.conf
+export KUBECONFIG="$PWD/infra/kubespray/inventory/artifacts/admin.conf"
 ```
 
 Verify:

@@ -21,13 +21,12 @@ sops --version
 op --version
 ```
 
-### SSH Key Setup
+### SSH Access
 
-Ensure your SSH key is loaded:
-```bash
-ssh-add -l                    # List loaded keys
-ssh-add ~/.ssh/id_ed25519     # Load key if needed
-```
+The Ubuntu fleet is **cert-only** (M76): the devbox/CI mint a short-lived user
+cert (renew-loop → `~/.ssh/id_homelab_cert`, presented automatically via
+ssh-config). Just `ssh ubuntu@<host>` — no `-i`/key to load. Break-glass = PVE
+console + IPMI. See CLAUDE.md §4.
 
 ### Kubeconfig
 
@@ -62,7 +61,7 @@ homelab-infra/
 
 ### Working Directory
 ```bash
-cd ~/Projects/homelab-infra/infra/ansible
+cd ~/code/infra/infra/ansible
 ```
 
 ### Inventory Check
@@ -136,9 +135,14 @@ ansible all -i inventory/wind/inventory.ini -b -m apt -a "update_cache=yes"
 
 ## Terraform Operations
 
+> **Terraform is CI-only** (M82): the devbox holds no standing AWS/PVE creds —
+> stacks run via GitHub Actions (AWS via OIDC; proxmox/unifi/cloudflare on the
+> self-hosted runner). For rare local debug, re-render creds on demand
+> (`scripts/render-aws-credentials.sh`, `scripts/tf-proxmox.sh`). See CLAUDE.md §4.
+
 ### Working Directory
 ```bash
-cd ~/Projects/homelab-infra/infra/terraform/proxmox
+cd ~/code/infra/infra/terraform/proxmox
 ```
 
 ### Common Commands
@@ -166,7 +170,7 @@ terraform import proxmox_virtual_environment_vm.vm pve/qemu/100
 ### Proxmox VM Management
 
 ```bash
-cd ~/Projects/homelab-infra/infra/terraform/proxmox/k8s-cluster
+cd ~/code/infra/infra/terraform/proxmox/k8s-vms
 
 # Plan K8s node changes
 terraform plan
@@ -182,7 +186,7 @@ terraform destroy -target=proxmox_virtual_environment_vm.k8s_workers["k8s-w3"]
 
 ```bash
 # State is stored in S3 (see backend.tf)
-# Lock table: homelab-terraform-locks (DynamoDB)
+# Locking is S3-native (use_lockfile=true) — no DynamoDB
 
 # Force unlock if stuck
 terraform force-unlock <LOCK_ID>
@@ -190,82 +194,11 @@ terraform force-unlock <LOCK_ID>
 
 ## Kubernetes Operations
 
-### Cluster Access
-
-```bash
-# Get cluster info
-kubectl cluster-info
-
-# Get nodes
-kubectl get nodes -o wide
-
-# Get all pods
-kubectl get pods -A
-
-# Get events (recent)
-kubectl get events -A --sort-by=.metadata.creationTimestamp | tail -50
-```
-
-### Namespace Operations
-
-```bash
-# List namespaces
-kubectl get ns
-
-# Switch context namespace
-kubectl config set-context --current --namespace=dns
-
-# Get resources in namespace
-kubectl get all -n dns
-```
-
-### Pod Troubleshooting
-
-```bash
-# Describe pod
-kubectl describe pod <pod-name> -n <namespace>
-
-# Get logs
-kubectl logs <pod-name> -n <namespace>
-kubectl logs <pod-name> -n <namespace> --previous  # Previous container
-kubectl logs -f <pod-name> -n <namespace>          # Follow logs
-
-# Exec into pod
-kubectl exec -it <pod-name> -n <namespace> -- /bin/bash
-kubectl exec -it <pod-name> -n <namespace> -- /bin/sh
-
-# Port forward
-kubectl port-forward svc/<service-name> <local-port>:<service-port> -n <namespace>
-```
-
-### Deployment Operations
-
-```bash
-# Scale deployment
-kubectl scale deployment <name> --replicas=3 -n <namespace>
-
-# Rollout status
-kubectl rollout status deployment/<name> -n <namespace>
-
-# Rollback
-kubectl rollout undo deployment/<name> -n <namespace>
-
-# Restart deployment (rolling restart)
-kubectl rollout restart deployment/<name> -n <namespace>
-```
-
-### Resource Management
-
-```bash
-# Apply manifest
-kubectl apply -f <file.yaml>
-
-# Delete resource
-kubectl delete -f <file.yaml>
-
-# Get YAML of resource
-kubectl get <resource> <name> -n <namespace> -o yaml
-```
+Standard kubectl applies (`get`/`describe`/`logs [--previous|-f]`/`exec -it`/
+`port-forward`/`scale`/`rollout {status,undo,restart}`/`apply`/`delete`). The
+cluster is 8 nodes (`kubectl get nodes -o wide`). Note: most workloads are
+**Flux-managed** — to change a deployment, edit the manifest under
+`platform/kubernetes/` and reconcile, don't `kubectl edit` live (it gets reverted).
 
 ## Flux GitOps Operations
 
@@ -344,10 +277,7 @@ done
 > The primary site-to-site WireGuard runs as a Kubernetes pod
 > (`wireguard/wireguard` deployment) with `vpn-local` as the VRRP backup.
 > "Restart WireGuard" on the K8s side means restarting that pod, not a
-> systemd unit. As of 2026-05 (C2 done) the `vpn-local` and
-> `dns-fallback` VMs were rebuilt onto the Ubuntu 24.04 cloud-init
-> template (VM 9001) and use `ubuntu` + `/tmp/auto-key` like the K8s
-> nodes.
+> systemd unit. SSH to the standalone VMs is cert-only (`ssh ubuntu@<host>`).
 
 ### Check Status
 
@@ -356,8 +286,8 @@ done
 kubectl get pods -n wireguard
 kubectl exec -n wireguard deployment/wireguard -c wireguard -- wg show wg0
 
-# Local VPN server (backup) — uses ubuntu + /tmp/auto-key like K8s nodes
-ssh -i /tmp/auto-key ubuntu@vpn-local.wind.etherport.net "sudo wg show"
+# Local VPN server (backup) — cert-only SSH
+ssh ubuntu@vpn-local.wind.etherport.net "sudo wg show"
 
 # AWS VPN server
 ssh ubuntu@10.10.100.10 "sudo wg show"
@@ -369,8 +299,8 @@ ssh ubuntu@10.10.100.10 "sudo wg show"
 # K8s (primary) - restart the pod, not a systemd unit
 kubectl rollout restart deployment wireguard -n wireguard
 
-# On vpn-local (backup VM - ubuntu + /tmp/auto-key since C2 rebuild)
-ssh -i /tmp/auto-key ubuntu@vpn-local.wind.etherport.net "sudo systemctl restart wg-quick@wg0"
+# On vpn-local (backup VM - cert-only SSH)
+ssh ubuntu@vpn-local.wind.etherport.net "sudo systemctl restart wg-quick@wg0"
 
 # On vpn-aws
 ssh ubuntu@10.10.100.10 "sudo systemctl restart wg-quick@wg0 wg-quick@wg1"
@@ -403,44 +333,10 @@ op item get "Technitium DNS" --fields password
 
 ## Common Troubleshooting
 
-### SSH Issues
-
-```bash
-# Too many auth failures
-ssh -o IdentitiesOnly=yes user@host
-
-# Debug connection
-ssh -vvv user@host
-```
-
-### Ansible Issues
-
-```bash
-# Verbose output
-ansible-playbook playbook.yml -vvv
-
-# Check syntax
-ansible-playbook playbook.yml --syntax-check
-
-# List tasks
-ansible-playbook playbook.yml --list-tasks
-```
-
-### Kubernetes Issues
-
-```bash
-# Node not ready
-kubectl describe node <node-name>
-kubectl get events --field-selector involvedObject.name=<node-name>
-
-# Pod stuck pending
-kubectl describe pod <pod-name> -n <namespace>
-kubectl get events -n <namespace> --field-selector involvedObject.name=<pod-name>
-
-# PVC issues
-kubectl get pvc -A
-kubectl describe pvc <pvc-name> -n <namespace>
-```
+Generic debugging is standard: SSH `-vvv` (cert auth — see SSH Access above),
+`ansible-playbook --syntax-check/--list-tasks/-vvv`, `kubectl describe
+node/pod/pvc` + `kubectl get events`. Homelab-specific gotchas (4-layer
+connectivity gating, Cilium netpol tiers, Ceph-over-firewall) are in CLAUDE.md §5.
 
 ### Flux Issues
 
@@ -510,7 +406,7 @@ kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.
 
 ```bash
 # Verify GPU node
-kubectl get nodes -l nvidia.com/gpu=true
+kubectl get nodes -l nvidia.com/gpu.present=true
 
 # Check GPU resources available
 kubectl describe node k8s-gpu1 | grep -A 10 "Allocated resources"
@@ -573,15 +469,14 @@ kubectl annotate --overwrite -n flux-system helmrelease/gpu-operator reconcile.f
 |---------|-------|-------|
 | Hardware watchdog (i6300esb) | Per-VM, see `docs/runbooks/vm-watchdog.md` | Imported VMs need stop+start to reattach the watchdog device |
 | CNPG HA | `platform/kubernetes/cnpg/` | `instances: 3` is the standard; primary + 2 sync replicas |
-| Velero schedules | `platform/kubernetes/backups/velero/schedules/` | All 9 schedules are git-managed via kustomization (since commit 95b3755) |
-| Post-bootstrap script | `infra/kubespray/scripts/post-bootstrap.sh` | Run once after a fresh cluster bring-up; restores Multus NADs, applies cluster-only kustomizations |
-| Autonomous-run decisions | `infra/kubespray/scripts/autonomous-run.sh` | Wraps `kubespray.sh` for unattended retries; see commit b390dee |
+| Velero schedules | `platform/kubernetes/backups/velero/schedules/` | Per-namespace schedules, git-managed via kustomization |
+| Post-bootstrap script | `infra/kubespray/post-bootstrap.sh` | Run once after a fresh cluster bring-up; restores Multus NADs, applies cluster-only kustomizations |
 
 ## Emergency Procedures
 
 ### Cluster Recovery
 
-1. Check control plane: `ssh -i /tmp/auto-key ubuntu@k8s-cp1.wind.etherport.net`
+1. Check control plane: `ssh ubuntu@k8s-cp1.wind.etherport.net`
    (cp2/cp3 at .51/.52 — pick any healthy member)
 2. Check kubelet: `systemctl status kubelet`
 3. Check etcd: `kubectl get pods -n kube-system | grep etcd`
@@ -590,8 +485,7 @@ kubectl annotate --overwrite -n flux-system helmrelease/gpu-operator reconcile.f
 
 If site-to-site VPN is down:
 1. Check K8s WireGuard (primary): `kubectl get pods -n wireguard`
-2. Check vpn-local (VRRP backup): `ssh -i /tmp/auto-key ubuntu@10.10.201.15 "sudo wg show"`
-   (rebuilt onto VM 9001 template in C2; now uses ubuntu + /tmp/auto-key)
+2. Check vpn-local (VRRP backup): `ssh ubuntu@10.10.201.15 "sudo wg show"`
 3. Check AWS VPN: Access via AWS console if needed
 4. Restart WireGuard on the appropriate side (pod restart for K8s; systemd
    for vpn-local/vpn-aws)

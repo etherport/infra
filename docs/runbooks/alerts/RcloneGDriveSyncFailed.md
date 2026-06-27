@@ -6,7 +6,7 @@ for 5 minutes. Severity: critical. No auto-action.
 ## Symptom
 
 PrometheusRule `rclone-gdrive-sync / RcloneGDriveSyncFailed` firing.
-The last rclone Google Drive → NFS sync run failed. Daily backup of
+The last rclone Google Drive → NFS sync run failed. Hourly backup of
 Google Drive content into the on-prem NFS share is broken.
 
 ## Verified root cause(s)
@@ -29,7 +29,7 @@ Google Drive content into the on-prem NFS share is broken.
 ## Verification steps
 
 1. Latest rclone pod logs:
-   `kubectl -n rclone logs -l app=rclone-gdrive --tail=200`
+   `kubectl -n rclone logs -l app=gdrive-sync --tail=200`
 2. Most recent Job runs:
    `kubectl -n rclone get jobs --sort-by=.metadata.creationTimestamp | tail -5`
 3. OAuth token status — if logs show 401 / `token expired`:
@@ -37,7 +37,7 @@ Google Drive content into the on-prem NFS share is broken.
    local box, then SOPS-encrypt and commit. Refer to the rclone-gdrive
    namespace's own runbook if it exists.
 4. After fix, trigger manual sync:
-   `kubectl -n rclone create job --from=cronjob/rclone-gdrive-sync manual-$(date +%s)`
+   `kubectl -n rclone create job --from=cronjob/gdrive-sync manual-$(date +%s)`
 
 ## Advisor action guidance
 

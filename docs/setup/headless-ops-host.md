@@ -33,10 +33,10 @@ comes from two on-disk artifacts:
 
 | Capability        | Source on the host                              | 1P at runtime? |
 |-------------------|-------------------------------------------------|----------------|
-| SSH to homelab/k8s| `~/.ssh/id_ed25519_homelab` (+ `IdentityAgent none`) | no        |
-| GitHub push/sign  | `~/.ssh/id_ed25519_github`                      | no             |
+| SSH to homelab/k8s| short-lived step-ca cert `~/.ssh/id_homelab_cert` (renew-loop; M76) | no |
+| GitHub push/sign  | `~/.ssh/id_ed25519_github` (devbox: `id_ed25519_devbox`) | no       |
 | SOPS decrypt      | age key `~/.config/sops/age/keys.txt`           | no             |
-| AWS (tf backend)  | `~/.aws/credentials [homelab]`, rendered from SOPS | no          |
+| AWS (tf backend)  | rendered on demand from SOPS (no standing creds on the devbox; M82) | no |
 | kubectl           | `~/.kube/config` (admin.conf from k8s-cp1)      | no             |
 
 1Password is touched **once, on an admin machine**, only to *sync secrets into
@@ -54,34 +54,30 @@ brew install hashicorp/tap/terraform        # license-gated; not in core
 npm install -g @anthropic-ai/claude-code     # or: brew install claude (cask/formula)
 ```
 
-### 2. SSH keys + config
+### 2. SSH (cert-only, M76) + GitHub key
 
-Two keys, by direction (kept off the 1P agent with `IdentityAgent none` so they
-work headless):
+**Fleet SSH is CERT-ONLY (M76).** All 15 Ubuntu hosts trust the step-ca user CA;
+the old static `automation@homelab` key was removed from `authorized_keys` and is
+now rejected. The host mints a **short-lived (13h) user cert** via the renew-loop
+(`step-ssh-renew.timer` → `~/.ssh/id_homelab_cert` + `…-cert.pub`); ssh-config is
+cert-only, so it's just `ssh ubuntu@<host>`. Ansible needs **no** `--private-key`.
 
-- `~/.ssh/id_ed25519_homelab` — outbound to PVE / k8s / SBC / standalone VMs.
-  Its public half must be in those hosts' `authorized_keys` (it's the homelab
-  automation key, `op://Private/xow32nxrvix5ismyupmheyevpe`).
-- `~/.ssh/id_ed25519_github` — push + commit signing. Register the **public**
-  key on GitHub yourself (browser or `gh ssh-key add`) — agents can't make
-  account-security changes.
+- **GitHub** (push + commit signing): a separate key (`~/.ssh/id_ed25519_github`,
+  devbox uses `id_ed25519_devbox`). Register the **public** half on GitHub
+  yourself — agents can't make account-security changes.
 
-`~/.ssh/config` managed block (specific hosts **before** any `Host *`, because
-SSH is first-match-wins and a `Host *` 1P-agent block otherwise wins):
+`~/.ssh/config` managed block (the homelab match presents the cert; `IdentitiesOnly`
+keeps it off the 1P agent):
 
 ```
-# >>> macmini-rc managed >>>
-Host 10.10.* *.wind.etherport.net
-    IdentityFile ~/.ssh/id_ed25519_homelab
+Host 10.10.* pve.wind.etherport.net *.wind.etherport.net
+    IdentityFile ~/.ssh/id_homelab_cert
     IdentitiesOnly yes
-    IdentityAgent none
     StrictHostKeyChecking accept-new
 
 Host github.com
     IdentityFile ~/.ssh/id_ed25519_github
     IdentitiesOnly yes
-    IdentityAgent none
-# <<< macmini-rc managed <<<
 ```
 
 Git identity + SSH commit signing:
@@ -116,8 +112,7 @@ reachable control-plane IP (mirrors `infra/kubespray/post-bootstrap.sh`):
 
 ```bash
 mkdir -p ~/.kube
-ssh -i ~/.ssh/id_ed25519_homelab -o IdentityAgent=none -o IdentitiesOnly=yes \
-    ubuntu@10.10.201.50 'sudo cat /etc/kubernetes/admin.conf' \
+ssh ubuntu@10.10.201.50 'sudo cat /etc/kubernetes/admin.conf' \
   | sed 's|https://127.0.0.1:6443|https://10.10.201.50:6443|g' > ~/.kube/config
 chmod 600 ~/.kube/config
 kubectl get nodes
@@ -126,6 +121,11 @@ kubectl get nodes
 (No HA VIP — `kube_vip_enabled: false` — so we target k8s-cp1 `10.10.201.50`.)
 
 ### 5. AWS credentials (terraform S3 backend) — the durable path
+
+> **devbox (M82): TF is CI-only — the devbox holds NO standing AWS creds.** Stacks
+> run via GitHub Actions (AWS OIDC). The render path below is **rare local-debug
+> only** — `scripts/render-aws-credentials.sh` writes `~/.aws [homelab]` from SOPS
+> as a throwaway. The mini retains it as the TF/AWS-capable ops box.
 
 The backend uses `profile = "homelab"` against `terraform.wind.etherport.net`.
 Those IAM keys live in 1P item `ojbjsshj45oup6mcu3vlxxb7re` ("AWS Key (Terraform)") and are **also**

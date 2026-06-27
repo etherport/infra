@@ -26,7 +26,7 @@ keep the `IF NOT EXISTS`.
 
 ## Connecting
 
-**In-cluster (app Deployment, later):**
+**In-cluster (the `cue-api` Deployment):**
 ```
 postgres://cue:<password>@cue-db-rw.cue.svc.cluster.local:5432/cue?sslmode=require
 ```
@@ -61,13 +61,15 @@ through the API server). Add `?sslmode=require` to encrypt to the pod, but **not
 ## Ops
 - **Scale to HA**: bump `spec.instances` to 3 (operator handles failover; storage
   class supports it). Currently 1 (single-user dogfood).
-- **Backups**: none configured yet (the shared `postgres-cluster` uses Barman→S3).
-  Nice-to-have follow-up: a daily `pg_dump` CronJob or wire Barman with its own
-  S3 prefix. Data is currently regenerable (app owns the schema in git).
+- **Backups**: Barman → S3, like the shared `postgres-cluster` — continuous WAL
+  archiving + a daily base backup (`04-scheduled-backup.yaml`, CNPG
+  `ScheduledBackup`) to `s3://postgres-barman.wind.etherport.net/cue-db/` (own
+  `serverName` prefix), 30-day retention, IRSA auth (`wind-irsa-barman`). Restore
+  via `bootstrap.recovery` — see `cnpg/README.md`.
 - **Superuser** access is disabled (CNPG default). Re-enable via
   `spec.enableSuperuserAccess: true` only if you need it.
 
-## Future: hosting the Cue app here
-When Cue is containerised, add an app `Deployment` + `Service` in this `cue`
-namespace that mounts the `cue-db-app` Secret as env (e.g. project `password`/
-`uri` into `DATABASE_URL`). A Helm chart / Dockerfile comes with containerisation.
+## The Cue app
+The Cue API is deployed alongside this DB in the `cue` namespace — see
+`platform/kubernetes/cue-api/`. It reads `DATABASE_URL` from the `cue-db-app`
+Secret (key `uri`).

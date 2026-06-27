@@ -14,15 +14,21 @@ Loss of etcd = loss of cluster state. Regular backups are critical.
 
 ## Backup Procedures
 
-### Automated Backups (Recommended)
+### Automated Backups (live)
 
-Kubespray can configure automated etcd snapshots. Add to `group_vars/all/etcd.yml`:
+A systemd timer on each `kube_control_plane` node runs `etcdctl snapshot save` daily
+to `/var/lib/etcd-snapshots` (14-day retention) — installed by
+`infra/ansible/playbooks/etcd-backup.yml` (M62). It also copies each snapshot off-host
+to S3 (`etcd-snapshots.wind.etherport.net`) and pushes a freshness metric to
+pushgateway. Velero's node-agent FS backup of `/var/lib/etcd-snapshots` (kube-system
+schedule) is a second off-host copy. systemd-not-CronJob so an etcd outage can't block
+its own backup.
 
-```yaml
-etcd_snapshot_enabled: true
-etcd_snapshot_schedule: "0 */6 * * *"  # Every 6 hours
-etcd_snapshot_retention: 5              # Keep last 5 snapshots
-etcd_snapshot_path: /var/lib/etcd/snapshots
+Apply/update:
+
+```bash
+gh workflow run ansible-vm-fleet.yml -f playbook=etcd-backup -f inventory=wind \
+  -f action=apply -f limit=kube_control_plane
 ```
 
 ### Manual Backup
@@ -124,16 +130,18 @@ sudo ETCDCTL_API=3 etcdctl snapshot restore /tmp/etcd-backup.db \
 
 | Type | Location | Retention |
 |------|----------|-----------|
-| Velero | S3 (archive.wind.etherport.net) | 30 days |
-| Etcd snapshots | /var/lib/etcd/snapshots | 5 snapshots |
+| Velero | S3 (velero.wind.etherport.net) | 30 days |
+| Etcd snapshots (CP timer) | /var/lib/etcd-snapshots | 14 days |
+| Etcd snapshots (off-host) | S3 (etcd-snapshots.wind.etherport.net) | per bucket lifecycle |
 
-### Recommended Off-Site Backup
+### Off-Site Backup
 
-For critical operations, copy etcd snapshots to S3:
+The CP systemd timer already ships each snapshot to
+`s3://etcd-snapshots.wind.etherport.net/` (see Automated Backups above). For an
+ad-hoc manual snapshot, copy it the same way:
 
 ```bash
-# Copy to S3
-aws s3 cp /tmp/etcd-backup-*.db s3://archive.wind.etherport.net/etcd-backups/
+aws s3 cp /tmp/etcd-backup-*.db s3://etcd-snapshots.wind.etherport.net/
 ```
 
 ## Testing Backups

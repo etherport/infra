@@ -275,6 +275,6 @@ Proxmox modules present unique challenges for GitHub Actions:
 
 ## See Also
 
-- [GitHub Actions Documentation](../setup/github-actions/README.md)
-- [AWS Infrastructure Architecture](../architecture/aws-infrastructure.md)
-- [Remote State Backend](../setup/terraform/remote-state-backend.md)
+- [GitHub Actions Documentation](../../setup/github-actions/README.md)
+- [AWS Infrastructure Architecture](../../architecture/aws-infrastructure.md)
+- [Remote State Backend](../../setup/terraform/remote-state-backend.md)

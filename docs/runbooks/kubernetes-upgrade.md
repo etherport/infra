@@ -6,16 +6,16 @@ Step-by-step procedures for upgrading Kubernetes cluster components.
 
 | Component | Version | Upgrade Frequency |
 |-----------|---------|-------------------|
-| Kubernetes | v1.33.7 | Quarterly |
-| containerd | 2.1.5 | With K8s upgrade |
-| Ubuntu | 24.04.3 LTS | Security: auto, Major: yearly |
+| Kubernetes | v1.34.2 | Quarterly |
+| containerd | 2.2.1 | With K8s upgrade |
+| Ubuntu | 24.04 LTS | Security: auto, Major: yearly |
 
 ## Upgrade Types
 
 | Type | Risk | Downtime | Method |
 |------|------|----------|--------|
-| Patch (1.33.x → 1.33.y) | Low | None | Rolling update |
-| Minor (1.33 → 1.34) | Medium | Minimal | Rolling update |
+| Patch (1.34.x → 1.34.y) | Low | None | Rolling update |
+| Minor (1.34 → 1.35) | Medium | Minimal | Rolling update |
 | Major (1.x → 2.x) | High | Possible | Planned maintenance |
 
 ---
@@ -39,41 +39,34 @@ Before any upgrade:
 
 ---
 
-## 1. Patch Version Upgrade (e.g., 1.33.6 → 1.33.7)
+## 1. Patch Version Upgrade (e.g., 1.34.1 → 1.34.2)
 
 Low risk, rolling update with zero downtime.
 
 ### 1.1 Update Kubespray Variables
 
 ```bash
-cd ~/Projects/homelab-infra/infra/kubespray
-
 # Check current version
-grep kube_version inventory/wind/group_vars/k8s_cluster/k8s-cluster.yml
+grep kube_version infra/kubespray/inventory/group_vars/k8s_cluster/k8s-cluster.yml
 
 # Update to new patch version
-vim inventory/wind/group_vars/k8s_cluster/k8s-cluster.yml
-# Change: kube_version: v1.33.7
+vim infra/kubespray/inventory/group_vars/k8s_cluster/k8s-cluster.yml
+# Change: kube_version: 1.34.2
 ```
 
 ### 1.2 Run Upgrade Playbook
 
-```bash
-# Activate virtual environment
-source venv/bin/activate
+Always run kubespray via the `infra/kubespray/kubespray.sh` wrapper — it auto-runs
+`pre-flight.yml` afterward to restore `/opt/cni/bin` ownership (raw `ansible-playbook`
+breaks Cilium; see [cilium-cni-dir-owner.md](cilium-cni-dir-owner.md)).
 
+```bash
 # Run upgrade (control plane first, then workers)
-./kubespray.sh upgrade-cluster.yml \
-  --become --become-user=root
+infra/kubespray/kubespray.sh upgrade-cluster.yml
 
 # Or upgrade one node at a time (safer)
-./kubespray.sh upgrade-cluster.yml \
-  --become --become-user=root \
-  --limit k8s-cp1
-
-./kubespray.sh upgrade-cluster.yml \
-  --become --become-user=root \
-  --limit k8s-w1
+infra/kubespray/kubespray.sh upgrade-cluster.yml --limit k8s-cp1
+infra/kubespray/kubespray.sh upgrade-cluster.yml --limit k8s-w1
 
 # Continue for each worker...
 ```
@@ -89,12 +82,12 @@ kubectl get pods -n kube-system
 
 # Check cluster health
 kubectl cluster-info
-kubectl get componentstatuses
+kubectl get --raw='/readyz?verbose'
 ```
 
 ---
 
-## 2. Minor Version Upgrade (e.g., 1.33 → 1.34)
+## 2. Minor Version Upgrade (e.g., 1.34 → 1.35)
 
 Medium risk, requires API deprecation review.
 
@@ -117,24 +110,19 @@ grep -r "apiVersion: extensions/v1beta1" platform/kubernetes/
 ### 2.2 Update Kubespray
 
 ```bash
-cd ~/Projects/homelab-infra/infra/kubespray
-
-# Pull latest kubespray (if needed)
-git fetch upstream
-git checkout release-2.x  # Match your kubespray version
+# Bump the kubespray submodule if a new minor needs a newer kubespray
+git -C infra/kubespray/kubespray fetch && git -C infra/kubespray/kubespray checkout <tag>
 
 # Update version in inventory
-vim inventory/wind/group_vars/k8s_cluster/k8s-cluster.yml
-# Change: kube_version: v1.34.0
+vim infra/kubespray/inventory/group_vars/k8s_cluster/k8s-cluster.yml
+# Change: kube_version: 1.35.0
 ```
 
 ### 2.3 Upgrade Control Plane First
 
 ```bash
-# Upgrade control plane only
-./kubespray.sh upgrade-cluster.yml \
-  --become --become-user=root \
-  --limit kube_control_plane
+# Upgrade control plane only (via the wrapper — see §1.2)
+infra/kubespray/kubespray.sh upgrade-cluster.yml --limit kube_control_plane
 
 # Verify control plane
 kubectl get nodes
@@ -154,10 +142,8 @@ for node in k8s-w1 k8s-w2 k8s-w3 k8s-w4 k8s-gpu1; do
   # Drain workloads
   kubectl drain $node --ignore-daemonsets --delete-emptydir-data
 
-  # Run upgrade
-  ./kubespray.sh upgrade-cluster.yml \
-    --become --become-user=root \
-    --limit $node
+  # Run upgrade (via the wrapper)
+  infra/kubespray/kubespray.sh upgrade-cluster.yml --limit $node
 
   # Uncordon node
   kubectl uncordon $node
@@ -200,7 +186,7 @@ Usually done as part of K8s upgrade via kubespray.
 kubectl get nodes -o wide | awk '{print $NF}'
 
 # containerd is upgraded via kubespray
-# Set in: inventory/wind/group_vars/all/containerd.yml
+# Set in: infra/kubespray/inventory/group_vars/all/containerd.yml
 ```
 
 ### 3.2 Helm Chart Upgrades
@@ -250,7 +236,7 @@ kubectl get pods -n flux-system
 
 # If control plane fails:
 # 1. SSH to control plane node (cp1/cp2/cp3 — .50/.51/.52)
-ssh -i /tmp/auto-key ubuntu@10.10.201.50
+ssh ubuntu@10.10.201.50
 
 # 2. Check kubelet logs
 sudo journalctl -u kubelet -f
@@ -290,8 +276,7 @@ sudo systemctl restart kubelet
 kubectl get nodes -o wide
 
 # Resume from failed node
-./kubespray.sh upgrade-cluster.yml \
-  --become --become-user=root \
+infra/kubespray/kubespray.sh upgrade-cluster.yml \
   --limit <failed-node> \
   --start-at-task="<task-name>"
 ```
@@ -300,7 +285,7 @@ kubectl get nodes -o wide
 
 ```bash
 # SSH to control plane (any of cp1/cp2/cp3)
-ssh -i /tmp/auto-key ubuntu@10.10.201.50
+ssh ubuntu@10.10.201.50
 
 # Check API server container
 sudo crictl ps | grep kube-apiserver
@@ -318,7 +303,7 @@ sudo mv /tmp/kube-apiserver.yaml /etc/kubernetes/manifests/
 
 ```bash
 # SSH to control plane (any of cp1/cp2/cp3 — etcd is HA, 3 members)
-ssh -i /tmp/auto-key ubuntu@10.10.201.50
+ssh ubuntu@10.10.201.50
 
 # Check etcd health
 sudo ETCDCTL_API=3 etcdctl \

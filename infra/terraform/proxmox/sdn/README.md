@@ -97,5 +97,5 @@ ssh root@pve.wind.etherport.net 'cat /etc/pve/sdn/vnets.cfg'
 
 ## Migration plan reference
 
-See `docs/planning/proxmox-sdn-implementation-2026-05-18.md` for the full
+See `docs/planning/archive/proxmox-sdn-implementation-2026-05-18.md` for the full
 6-PR migration sequence and per-VM rollback procedures.

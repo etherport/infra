@@ -37,8 +37,8 @@ Provides HTTPS access to infrastructure devices with self-signed certificates:
 
 - **ups1.wind.etherport.net** → `10.10.200.10:443` (UPS 1 web UI)
 - **ups2.wind.etherport.net** → `10.10.200.11:443` (UPS 2 web UI)
-- **pdu1.wind.etherport.net** → `10.10.200.15:443` (PDU 1 web UI)
-- **pdu2.wind.etherport.net** → `10.10.200.16:443` (PDU 2 web UI)
+- **pdu1.wind.etherport.net** → `10.10.200.15:80` (PDU 1 web UI — plain HTTP, HTTPS unsupported)
+- **pdu2.wind.etherport.net** → `10.10.200.16:80` (PDU 2 web UI — plain HTTP, HTTPS unsupported)
 
 **Special Configuration**: Uses `ServersTransport` with `insecureSkipVerify: true` to bypass self-signed certificate validation on backend devices.
 

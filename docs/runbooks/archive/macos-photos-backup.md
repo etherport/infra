@@ -2,7 +2,7 @@
 
 > ⚠️ **SUPERSEDED 2026-06-26 by cairn (M103).** The bash `photos-export*.sh` pipeline this runbook
 > describes was retired; iCloud Photos (and all other categories) now run on **cairn** — see
-> [`cairn-deployment.md`](cairn-deployment.md) and the cairn repo README. Kept for the M79 history
+> [`cairn-deployment.md`](../cairn-deployment.md) and the cairn repo README. Kept for the M79 history
 > (sparsebundle rationale, the download-missing/SMB saga) which still informs the cairn photos source.
 
 **What:** backs up the iCloud Photos library as individual files + XMP sidecars to the NAS
@@ -11,7 +11,7 @@ Loki logs for observability. Runs **on a macOS host** (currently the Mac mini,
 `graham@`, `10.10.202.101`) because it needs Photos/PhotoKit/SMB-keychain/launchd.
 
 This runbook is the **operational + replication** guide. Component-level detail lives in
-[`infra/macos/mini/README.md`](../../infra/macos/mini/README.md); durable cross-session
+[`infra/macos/mini/README.md`](../../../infra/macos/mini/README.md); durable cross-session
 gotchas are in the agent memory. Narrative history: `docs/planning/session-log.md`
 (2026-06-18 → 22).
 

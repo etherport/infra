@@ -155,6 +155,27 @@ Zone transfers use catalog zones. The catalog automatically provisions member zo
 - Local fallback: `10.10.201.6`
 - AWS instance: `10.10.100.5`
 
+### Standalone-VM secondaries (Ansible-managed)
+
+The two non-K8s secondaries are installed/configured by Ansible, not Flux:
+
+| Host | IP | Inventory |
+|------|-----|-----------|
+| dns-fallback | 10.10.201.6 | `inventory/wind` |
+| dns-aws | 10.10.100.5 | `inventory/aws` (EC2 nano) |
+
+```bash
+cd infra/ansible
+ansible-playbook -i inventory/wind/ playbooks/technitium.yml --limit dns-fallback
+ansible-playbook -i inventory/aws/  playbooks/technitium.yml --limit dns-aws
+```
+
+The playbook installs Technitium, sets the admin credentials (decrypted from
+`05-secret.sops.yaml`), the upstream/conditional forwarders, and the
+`wind.etherport.net` secondary zone. Config lives under
+`/opt/technitium/config/` on the VM; zones resync automatically from the
+cluster primary on join, so no manual config backup is needed.
+
 ## DNS Records (wind.etherport.net)
 
 Current records are defined in `zones/wind.etherport.net.yaml`.
@@ -163,10 +184,13 @@ Current records are defined in `zones/wind.etherport.net.yaml`.
 
 | Hostname | IP | Description |
 |----------|-----|-------------|
-| k8s-cp1 | 10.10.201.50 | Kubernetes control plane |
-| k8s-w1 | 10.10.201.51 | Kubernetes worker 1 |
-| k8s-w2 | 10.10.201.52 | Kubernetes worker 2 |
-| k8s-w3 | 10.10.201.53 | Kubernetes worker 3 |
+| k8s-cp1 | 10.10.201.50 | Kubernetes control plane 1 |
+| k8s-cp2 | 10.10.201.51 | Kubernetes control plane 2 |
+| k8s-cp3 | 10.10.201.52 | Kubernetes control plane 3 |
+| k8s-w1 | 10.10.201.53 | Kubernetes worker 1 |
+| k8s-w2 | 10.10.201.54 | Kubernetes worker 2 |
+| k8s-w3 | 10.10.201.55 | Kubernetes worker 3 |
+| k8s-w4 | 10.10.201.56 | Kubernetes worker 4 |
 | k8s-gpu1 | 10.10.201.60 | Kubernetes GPU worker |
 | traefik | 10.10.201.70 | Traefik ingress VIP |
 | dns | 10.10.201.70 | DNS web UI (via Traefik) |

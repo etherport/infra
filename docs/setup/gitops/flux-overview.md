@@ -46,18 +46,18 @@ Flux is a GitOps operator for Kubernetes that automatically synchronizes the sta
 
 ### Current GitOps Coverage
 
-**Nearly 100% of the cluster is Flux-managed.** All 11 HelmReleases in
+**Nearly 100% of the cluster is Flux-managed.** All 16 HelmReleases in
 `clusters/wind/helm-releases/` reconcile cleanly, and the
 application/infrastructure kustomizations under `platform/kubernetes/`
 are all referenced from `clusters/wind/`.
 
-**Flux-managed HelmReleases** (`clusters/wind/helm-releases/`):
-cert-manager, cnpg, github-actions-runner, gpu-operator, kured,
-monitoring (kube-prometheus-stack), pushgateway, tailscale-connector,
-tailscale-operator, traefik, velero.
+**Flux-managed HelmReleases** (`clusters/wind/helm-releases/` — regenerate with
+`ls`): alloy, cert-manager, cnpg, github-actions-runner, gpu-operator, kured,
+kyverno, loki, metallb, monitoring (kube-prometheus-stack), pushgateway,
+tailscale-connector, tailscale-operator, tetragon, traefik, velero.
 
 **Flux-managed kustomizations** (selected — see
-`clusters/wind/kustomization.yaml` for the full list): MetalLB,
+`clusters/wind/kustomization.yaml` for the full list):
 Technitium DNS, Multus NADs, Home Automation, Plex, Ollama, Wiki.js,
 WireGuard, Cloudflare DDNS, Rclone (GDrive + OneDrive), backups
 (Velero schedules + S3-sync shares), auto-remediation.

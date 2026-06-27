@@ -204,7 +204,7 @@ spec:
             summary: "Velero hasn't completed a backup in >36h"
             description: |
               {{ $value | humanizeDuration }} since any Velero schedule
-              completed successfully. All 10 schedules should run daily.
+              completed successfully. All Velero schedules (12) should run daily.
 
     # ---------- etcd snapshot offsite (M62) ----------
     # Metrics pushed to Pushgateway by /usr/local/bin/etcd-snapshot.sh on each

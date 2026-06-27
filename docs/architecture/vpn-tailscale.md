@@ -57,7 +57,7 @@ While WireGuard handles AWS↔homelab traffic routing, Tailscale enables:
 
 | Use Case | Solution | Reason |
 |----------|----------|--------|
-| AWS ↔ On-prem production traffic | WireGuard (wg0) | Fixed topology, predictable routing for ALB ingress |
+| AWS ↔ On-prem production traffic | WireGuard (wg0) | Fixed topology, predictable routing for the site-to-site tunnel |
 | Remote client access | Tailscale | Easy onboarding, MagicDNS, split DNS |
 | Direct device-to-device | Tailscale | Mesh routing without hub bottleneck |
 
@@ -70,7 +70,7 @@ The vpn-aws server runs **both** WireGuard and Tailscale. To prevent Tailscale f
 tailscale set --accept-routes=false
 ```
 
-If `--accept-routes=true`, Tailscale will accept routes from `k8s-homelab-router`, causing traffic to 10.10.201.x to go via Tailscale instead of WireGuard. This breaks ALB connectivity (504 Gateway Timeout).
+If `--accept-routes=true`, Tailscale will accept routes from `k8s-homelab-router`, causing traffic to 10.10.201.x to go via Tailscale instead of WireGuard. This breaks the AWS→homelab path over the site-to-site tunnel (e.g. dns-aws/vpn-aws and any service reached from AWS via wg0 start timing out).
 
 ## Components
 
@@ -156,6 +156,8 @@ tailscale up \
 Exit nodes allow routing **all** traffic through a Tailscale node, not just private subnet traffic. This provides privacy when traveling or access to geo-restricted content.
 
 ### Available Exit Nodes
+
+> The `100.x` Tailscale IPs below are stable assignments, but prefer the MagicDNS hostname (`vpn-aws`, `k8s-homelab-router`, `vpn-local`) in commands — the IP can change if a node is removed and re-added.
 
 | Node | Tailscale IP | Exit Location | Use Case |
 |------|--------------|---------------|----------|
@@ -322,15 +324,15 @@ ip route get 10.10.201.70
 
 ## Troubleshooting
 
-### 504 Gateway Timeout on ALB Services
+### AWS→homelab traffic over wg0 times out
 
-**Symptom:** Services like ha.wind.etherport.net return 504 when accessed via ALB.
+**Symptom:** Traffic from AWS to on-prem (e.g. dns-aws/vpn-aws reaching `10.10.201.x`, or anything routed over the site-to-site tunnel) stalls/times out.
 
-**Cause:** vpn-aws has `--accept-routes=true`, accepting routes from k8s-homelab-router via Tailscale.
+**Cause:** vpn-aws has `--accept-routes=true`, accepting routes from k8s-homelab-router via Tailscale, so on-prem traffic takes the Tailscale path instead of wg0.
 
 **Fix:**
 ```bash
-ssh ubuntu@10.10.100.10
+ssh vpn-aws
 sudo tailscale set --accept-routes=false
 ```
 

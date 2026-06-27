@@ -14,21 +14,23 @@
 
 ## Quick Reference
 
-All K8s nodes have five interfaces. The first is configured by cloud-init
-(VLAN 201 management); three are VLAN parents for Multus; one is the
-dedicated Ceph storage interface. The Multus VLAN parents are brought
-up by `/etc/netplan/51-vlan-interfaces.yaml` (baked into the
-Packer-built template VM 9001); the storage interface is brought up by
-`/etc/netplan/52-storage.yaml` and uses DHCP-without-routes-or-DNS to
+All K8s nodes have six interfaces. The first is configured by cloud-init
+(VLAN 201 management); three are VLAN parents for Multus; two are
+storage interfaces (Ceph 210 + backup/NAS 209). The Multus VLAN parents
+are brought up by `/etc/netplan/51-vlan-interfaces.yaml` (baked into the
+Packer-built template VM 9001); the storage interfaces are brought up by
+`/etc/netplan/52-storage.yaml` and use DHCP-without-routes-or-DNS to
 avoid polluting the cluster-network routing table (post-2026-05-18).
+(Control-plane nodes omit `enp6s23` — VLAN 209 lands on workers + GPU only.)
 
 | Interface | VLAN | Network | Purpose |
 |-----------|------|---------|---------|
-| enp6s18 (eth0) | 201 | 10.10.201.0/24 | Management (cluster, kubelet, API) |
+| eth0 (enp6s18) | 201 | 10.10.201.0/24 | Management (cluster, kubelet, API) |
 | enp6s19 | 202 | 10.10.202.0/24 | Client devices |
 | enp6s20 | 204 | 10.10.204.0/24 | IoT devices |
 | enp6s21 | 205 | 10.10.205.0/24 | Security devices (cameras, etc.) |
 | enp6s22 | 210 | 10.10.210.0/24 | Storage (Ceph, MTU 9000) |
+| enp6s23 | 209 | 10.10.209.0/24 | Backup / NAS storage (workers + GPU) |
 
 ## Node IP Assignments (VLAN 201 — management)
 

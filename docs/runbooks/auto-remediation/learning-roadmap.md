@@ -35,7 +35,7 @@ Tracked separately from main task list since these are advisor-internal R&D.
 Fixes-alert: VeleroLastBackupAgeHigh
 Root-cause: Global label-less metric series stuck; alert matched it
 Action-pattern: Filter expr with {schedule!=""}
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
 Then `search_git_log` can grep with `--grep="Fixes-alert: <name>"` precisely — no keyword guessing.

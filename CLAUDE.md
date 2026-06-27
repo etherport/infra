@@ -129,7 +129,7 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   reachable to be enrolled, then `step-ca-remove-static-key.yml` strips it — the 3 TF vars are annotated)
   + **packer** (build VM) + **appliance** scoped keys. **Break-glass = PVE console + IPMI
   `10.10.200.21`** (if a cert expires with step-ca down). Host certs (`HostCertificate`) kill known_hosts
-  TOFU on the 13 Servers-VLAN hosts. Detail: `docs/planning/m76-ssh-shortlived-plan.md`.
+  TOFU on the 13 Servers-VLAN hosts. Detail: `docs/planning/archive/m76-ssh-shortlived-plan.md`.
 - **Never delete the `terraform-homelab` IAM access key** — it's shared with the local
   homelab profile (H29 cutover note); rotate-only. (It is NOT one of the M75-orphaned keys.)
 - **M75 IRSA (in-cluster AWS workload identity) — DONE + e2e-verified 2026-06-24.** All in-cluster

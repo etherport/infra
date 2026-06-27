@@ -21,11 +21,11 @@ brew install git kubectl awscli wireguard-tools
 brew install --cask tailscale 1password nordvpn visual-studio-code
 
 # 4. Clone homelab repo
-mkdir -p ~/Projects && cd ~/Projects
-git clone https://github.com/sparked-diamond/infra.git homelab-infra
+mkdir -p ~/code && cd ~/code
+git clone https://github.com/sparked-diamond/infra.git
 
 # 5. Run setup script (see below)
-~/Projects/homelab-infra/scripts/setup-terminal.sh
+~/code/infra/scripts/setup-terminal.sh
 ```
 
 ## Configuration Files to Restore
@@ -59,7 +59,7 @@ git clone https://github.com/sparked-diamond/infra.git homelab-infra
 ### Stored in Git (This Repo)
 
 ```
-homelab-infra/
+infra/
 ├── scripts/
 │   ├── setup-terminal.sh      # Automated setup
 │   └── dotfiles/              # Shell configs, aliases
@@ -139,14 +139,18 @@ echo "  aws sts get-caller-identity --profile homelab"
 
 ## Tailscale Aliases
 
-Already added to `.zshrc`:
+Already added to `.zshrc` (use the **MagicDNS hostname**, not the rotatable
+100.x IP):
 
 ```bash
 alias ts-split='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node='
-alias ts-aws='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node=100.117.87.10'
-alias ts-home='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node=100.117.63.43'
+alias ts-aws='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node=vpn-aws'
+alias ts-home='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node=k8s-homelab-router'
 alias ts-status='/Applications/Tailscale.app/Contents/MacOS/Tailscale status'
 ```
+
+For the full NordVPN + Tailscale split-tunnel / exit-node story (including the
+WireGuard-app NordLynx route), see [`../guides/vpn-split-tunnel.md`](../guides/vpn-split-tunnel.md).
 
 ## AWS Profile Configuration
 
@@ -179,6 +183,14 @@ Host *
 ```
 
 This routes all SSH authentication through 1Password's agent.
+
+> **Fleet SSH is cert-only (M76).** The 15-host Ubuntu fleet (k8s nodes +
+> standalone VMs + step-ca + pve) no longer accepts raw keys — it trusts the
+> step-ca user CA. To reach those hosts from a Mac you need a **short-lived user
+> cert minted from step-ca** (the devbox/CI do this automatically; a Mac is not
+> set up for it by default). For ad-hoc access use the devbox, or mint a cert per
+> `docs/planning/archive/m76-ssh-shortlived-plan.md` (`step ssh certificate …`). Break-glass
+> if step-ca is down = PVE console + IPMI `10.10.200.21`.
 
 ## Kubernetes Access
 

@@ -39,6 +39,14 @@ options: `shutdown` (graceful shutdown — defeats the purpose for
 hangs), `poweroff` (hard power off, no auto-restart), `none` (alarm
 only). Reset is the right choice for "VM is unresponsive, kick it."
 
+> ⚠️ **The bpg/proxmox provider (0.106) silently NO-OPs this `watchdog {}` block**
+> (M91) — `apply` "succeeds" but the device never lands, leaving a perpetual plan
+> diff. The k8s-vms VMs therefore carry `lifecycle { ignore_changes = [watchdog] }`
+> and the device is attached **host-side** instead:
+> `qm set <vmid> --watchdog model=i6300esb,action=reset` (surfaces in the guest on
+> the VM's next COLD start). But even attached it's inert — see the status banner
+> (the `i6300esb` kernel module is absent).
+
 ### Guest side (Ansible)
 
 `infra/ansible/playbooks/k8s-node-fixes.yml` installs the `watchdog`

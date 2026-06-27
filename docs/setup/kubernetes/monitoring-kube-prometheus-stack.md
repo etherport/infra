@@ -90,7 +90,7 @@ kubectl get alertmanagerconfig -n monitoring
 
 Email alerts are configured via AlertmanagerConfig CR and sent through AWS SES:
 
-- **From**: alerts@etherport.net
+- **From**: alertmanager@wind.etherport.net
 - **To**: graham.m.smith@me.com
 - **SMTP**: email-smtp.us-west-2.amazonaws.com:587
 
@@ -210,7 +210,7 @@ kubectl exec -n monitoring alertmanager-monitoring-kube-prometheus-alertmanager-
 **Emails not sending:**
 - Check Alertmanager logs: `kubectl logs -n monitoring alertmanager-monitoring-kube-prometheus-alertmanager-0 -c alertmanager`
 - Verify SMTP secret exists: `kubectl get secret alertmanager-smtp-config -n monitoring`
-- Check SES sending stats: `aws ses get-send-statistics --profile claude-admin`
+- Check SES sending stats: `aws ses get-send-statistics --profile homelab`
 
 **AlertmanagerConfig not applied:**
 - Verify label matches: `alertmanagerConfig: main`

@@ -74,10 +74,8 @@ done
 # DNS
 dig @10.10.201.5 google.com +short
 
-# VPN — vpn-local + dns-fallback rebuilt 2026-05 onto the Ubuntu 24.04
-# template (VM 9001); both now use `ubuntu` + /tmp/auto-key like the
-# K8s nodes (C2 done).
-ssh -i /tmp/auto-key ubuntu@10.10.201.15 "sudo wg show"
+# VPN — cert-only SSH (M76)
+ssh ubuntu@10.10.201.15 "sudo wg show"
 ```
 
 ---
@@ -126,7 +124,7 @@ Full ownership matrix + restore procedures: [`disaster-recovery.md`](disaster-re
 
 | Component | Method | Frequency |
 |-----------|--------|-----------|
-| K8s workloads + PVs | Velero (10 schedules) → Kopia → S3 | Daily |
+| K8s workloads + PVs | Velero (per-namespace schedules) → S3 | Daily |
 | Postgres (CNPG) | Barman continuous WAL + nightly base → S3 | Continuous |
 | etcd | systemd timer per CP + Velero ships /var/lib/etcd-snapshots | Daily 02:00 PT |
 | UDM + Protect config | unifi-backup CronJob → S3 | Daily 04:00 PT |

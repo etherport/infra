@@ -67,8 +67,7 @@ published JWKS stays correct.
 For each of **cp2 (.51), then cp3 (.52), then cp1 (.50)**:
 
 ```bash
-K=~/.ssh/id_ed25519_homelab
-SSH="ssh -i $K -o IdentitiesOnly=yes"
+SSH="ssh"            # M76: step-ca cert presented via ssh-config (no -i key)
 NODE=10.10.201.51    # then .52, then .50
 
 # 0. backup the manifest

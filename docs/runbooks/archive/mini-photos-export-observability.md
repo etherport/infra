@@ -2,7 +2,7 @@
 
 > ⚠️ **SUPERSEDED 2026-06-26 by cairn (M103).** This describes the old `photos_export_*` metric
 > schema. Backups now emit the **cairn label schema** (`cairn_backup_*{job=...}` + `cairn_photos_*`);
-> the dashboards/alerts were rewritten accordingly. See [`cairn-deployment.md`](cairn-deployment.md)
+> the dashboards/alerts were rewritten accordingly. See [`cairn-deployment.md`](../cairn-deployment.md)
 > and the cairn repo README §5 (metrics). Kept for historical context.
 
 The Mac mini (`10.10.202.101`, macOS, **off-cluster**) runs the iCloud photos

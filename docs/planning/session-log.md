@@ -332,7 +332,7 @@ severe (the one session carries Traefik .70 + Technitium DNS .5/.71/.72, no GR/B
 the existing alert), so the plan uses a temporary L2 safety net + 2 windows + tcpdump-verify-MD5
 (FRR #6921 one-sided-up) + a new `metallb_bgp_session_up` alert. UDM side is UI-only/no-API.
 
-**M76 (short-lived SSH) → [`m76-ssh-shortlived-plan.md`](m76-ssh-shortlived-plan.md), step-ca hybrid.**
+**M76 (short-lived SSH) → [`m76-ssh-shortlived-plan.md`](archive/m76-ssh-shortlived-plan.md), step-ca hybrid.**
 Chose **step-ca SSH CA** over Tailscale-SSH-for-fleet. Deciders: the heavy consumers are HEADLESS
 (devbox agent + CI ansible) but the live TS ACL is `action: check` (interactive) and the **fleet
 isn't on the tailnet**; and **TS SSH only governs the tailnet transport** so **LAN-IP SSH bypasses

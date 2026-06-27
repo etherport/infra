@@ -49,7 +49,11 @@ External Request
 
 The public edge is the Cloudflare Tunnel + Access (ALB decommissioned
 2026-05-27; the old WireGuard-fronted ALB tier no longer exists). See
-`docs/runbooks/cloudflare-access-enable.md`.
+`docs/runbooks/archive/cloudflare-access-enable.md`.
+
+**MetalLB is BGP-only** (eBGP to the UDM at `10.10.201.1`), not L2 —
+VIPs (Traefik `.70`, DNS `.5/.6`) are advertised via BGP, so raw ICMP to
+a VIP fails by design and a same-subnet VLAN-201 host can't reach them.
 
 ## Related Documentation
 

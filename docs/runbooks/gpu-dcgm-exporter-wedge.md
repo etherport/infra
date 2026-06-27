@@ -23,7 +23,7 @@
 ```bash
 kubectl cordon k8s-gpu1
 # Reboot the VM via Proxmox (guest agent is unresponsive when wedged, so graceful-then-force):
-ssh -i ~/.ssh/id_ed25519_homelab root@10.10.200.41 \
+ssh root@10.10.200.41 \
   "qm shutdown 120 --timeout 60 --forceStop 1 && qm start 120"
 # Wait for the node to rejoin + the GPU stack to reinit:
 kubectl get node k8s-gpu1 -w                                  # until Ready

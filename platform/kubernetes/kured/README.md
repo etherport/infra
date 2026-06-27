@@ -80,7 +80,7 @@ kubectl get pods -n kube-system -l app.kubernetes.io/name=kured
 Expected output:
 ```
 NAME    DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
-kured   4         4         4       4            4           <none>          1m
+kured   8         8         8       8            8           <none>          1m
 ```
 
 ### 3. Verify Kured is Working

@@ -68,7 +68,7 @@ A cleanup daemon runs on all worker nodes to remove orphaned wg0 interfaces when
 | 10.254.0.0/24 | Remote access | Mobile/roaming client VPN |
 | 10.10.192.0/19 | Local homelab | All local VLANs (10.10.192.0 - 10.10.223.255) |
 | 10.10.100.0/22 | AWS networks | AWS VPC and related (10.10.100.0 - 10.10.103.255) |
-| 10.10.112.0/24 | Mumbai regional VPC | Travel VPN (temporary, see [Regional VPNs](#regional-travel-vpns)) |
+| 10.10.104.0/22 | us-east-1 VPC | vpn-use1 permanent east-coast endpoint (tunnel .4) |
 
 ## Regional Travel VPNs
 
@@ -78,26 +78,25 @@ A cleanup daemon runs on all worker nodes to remove orphaned wg0 interfaces when
 
 | Region | IP Assignment | VPC CIDR | Status | Notes |
 |--------|---------------|----------|--------|-------|
-| ap-south-1 (Mumbai) | 10.255.255.3 | 10.10.112.0/24 | **ACTIVE** | Direct wg0 tunnel to homelab |
-| us-east-1 | 10.255.255.4 | 10.10.116.0/24 | Planned | Next region |
-| eu-west-1 | 10.255.255.5 | 10.10.120.0/24 | Planned | Future |
+| us-east-1 (vpn-use1) | 10.255.255.4 | 10.10.104.0/22 | **ACTIVE** | Permanent east-coast endpoint; homelab dials its static EIP `35.169.37.16`. Direct wg0 tunnel. |
+| ap-south-1 (Mumbai) | 10.255.255.3 | 10.10.112.0/24 | Destroyed | Travel VPN; torn down 2026-05-23 (regional-peers.yaml `status: destroyed`). |
+
+The ephemeral travel-VPN tooling (transient AWS regions, on-demand teardown) is unused day-to-day; `vpn-use1` is the one standing regional peer.
 
 ### Architecture
 
 Regional VPNs use **direct wg0 tunnels** to homelab (not VPC peering transit) because AWS VPC peering doesn't support transit routing.
 
 ```
-Your Device (10.254.0.10)
+homelab K8s pod (10.255.255.2)
      │
-     │ WireGuard wg1 (51821)
+     │ WireGuard wg0 (homelab dials static EIP 35.169.37.16:51820)
      ▼
-vpn-mumbai (ap-south-1)
+vpn-use1 (us-east-1)
      │
-     ├── Internet → NAT → local IP (fast, local egress)
+     ├── AWS VPC (10.10.104.0/22) → local egress
      │
-     ├── AWS VPC (10.10.100.0/22) → VPC Peering → us-west-2
-     │
-     └── Homelab (10.10.192.0/19) → wg0 tunnel → homelab K8s pod
+     └── Homelab (10.10.192.0/19) → wg0 tunnel
 ```
 
 ### Deployment
@@ -126,10 +125,10 @@ Update this section whenever:
 | Node Affinity | Prefers k8s-w1, any worker allowed |
 | VIP | 10.10.201.20 (managed by Keepalived sidecar) |
 | Tunnel IP | 10.255.255.2/29 |
-| Host Port | 51820/UDP |
+| Host/Listen Ports | wg0: 9820/UDP, wg1: 9821/UDP (hostPort = containerPort) |
 | Public Key | `MwsTBFT0FPsZO+Bpe2Exk3y7oeIyv+HDx3j+lRSISTw=` |
 
-**Managed by:** Flux (GitOps) from `platform/kubernetes/wireguard/`
+**Managed by:** Flux (GitOps) from `platform/kubernetes/wireguard/`. (The pod listens on 9820/9821; `vpn-aws` still listens on 51820/51821, so the K8s peer block dials `44.240.60.80:51820`.)
 
 ### vpn-local (Backup Local Gateway)
 
@@ -206,7 +205,7 @@ ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/wireguard.yml --
 ```ini
 [Interface]
 Address = 10.255.255.2/29
-ListenPort = 51820
+ListenPort = 9820
 PrivateKey = <from secret>
 MTU = 1420
 # NAT for regional VPN traffic (so replies route back via wg0)
@@ -222,9 +221,10 @@ AllowedIPs = 10.10.100.0/22, 10.255.255.1/32
 PersistentKeepalive = 25
 
 [Peer]
-# vpn-mumbai (ap-south-1) - TEMPORARY regional travel endpoint
-PublicKey = y1vB4tdG7YdaTE8RODm1f69dnz6vnIqTmANA4BQvnBg=
-AllowedIPs = 10.10.112.0/24, 10.255.255.3/32
+# vpn-use1 (us-east-1) - permanent east-coast endpoint (homelab dials its static EIP)
+PublicKey = vwQ0C92BHfBBhuUkZsukGxt76Nu6R2gwpwlPz396PgM=
+Endpoint = 35.169.37.16:51820
+AllowedIPs = 10.10.104.0/22, 10.255.255.4/32
 PersistentKeepalive = 25
 ```
 
@@ -425,7 +425,8 @@ Keys are stored encrypted with SOPS:
 
 ```
 platform/wireguard/servers/
-├── vpn-aws.sops.yaml      # AWS keys (wg0 + wg1)
+├── vpn-aws.sops.yaml      # AWS us-west-2 keys (wg0 + wg1)
+├── vpn-use1.sops.yaml     # AWS us-east-1 keys (permanent regional peer)
 └── vpn-local.sops.yaml    # Local keys (wg0)
 
 platform/kubernetes/wireguard/
@@ -442,8 +443,8 @@ All WireGuard endpoints are in sync as of 2026-05-03:
 
 | Component | Git/Ansible | Running | Status |
 |-----------|-------------|---------|--------|
-| K8s pod wg0 | /29 + Mumbai | /29 + Mumbai | ✓ Synced |
-| vpn-local wg0 | /29 + Mumbai | /29 + Mumbai | ✓ Synced |
+| K8s pod wg0 | /29 + vpn-use1 | /29 + vpn-use1 | ✓ Synced |
+| vpn-local wg0 | /29 | /29 | ✓ Synced |
 | vpn-aws wg0 | /29 | /29 | ✓ Synced |
 
 **Last sync:** Ansible applied to vpn-local and vpn-aws on 2026-05-03.

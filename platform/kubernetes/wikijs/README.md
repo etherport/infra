@@ -115,21 +115,9 @@ Key environment variables in deployment:
 
 ## Upgrades
 
-Edit the image tag in `03-deployment.yaml`:
-
-```yaml
-image: ghcr.io/requarks/wiki:2.5
-```
-
-Commit and push - Flux handles the rollout:
-
-```bash
-git add -A
-git commit -m "Upgrade Wiki.js to 2.5"
-git push
-```
-
-Or restart to pull latest `:2` tag:
+The image is digest-pinned and auto-bumped by Flux image automation
+(`clusters/wind/image-automation/wikijs.yaml`). To force a redeploy of the
+current tag:
 
 ```bash
 kubectl rollout restart deployment/wiki-js -n wikijs

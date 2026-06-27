@@ -2,11 +2,11 @@
 
 Two layers in one namespace:
 
-1. **Static rule-based remediation** — 22 hardcoded alert→action
+1. **Static rule-based remediation** — 21 hardcoded alert→action
    mappings in `configmap.yaml` (restart_pods / scale_deployment).
    Hits first; deterministic; the floor.
 2. **AI advisor (Phases 1/2/3 live)** — handles alerts that fall
-   through the static rules. 18 action types across 3 tiers,
+   through the static rules. 19 action types across 3 tiers,
    closed-loop verification, cross-session memory, deep-mode tool-use.
 
 Both run in the same controller pod (image: `python:3.14-slim`,
@@ -116,9 +116,9 @@ receivers (continue: true).
 ## Documentation
 
 - Coverage: `COVERAGE.md` (this directory)
-- Phase 1 enable: `docs/runbooks/ai-advisor-phase1-enable.md`
-- Phase 2 enable: `docs/runbooks/ai-advisor-phase2-enable.md`
-- Phase 3 enable: `docs/runbooks/ai-advisor-phase3-enable.md`
-- Phase B (CW logs): `docs/runbooks/ai-advisor-phase-b-cloudwatch.md`
-- Design spec: `docs/planning/ai-alert-remediation-2026-05-23.md`
-- Phase 2/3 scope: `docs/planning/ai-advisor-phases-2-3-scope.md`
+- Phase 1 enable: `docs/runbooks/archive/ai-advisor-phase1-enable.md`
+- Phase 2 enable: `docs/runbooks/archive/ai-advisor-phase2-enable.md`
+- Phase 3 enable: `docs/runbooks/archive/ai-advisor-phase3-enable.md`
+- Phase B (CW logs): `docs/runbooks/archive/ai-advisor-phase-b-cloudwatch.md`
+- Design spec: `docs/planning/archive/ai-alert-remediation-2026-05-23.md`
+- Phase 2/3 scope: `docs/planning/archive/ai-advisor-phases-2-3-scope.md`

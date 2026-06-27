@@ -149,7 +149,7 @@ sudo wg-quick down ~/.wireguard/nordvpn.conf
 curl -s https://api.ipify.org && echo
 
 # Check Tailscale connectivity (should work)
-tailscale ping 100.75.199.69  # k8s-homelab-router
+tailscale ping k8s-homelab-router  # MagicDNS hostname (100.x IP rotates)
 
 # Check homelab connectivity (should work via Tailscale)
 ping 10.10.201.50  # Example homelab host
@@ -206,11 +206,12 @@ EXCLUDE_RANGES="10.0.0.0/8,100.64.0.0/10"
 For simpler setup, use Tailscale exit nodes instead of NordVPN:
 
 ```bash
-# Route all traffic through AWS (US IP)
-tailscale set --exit-node=100.117.87.10  # vpn-aws
+# Route all traffic through AWS (US IP) — use the MagicDNS hostname, not the
+# rotatable 100.x IP
+tailscale set --exit-node=vpn-aws
 
 # Route all traffic through homelab (home IP)
-tailscale set --exit-node=100.75.199.69  # k8s-homelab-router
+tailscale set --exit-node=k8s-homelab-router
 
 # Split tunnel (only private traffic via Tailscale)
 tailscale set --exit-node=

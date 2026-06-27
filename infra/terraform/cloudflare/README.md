@@ -11,7 +11,7 @@
 ## What this module owns
 
 1. **The etherport.net zone in CF** (manually created, then imported)
-2. **All 20 DNS records** mirroring current Route53 state (audited 2026-05-25)
+2. **The `etherport.net` DNS records + tunnel CNAMEs**
 3. **Cloudflare Tunnel** `wind-cluster` (cloudflared daemon runs in-cluster, outbound-only)
 4. **Tunnel ingress config** routing `approve.etherport.net` → cluster
 5. **CNAME** `approve.etherport.net → <tunnel-id>.cfargotunnel.com`
@@ -113,7 +113,7 @@ gh workflow run terraform-cloudflare.yml -f action=apply  # if plan looks right
 
 ## NS cutover
 
-See the runbook (`docs/runbooks/cloudflare-access-enable.md`) for the destructive cutover step. **Email is priority-1** — verify a test SES send works post-cutover before declaring success.
+See the runbook (`docs/runbooks/archive/cloudflare-access-enable.md`) for the destructive cutover step. **Email is priority-1** — verify a test SES send works post-cutover before declaring success.
 
 ## Cost
 

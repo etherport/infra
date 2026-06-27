@@ -43,12 +43,12 @@ kubectl describe node <failed-node>
 kubectl drain <failed-node> --ignore-daemonsets --delete-emptydir-data --force
 kubectl delete node <failed-node>
 
-# Recreate node via Terraform
-cd ~/Projects/homelab-infra/infra/terraform/proxmox/k8s-cluster
+# Recreate node via Terraform (CI-only — dispatch the proxmox workflow)
+cd ~/code/infra/infra/terraform/proxmox/k8s-vms
 terraform apply -target=proxmox_virtual_environment_vm.k8s_workers["<node-name>"]
 
 # Re-add to cluster via Kubespray
-cd ~/Projects/homelab-infra/infra/kubespray
+cd ~/code/infra/infra/kubespray
 ./kubespray.sh scale.yml --limit=<node-name>
 ```
 
@@ -60,7 +60,7 @@ cd ~/Projects/homelab-infra/infra/kubespray
 
 ```bash
 # 1. Access control plane node directly (any of cp1/cp2/cp3 — .50/.51/.52)
-ssh -i /tmp/auto-key ubuntu@10.10.201.50
+ssh ubuntu@10.10.201.50
 
 # 2. Check kubelet and container runtime
 sudo systemctl status kubelet
@@ -102,34 +102,27 @@ velero restore create cp-restore --from-backup kube-system-daily-<date>
 **Recovery Procedure:**
 
 ```bash
-# 1. Recreate VMs via Terraform
-cd ~/Projects/homelab-infra/infra/terraform/proxmox/k8s-cluster
+# 1. Recreate VMs via Terraform (CI-only — dispatch the proxmox workflow)
+cd ~/code/infra/infra/terraform/proxmox/k8s-vms
 terraform apply
 
 # 2. Wait for VMs to boot (5 minutes)
 sleep 300
 
 # 3. Deploy Kubernetes via Kubespray
-cd ~/Projects/homelab-infra/infra/kubespray
+cd ~/code/infra/infra/kubespray
 ./kubespray.sh cluster.yml
 
-# 4. Install Velero
-helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
-helm install velero vmware-tanzu/velero \
-  --namespace velero --create-namespace \
-  --set credentials.useSecret=true \
-  --set configuration.provider=aws \
-  --set configuration.backupStorageLocation.bucket=velero.wind.etherport.net \
-  --set configuration.backupStorageLocation.config.region=us-west-2
+# 4. Velero is a Flux HelmRelease (clusters/wind/helm-releases/velero.yaml) — it
+#    comes back with Flux in step 8, NOT a manual `helm install`. It uses IRSA
+#    (useSecret=false; AssumeRoleWithWebIdentity via the projected SA token,
+#    role wind-irsa-velero) — there is NO static AWS key. See
+#    docs/runbooks/irsa-workload-identity.md.
 
-# 5. Wait for Velero to sync with S3
-kubectl wait --for=condition=Available -n velero deployment/velero --timeout=300s
-velero backup-location get  # Should show "Available"
+# 5-6. (Velero is reconciled by Flux in step 8.) Once it's up, confirm it can
+#       reach S3 and list backups (BackupStorageLocation should be "Available").
 
-# 6. List available backups
-velero backup get
-
-# 7. Restore in order of priority
+# 7. Restore in order of priority (after step 8 has brought Velero up)
 velero restore create restore-infra --from-backup infrastructure-daily-<latest>
 velero restore create restore-critical --from-backup critical-apps-daily-<latest>
 velero restore create restore-monitoring --from-backup monitoring-daily-<latest>
@@ -163,19 +156,30 @@ kubectl get gitrepository,kustomization,helmrelease -A
 
 ### 2.1 Ceph OSD Failure
 
-**Symptoms:** Ceph health warning, degraded PGs.
+**Symptoms:** Ceph health warning, degraded PGs; K8s PVC ops (`rbd map`/create)
+time out (`csi DeadlineExceeded`/`exit 108`) while the cluster looks fine.
+
+Ceph is **external on the `pve` host** (not Rook/in-cluster — there is no
+`rook-ceph` namespace or toolbox). Diagnose from the pve host over SSH:
 
 ```bash
-# Check Ceph status
-kubectl -n rook-ceph exec -it deploy/rook-ceph-tools -- ceph status
-kubectl -n rook-ceph exec -it deploy/rook-ceph-tools -- ceph osd tree
+ssh root@pve   # or the pve mgmt IP
 
-# If OSD is down, check the node
-kubectl get pods -n rook-ceph -o wide | grep osd
+# Check Ceph status + OSD tree
+ceph -s
+ceph osd tree
 
-# Restart OSD pod
-kubectl delete pod -n rook-ceph <osd-pod>
+# Inspect a specific RBD image (stale watchers / blocklist after a node reboot)
+rbd status k8s-ceph/<img>
+ceph osd blocklist ls
+
+# Restart a down OSD (PVE systemd; N = OSD id from `ceph osd tree`)
+systemctl restart ceph-osd@<N>
 ```
+
+If `ceph -s` is `HEALTH_OK` on pve but K8s rbd ops still time out, suspect the
+**PVE host firewall** dropping the storage VLAN → mon/OSD (see CLAUDE.md §5 /
+the `pve-ceph` security group).
 
 ### 2.2 PVC Data Recovery
 
@@ -316,9 +320,8 @@ echo "nameserver 1.1.1.1" | sudo tee /etc/resolv.conf
 
 **Recovery:**
 ```bash
-# SSH to dns-fallback (standalone, always available). C2 (2026-05): rebuilt
-# onto the Ubuntu 24.04 template; uses `ubuntu` + /tmp/auto-key now.
-ssh -i /tmp/auto-key ubuntu@10.10.201.6
+# SSH to dns-fallback (standalone, always available; cert-only auth, M76)
+ssh ubuntu@10.10.201.6
 
 # Restart Technitium
 sudo systemctl restart technitium
@@ -389,12 +392,12 @@ kubectl scale deployment wireguard -n wireguard --replicas=1
 If K8s is primary, vpn-local failure has no immediate impact.
 
 ```bash
-# Recreate vpn-local VM
-cd ~/Projects/homelab-infra/infra/terraform/proxmox/standalone-vms
+# Recreate vpn-local VM (CI-only — dispatch the proxmox workflow)
+cd ~/code/infra/infra/terraform/proxmox/standalone-vms
 terraform apply -target=proxmox_virtual_environment_vm.standalone["vpn-local"]
 
 # Reconfigure WireGuard and Keepalived
-cd ~/Projects/homelab-infra/infra/ansible
+cd ~/code/infra/infra/ansible
 ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-local
 ```
 
@@ -480,8 +483,8 @@ velero restore create monitoring-restore \
 
 # 2. Restore VM configurations from Proxmox Backup Server
 
-# 3. Recreate VMs via Terraform
-cd ~/Projects/homelab-infra/infra/terraform/proxmox/k8s-cluster
+# 3. Recreate VMs via Terraform (CI-only — dispatch the proxmox workflow)
+cd ~/code/infra/infra/terraform/proxmox/k8s-vms
 terraform apply
 ```
 
@@ -530,10 +533,14 @@ automatically — see `platform/kubernetes/cnpg/01-cluster.yaml`
 `backup` section). RPO of ~5min comes from `wal_compression` +
 streaming, not nightly snapshots.
 
+CNPG reaches S3 via **IRSA** (`inheritFromIAMRole: true`, role `wind-irsa-barman`
+— no static key); the restore cluster needs the same projected-token/env wiring
+as the live one (see `01-cluster.yaml`).
+
 ```bash
 # 1. List available base backups + WAL files
 kubectl exec -n postgres -it postgres-cluster-1 -c postgres -- \
-  barman-cloud-backup-list s3://infra.wind.etherport.net/postgres/barman/postgres-cluster
+  barman-cloud-backup-list s3://postgres-barman.wind.etherport.net/postgres-cluster
 
 # 2. Create a new CNPG cluster from backup (point-in-time recovery)
 cat <<EOF | kubectl apply -f -
@@ -551,10 +558,9 @@ spec:
   externalClusters:
     - name: postgres-cluster
       barmanObjectStore:
-        destinationPath: s3://infra.wind.etherport.net/postgres/barman
+        destinationPath: s3://postgres-barman.wind.etherport.net
         s3Credentials:
-          accessKeyId: { name: cnpg-barman-creds, key: ACCESS_KEY_ID }
-          secretAccessKey: { name: cnpg-barman-creds, key: ACCESS_SECRET_KEY }
+          inheritFromIAMRole: true   # IRSA, not a static-key secret
 EOF
 
 # 3. After cluster is Ready, switch app connections to the new service:
@@ -574,7 +580,7 @@ alerts that fire when any of these fail.
 
 | Workload backed up | Backup tool | Location | Schedule | Restore proc |
 |---|---|---|---|---|
-| K8s resources + PVs | Velero (10 schedules) | S3 `velero.wind.etherport.net` | daily | §3.1 above |
+| K8s resources + PVs | Velero (per-namespace schedules) | S3 `velero.wind.etherport.net` | daily | §3.1 above |
 | Postgres data | CNPG Barman (continuous WAL + nightly base) | S3 `postgres-barman.wind.etherport.net` | continuous | §9 above |
 | etcd | systemd timer on each CP node + Velero `kube-system-daily` ships /var/lib/etcd-snapshots | local + S3 | daily 02:00 PT | §1.2 above |
 | UDM controller-db + UDM core-config + Protect core-config | `unifi-backup` CronJob | S3 `infra.wind.etherport.net/unifi/` | daily 04:00 PT | UDM UI restore (Settings → System → Restore) |

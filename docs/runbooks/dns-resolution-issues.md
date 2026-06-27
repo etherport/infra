@@ -29,6 +29,13 @@ TCP/UDP protocol mismatch between NodeLocalDNS and CoreDNS:
    - Command: `kubectl delete pod -n kube-system -l k8s-app=node-local-dns`
    - Result: Fresh connections with UDP protocol
 
+> ⚠️ **This is a manual one-shot that kubespray REVERTS.** The `nodelocaldns`
+> ConfigMap is kubespray-managed (`force_tcp` by default), so any `cluster.yml`
+> run overwrites the `prefer_udp` patch (live ConfigMap currently shows
+> `force_tcp` again). Re-apply `nodelocaldns-udp-fix.yaml` + restart the
+> DaemonSet after a kubespray run, or set the forward protocol in the inventory
+> to make it durable.
+
 3. **Added monitoring**
    - File: `platform/kubernetes/monitoring/dns-health-alerts.yaml`
    - Alerts: NodeLocalDNSHighErrorRate, NodeLocalDNSTimeout, CoreDNSDown

@@ -31,7 +31,9 @@ user with the homelab SSH key.
    - Datastore.AllocateSpace
    - Sys.Audit
 
-3. **SSH key** at `~/.ssh/id_ed25519`
+3. **SSH key** at `~/.ssh/id_ed25519` (`ssh_private_key_file` default) — Packer's
+   build-time key, paired with the `ssh_public_key` it bakes in as the per-host
+   bootstrap seed; the running fleet is SSH cert-only (M76), this is build-only.
 
 ## Usage
 
@@ -106,12 +108,13 @@ gh workflow run packer-ubuntu-template.yml -f action=build
 | `template_vm_id` | `9001` | VM ID for the Packer-built template (clone source for Terraform) |
 | `template_name` | `ubuntu-2404-cloud-init` | Template name |
 | `storage_pool` | `local-zfs` | Storage pool for VM disks |
-| `ssh_username` | `ubuntu` | Default cloud-init user baked into the template (with the homelab `/tmp/auto-key`) |
+| `ssh_username` | `ubuntu` | Default cloud-init user baked into the template (with the `automation@homelab` bootstrap pubkey) |
 
 ## What's Installed
 
 - **System**: Ubuntu 24.04 LTS, fully updated
-- **User**: `ubuntu` (cloud-init) with the homelab SSH key (`/tmp/auto-key`)
+- **User**: `ubuntu` (cloud-init) with the `automation@homelab` pubkey baked as a
+  per-host **bootstrap seed** (stripped post-enrolment, M76 — the fleet is SSH cert-only)
 - **Packages**:
   - `qemu-guest-agent` - VM management
   - `cloud-init`, `cloud-guest-utils` - Cloud provisioning

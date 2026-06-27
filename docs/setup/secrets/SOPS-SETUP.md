@@ -225,54 +225,18 @@ Update `.gitignore` to only ignore unencrypted secrets:
 !**/.sops.yaml
 ```
 
-## Team Collaboration
+## Recipients (single-owner repo)
 
-### Sharing Secrets with Team Members
-
-**Option 1: Share age private key (simple, less secure)**
-```bash
-# Sender encrypts and shares age private key
-gpg -c ~/.config/sops/age/keys.txt
-# Send keys.txt.gpg to team member securely
-
-# Receiver decrypts
-gpg -d keys.txt.gpg > ~/.config/sops/age/keys.txt
-chmod 600 ~/.config/sops/age/keys.txt
-```
-
-**Option 2: Multiple age recipients (better)**
-```bash
-# Each team member generates their own age key
-age-keygen -o ~/.config/sops/age/keys.txt
-
-# Update .sops.yaml with all public keys
-creation_rules:
-  - path_regex: \.enc\.yaml$
-    encrypted_regex: ^(data|stringData)$
-    age: >-
-      age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p,
-      age1vzaqy5qrqmwmx5vlcf6nq7gdwzq6y8w8s8vn8e4z8w7s5v6n8e4z8w7s5v
-
-# Re-encrypt existing secrets for new recipients
-sops updatekeys cloudflare-ddns/base/cloudflare-credentials.sops.yaml
-```
-
-### Adding New Team Member
+This is a single-owner repo with **two fixed age recipients** on every
+`*.sops.yaml`: the PRIMARY key
+(`age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g`, held on the
+devbox + mini + GH `SOPS_AGE_KEY` + Flux `sops-age`) and the offline BACKUP
+(`age1phcm…3466`, break-glass only). New per-component `.sops.yaml` files must
+list **both** (see the home-automation example below). To rotate/re-key after a
+recipient change, re-encrypt in place:
 
 ```bash
-# 1. New member generates key and shares public key
-age-keygen -o ~/.config/sops/age/keys.txt
-# Public key: age1xyz...
-
-# 2. Add to .sops.yaml
-# (append to age: list)
-
-# 3. Update all encrypted files
-find . -name "*.enc.yaml" -exec sops updatekeys {} \;
-
-# 4. Commit updated .sops.yaml and re-encrypted files
-git add .sops.yaml **/*.enc.yaml
-git commit -m "Add new team member to SOPS encryption"
+find . -name '*.sops.yaml' -exec sops updatekeys {} \;
 ```
 
 ## Flux/GitOps Integration
@@ -598,7 +562,6 @@ the item **ID** instead.
 
 ## Related Documentation
 
-- [SOPS vs Ansible-Vault Decision](../../planning/sops-vs-ansible-vault.md)
 - [GitOps with Flux](../gitops/flux-overview.md)
 - [Secrets rotation runbook](../../runbooks/secrets-rotation.md)
 

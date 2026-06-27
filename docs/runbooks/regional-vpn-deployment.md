@@ -6,11 +6,14 @@ Deploy temporary WireGuard VPN endpoints in AWS regions closest to your travel l
 
 ## Current Deployment Status
 
-| Region | Tunnel IP | VPC CIDR | Status | Deployed |
-|--------|-----------|----------|--------|----------|
-| ap-south-1 (Mumbai) | 10.255.255.3 | 10.10.112.0/24 | **ACTIVE** | 2026-05 |
-| me-south-1 (Bahrain) | 10.255.255.4 | 10.10.116.0/24 | **OFFLINE** | Region damaged |
-| eu-west-1 (Ireland) | 10.255.255.5 | 10.10.120.0/24 | Planned | - |
+**No regional VPN is currently deployed** (`platform/wireguard/regional-peers.yaml`
+`status: destroyed`). Reference assignments for the next deploy:
+
+| Region | Tunnel IP | VPC CIDR | Status |
+|--------|-----------|----------|--------|
+| ap-south-1 (Mumbai) | 10.255.255.3 | 10.10.112.0/24 | Not deployed |
+| me-south-1 (Bahrain) | 10.255.255.4 | 10.10.116.0/24 | **OFFLINE** (region damaged) |
+| eu-west-1 (Ireland) | 10.255.255.5 | 10.10.120.0/24 | Not deployed |
 
 **Note:** Bahrain (me-south-1) and UAE (me-central-1) regions are currently offline due to infrastructure damage. ETA for recovery unknown.
 
@@ -69,7 +72,7 @@ After apply, you must add the new peer to homelab WireGuard:
 5. Run Ansible to update vpn-local:
    ```bash
    cd infra/ansible
-   ansible-playbook -i inventory/local/ playbooks/wireguard.yml
+   ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-local
    ```
 
 ### Configure Your Client
@@ -174,7 +177,7 @@ For when you need more control or GitHub Actions isn't available.
 ### Deploy a New Region
 
 ```bash
-cd ~/Projects/homelab-infra/infra/terraform/aws-regional-vpn
+cd infra/terraform/aws-regional-vpn   # repo-relative
 
 # 1. Generate new WireGuard keys for wg0
 wg genkey | tee /tmp/wg0.key | wg pubkey > /tmp/wg0.pub
@@ -243,7 +246,7 @@ terraform destroy \
 |----|--------|-------|
 | 10.255.255.1 | vpn-aws (us-west-2) | Primary, permanent |
 | 10.255.255.2 | Homelab K8s | Primary local endpoint |
-| 10.255.255.3 | Mumbai (ap-south-1) | Currently active |
+| 10.255.255.3 | Mumbai (ap-south-1) | Reserved |
 | 10.255.255.4 | Bahrain (me-south-1) | Reserved |
 | 10.255.255.5 | Ireland (eu-west-1) | Reserved |
 | 10.255.255.6 | Frankfurt (eu-central-1) | Reserved |
@@ -360,6 +363,6 @@ ip route
 ## See Also
 
 - [GitHub Actions Documentation](../setup/github-actions/README.md)
-- [AWS Cost Analysis](../planning/aws-cost-analysis.md)
+- [AWS Cost Analysis](../planning/archive/aws-cost-analysis.md)
 - [VPN Split Tunnel Guide](../guides/vpn-split-tunnel.md)
 - [WireGuard Architecture](../architecture/vpn-wireguard.md)

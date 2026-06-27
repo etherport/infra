@@ -341,6 +341,6 @@ resource "aws_vpc_peering_connection" "to_hub" {
 ## Related Documentation
 
 - [VPN Infrastructure Plan](./INFRASTRUCTURE-HARDENING-CHECKLIST.md)
-- [AWS Infrastructure](../architecture/aws-infrastructure.md)
-- [WireGuard Configuration](../architecture/vpn-wireguard.md)
-- [Tailscale Mesh VPN](../architecture/vpn-tailscale.md)
+- [AWS Infrastructure](../../architecture/aws-infrastructure.md)
+- [WireGuard Configuration](../../architecture/vpn-wireguard.md)
+- [Tailscale Mesh VPN](../../architecture/vpn-tailscale.md)

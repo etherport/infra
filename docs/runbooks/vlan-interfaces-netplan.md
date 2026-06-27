@@ -13,9 +13,9 @@ Run the ansible playbook to restore the netplan on existing nodes instead of edi
 cd infra/ansible
 ansible-playbook -i ../kubespray/inventory/inventory.ini \
   playbooks/k8s-node-fixes.yml \
-  --limit k8s_cluster \
-  --private-key /tmp/auto-key -u ubuntu --become \
+  --limit k8s_cluster -u ubuntu --become \
   --start-at-task='Ensure VLAN parent interfaces are UP via netplan'
+# (M76: SSH is cert-only — no --private-key; the step-ca cert is presented via ssh-config)
 ```
 
 The manual steps below are kept for emergency use when ansible/SSH is broken.

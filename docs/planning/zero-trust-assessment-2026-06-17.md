@@ -1,3 +1,5 @@
+> **Dated snapshot (2026-06-17).** Most gaps have since shipped: H37 (PVE firewall) ✅, H38 (Authentik internal SSO) ✅, M75 (IRSA) ✅, M76 (cert-only SSH) ✅, PSA now enforcing. Kept for the pillar-by-pillar reasoning; check `outstanding-work.md` for current status.
+
 # Zero-Trust posture assessment — 2026-06-17
 
 Requested by owner after M66 (Cilium WireGuard) landed: "evaluate what other

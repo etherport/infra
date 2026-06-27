@@ -42,7 +42,7 @@ kubectl apply -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-c
 kubectl get pods -n kube-system | grep multus
 
 # Check CNI configuration
-kubectl get ds -n kube-system kube-multus-ds
+kubectl get ds -n kube-system kube-multus-ds-amd64
 
 # Verify NADs
 kubectl get network-attachment-definitions -n multus-system
@@ -103,7 +103,7 @@ The parent interfaces used by Multus macvlan (`enp6s19/20/21` on all nodes, incl
 **Quick check:**
 ```bash
 # Verify interfaces are UP on all nodes
-ansible -i infra/kubespray/inventory/inventory.ini k8s_cluster --private-key /tmp/auto-key -u ubuntu \
+ansible -i infra/kubespray/inventory/inventory.ini k8s_cluster -u ubuntu \
   -m shell -a 'ip -br link show enp6s19 enp6s20 enp6s21'
 ```
 

@@ -248,14 +248,13 @@ Transferred: 0 / 0, 100%
 
 ### Job Fails with "read-only file system"
 
-The NFS share is mounted read-only. Verify NFS export on server:
+The Backups share is the sync **destination** and must be mounted read-write.
+Verify the NFS export on the server allows read-write for the Kubernetes node IPs:
 
 ```bash
 # On NFS server (sequoia)
 showmount -e localhost | grep Backups
 ```
-
-Ensure export allows read-write for Kubernetes node IPs.
 
 ### OAuth Token Expired
 
@@ -291,15 +290,12 @@ showmount -e sequoia.wind.etherport.net
 
 ### Update Rclone Version
 
-The CronJob uses `rclone/rclone:latest`. To update:
+The image is digest-pinned and auto-bumped by Flux image automation
+(`clusters/wind/image-automation/rclone.yaml`). To force a redeploy of the
+current tag:
 
 ```bash
 kubectl rollout restart cronjob/gdrive-sync -n rclone
-```
-
-Or pin to specific version in `02-cronjob.yaml`:
-```yaml
-image: rclone/rclone:1.65.0
 ```
 
 ### Backup OAuth Token

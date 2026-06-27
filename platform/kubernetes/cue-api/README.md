@@ -15,8 +15,11 @@ local Docker build — CI is the source of truth.
   `node dist/db/migrate.js` (idempotent drizzle migrations) before the app
   serves. `terminationGracePeriodSeconds: 15` (app does graceful SIGTERM ≤10s).
   Probes hit `GET /health`.
-- **Service** `cue-api` — **ClusterIP** :3000. No LoadBalancer / Ingress /
-  cert-manager.
+- **Service** `cue-api` — **ClusterIP** :3000. Public ingress is via the
+  cloudflared tunnel (below); a tailnet-only LoadBalancer (`cue-api-ts`,
+  `05-tailscale-svc.yaml`) + HTTPS Ingress (`06-ingress.yaml`,
+  `cue-api.<tailnet>.ts.net`) expose it on the tailnet for dev. No public
+  LoadBalancer / cert-manager.
 
 ## Config / secrets
 - `DATABASE_URL` ← `cue-db-app` secret, key `uri` (CNPG-generated, in-cluster rw).
@@ -31,8 +34,7 @@ local Docker build — CI is the source of truth.
       '["stringData"]["ANTHROPIC_API_KEY"]' '"sk-ant-..."'
     ```
 - `ghcr-cue` Secret (`04-secret-ghcr.sops.yaml`, SOPS) — ghcr read-only pull
-  cred. Created from a `read:packages` PAT; currently commented out in
-  `kustomization.yaml` until the PAT is provided.
+  cred. Created from a `read:packages` PAT.
 
 ## Public access — cloudflared tunnel + CF Access (per-path)
 `cue.etherport.net` is served by the wind-cluster cloudflared tunnel
@@ -51,5 +53,7 @@ All other routes (`/coach/*`, `/meals/*`, `/onboarding`, `/progress/*`,
 is ClusterIP).
 
 ## Wiring
-Add `- ../../platform/kubernetes/cue-api` to `clusters/wind/kustomization.yaml`
-to have Flux deploy it (done once the image + `ghcr-cue` pull secret exist).
+Deployed by Flux via `- ../../platform/kubernetes/cue-api` in
+`clusters/wind/kustomization.yaml`. The image is digest-pinned + auto-bumped by
+Flux image automation (`clusters/wind/image-automation/cue.yaml`); force a
+redeploy with `kubectl rollout restart deploy/cue-api -n cue`.

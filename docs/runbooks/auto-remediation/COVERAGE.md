@@ -6,7 +6,8 @@ code, kept in sync with `configmap.yaml`:
 **[`platform/kubernetes/auto-remediation/COVERAGE.md`](../../../platform/kubernetes/auto-remediation/COVERAGE.md)**
 
 That file enumerates:
-- All 22 static rules (alert → action mapping + selector)
+- All 21 static rules (alert → action mapping + selector; Kopia
+  decommissioned, no `KopiaDown`)
 - Coverage gaps (CNPG operator, ceph-csi-rbdplugin-provisioner, WG
   K8s pod, MetalLB speakers, Multus DS)
 - Per-rule cooldown semantics + safety guardrails

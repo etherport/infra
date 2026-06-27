@@ -1,16 +1,15 @@
 # KubePodCrashLooping
 
 Default kube-prometheus-stack alert. Fires when
-`rate(kube_pod_container_status_restarts_total[15m]) * 60 * 5 > 0`
-sustained 15 min, i.e. >1 restart in the last 5-minute window.
-Severity: warning. (Custom homelab `PodCrashLooping` is tuned tighter —
-see that runbook.)
+`max_over_time(kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff", job="kube-state-metrics", namespace=~".*"}[5m]) >= 1`,
+i.e. a container has sat in `CrashLoopBackOff` at any point in the last
+5-minute window. Severity: warning. (Custom homelab `PodCrashLooping` is
+tuned tighter — see that runbook.)
 
 ## Symptom
 
-A pod has restarted at least once within the last 5-minute window and
-this remained true for 15 minutes — meaning restart pattern is steady,
-not a one-off.
+A container has been in `CrashLoopBackOff` within the last 5-minute
+window — the kubelet is backing off restarts because it keeps dying.
 
 ## Verified root cause(s)
 
