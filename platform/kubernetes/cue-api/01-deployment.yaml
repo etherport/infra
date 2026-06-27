@@ -39,7 +39,7 @@ spec:
           # work here (Flux SSA strips the annotation); image automation is the trigger.
           # BOTH image lines (migrate init + app) carry the marker so they pin the SAME
           # digest — migration + serving code stay in lockstep (no schema-ahead-of-code).
-          image: ghcr.io/sparked-diamond/cue:latest@sha256:8a1ba3004ca27d2eaefc9d36a8d2d38c5c67b1f8fa24e6c3481ce21a8a935d9f # {"$imagepolicy": "flux-system:cue-api"}
+          image: ghcr.io/sparked-diamond/cue:latest@sha256:499b7c868feab18ec1d121a3aba42aa8d006f0f1afe8cc5b0639a9f3eb8f80bf # {"$imagepolicy": "flux-system:cue-api"}
           imagePullPolicy: Always
           command: ['node', 'dist/db/migrate.js']
           env:
@@ -64,7 +64,7 @@ spec:
           # work here (Flux SSA strips the annotation); image automation is the trigger.
           # BOTH image lines (migrate init + app) carry the marker so they pin the SAME
           # digest — migration + serving code stay in lockstep (no schema-ahead-of-code).
-          image: ghcr.io/sparked-diamond/cue:latest@sha256:8a1ba3004ca27d2eaefc9d36a8d2d38c5c67b1f8fa24e6c3481ce21a8a935d9f # {"$imagepolicy": "flux-system:cue-api"}
+          image: ghcr.io/sparked-diamond/cue:latest@sha256:499b7c868feab18ec1d121a3aba42aa8d006f0f1afe8cc5b0639a9f3eb8f80bf # {"$imagepolicy": "flux-system:cue-api"}
           imagePullPolicy: Always
           ports:
             - name: http
