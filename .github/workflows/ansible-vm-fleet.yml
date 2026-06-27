@@ -75,19 +75,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
-      - name: Setup SSH key
-        env:
-          ANSIBLE_SSH_KEY: ${{ secrets.ANSIBLE_SSH_KEY }}
-        run: |
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$ANSIBLE_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          # ansible.cfg sets StrictHostKeyChecking=no + accept-new in
-          # ansible_ssh_common_args. No ssh-keyscan (would add a
-          # PerSourcePenalty noauth attempt that breaks subsequent
-          # ansible SSH on OpenSSH 9.8+ — see ansible-proxmox.yml).
-          ls -la ~/.ssh/
-          ssh-keygen -lf ~/.ssh/id_ed25519 || true
+      - name: Mint SSH cert (step-ca)
+        id: sshcert
+        uses: ./.github/actions/setup-ssh-cert
+        with:
+          jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}
 
       - name: Build inventory args + limit
         id: invargs
@@ -112,7 +104,7 @@ jobs:
       - name: Run ansible (check)
         if: github.event.inputs.action == 'check'
         env:
-          ANSIBLE_PRIVATE_KEY_FILE: /github/home/.ssh/id_ed25519
+          ANSIBLE_PRIVATE_KEY_FILE: ${{ steps.sshcert.outputs.key-file }}
           # age key for community.sops.load_vars (decrypt *.sops.yaml on the
           # runner). Empty for playbooks that don't use SOPS — harmless.
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
@@ -126,7 +118,7 @@ jobs:
       - name: Run ansible (apply)
         if: github.event.inputs.action == 'apply'
         env:
-          ANSIBLE_PRIVATE_KEY_FILE: /github/home/.ssh/id_ed25519
+          ANSIBLE_PRIVATE_KEY_FILE: ${{ steps.sshcert.outputs.key-file }}
           # age key for community.sops.load_vars (decrypt *.sops.yaml on the
           # runner). Empty for playbooks that don't use SOPS — harmless.
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}

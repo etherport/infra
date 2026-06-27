@@ -31,6 +31,19 @@ runs:
         NOT_AFTER: ${{ inputs.not-after }}
       run: |
         set -euo pipefail
+        # Self-install the step CLI if absent. The host runner has it system-wide
+        # (Phase 2b), but container jobs (ansible-vm-fleet / ansible-proxmox use
+        # ghcr.io/sparked-diamond/ansible-runner) don't — pull the pinned,
+        # checksum-verified standalone binary into a job-local dir.
+        if ! command -v step >/dev/null 2>&1; then
+          _sv=0.30.6
+          _ssha=e44a5dc5f880a694b24a0f2941a69a81b0bc6ee053170fdfde18453d4d5816de
+          curl -fsSL -o "${RUNNER_TEMP}/step.tgz" \
+            "https://github.com/smallstep/cli/releases/download/v${_sv}/step_linux_${_sv}_amd64.tar.gz"
+          echo "${_ssha}  ${RUNNER_TEMP}/step.tgz" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/step.tgz" -C "${RUNNER_TEMP}"
+          export PATH="${RUNNER_TEMP}/step_${_sv}/bin:${PATH}"
+        fi
         mkdir -p ~/.ssh && chmod 700 ~/.ssh
         # Job-local step context (no dependency on the runner's /etc/step perms).
         export STEPPATH="${RUNNER_TEMP}/step-ci"

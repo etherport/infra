@@ -71,27 +71,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
-      - name: Setup SSH key
-        env:
-          ANSIBLE_SSH_KEY: ${{ secrets.ANSIBLE_SSH_KEY }}
-        run: |
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$ANSIBLE_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          # No ssh-keyscan: ansible.cfg already sets StrictHostKeyChecking=no
-          # and ansible_ssh_common_args uses accept-new. Pre-seeding known_hosts
-          # adds a redundant `noauth` SSH connection that trips OpenSSH 9.8+
-          # PerSourcePenalties on PVE (see playbooks/pve-sshd.yml). Skipping it
-          # prevents the gh-runner from accruing source-IP penalty every CI run.
-          echo "--- key sanity ---"
-          echo "HOME=$HOME"
-          ls -la ~/.ssh/
-          ssh-keygen -lf ~/.ssh/id_ed25519 || echo "key fingerprint failed"
-          echo "--- SSH probe (publickey only) ---"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-              -o PreferredAuthentications=publickey \
-              -i ~/.ssh/id_ed25519 \
-              root@pve.wind.etherport.net 'echo OK; whoami' || echo "ssh probe failed (rc=$?)"
+      - name: Mint SSH cert (step-ca)
+        id: sshcert
+        uses: ./.github/actions/setup-ssh-cert
+        with:
+          jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}
 
       - name: Build EXTRA_VARS
         id: extra
@@ -109,10 +93,7 @@ jobs:
       - name: Run Ansible playbook (check mode)
         if: github.event.inputs.action == 'check'
         env:
-          # Explicit key path — container HOME is /github/home; ansible's
-          # default SSH lookup doesn't seem to find ~/.ssh/id_ed25519 in
-          # this environment even though plain ssh -i does. Be explicit.
-          ANSIBLE_PRIVATE_KEY_FILE: /github/home/.ssh/id_ed25519
+          ANSIBLE_PRIVATE_KEY_FILE: ${{ steps.sshcert.outputs.key-file }}
         run: |
           ansible-playbook \
             -i inventory/wind/inventory.ini \
@@ -125,7 +106,7 @@ jobs:
       - name: Run Ansible playbook (apply)
         if: github.event.inputs.action == 'apply'
         env:
-          ANSIBLE_PRIVATE_KEY_FILE: /github/home/.ssh/id_ed25519
+          ANSIBLE_PRIVATE_KEY_FILE: ${{ steps.sshcert.outputs.key-file }}
         run: |
           ansible-playbook \
             -i inventory/wind/inventory.ini \
