@@ -146,3 +146,12 @@ categories. Photos last (longest seed). Reverse = unload cairn's agents + re-ena
 - **15 GB free on the mini** — photos/messages are **in-place** (never stage the 448 GB / 48 GB);
   don't add staged variants for them.
 - SMB creds live in the login Keychain (`graham@sequoia…`); `cairn` remounts headlessly with them.
+- **Sparsebundle attach-leak (fixed in cairn v0.1.2, 2026-06-27) — know the symptom.** A photos `rc=1`
+  combined with a Finder **"Macintosh HD can't be opened — you don't have permission"** dialog and
+  `hdiutil attach: No child processes` in the cairn log = leaked `PhotosLibrary.sparsebundle` attachments
+  (a pre-v0.1.2 heal re-attached without detaching the prior ghost) exhausting process resources — **not**
+  a disk fault (the boot disk is fine). **Recover:** detach each ghost with `hdiutil detach -force /dev/diskN`
+  (find them via `diskutil list` / `hdiutil info | grep image-path`), then re-mount with
+  `infra/macos/mini/mount-nas.sh`, and confirm cairn is on **≥ v0.1.2** (`dist/cairn.app/Contents/MacOS/cairn
+  --version`), which makes the attach idempotent. Redeploy a release with `gh release download vX.Y.Z -p '*.zip'
+  -D /tmp && ditto -x -k /tmp/cairn-vX.Y.Z-macos.zip dist/`.

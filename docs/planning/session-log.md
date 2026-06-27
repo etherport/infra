@@ -13,6 +13,30 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-27 — cairn photos sparsebundle attach-leak incident → v0.1.2 (idempotent attach + release fix)
+
+**What:** overnight `ICloudBackupFailed` alert (photos rc=1) + a Finder **"Macintosh HD can't be opened —
+permission"** dialog on the mini's VNC. **Root cause (one bug, both symptoms):** cairn's photos mount-heal
+(`MountHealth.ensureImage`) detached the sparsebundle **by mountpoint**; when an `hdiutil attach` succeeded
+but the APFS volume didn't surface at `/Volumes/PhotosLib`, the mountpoint detach was a no-op and the next
+heal re-attached → **leaked a new attachment each retry**. 3 ghost attachments of `PhotosLibrary.sparsebundle`
+piled up until `hdiutil attach: No child processes` (fork exhaustion) → photos rc=1 AND the Finder dialog (a
+resource-degradation side-effect — the **boot disk was healthy**). Diagnosed via `diskutil list` / `hdiutil
+info` (3 disk-image attachments, none mounted).
+
+**Fix + resolution (all done):**
+- **Live cleanup:** `hdiutil detach -force` the 3 ghosts → `mount-nas.sh` restored Personal-Drive + Backups +
+  PhotosLib; system could fork again.
+- **cairn code fix (`v0.1.2`):** `ensureImage` now detaches **by image path** (`detachImageAttachments`
+  resolves dev nodes from `hdiutil info`) before re-attaching → idempotent, no leak. Verified: clean photos
+  run (43,856 items, 417.7 GB, 505s) + a single attachment, no thrash.
+- **Release-pipeline bug also fixed:** `release.yml`'s publish used `"${TARGET[@]}"` on an empty bash array,
+  which errors under `set -u` on the macOS runner's **bash 3.2** ("unbound variable") — that's why `v0.1.1`
+  failed. Switched to a plain string; `v0.1.2` built/signed/**published** cleanly and deployed to
+  `dist/cairn.app` (leaf `541075…`, both fixes in the binary). **8/8 green; alert cleared.**
+- Docs: cairn README §6 gotcha + memory + `cairn-deployment.md` §8. **Lesson:** disk-image (re)attach must be
+  idempotent — detach by image path, never just the mountpoint.
+
 ## 2026-06-27 (cont.) — comprehensive repo-wide doc/drift review + M71 RA foundation
 
 **What:** (1) authored the M71 IAM Roles Anywhere foundation (separate entry below covers M71
