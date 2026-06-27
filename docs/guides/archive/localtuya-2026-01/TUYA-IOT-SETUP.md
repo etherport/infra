@@ -49,8 +49,8 @@ python3 docs/guides/localtuya/get_tuya_devices.py
 ## Current Project Details
 
 From 1Password:
-- **Access ID (username)**: h5auaea7n9pqre5uhna7
-- **Access Secret (credential)**: ba59562a017249ad8f1a71619d3b43ca
+- **Access ID (username)**: <TUYA_ACCESS_ID>
+- **Access Secret (credential)**: <TUYA_ACCESS_SECRET>
 - **Project Code**: p1767568700268edn5pr
 - **Data Center**: Western America Data Center
 - **API Endpoint**: https://openapi.tuyaus.com

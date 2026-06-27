@@ -41,8 +41,8 @@ When prompted, enter:
 **Account Type**: Choose **"Smart Home PaaS"**
 
 **Configuration**:
-- **Access ID**: `h5auaea7n9pqre5uhna7`
-- **Access Secret**: `ba59562a017249ad8f1a71619d3b43ca`
+- **Access ID**: `<TUYA_ACCESS_ID>`
+- **Access Secret**: `<TUYA_ACCESS_SECRET>`
 - **Country/Region**: **United States**
 - **Data Center**: **Western America** (or Americas/US)
 

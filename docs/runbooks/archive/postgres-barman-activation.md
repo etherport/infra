@@ -1,5 +1,10 @@
 # Postgres Barman Backup — Activation Runbook
 
+> ✅ **ARCHIVED — activation COMPLETE.** Barman is live: continuous WAL + daily base backup
+> to `s3://postgres-barman.wind.etherport.net` (IRSA, no static key). Source of truth =
+> `platform/kubernetes/cnpg/01-cluster.yaml` (+ `cue-db/01-cluster.yaml`). For **restore**, see
+> `docs/runbooks/disaster-recovery.md` §9 and `platform/kubernetes/cnpg/README.md`. Kept for history.
+
 CloudNativePG ships with [Barman Cloud](https://docs.cloudnative-pg.io/documentation/current/backup_recovery/)
 support: continuous WAL archiving to S3 + scheduled `pg_basebackup`-style
 full backups. Together they give point-in-time recovery (PITR) at

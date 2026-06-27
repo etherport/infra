@@ -1,5 +1,11 @@
 # LocalTuya Setup - Local Control for Tuya Devices
 
+> ⚠️ **ARCHIVED (2026-01 setup saga, historical).** LocalTuya is now **live** — installed via the
+> Home Assistant deployment init-container (`platform/kubernetes/home-automation/`). This dir is the
+> original (incomplete-at-the-time) setup struggle; kept for reference only. **Any Tuya API
+> credentials in these files were scrubbed to placeholders** — the originally-committed secret must
+> be treated as compromised (in git history) and rotated at iot.tuya.com.
+
 This guide helps you set up LocalTuya for direct local control of all your Tuya/Smart Life devices.
 
 ## Benefits

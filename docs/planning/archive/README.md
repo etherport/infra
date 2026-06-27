@@ -32,6 +32,9 @@ current state is documented.
 | `gcp-oidc-wif-l21.md` | L21 GCP→Workload Identity Federation — ✅ done 2026-06-13. | `docs/planning/outstanding-work.md` L21 |
 | `udm-audit-2026-05-23.md` | One-shot read-only UDM/UniFi config-vs-docs audit; findings drove M30/M52/M56 (all ✅). 884-line historical snapshot. | `docs/architecture/firewall-zones.md` (live zone state) |
 | `completed-2026-H1.md` | Full detail for ✅-done tracker items (H3/H29–H40, M-tier, L-tier), extracted 2026-06-24 to slim the live tracker. The tracker keeps a one-line ✅ header per item linking here. | `docs/planning/outstanding-work.md` (one-line ✅ headers) |
+| `m76-ssh-shortlived-plan.md` | step-ca SSH-CA hybrid — ✅ cutover DONE 2026-06-26, fleet SSH is cert-only. Design record. | `CLAUDE.md` §4 (live invariant); `outstanding-work.md` M76 |
+| `VERSIONING-STRATEGY.md` | Considered-and-declined ADR; repo uses the Flux `$imagepolicy` + digest-pin model, not semver tags. | `outstanding-work.md` M64/H30; `docs/runbooks/image-pinning-policy.md` |
+| `kubespray-addons-migration-2026-01-completed.md` | Kubespray addon/config migration — completed early 2026 (moved out of `infra/ansible/`). | Live cluster (3-CP-HA build); `infra/kubespray/` |
 
 ## Future archive convention
 

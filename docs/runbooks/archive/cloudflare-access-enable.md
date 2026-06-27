@@ -1,5 +1,9 @@
 # Cloudflare full-zone migration + Access for approve.etherport.net
 
+> ✅ **ARCHIVED — COMPLETED 2026-05-27.** etherport.net is Cloudflare-authoritative; the Route53
+> zone was deleted. CF Access is edge-only (enforced at the tunnel, not Traefik — see CLAUDE.md §5).
+> This is the one-time migration record. Steady-state CF config lives in `infra/terraform/cloudflare/`.
+
 Migrates etherport.net DNS from Route53 to Cloudflare, then puts CF Access (Google SSO) in front of the AI advisor approval URL. Cost stays $0/mo; saves ~$15-18/mo if you later drop the ALB by tunneling its services through CF.
 
 **Email is priority-1.** SES sending (alertmanager, advisor, daily reports) depends on SPF + DKIM + DMARC + MX records being preserved exactly. Test a real send post-cutover before declaring success.

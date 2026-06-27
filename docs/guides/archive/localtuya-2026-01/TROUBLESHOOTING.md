@@ -46,7 +46,7 @@ The Tuya Cloud API requires devices to be **online** to return local keys becaus
    source /tmp/tuya-venv/bin/activate
    python3 -c "
    import tinytuya
-   cloud = tinytuya.Cloud(apiRegion='us', apiKey='h5auaea7n9pqre5uhna7', apiSecret='ba59562a017249ad8f1a71619d3b43ca')
+   cloud = tinytuya.Cloud(apiRegion='us', apiKey='<TUYA_ACCESS_ID>', apiSecret='<TUYA_ACCESS_SECRET>')
    devices = cloud.getdevices()
    for d in devices:
        if d.get('online'):

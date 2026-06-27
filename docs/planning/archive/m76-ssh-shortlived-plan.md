@@ -1,6 +1,12 @@
 # M76 — short-lived identity-bound SSH (step-ca hybrid) (plan)
 
-**Status:** 📋 PLANNED (decided 2026-06-25 — **step-ca SSH CA hybrid**, chosen over
+> ✅ **ARCHIVED — CUTOVER DONE 2026-06-26.** All phases shipped: step-ca up (VM 1006), fleet on
+> `TrustedUserCAKeys`, host certs, all consumers (CI + devbox) on certs, and the standing
+> `automation@homelab` key removed from all 15 hosts (cert-only, verified). Cloud-init keeps the key
+> as a per-host bootstrap seed. Commits `51400c7`/`19ef435`/`e9e28e3`/`3e811d9`/`3b6f994`/`071cebd`.
+> Live invariant lives in CLAUDE.md §4. Kept as the design record.
+
+**Status:** ✅ DONE 2026-06-26 (was: PLANNED, decided 2026-06-25 — **step-ca SSH CA hybrid**, chosen over
 Tailscale-SSH-for-fleet). **Tier/effort:** MED/M. Pairs with **M71** ("kill standing creds";
 M75 already did the in-cluster IRSA leg).
 

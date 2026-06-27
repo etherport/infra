@@ -36,6 +36,8 @@ approve-via-email). Archived because enablement is done, not because it's retire
 | [ddns-updater-cf-migration.md](ddns-updater-cf-migration.md) | DDNS updater → Cloudflare |
 | [cert-manager-dns01-cf-migration.md](cert-manager-dns01-cf-migration.md) | cert-manager DNS-01 → Cloudflare |
 | [aws-private-dns.md](aws-private-dns.md) | AWS private DNS setup |
+| [cloudflare-access-enable.md](cloudflare-access-enable.md) | Full-zone Route53→CF migration + CF Access (✅ 2026-05-27) |
+| [ubiquiti-ddns-route53.md](ubiquiti-ddns-route53.md) | Router-side Route53 DDNS field layout (Route53 retired) |
 
 ## Other completed migrations
 
@@ -45,3 +47,11 @@ approve-via-email). Archived because enablement is done, not because it's retire
 | [udm-network-app-modernization.md](udm-network-app-modernization.md) | UDM Network App API-key / Integration API |
 | [cloudwatch-to-loki-enable.md](cloudwatch-to-loki-enable.md) | Ship CloudWatch logs → Loki |
 | [alb-decom.md](alb-decom.md) | Decommission the AWS ALB |
+| [postgres-barman-activation.md](postgres-barman-activation.md) | CNPG Barman backup activation (✅ live; restore → disaster-recovery §9) |
+
+## Superseded by cairn (M103 — iCloud backup agent, 2026-06-25)
+
+| Doc | Purpose |
+|-----|---------|
+| [macos-photos-backup.md](macos-photos-backup.md) | The retired M79 bash iCloud Photos pipeline |
+| [mini-photos-export-observability.md](mini-photos-export-observability.md) | The old `photos_export_*` cluster-side metric/alert schema |
