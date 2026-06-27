@@ -13,6 +13,33 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-27 (cont.) — comprehensive repo-wide doc/drift review + M71 RA foundation
+
+**What:** (1) authored the M71 IAM Roles Anywhere foundation (separate entry below covers M71
+detail), (2) ran a full adversarial doc-drift review of the ENTIRE repo and brought it into line.
+Commits `34191b9` (M71 RA), `ba61e07` (archives + Tuya scrub), `b141494` (117 drift fixes + links).
+
+- **Comprehensive doc review (4 workflows, ~2.3M agent tokens).** Phase A: 13 agents reviewed
+  ~190 docs (all except vendored kubespray + .terraform) vs live manifests/kubectl/TF/git → 135
+  findings, **73 docs verified clean**. Phase C1 (me): **archived 10 completed/superseded docs**
+  (m76-plan cutover-done, VERSIONING-STRATEGY declined-ADR, KUBESPRAY_MIGRATION, 2 cairn-superseded
+  photos runbooks, postgres-barman activation, cloudflare-access migration, ubiquiti Route53 DDNS,
+  the 9-file localtuya setup saga) + banners + archive-index rows. Phase C2: 10 agents applied 117
+  drift fixes (disjoint file ownership). Phase D (me): repo-wide dead-link scan (fixed 33 links via
+  basename resolution + the move-map), residual cross-cutting grep, manifest validation.
+- **Themes fixed:** M76 cert-only across ALL ssh examples (dropped /tmp/auto-key + id_ed25519_homelab
+  → plain `ssh user@host`; kubespray → kubespray.sh wrapper); stale counts (Velero 10→12, nodes 5→8,
+  k8s v1.33.7→v1.34.2, helm→15, images→14, rules 22→21, AI actions 18→19); DynamoDB→S3-native lock;
+  manual-image→Flux automation; ~/Projects/homelab-infra→~/code/infra; kyverno/tetragon/step-ca added
+  to README; external-Ceph DR rewrite + barman bucket; alert-runbook label selectors. **Net −1040
+  lines** (bloat trims: remote-state-backend 807→150, operations-guide, SOPS-SETUP, plex, etc.).
+  platform/technitium consolidated into the k8s technitium README. **2 Flux manifests** corrected
+  (advisor-prompt node count/MetalLB-mode the AI consumes; backup-alerts schedule count).
+- **🔴 SECURITY — owner action:** plaintext Tuya Cloud **Access ID + Secret** were committed in the
+  localtuya docs (now scrubbed to placeholders, but **in git history**). **Rotate at iot.tuya.com**
+  (treat as compromised). Also left banner'd (not archived): the 3 dated planning snapshots
+  (zero-trust-assessment, dev-roadmap, roadmap-specs).
+
 ## 2026-06-27 — step-ca cert principals pinned + doc-sweep verification & fixes
 
 **What:** (1) tightened the step-ca headless cert principals (security hygiene), (2) independently
