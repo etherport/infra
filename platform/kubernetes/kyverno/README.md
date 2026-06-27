@@ -6,9 +6,11 @@ chart 3.8.x / Kyverno v1.18); this directory holds the **ClusterPolicies**.
 
 ## Safety model (why this can't wedge the cluster)
 
-1. **Audit-only.** Every rule sets `validate.failureAction: Audit` → violations are
-   *reported* (PolicyReports), never blocked. Flip a rule to `Enforce` only after its
-   report is clean.
+1. **Audit-first, enforce-when-clean.** A rule sets `validate.failureAction: Audit` →
+   violations are *reported* (PolicyReports), never blocked; flip to `Enforce` only once its
+   report is clean. **Current:** `disallow-latest-tag` = **Enforce** (0 violations, 2026-06-27);
+   `require-resource-requests` = **Audit** (third-party Helm charts + dynamically-created pods
+   lack requests — see its header for the enforce prereq).
 2. **Fail-open.** `spec.webhookConfiguration.failurePolicy: Ignore` → if the admission
    controller is down/slow, admission proceeds without the policy (never blocks).
 3. **Control-plane excluded.** Policies `exclude` `kube-system`/`flux-system`/`kyverno`
@@ -20,10 +22,10 @@ chart 3.8.x / Kyverno v1.18); this directory holds the **ClusterPolicies**.
 
 ## Policies
 
-| File | Policy | What it flags (audit) | Notable excludes |
-|---|---|---|---|
-| `00-require-resource-requests.yaml` | `require-resource-requests` | containers without cpu+memory requests | system + operator ns |
-| `01-disallow-latest-tag.yaml` | `disallow-latest-tag` | untagged images + `:latest` | system + operator ns, **`cue`** (intentional `:latest`, H30/M64) |
+| File | Policy | Mode | What it flags | Notable excludes |
+|---|---|---|---|---|
+| `00-require-resource-requests.yaml` | `require-resource-requests` | **Audit** | containers without cpu+memory requests | system + operator ns |
+| `01-disallow-latest-tag.yaml` | `disallow-latest-tag` | **Enforce** | untagged images + `:latest` | system + operator ns, **`cue`** (intentional `:latest`, H30/M64) |
 
 ## Operating
 

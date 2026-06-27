@@ -353,8 +353,19 @@ orphaned. Not service-affecting on its own.
   - **Clean Helm-created namespaces** `cert-manager`, `cnpg-system`, `github-actions-runner`, `plex` are **baseline-clean** (dry-run) but **NOT yet enforced** — their ns is created by a HelmRelease (`createNamespace`), so a strategic-merge patch in `namespace-pss-labels.yaml` has no build target (breaks the build, per that file's header). Label them **at the creation source**: add an explicit `00-namespace.yaml` (with PSS labels) + set the release `createNamespace: false`, per release. **Effort:** S each.
   - **Stale/empty namespaces** (0 pods, likely leftovers): `kopia` (decommissioned), `technitium-dns`, `rclone-gdrive`, `home`, `media`, `infra`, `gpu-operator` — **delete** (separate cleanup, confirm truly unused first), don't label. `cilium-secrets`/`pg-recovery`/`ceph-csi`/`multus-system` are legit-empty system ns — leave.
 
-### 🟡 M73. Admission policy engine (Kyverno) — DEPLOYED audit-first 2026-06-24
-- **Source:** zero-trust assessment 2026-06-17. No policy engine before now.
+### 🟡 M73. Admission policy engine (Kyverno) — ENFORCE PHASE-1 2026-06-27
+- **✅ ENFORCING `disallow-latest-tag` (2026-06-27, commit `ba130f9`).** Audit review found **0
+  violations** for this policy (cue-api excluded; all operators use tagged/pinned images so even
+  dynamically-created pods pass), so flipped both its rules `failureAction: Audit→Enforce`. **Verified
+  live:** a `:latest` pod in `default` is **denied** at admission, a tagged pod is allowed, and `:latest`
+  in the excluded `cue` ns is allowed; 0 running pods disrupted (enforce doesn't evict; fail-open via
+  `failurePolicy: Ignore`). **`require-resource-requests` STAYS Audit by design** — its 59 audit fails
+  are ~6 third-party Helm charts (kube-prometheus-stack, traefik, tailscale-operator, ARC, ceph
+  csi-rbdplugin in `default`, the s3-sync cronjob), several creating pods **dynamically** (tailscale
+  proxies, ARC ephemeral runners, csi on reschedule) → enforcing would block those = outages. **Prereq
+  to enforce it: add `resources.requests` to those charts' values (+ dynamic-pod templates), re-confirm
+  `kubectl get polr -A` clean, then flip** (documented in `00-require-resource-requests.yaml` header).
+- **Source:** zero-trust assessment 2026-06-17 (archived). No policy engine before now.
 - ✅ **Engine deployed** (`clusters/wind/helm-releases/kyverno.yaml`, chart 3.8.x / Kyverno **v1.18.1**): 4 controllers healthy. Found a pre-existing `cluster-policy` that turned out to be the **NVIDIA gpu-operator's** `ClusterPolicy` (`nvidia.com`, not `kyverno.io`) — Kyverno itself has **zero** prior policies. Webhook is **fail-open** (`failurePolicy: Ignore`).
 - ✅ **Starter policies (audit-only)** in `platform/kubernetes/kyverno/`: `require-resource-requests`, `disallow-latest-tag` (cue excluded — intentional `:latest`, H30/M64). Both Ready, `validate.failureAction: Audit`, control-plane + operator namespaces excluded. **Verified admission still works** (a `:latest`/no-requests pod admits under audit). Kyverno **v1.18 API** = per-rule `validate.failureAction` + `spec.webhookConfiguration.failurePolicy` (the spec-level fields are deprecated). Safety model + ops in the dir README.
 - ⏳ **Next (promote + extend):** review `kubectl get polr -A` (populates on the background-scan interval / next admission), then flip clean rules `Audit→Enforce` per-rule. **Add image-signature/provenance** (cosign `verifyImages`) to back H30 — the higher-value provenance policy, deferred (needs the signing setup). Optionally a `require-digest` policy. **Effort:** S–M to promote + add cosign.

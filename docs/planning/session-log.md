@@ -13,6 +13,30 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-27 (cont. 2) — M73 Kyverno: enforce disallow-latest-tag (audit→enforce, verified safe) + zero-trust archived
+
+**What:** closed out + archived the zero-trust assessment (`da7d6c6`), then did M73 enforce phase-1.
+Commit `ba130f9`.
+
+- **M73 — `disallow-latest-tag` → Enforce.** Reviewed the Kyverno audit thoroughly first (the
+  requirement was "enforcing won't cause problems"): this policy had **0 violations** (`kubectl get
+  polr -A` clean for it; cue-api excluded + all operators use tagged/pinned images so dynamic pods
+  pass), so flipped both rules `failureAction: Audit→Enforce`. **Verified live:** `:latest` pod in
+  `default` denied at admission; tagged pod allowed; `:latest` in excluded `cue` allowed; 0 running
+  pods disrupted; Kyverno controllers healthy. Fail-open (`failurePolicy: Ignore`) so a down Kyverno
+  never wedges admission.
+- **`require-resource-requests` deliberately LEFT in Audit.** Its 59 audit fails are ~6 third-party
+  Helm charts (kube-prometheus-stack, traefik, tailscale-operator, ARC, ceph csi-rbdplugin in
+  `default`, s3-sync cronjob), several creating pods **dynamically** (tailscale proxies, ARC ephemeral
+  runners, csi on reschedule) — enforcing would block those = outages. Prereq to enforce: add
+  `resources.requests` to those charts' values + the dynamic-pod templates, re-audit clean, then flip.
+  Documented in the policy header + the dir README + tracker M73.
+- **Zero-trust assessment archived** (`da7d6c6`): all 8 gaps it raised became tracked items
+  (H37/H38/M75/M76 ✅; M72/M73/M74 deployed; L24/M71 carried in the tracker). Closure banner added,
+  git mv → planning/archive/, refs repointed.
+- **Next:** require-resource-requests chart-prep (to enforce it); M74 Tetragon detection policies →
+  alerting; M72 PSA enforce tail; M77 Stage 2 (PVE firewall DROP); L24 (FRR window); M71 RA apply.
+
 ## 2026-06-27 — cairn photos sparsebundle attach-leak incident → v0.1.2 (idempotent attach + release fix)
 
 **What:** overnight `ICloudBackupFailed` alert (photos rc=1) + a Finder **"Macintosh HD can't be opened —
