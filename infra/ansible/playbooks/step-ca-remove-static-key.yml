@@ -1,0 +1,35 @@
+---
+# M76 CUTOVER — remove the standing automation@homelab static key from the running
+# fleet's authorized_keys. After this, SSH to the Ubuntu fleet is CERT-ONLY
+# (TrustedUserCAKeys, verified on all 15 hosts before running this).
+#
+# SAFE BY DESIGN:
+#   * Surgical: `ansible.posix.authorized_key state=absent` removes ONLY the one
+#     automation@homelab key — other authorized_keys (e.g. root@pve keeps
+#     graham-mac break-glass + unifi-cert-sync) and the cert trust
+#     (TrustedUserCAKeys in sshd_config) are untouched.
+#   * Cert-connected: run with `--private-key ~/.ssh/id_homelab_cert` so ansible
+#     authenticates via the CERT, never the key it's removing — it cannot cut its
+#     own connection.
+#   * Reversible: re-add via the SOPS automation_ssh_private_key, or re-provision
+#     (cloud-init re-injects it as the per-host BOOTSTRAP key). Break-glass = PVE
+#     console + IPMI 10.10.200.21.
+#
+# cloud-init (TF k8s-vms/standalone-vms + AWS compute) KEEPS the key as the
+# per-host bootstrap (a new host needs it to be enrollable). This play only cleans
+# RUNNING hosts. pve-sshd.yml's re-assertion of the key is dropped in the same change.
+#
+# Run:  ansible-playbook -i inventory/wind/inventory.ini playbooks/step-ca-remove-static-key.yml \
+#         --private-key ~/.ssh/id_homelab_cert
+- name: M76 cutover — remove the static automation@homelab key from the fleet
+  hosts: "{{ target_hosts | default('all') }}"
+  become: true
+  gather_facts: false
+  vars:
+    automation_pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab"
+  tasks:
+    - name: Remove automation@homelab from {{ ansible_user }}@{{ inventory_hostname }} authorized_keys
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user | default('ubuntu') }}"
+        key: "{{ automation_pubkey }}"
+        state: absent

@@ -36,11 +36,9 @@
         ssh-ed25519
         AAAAC3NzaC1lZDI1NTE5AAAAIHJaxovJWESV+EyzJVzx120nYxIfG3DIYp24J8bzlR6s
         graham-mac
-      # gh-runner ANSIBLE_SSH_KEY secret — primary automation channel.
-      - >-
-        ssh-ed25519
-        AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR
-        automation@homelab
+      # M76 cutover: automation@homelab REMOVED — root@pve is now cert-only
+      # (TrustedUserCAKeys, step-ca user CA) for automation (CI + the devbox agent
+      # mint short-lived certs). graham-mac above stays as operator break-glass.
       # unifi-cert-sync job (k8s unifi-cert-sync ns) — pushes the cert-manager
       # CF wildcard to PVE's pveproxy, replacing the broken native Route53 ACME.
       - >-
