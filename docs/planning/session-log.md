@@ -13,6 +13,53 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-26 (cont. 4) — M76 CUTOVER: the running fleet is SSH cert-only (static key removed)
+
+**What:** finished M76 — switched the last 2 consumers to certs, removed the standing
+`automation@homelab` key from every running host's `authorized_keys`, and cleaned the devbox
+holder. SSH to the Ubuntu fleet is now **cert-only** (step-ca user CA). Commits `e9e28e3`
+(container workflows), `3e811d9` (cutover removal play + pve-sshd), `3b6f994` (devbox cert-only
++ cloud-init bootstrap annotations).
+
+- **Last consumers → certs:** the **2 CONTAINER** ansible workflows (vm-fleet, proxmox) couldn't
+  use the host's system `step` (it's not in `ghcr.io/sparked-diamond/ansible-runner`), so
+  `setup-ssh-cert/action.yml` now **self-installs the pinned, checksum-verified step CLI**
+  (`0.30.6`, sha `e44a5dc5…`) into a job-local dir when absent. proxmox check-mode smoke-tested
+  green. (The 4 host-context workflows were already on certs from cont. 3.) **packer keeps the
+  static key by design** (build-VM access).
+- **Pre-removal safety:** verified all **15 hosts cert-reachable (15/15)** first. step-ca itself
+  (VM 1006) had been **excluded** from Phase 2 user-CA trust (it's the CA) → added user-CA trust to
+  it first so the removal wouldn't strand it.
+- **Removal:** `step-ca-remove-static-key.yml` — surgical `ansible.posix.authorized_key state=absent`
+  for the one `automation@homelab` pubkey, run **`--private-key ~/.ssh/id_homelab_cert`** so ansible
+  authenticates with the CERT (never the key it's deleting → can't cut its own connection),
+  `gather_facts:false`, `user={{ ansible_user|default('ubuntu') }}`. **PLAY RECAP: 15/15
+  `changed=1 failed=0`.** `pve-sshd.yml` edited to stop re-asserting the key (root@pve cert-only;
+  graham-mac break-glass + unifi-cert-sync kept).
+- **Post-removal verify (the proof):** cert still **15/15**; static key now **REJECTED** on
+  k8s-w1/pve/step-ca (`Permission denied`). So the key no longer grants standing access anywhere.
+- **Devbox holder cleanup:** `devbox.yml` no longer deploys the static key + writes a **cert-only**
+  `~/.ssh/config` (single `IdentityFile id_homelab_cert`); dropped the unused `homelab_key_path` var.
+  Live devbox matched (removed `~/.ssh/id_ed25519_homelab`, config cert-only) → SSH to
+  k8s-w1/devbox/pve verified **via config alone** (no `-i`). The renew-loop cert is valid 13h, renews
+  every 6h (timer active).
+- **Residuals — BY DESIGN (documented, NOT standing fleet access):** (1) **cloud-init** keeps the key
+  as the per-host **BOOTSTRAP** pubkey (a new host must be SSH-reachable to be enrolled into cert
+  trust, then the same removal play strips it) — annotated the 3 TF vars (proxmox k8s-vms +
+  standalone-vms, AWS compute); (2) **packer** static key; (3) **appliances** scoped legacy keys.
+  **Residual HOLDERS of the now-powerless key material:** the **mini** copy (rolls into **M71**), the
+  GH **`ANSIBLE_SSH_KEY`** secret (now bootstrap-only — **user removes via the GitHub UI**; the M92
+  dispatch PAT lacks Secrets scope so I can't), and the SOPS `automation_ssh_private_key` (kept as the
+  re-add / break-glass source).
+- **Break-glass:** PVE console + IPMI `10.10.200.21`. Reversible: re-add via the SOPS key or
+  re-provision (cloud-init re-injects the bootstrap key).
+- **Minor follow-up noted:** the devbox renew-loop cert shows an **empty Principals** list (valid for
+  any username — broader than the intended `ubuntu,root`); functional + short-lived + CA-restricted, so
+  not a blocker. Tighten `step-ssh-renew.sh` to pin principals when convenient.
+- **Next:** M71 (kill the mini's standing AWS keys — also remove the mini's `automation@homelab` copy
+  there); L24 FRR migration (windowed, prep done); M77 Stage 2 (flip per-VM firewall ACCEPT→DROP after
+  PVE firewall-log review). User to delete the `ANSIBLE_SSH_KEY` GH secret.
+
 ## 2026-06-26 (cont. 3) — cairn CI signed release (M7) + Grafana photos totals + full docs sweep
 
 **What:** (1) shipped cairn's **CI signed-release** automation, (2) fixed a Grafana Photos-board gap, (3)

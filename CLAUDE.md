@@ -119,6 +119,17 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   or `udm_tfadmin_*` login). UniFi Protect = **`Windprotect` `10.10.212.10`** (SSH via
   `udm_ssh_user`/`udm_ssh_password`; integration API via `protect-tf` key but it's
   **read-only — Alarm Manager automations are UI-only**). UNAS `10.10.209.10`.
+- **SSH to the Ubuntu fleet is CERT-ONLY (M76, since 2026-06-26).** All 15 hosts (8 k8s nodes +
+  5 standalone VMs + step-ca + pve) trust the **step-ca user CA** (`TrustedUserCAKeys`, VM 1006
+  `https://10.10.201.46:8443`); the standing `automation@homelab` static key was **removed from every
+  running host's `authorized_keys`** and is now **rejected**. The **devbox** mints a 13h user cert via
+  the renew-loop (`step-ssh-renew.timer` → `~/.ssh/id_homelab_cert`, ssh-config is cert-only — just
+  `ssh user@host`); **CI** mints a ≤1h cert per run (`setup-ssh-cert` action + `STEP_JWK_PASSWORD`).
+  ⚠️ The static key SURVIVES in **cloud-init as the per-host BOOTSTRAP seed** (a new host must be
+  reachable to be enrolled, then `step-ca-remove-static-key.yml` strips it — the 3 TF vars are annotated)
+  + **packer** (build VM) + **appliance** scoped keys. **Break-glass = PVE console + IPMI
+  `10.10.200.21`** (if a cert expires with step-ca down). Host certs (`HostCertificate`) kill known_hosts
+  TOFU on the 13 Servers-VLAN hosts. Detail: `docs/planning/m76-ssh-shortlived-plan.md`.
 - **Never delete the `terraform-homelab` IAM access key** — it's shared with the local
   homelab profile (H29 cutover note); rotate-only. (It is NOT one of the M75-orphaned keys.)
 - **M75 IRSA (in-cluster AWS workload identity) — DONE + e2e-verified 2026-06-24.** All in-cluster

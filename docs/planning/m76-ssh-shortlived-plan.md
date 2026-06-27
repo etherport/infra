@@ -87,7 +87,13 @@ earlier follow-ups are RESOLVED:
 > drop-in `60-step-ca.conf`) to **all 14 fleet hosts** (8 k8s nodes + 5 standalone VMs + pve) —
 > ADDITIVE, `sshd -t`-validated before reload, the static key untouched. Proven e2e: the devbox
 > (step-cli bootstrapped) mints a JWK cert and SSHes cert-only (`-F /dev/null`) to several hosts.
-> **Only Phase 5 (cutover) remains** — see below.
+> **✅ Phase 5 (CUTOVER) DONE 2026-06-26** (commits `e9e28e3`, `3e811d9`, `3b6f994`). The 2 container
+> ansible workflows switched to certs (step CLI self-installed in-container); `automation@homelab`
+> removed from `authorized_keys` on **all 15 hosts** (`step-ca-remove-static-key.yml`, run with the
+> cert as `--private-key`); verified after — cert 15/15, static key REJECTED. devbox is cert-only
+> (`devbox.yml` + live). Residuals are **bootstrap-only by design** (cloud-init key = per-host
+> enrollment seed; packer build key; appliance scoped keys) — see the §"Phase 5" note below + the
+> 2026-06-26 cont. 4 session-log entry. **Fleet SSH is now cert-only.**
 
 Host = a **dedicated off-cluster standalone VM `step-ca` (1006, 10.10.201.46)**. Built + validated:
 - `infra/terraform/proxmox/standalone-vms/main.tf` — VM 1006 (1 vCPU / 1 GB / 15 GB). `validate` OK.
@@ -128,13 +134,23 @@ headless renewal is demonstrably non-interactive.
 node/VM + PVE, still **in parallel** with the existing key. Set the **console break-glass password**
 on each (cloud-init drop-in / ansible). Document break-glass (PVE console + IPMI) in a runbook.
 
-**Phase 5 — cut over + remove the standing key.** Switch the devbox agent SSH config + CI ansible to
-the cert path; verify the whole fleet works on certs (incl. `k8s-node-patch.yml`,
-`ansible-vm-fleet.yml`, kubespray SSH). **Then remove the `automation@homelab` authorized_keys entry
-host-by-host** (cloud-init `keys=` → ansible-managed removal), and from the 4 hardcoded deploy points
-(TF cloud-init, Packer, ansible, AWS cloud-init) + the SOPS/GH-secret holders — leaving **only**: the
-appliance scoped keys, and **optionally** a SOPS-sealed emergency key authorized on **PVE root only**
-(belt-and-suspenders; IPMI already covers it).
+**Phase 5 — cut over + remove the standing key. ✅ DONE 2026-06-26.** Switched the devbox agent SSH
+config + all 6 CI ansible workflows to the cert path; verified the whole fleet works on certs.
+**Removed the `automation@homelab` authorized_keys entry** from all 15 running hosts via
+`step-ca-remove-static-key.yml` (ansible-managed `state=absent`, run with the cert as `--private-key`),
+plus `pve-sshd.yml` stopped re-asserting it, plus the devbox stopped deploying/offering it. Verified
+after: cert 15/15, static key REJECTED.
+**Refinement vs the original plan** — the key is NOT removed from cloud-init / packer / appliances:
+- **cloud-init (3 TF vars)** KEEPS it as the per-host **BOOTSTRAP** seed — a freshly provisioned host
+  must be SSH-reachable before it can be enrolled into cert trust (`step-ca-trust.yml` +
+  `-hostcerts.yml`); the same removal play strips it post-enroll. The vars are annotated as
+  bootstrap-only. (Removing it here would make new hosts un-provisionable.)
+- **packer** keeps the static key (build-VM access, by design).
+- **appliances** keep scoped legacy keys (hard carve-out).
+**Residual holders of the now-powerless key material** (grants nothing on the running fleet): the mini
+copy (→ M71), the GH `ANSIBLE_SSH_KEY` secret (bootstrap-only; user deletes via UI), and the SOPS
+`automation_ssh_private_key` (kept as the re-add / break-glass source). No PVE-root emergency key was
+added — IPMI + console cover it.
 
 **Phase 6 — human path + docs.** Confirm Tailscale-SSH `check` mode still serves interactive remote
 human access (already IaC'd). Update CLAUDE.md (§4 access), the SSH runbook, outstanding-work (M76 ✅
