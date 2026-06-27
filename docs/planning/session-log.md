@@ -54,8 +54,18 @@ verified the prior doc sweep (`1cb7d82`) and fixed its one defect + ~18 sweep-mi
   recommend `max_over_time([30d])` or a cumulative metric — left for operator (cairn metric semantics live
   in the cairn repo). (3) headless-ops-host.md body still describes mini-RC/static-key/standing-AWS-creds
   (M76/M82 superseded) — banner added, deeper body reconcile deferred (low priority).
-- **Next:** M71 (kill standing static AWS keys on mini/terminals — also drop the mini's residual
-  `automation@homelab` copy). User is deleting the GH `ANSIBLE_SSH_KEY` secret.
+- **M71 (started, "Both" path chosen):** authored the **IAM Roles Anywhere foundation** (AWS-side) so
+  the mini mints short-lived creds from a step-ca X.509 cert instead of the standing `[homelab]` key.
+  `infra/terraform/aws/roles-anywhere/` (trust anchor = **reused step-ca root**; role trust-scoped to
+  trust-anchor + cert Subject CN `mini.wind.etherport.net` + issuer = step-ca intermediate; profile,
+  1h) + CI workflow + the CI rolesanywhere-perms delta JSON + mini runbook + `m71-roles-anywhere-plan.md`.
+  `terraform validate` green; RA semantics adversarially verified vs AWS docs (fixed the signing-helper
+  download URL `Darwin`→`MacOS/Sonoma` + version→1.8.4, added `--intermediates`, confirmed the
+  `x509Subject/CN` condition key). **Not applied** — 3 owner-gated steps (CI rolesanywhere perms;
+  policy-scope+quota; mini-side cert). **Interim:** the agent can't reach the mini (lost the static
+  key in M76) or do IAM (bounded homelab key); owner ran interim-win (a) **[claude-admin] PowerUser
+  removed from the mini 2026-06-27**. **`[homelab]` terraform key STAYS until RA is live + verified**
+  (removing it now strands the mini's AWS). User is deleting the GH `ANSIBLE_SSH_KEY` secret.
 
 ## 2026-06-26 (cont. 4) — M76 CUTOVER: the running fleet is SSH cert-only (static key removed)
 
