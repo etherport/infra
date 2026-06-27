@@ -21,8 +21,12 @@ variable "proxmox_token_secret" {
   sensitive   = true
 }
 
+# M76 cutover (2026-06-26): per-host BOOTSTRAP key only. A new node must be SSH-reachable
+# before step-ca cert enrollment (playbooks/step-ca-trust.yml + -hostcerts.yml); the key
+# is then removed from the running host (step-ca-remove-static-key.yml) → fleet SSH is
+# cert-only. Keep this default so new nodes provision; it is NOT standing access.
 variable "ssh_public_key" {
-  description = "SSH public key injected into each VM via cloud-init for ansible/kubespray + admin access"
+  description = "automation@homelab BOOTSTRAP pubkey (cloud-init) — removed post-enroll; fleet SSH is cert-only (M76)"
   type        = string
   default     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab"
 }

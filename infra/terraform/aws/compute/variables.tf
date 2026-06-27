@@ -27,8 +27,12 @@ variable "alert_email" {
 # and infra/ansible/playbooks/pve-sshd.yml — true cross-stack dedup isn't possible
 # from a single TF var. If rotated, update all of them (see
 # memory/reference_pve_automation_pubkey.md for the canonical placement list).
+# M76 cutover (2026-06-26): per-host BOOTSTRAP key only (cloud-init). The AWS gh-runner
+# is enrolled into step-ca cert trust after first boot, then the key is removed from the
+# running host → SSH is cert-only. Keep this default so a re-provisioned runner is
+# reachable for enrollment; it is NOT standing access.
 variable "automation_ssh_pubkey" {
-  description = "gh-runner automation SSH public key for ubuntu cloud-init authorized_keys"
+  description = "automation@homelab BOOTSTRAP pubkey (cloud-init) — removed post-enroll; fleet SSH is cert-only (M76)"
   type        = string
   default     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDbuFR+hru9VgMct+C7pCxrxXB0O3mrhFcBP3QJ/D8IR automation@homelab"
 }

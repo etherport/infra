@@ -94,8 +94,15 @@ standing `id_ed25519_homelab` key:
 - `step-ssh-renew.sh` — mints a 13h user cert (principals `ubuntu`,`root`) to
   `~/.ssh/id_homelab_cert` via the headless JWK provisioner (jwk_password from SOPS).
 - `step-ssh-renew.{service,timer}` — user units; the timer renews every 6h.
-- `devbox.yml` adds `id_homelab_cert` to `~/.ssh/config` **ahead of** the static key
-  (key stays as fallback until the M76 cutover removes it).
+- `devbox.yml` writes a **cert-only** `~/.ssh/config` (`id_homelab_cert` is the sole
+  `IdentityFile` for homelab hosts).
+
+> **M76 cutover DONE (2026-06-26):** the static `id_ed25519_homelab` key is no longer
+> deployed to the devbox and the running fleet **rejects** it (removed from
+> `authorized_keys`, see `playbooks/step-ca-remove-static-key.yml`). The devbox SSHes
+> cert-only; the renew-loop is the only credential. **Break-glass = PVE console + IPMI
+> 10.10.200.21** (if the cert expires with step-ca down, mint manually or use the SOPS
+> `automation_ssh_private_key` after re-adding it — both require step-ca/console access).
 
 Install on devbox (one-time):
 ```bash

@@ -37,7 +37,6 @@
     # homelab hosts; Claude Code reads the rest on-demand via `sops -d` (age key
     # deployed below) — no `op`, no 1Password unlocks.
     _ops: "{{ lookup('pipe', 'sops -d ' ~ (playbook_dir | quote) ~ '/secrets/homelab-ops.sops.yaml') | from_yaml }}"
-    homelab_key_path: "/home/ubuntu/.ssh/id_ed25519_homelab"
 
   tasks:
     # -------------------------------------------------------------------------
@@ -256,16 +255,13 @@
       no_log: true
       when: (lookup('env', 'SOPS_AGE_KEY') | default('')) | length > 0
 
-    - name: Deploy homelab automation SSH key (SSH to PVE / k8s / SBC / VMs)
-      ansible.builtin.copy:
-        content: "{{ _ops.automation_ssh_private_key }}"
-        dest: "{{ homelab_key_path }}"
-        owner: "{{ dev_user }}"
-        group: "{{ dev_user }}"
-        mode: "0600"
-      no_log: true
+    # M76 CUTOVER (done 2026-06-26): the static homelab key is NO LONGER deployed to
+    # the devbox. The fleet rejects it (removed from authorized_keys) — SSH is
+    # cert-only. The renew-loop (step-ssh-renew.timer, below) mints a short-lived
+    # step-ca user cert at id_homelab_cert; that is the sole credential.
+    # Break-glass = PVE console + IPMI 10.10.200.21.
 
-    - name: SSH config — prefer the step-ca cert for homelab hosts, key as fallback
+    - name: SSH config — step-ca cert for homelab hosts (cert-only, M76 cutover)
       ansible.builtin.blockinfile:
         path: "{{ dev_home }}/.ssh/config"
         create: true
@@ -273,13 +269,11 @@
         group: "{{ dev_user }}"
         mode: "0600"
         marker: "# {mark} ANSIBLE homelab"
-        # M76: the renew-loop (below) keeps a short-lived step-ca user cert at
-        # id_homelab_cert; offer it FIRST. The static homelab key stays as a
-        # fallback until the M76 cutover removes it (drop that line at cutover).
+        # M76 cutover: the static homelab key is gone; the step-ca renew-loop
+        # (below) keeps a short-lived user cert at id_homelab_cert — the sole creds.
         block: |
           Host 10.10.* pve.wind.etherport.net *.wind.etherport.net
             IdentityFile {{ dev_home }}/.ssh/id_homelab_cert
-            IdentityFile {{ homelab_key_path }}
             IdentitiesOnly yes
             StrictHostKeyChecking accept-new
 
