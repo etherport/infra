@@ -1,9 +1,17 @@
 # M73 — Kyverno guardrail: every container must declare CPU + memory requests.
-# AUDIT-only (validate.failureAction: Audit) → reported via PolicyReports, nothing blocked.
+# ⚠️ STAYS AUDIT-only (validate.failureAction: Audit) → reported via PolicyReports, nothing blocked.
 # failurePolicy: Ignore → a down/slow admission controller fails OPEN (never wedges admission).
-# Flip failureAction → Enforce per-rule once `kubectl get polr -A` is clean.
+#
+# Why NOT enforce yet (audit 2026-06-27): ~6 third-party Helm charts ship pods without requests —
+# kube-prometheus-stack (node-exporter/grafana/pushgateway/prometheus/loki/alertmanager/operator/
+# kube-state-metrics), traefik, the tailscale-operator, ARC (github-actions-runner), the ceph
+# csi-rbdplugin (runs in `default`), and the s3-sync-daily-report CronJob. Several create pods
+# DYNAMICALLY (tailscale proxies, ARC ephemeral runners, csi on reschedule) — enforcing would BLOCK
+# those at admission = outages. PREREQ to enforce: add resources.requests to each chart's values
+# (+ the dynamic-pod templates), re-confirm `kubectl get polr -A` clean, THEN flip to Enforce.
 # (Division of labour: PSA handles pod-security posture; Kyverno does the guardrails PSA can't —
 #  resource requests, image tags, later image-signature/provenance for H30.)
+# disallow-latest-tag (01-) is already ENFORCING — see its header.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:

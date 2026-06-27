@@ -1,6 +1,8 @@
 # M73 — Kyverno guardrail: images must carry an explicit, non-':latest' tag.
-# AUDIT-only + failurePolicy Ignore (see 00-require-resource-requests.yaml header).
-# Pairs with H30 (digest-pinning): a tag is the floor; digest is the goal.
+# ✅ ENFORCING (2026-06-27): flipped audit→enforce after the audit showed ZERO violations
+# (`kubectl get polr -A` clean for this policy; all operators use tagged/pinned images, so
+# dynamically-created pods pass too). failurePolicy: Ignore → a down Kyverno fails OPEN
+# (never wedges admission). Pairs with H30 (digest-pinning): a tag is the floor; digest is the goal.
 # cue-api is EXCLUDED — it intentionally floats on :latest during dev (H30/M64).
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
@@ -39,7 +41,7 @@ spec:
                 - multus-system
                 - ceph-csi
       validate:
-        failureAction: Audit
+        failureAction: Enforce
         message: "An explicit image tag is required (no untagged images)."
         pattern:
           spec:
@@ -67,7 +69,7 @@ spec:
                 - ceph-csi
                 - cue   # cue-api intentionally floats on :latest during dev (H30/M64)
       validate:
-        failureAction: Audit
+        failureAction: Enforce
         message: "Using a ':latest' image tag is not allowed — pin a version (ideally a digest)."
         pattern:
           spec:
