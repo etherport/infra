@@ -107,7 +107,9 @@ spec:
             - name: CUE_BUG_REPORTS
               value: 'true'
             - name: CUE_OWNER_EMAIL
-              value: 'grahamsm@gmail.com'
+              # Comma-separated bug-admin allow-list (owner + co-admin Aidan) — gates /ui/admin/bugs
+              # + the owner /bug chat commands (CF-Access email match, fail-closed).
+              value: 'grahamsm@gmail.com,aidan.eichman@gmail.com'
             # 2026-06-02: enable the daily-state + surfaces features (built + adversarially
             # reviewed + eval-validated, no regression). today-state extraction (chat →
             # daily_state), inbound-photo classification (workout photos log cardio), and
