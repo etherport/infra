@@ -31,7 +31,7 @@ provider "proxmox" {
 #
 # k8s nodes + standalone VMs are NOT touched here (all VM NICs are firewall=0).
 # Selective VM firewalling is tracked separately as M77. See
-# docs/planning/zero-trust-assessment-2026-06-17.md.
+# docs/planning/archive/zero-trust-assessment-2026-06-17.md.
 # =============================================================================
 
 locals {

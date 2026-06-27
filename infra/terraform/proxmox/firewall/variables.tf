@@ -29,7 +29,7 @@ variable "node_name" {
 
 # Trusted admin source ranges allowed to reach the PVE host management plane
 # (API 8006 / SSH 22 / SPICE / ping). Deliberately covers every path admin
-# access can arrive by — see H37 / zero-trust-assessment-2026-06-17.md:
+# access can arrive by — see H37 / archive/zero-trust-assessment-2026-06-17.md:
 #   10.10.200.0/24  Management VLAN (local)
 #   10.10.201.0/24  Servers — WG-pod SNAT source + likely TS subnet-router
 #   10.10.202.0/24  Mac mini LAN (10.10.202.101)

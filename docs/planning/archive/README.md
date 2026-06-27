@@ -35,6 +35,7 @@ current state is documented.
 | `m76-ssh-shortlived-plan.md` | step-ca SSH-CA hybrid — ✅ cutover DONE 2026-06-26, fleet SSH is cert-only. Design record. | `CLAUDE.md` §4 (live invariant); `outstanding-work.md` M76 |
 | `VERSIONING-STRATEGY.md` | Considered-and-declined ADR; repo uses the Flux `$imagepolicy` + digest-pin model, not semver tags. | `outstanding-work.md` M64/H30; `docs/runbooks/image-pinning-policy.md` |
 | `kubespray-addons-migration-2026-01-completed.md` | Kubespray addon/config migration — completed early 2026 (moved out of `infra/ansible/`). | Live cluster (3-CP-HA build); `infra/kubespray/` |
+| `zero-trust-assessment-2026-06-17.md` | Posture assessment — its 8 gaps (H37/H38/M72–M76/L24) all became tracked items; H37/H38/M75/M76 ✅ shipped, M72/M73/M74 deployed, L24/M71 carried in the tracker. | `docs/planning/outstanding-work.md` (the tracked IDs) |
 
 ## Future archive convention
 

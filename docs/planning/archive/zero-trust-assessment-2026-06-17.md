@@ -1,4 +1,21 @@
-> **Dated snapshot (2026-06-17).** Most gaps have since shipped: H37 (PVE firewall) ✅, H38 (Authentik internal SSO) ✅, M75 (IRSA) ✅, M76 (cert-only SSH) ✅, PSA now enforcing. Kept for the pillar-by-pillar reasoning; check `outstanding-work.md` for current status.
+> ✅ **CLOSED / ARCHIVED 2026-06-27 — assessment complete; every gap became a tracked item.**
+> This 2026-06-17 snapshot's job was to identify zero-trust gaps and spawn tracked work — done.
+> Final status of the gaps it raised (live status always in `outstanding-work.md`):
+>
+> | Gap | Status |
+> |-----|--------|
+> | **H37** PVE host firewall | ✅ shipped (default-deny + mgmt/Ceph/IPMI allows) |
+> | **H38** Authentik internal SSO (forward-auth) | ✅ shipped |
+> | **M75** in-cluster IRSA (no static AWS keys in etcd) | ✅ shipped + e2e-verified |
+> | **M76** cert-only fleet SSH (step-ca) | ✅ shipped (cutover done) |
+> | **M72** PSA audit→enforce | 🟡 enforcing on 19 namespaces (per-ns rollout continues) |
+> | **M73** Kyverno admission engine | 🟡 deployed; policies in **Audit** → flip to Enforce is the tracked next step |
+> | **M74** Tetragon eBPF runtime detection | 🟡 deployed (observe-only) |
+> | **L24** BGP session auth (MetalLB↔UDM) | 📋 blocked on the FRR migration (windowed) |
+> | **M71** mini AWS standing-key removal (the AWS analog) | 🟡 Roles Anywhere foundation built; owner-gated apply |
+>
+> The pillar-by-pillar reasoning below is the historical record. **Remaining active work
+> (M71, M72/M73/M74 enforce, L24) lives under those IDs in `outstanding-work.md`.**
 
 # Zero-Trust posture assessment — 2026-06-17
 
