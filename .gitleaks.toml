@@ -10,11 +10,15 @@ useDefault = true
 description = "Benign: SOPS templates (placeholders), doc examples, and the SES SMTP access-key ID (a public identifier — the secret access key is externalized in the alertmanager-smtp-config k8s Secret)."
 paths = [
   '''.*\.sops\.yaml\.template$''',
-  '''docs/guides/localtuya/TROUBLESHOOTING\.md''',
-  '''docs/guides/localtuya/WEB-UI-EXTRACTION\.md''',
-  '''docs/planning/sops-vs-ansible-vault\.md''',
+  # localtuya guide examples (fake device local_keys / IDs) — archived 2026-06-27
+  '''docs/guides/archive/localtuya-2026-01/TROUBLESHOOTING\.md''',
+  '''docs/guides/archive/localtuya-2026-01/WEB-UI-EXTRACTION\.md''',
   '''docs/runbooks/alertmanager-ses-quota\.md''',
   '''docs/setup/secrets/SOPS-SETUP\.md''',
+  # vendored kubespray submodule — upstream code + CI test fixtures (dummy
+  # certificate_keys), not our secrets. Our kubespray creds live OUTSIDE it
+  # (infra/kubespray/inventory/, SOPS-encrypted).
+  '''^infra/kubespray/kubespray/''',
 ]
 regexes = [
   '''AKIA4C5DM33XKE5WUPG4''',
