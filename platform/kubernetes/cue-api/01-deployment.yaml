@@ -99,6 +99,15 @@ spec:
             # Enable the interaction-style learn loop in dev (per deploy spec).
             - name: CUE_INTERACTION_LEARNING
               value: 'true'
+            # 2026-06-27: enable user bug reporting + the owner bug-admin approval view
+            # (cue repo docs/bug-reporting-plan.md). CUE_GITHUB_TOKEN lives in the SOPS cue-app
+            # secret; CUE_MEDIA_BUCKET (S3 screenshots) is set above. The /ui/admin/* path is
+            # owner-gated in-app (CF-email == CUE_OWNER_EMAIL, fail-closed); a CF Access edge
+            # policy restricting /ui/admin/* to the owner is a recommended defense-in-depth add.
+            - name: CUE_BUG_REPORTS
+              value: 'true'
+            - name: CUE_OWNER_EMAIL
+              value: 'grahamsm@gmail.com'
             # 2026-06-02: enable the daily-state + surfaces features (built + adversarially
             # reviewed + eval-validated, no regression). today-state extraction (chat →
             # daily_state), inbound-photo classification (workout photos log cardio), and
