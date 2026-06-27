@@ -38,7 +38,7 @@ If a service VM is rebuilt this month anyway (e.g. you destroyed dns-fallback fo
 **2. Verify Flux image automation is actually firing for the deny-listed images.**
 
 These images are excluded from Renovate because Flux handles them via `ImagePolicy` CRDs:
-`ollama`, `open-webui`, `technitium/dns-server`, `requarks/wiki`, `plexinc/pms-docker`, `kopia/kopia`, `rclone/rclone`, `home-assistant`, `python`, `busybox`, `sparked-diamond/*`.
+`ollama`, `open-webui`, `technitium/dns-server`, `requarks/wiki`, `plexinc/pms-docker`, `rclone/rclone`, `home-assistant`, `python`, `busybox`, `sparked-diamond/*`.
 
 ```bash
 flux get image policy -A

@@ -59,8 +59,8 @@ tailscale-operator, traefik, velero.
 **Flux-managed kustomizations** (selected — see
 `clusters/wind/kustomization.yaml` for the full list): MetalLB,
 Technitium DNS, Multus NADs, Home Automation, Plex, Ollama, Wiki.js,
-WireGuard, iCloudPD, Rclone GDrive, Kopia, Route53 DDNS, backups
-(Velero schedules), auto-remediation.
+WireGuard, Cloudflare DDNS, Rclone (GDrive + OneDrive), backups
+(Velero schedules + S3-sync shares), auto-remediation.
 
 **Out of band (intentional)**: the Flux bootstrap itself (the
 `flux-system` install was done with `flux bootstrap github`) and the

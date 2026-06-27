@@ -632,7 +632,7 @@ username/password login when no key — verified both paths via `--check` (faile
 legacy + v2 endpoints (200; bad key → 401).
 
 **Still open (UI / queued):** Security/205 fix (UI — **M104**), unused-ports → Disabled incl.
-the outdoor switches (UI — **M103** / task #18), **L24** BGP session auth (UI/FRR).
+the outdoor switches (UI — **M105** / task #18), **L24** BGP session auth (UI/FRR).
 
 ---
 

@@ -4,7 +4,8 @@
 > Linux `devbox` (`10.10.201.45`), not the mini.** The Linux OAuth bug below was
 > worked around by transplanting a token (no native interactive login needed) —
 > see `infra/devbox/README.md`. The mini was **repurposed, not retired**: it is
-> kept for macOS-only iCloud/cairn backups (M79/M80/M103) and as the
+> kept for macOS-only iCloud/cairn backups (cairn, M103 — the M79/M80 bash
+> suite was retired at the 2026-06-25 cairn cutover) and as the
 > TF/AWS-capable ops box. This page remains a valid **headless-macOS** setup
 > reference; the migration is described in past tense in [Migration](#migration).
 

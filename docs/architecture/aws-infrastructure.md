@@ -469,7 +469,6 @@ separately as a follow-up.
 | Chat (Open WebUI) | chat.wind.etherport.net | / | Enabled |
 | Grafana | grafana.wind.etherport.net | /api/health | Disabled (was ALB issue; re-evaluate post CF Tunnel) |
 | Traefik | traefik.wind.etherport.net | /ping | Disabled (Tailscale-only since 2026-05-27, no public path) |
-| Kopia | kopia.wind.etherport.net | / | Disabled — kopia decommissioned 2026-05-29 (no backend); remove this health check |
 
 **Configuration:**
 - Checks from 3 regions: us-west-2, us-east-1, eu-west-1

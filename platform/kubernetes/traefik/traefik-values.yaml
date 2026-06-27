@@ -34,7 +34,7 @@ additionalArguments:
   # for LE certs. Kept enabled for potential future use with other CAs.
   - "--ocsp=true"
 
-# AWS env vars no longer needed - cert-manager handles Route53 DNS challenge
+# AWS env vars no longer needed - cert-manager handles the Cloudflare DNS-01 challenge
 env: []
 
 persistence:

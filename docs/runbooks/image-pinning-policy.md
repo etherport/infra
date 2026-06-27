@@ -34,7 +34,7 @@ YAML in this repo when a new tag matches the policy.
 | `python:3.X-slim`                        | `python-slim`    | newest `3.<minor>-slim`                                |
 | `busybox:1.X.Y`                          | `busybox`        | newest `1.<minor>.<patch>` (excludes latest/stable)    |
 | `velero/velero-plugin-for-aws`           | `velero-plugin-aws` | semver `>=1.0.0`                                    |
-| `home-assistant`, `ollama`, `open-webui`, `wikijs`, `plex`, `rclone`, `kopia`, `technitium` | per-app | per-app pattern in `clusters/wind/image-automation/` |
+| `home-assistant`, `ollama`, `open-webui`, `wikijs`, `plex`, `rclone`, `technitium` | per-app | per-app pattern in `clusters/wind/image-automation/` |
 
 **When to use:** the image is from a third party with semver-ish tags
 and we want the latest patch automatically.

@@ -52,7 +52,7 @@ docs/
 | [cert-manager-wildcard.md](runbooks/cert-manager-wildcard.md) | Wildcard cert issuance + Traefik TLSStore |
 | [cilium-cni-dir-owner.md](runbooks/cilium-cni-dir-owner.md) | Cilium CrashLoop after a kubespray run (/opt/cni/bin owner) + the real kubespray run path |
 | [networkpolicy-tiers.md](runbooks/networkpolicy-tiers.md) | H3 NetworkPolicy enforcement model + **catering for new services** (allowlist a new flow) + tier rollout + rollback |
-| [udm-manual-hardening-actions.md](runbooks/udm-manual-hardening-actions.md) | Console-only UDM hardening: Security/205 isolation+DNS (M104), unused/exposed switch ports → Disabled + VLAN-min + 802.1X/MAB (M103/#18), UDM_API_KEY GH secret (M47), BGP auth (L24) |
+| [udm-manual-hardening-actions.md](runbooks/udm-manual-hardening-actions.md) | Console-only UDM hardening: Security/205 isolation+DNS (M104), unused/exposed switch ports → Disabled + VLAN-min + 802.1X/MAB (M105/#18), UDM_API_KEY GH secret (M47), BGP auth (L24) |
 | [secrets-rotation.md](runbooks/secrets-rotation.md) | SOPS age-key rotation (routine + post-compromise) + offline backup recipient |
 | [irsa-workload-identity.md](runbooks/irsa-workload-identity.md) | M75 in-cluster AWS workload identity (self-hosted IRSA): architecture, the disruptive apiserver issuer flip (Phase 3) + per-workload migration (Phase 4) + rollback |
 | [ceph-vlan-migration.md](runbooks/archive/ceph-vlan-migration.md) | Ceph mon/OSD migration to VLAN 210 (2026-05-18, done) |
@@ -219,8 +219,8 @@ AI alert advisor (auto-remediation namespace):
 
 Data layer:
 ├── Ceph (external on PVE, mon 10.10.210.41 VLAN 210) + ceph-csi
-├── Velero (10 schedules) → Kopia → S3 infra.wind.etherport.net/velero/
-├── CNPG Barman              continuous WAL + nightly base → S3 postgres/barman/
+├── Velero (10 schedules) → Kopia → S3 velero.wind.etherport.net
+├── CNPG Barman              continuous WAL + nightly base → S3 postgres-barman.wind.etherport.net
 ├── unifi-backup CronJob     UDM controller-db + UDM/Protect core-config → S3 unifi/
 ├── s3-sync CronJobs (7)     per NAS share → per-share S3 buckets
 ├── rclone gdrive-sync       Google Drive → NFS mirror

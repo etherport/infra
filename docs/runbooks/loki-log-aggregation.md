@@ -43,7 +43,7 @@ LogQL cheat sheet:
 {cluster="wind"} |= "error" | json
 
 # Syslog from the UDM, last 15m
-{job="syslog"} |~ "10.10.1.1"
+{job="syslog"} |~ "10.10.200.1"
 
 # CrashLoopBackOff context — last 200 lines of a container before death
 {namespace="home-automation", container="home-assistant"} | logfmt

@@ -571,8 +571,8 @@ alerts that fire when any of these fail.
 
 | Workload backed up | Backup tool | Location | Schedule | Restore proc |
 |---|---|---|---|---|
-| K8s resources + PVs | Velero (10 schedules) | S3 `infra.wind.etherport.net/velero/` (via Kopia repo) | daily | §3.1 above |
-| Postgres data | CNPG Barman (continuous WAL + nightly base) | S3 `infra.wind.etherport.net/postgres/barman/` | continuous | §9 above |
+| K8s resources + PVs | Velero (10 schedules) | S3 `velero.wind.etherport.net` | daily | §3.1 above |
+| Postgres data | CNPG Barman (continuous WAL + nightly base) | S3 `postgres-barman.wind.etherport.net` | continuous | §9 above |
 | etcd | systemd timer on each CP node + Velero `kube-system-daily` ships /var/lib/etcd-snapshots | local + S3 | daily 02:00 PT | §1.2 above |
 | UDM controller-db + UDM core-config + Protect core-config | `unifi-backup` CronJob | S3 `infra.wind.etherport.net/unifi/` | daily 04:00 PT | UDM UI restore (Settings → System → Restore) |
 | NAS media + docs (7 shares) | `s3-sync` CronJob | per-share S3 buckets | daily 01:00 PT | `aws s3 sync s3://<bucket>/ /restore/` |

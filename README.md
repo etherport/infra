@@ -189,7 +189,6 @@ via `docs/runbooks/grafana-admin-password.md`).
 | NAS shares (7) | `s3-sync` CronJob per share | per-share S3 buckets | daily 01:00 PT |
 | Google Drive | `rclone gdrive-sync` CronJob | NFS `/mnt/data/gdrive-mirror` | hourly (:00) |
 | OneDrive | `rclone onedrive-sync` CronJob | NAS `Backups/Graham/OneDrive` → S3 | hourly (:30) |
-| Cluster pull-side: long-form repository copies | Kopia | inside K8s, S3-backed | nightly |
 
 Backup alerts in `platform/kubernetes/monitoring/06-backup-alerts.yaml`.
 Restore procedures + RTO/RPO targets:

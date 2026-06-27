@@ -91,10 +91,10 @@ QUARTERLY (Manual - requires maintenance window)
 
 ### 1.1 Container Images (Flux)
 
-**Images tracked (13):**
+**Images tracked (14):**
 - ollama, open-webui, technitium, wikijs, plex
-- kopia, rclone, icloudpd, home-assistant
-- python:alpine, python:slim, busybox, velero-plugin-aws
+- rclone, home-assistant, cue, cloudflared
+- python:alpine, python:slim, busybox, blackbox-exporter, velero-plugin-aws
 
 **How it works:**
 1. Flux ImageRepository scans registries hourly

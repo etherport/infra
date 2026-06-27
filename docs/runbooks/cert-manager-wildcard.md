@@ -22,7 +22,7 @@ the modern shortlived profile.
                 ┌──────────────────────┴────────────────────────┐
                 ▼                                               ▼
    ClusterIssuer: letsencrypt-prod               ClusterIssuer: letsencrypt-prod-classic
-   solver: dns01 / Route53                       solver: dns01 / Route53
+   solver: dns01 / Cloudflare                    solver: dns01 / Cloudflare
    ↓                                             ↓
    Certificate: wildcard-wind-etherport-net      Certificate: wildcard-wind-etherport-net-rsa
    key: ECDSA P-256                              key: RSA 2048
@@ -41,7 +41,7 @@ the modern shortlived profile.
 | RSA cert | `platform/kubernetes/traefik/certificate-wildcard-rsa.yaml` |
 | shortlived ClusterIssuer | `platform/kubernetes/traefik/clusterissuer-letsencrypt.yaml` |
 | classic ClusterIssuer | `platform/kubernetes/traefik/clusterissuer-letsencrypt-classic.yaml` |
-| Route53 creds (SOPS) | `platform/kubernetes/traefik/route53-credentials.sops.yaml` |
+| Cloudflare creds (SOPS) | `platform/kubernetes/cert-manager-issuer/cloudflare-credentials.sops.yaml` |
 | Traefik default TLSStore | `platform/kubernetes/traefik/tlsstore-default.yaml` |
 | cert-manager Helm values | `platform/kubernetes/cert-manager/values.yaml` |
 | UniFi cert push CronJob | `platform/kubernetes/unifi-cert-sync/` |
@@ -60,7 +60,7 @@ cert-manager handles renewal without intervention:
 
 - **ECDSA / shortlived** — 6-day validity. cert-manager renews when
   cert age crosses 2/3 of validity (~day 4). DNS-01 challenge against
-  Route53 takes ~30s once propagation settles.
+  Cloudflare takes ~30s once propagation settles.
 - **RSA / classic** — 90-day validity. cert-manager renews at day 60.
 - **unifi-cert-sync CronJob** — runs daily; pushes the current RSA
   cert to UniFi OS endpoints when their fingerprint differs from the
@@ -180,18 +180,20 @@ which point they re-issue under the new account.
 
 ### `READY: False, reason: Failed`, message mentions `dns01`
 
-Most common cause: the `route53-credentials` secret is missing or its
-IAM policy doesn't allow `route53:ChangeResourceRecordSets` for the
-hosted zone.
+Most common cause: the `cloudflare-credentials` secret is missing or
+its CF API token lacks Zone:Read + DNS:Edit on the `etherport.net`
+zone (so cert-manager can't write the `_acme-challenge` TXT record).
 
 Check:
 ```
-kubectl -n traefik get secret route53-credentials -o yaml | grep -c "AWS_ACCESS_KEY_ID"
-# H19 raised the terraform-dns IAM policy to v3 — that's the floor.
+kubectl -n cert-manager get secret cloudflare-credentials -o yaml | grep -c "api-token"
+# Token scope: Zone—Zone—Read + Zone—DNS—Edit, zone resource = etherport.net.
 ```
 
-Fix: re-create from the SOPS source if missing, or re-attach the IAM
-policy if it was reverted.
+Fix: re-create from the SOPS source
+(`platform/kubernetes/cert-manager-issuer/cloudflare-credentials.sops.yaml`)
+if missing, or re-issue the CF API token with the correct scope if it
+was revoked — see "Rotate the Cloudflare credentials" above.
 
 ### `READY: False, reason: Failed`, message mentions `urn:ietf:params:acme:error:rateLimited`
 

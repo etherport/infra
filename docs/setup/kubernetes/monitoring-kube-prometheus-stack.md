@@ -40,7 +40,8 @@ The monitoring stack is deployed via Flux GitOps using the kube-prometheus-stack
 ┌─────────────────────────────────────────────────────────────────┐
 │                    PrometheusRule CRDs                          │
 │  - comprehensive-alerts.yaml (GPU, services, pod health)        │
-│  - external-alerts.yaml (Route53 health checks)                 │
+│  - external-alerts.yaml (external-host node-exporter alerts,     │
+│       external-nodes job)                                        │
 │  - dns-health-alerts.yaml                                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -53,7 +54,7 @@ The monitoring stack is deployed via Flux GitOps using the kube-prometheus-stack
 | `platform/kubernetes/monitoring/03-alertmanager-config.yaml` | AlertmanagerConfig CR for email routing |
 | `platform/kubernetes/monitoring/alertmanager-secret.sops.yaml` | SMTP credentials (SOPS encrypted) |
 | `platform/kubernetes/monitoring/comprehensive-alerts.yaml` | Service and GPU monitoring alerts |
-| `platform/kubernetes/monitoring/02-external-alerts.yaml` | External monitoring (Route53 health checks) |
+| `platform/kubernetes/monitoring/02-external-alerts.yaml` | External-host node-exporter alerts (external-nodes job) |
 | `platform/kubernetes/monitoring/kustomization.yaml` | Kustomize config for monitoring resources |
 
 ## Deployment

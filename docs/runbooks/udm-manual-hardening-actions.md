@@ -3,7 +3,7 @@
 Network-hardening items that **can't be done via IaC** (the `paultyng/unifi` TF provider
 + `udm-firewall.yml` don't cover them) and need the UniFi console. Created 2026-06-24
 from the network-hardening cleanup pass. Do these in one sitting; tick them off + ping the
-agent to update the tracker (M103 / M104 / M47 follow-up / L24).
+agent to update the tracker (M105 / M104 / M47 follow-up / L24).
 
 > UI paths are for UniFi Network ~10.x (UniFi OS). Labels shift slightly by version — the
 > nav intent is stable. Controller: `https://10.10.200.1` (or `unifi.ui.com`).
@@ -26,7 +26,7 @@ resolve via the LAN. Owner decision: **fix** (zone firewall is the enforcement l
 
 ---
 
-## 2. Unused switch ports → Disabled  (M103 — do the EXPOSED switches first, #18)
+## 2. Unused switch ports → Disabled  (M105 — do the EXPOSED switches first, #18)
 
 **Why:** ~33 unused/down ports fleet-wide default to the **Default/199** network (Internal
 trusted-transit zone). A device plugged into an open jack on a **physically-exposed** switch
@@ -47,7 +47,7 @@ Current unused counts (2026-06-24): Driveway 0 · Access Road 2 · Outdoor Junct
 
 ---
 
-## 3. Per-port VLAN minimisation on exposed switches  (M103 / #18)
+## 3. Per-port VLAN minimisation on exposed switches  (M105 / #18)
 
 **Why:** so a *hijacked* active port (unplug a camera, plug in) lands in an already-isolated,
 zoned VLAN — not a trusted network. This is the real blast-radius control (MAC filtering is spoofable).
@@ -62,7 +62,7 @@ UniFi Devices → switch → port → **Native/Access Network** = the specific V
 
 ---
 
-## 4. 802.1X + MAC-Auth-Bypass (MAB) — project, not a quick toggle  (M103 / #18)
+## 4. 802.1X + MAC-Auth-Bypass (MAB) — project, not a quick toggle  (M105 / #18)
 
 **Why:** proper access control for untrusted physical ports — unknown device → denied/quarantine VLAN.
 Cameras/APs can't do cert 802.1X, so use **MAB** (authenticate by MAC). Note: MAB is **spoofable**,
@@ -77,7 +77,7 @@ so it raises the bar but #3 (VLAN confinement) is the durable control.
 
 ---
 
-## 5. L2 + physical hardening (quick wins)  (M103 / #18)
+## 5. L2 + physical hardening (quick wins)  (M105 / #18)
 
 - **DHCP Guard / Snooping** on the exposed switches (block a rogue plugged-in DHCP server).
 - **Port Isolation** on camera/IoT ports (a hijacked port can't reach the adjacent camera).

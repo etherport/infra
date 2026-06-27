@@ -20,16 +20,21 @@ This guide provides step-by-step instructions for common change scenarios in Flu
 
 - Git repository cloned locally
 - kubectl configured and working
-- flux CLI installed (optional but recommended)
+
+> **Note:** there is **no `flux` CLI** on the ops hosts (mini or devbox). All the
+> "reconcile" steps below trigger Flux via an annotation on the Flux objects
+> instead — see [CLAUDE.md §3](../../../CLAUDE.md). The pattern is:
+> ```bash
+> kubectl annotate --overwrite -n flux-system <kind>/<name> \
+>   reconcile.fluxcd.io/requestedAt="$(date +%s)"
+> ```
 
 ### Check Current Flux Status
 
 ```bash
-# Ensure Flux is healthy
-flux check
-
-# View what Flux is currently managing
-flux get kustomizations
+# View what Flux is currently managing (and its health/last-applied revision)
+kubectl get kustomizations -n flux-system
+kubectl get gitrepositories -n flux-system
 ```
 
 ### Identify If Your App is Flux-Managed
@@ -80,8 +85,8 @@ If not, use traditional `kubectl apply` commands documented in the app's README.
 
 5. **Force Flux to sync immediately** (or wait up to 10 minutes):
    ```bash
-   flux reconcile source git flux-system
-   flux reconcile kustomization flux-system
+   kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
+   kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
    ```
 
 6. **Verify the change**:
@@ -113,7 +118,7 @@ For apps using ConfigMap generators (check their `kustomization.yaml`):
 
 ## Scenario 2: Change CronJob Schedule
 
-**Example**: Change Route53 DDNS from hourly to every 30 minutes.
+**Example**: Change Cloudflare DDNS from hourly to every 30 minutes.
 
 ### Steps
 
@@ -139,7 +144,7 @@ For apps using ConfigMap generators (check their `kustomization.yaml`):
 
 4. **Force reconciliation**:
    ```bash
-   flux reconcile kustomization flux-system
+   kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
    ```
 
 5. **Verify the change**:
@@ -186,7 +191,7 @@ To test immediately, see [Scenario 6](#scenario-6-test-changes-immediately-cronj
 
 4. **Force reconciliation**:
    ```bash
-   flux reconcile kustomization flux-system
+   kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
    ```
 
 5. **Watch the rolling update**:
@@ -210,7 +215,7 @@ If the new version has issues:
 # Option 1: Git revert
 git revert HEAD
 git push
-flux reconcile kustomization flux-system
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 
 # Option 2: Kubectl rollback (temporary - will be reverted by Flux)
 kubectl rollout undo deployment/plex -n plex
@@ -220,13 +225,13 @@ kubectl rollout undo deployment/plex -n plex
 
 ## Scenario 4: Add Environment Variable
 
-**Example**: Add a new environment variable to iCloudPD.
+**Example**: Add a new environment variable to the rclone Google Drive sync CronJob.
 
 ### Steps
 
 1. **Find the manifest**:
    ```bash
-   cd platform/kubernetes/icloudpd/
+   cd platform/kubernetes/rclone-gdrive/
    vim 02-cronjob.yaml
    ```
 
@@ -238,7 +243,7 @@ kubectl rollout undo deployment/plex -n plex
          template:
            spec:
              containers:
-             - name: icloudpd
+             - name: rclone
                env:
                - name: TZ
                  value: "America/Los_Angeles"
@@ -249,19 +254,19 @@ kubectl rollout undo deployment/plex -n plex
 3. **Commit and push**:
    ```bash
    git add 02-cronjob.yaml
-   git commit -m "icloudpd: add NEW_VARIABLE environment variable"
+   git commit -m "rclone-gdrive: add NEW_VARIABLE environment variable"
    git push
    ```
 
 4. **Force reconciliation**:
    ```bash
-   flux reconcile kustomization flux-system
+   kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
    ```
 
 5. **Verify** (for CronJobs, create a test job):
    ```bash
-   kubectl create job --from=cronjob/icloudpd-sync icloudpd-test -n icloudpd
-   kubectl logs job/icloudpd-test -n icloudpd
+   kubectl create job --from=cronjob/gdrive-sync gdrive-sync-test -n rclone
+   kubectl logs job/gdrive-sync-test -n rclone
    # Check that the new variable appears in the environment
    ```
 
@@ -294,7 +299,7 @@ kubectl rollout undo deployment/plex -n plex
 
 4. **Force reconciliation**:
    ```bash
-   flux reconcile kustomization flux-system
+   kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
    ```
 
 5. **Watch scaling**:
@@ -310,7 +315,7 @@ Flux manages the desired state. If you manually scale with `kubectl scale`, Flux
 
 ## Scenario 6: Test Changes Immediately (CronJob)
 
-**Example**: You changed the Route53 DDNS script and want to test it now instead of waiting for the next schedule.
+**Example**: You changed the Cloudflare DDNS script and want to test it now instead of waiting for the next schedule.
 
 ### Steps
 
@@ -318,12 +323,12 @@ Flux manages the desired state. If you manually scale with `kubectl scale`, Flux
 
 2. **Wait for Flux to reconcile** or force it:
    ```bash
-   flux reconcile kustomization flux-system
+   kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
    ```
 
 3. **Create a manual job from the CronJob**:
    ```bash
-   kubectl create job --from=cronjob/cloudflare-ddns route53-test-$(date +%s) -n cloudflare-ddns
+   kubectl create job --from=cronjob/cloudflare-ddns ddns-test-$(date +%s) -n cloudflare-ddns
    ```
 
 4. **Watch the test job**:
@@ -333,12 +338,12 @@ Flux manages the desired state. If you manually scale with `kubectl scale`, Flux
 
 5. **Check logs**:
    ```bash
-   kubectl logs -n cloudflare-ddns job/route53-test-1234567890
+   kubectl logs -n cloudflare-ddns job/ddns-test-1234567890
    ```
 
 6. **Clean up test job** (optional):
    ```bash
-   kubectl delete job route53-test-1234567890 -n cloudflare-ddns
+   kubectl delete job ddns-test-1234567890 -n cloudflare-ddns
    ```
 
 ---
@@ -358,7 +363,7 @@ git revert <commit-hash>
 git push
 
 # Force Flux to apply
-flux reconcile kustomization flux-system
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ### Option 2: Git Reset (Destructive)
@@ -371,7 +376,7 @@ git reset --hard HEAD~1
 git push --force
 
 # Force Flux to apply
-flux reconcile kustomization flux-system
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ### Option 3: Emergency Manual Rollback
@@ -379,8 +384,8 @@ flux reconcile kustomization flux-system
 If git is unavailable:
 
 ```bash
-# Suspend Flux
-flux suspend kustomization flux-system
+# Suspend Flux (so it stops re-applying git while you hand-fix)
+kubectl patch kustomization/flux-system -n flux-system --type=merge -p '{"spec":{"suspend":true}}'
 
 # Manual rollback (for Deployments)
 kubectl rollout undo deployment/my-app -n my-namespace
@@ -390,9 +395,9 @@ vim platform/kubernetes/my-app/deployment.yaml
 git commit -am "Fix deployment issue"
 git push
 
-# Resume Flux
-flux resume kustomization flux-system
-flux reconcile kustomization flux-system
+# Resume Flux + reconcile
+kubectl patch kustomization/flux-system -n flux-system --type=merge -p '{"spec":{"suspend":false}}'
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ---
@@ -407,14 +412,14 @@ flux reconcile kustomization flux-system
 
 1. Check if Flux detected the git change:
    ```bash
-   flux get sources git
-   # Look for updated revision
+   kubectl get gitrepository/flux-system -n flux-system -o jsonpath='{.status.artifact.revision}'
+   # Look for the latest commit SHA
    ```
 
 2. Force reconciliation:
    ```bash
-   flux reconcile source git flux-system
-   flux reconcile kustomization flux-system
+   kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
+   kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
    ```
 
 3. Check for errors:
@@ -494,12 +499,13 @@ If you need to make emergency manual changes, see [Emergency Manual Rollback](#o
 ## Quick Reference Commands
 
 ```bash
-# Force Flux to sync NOW
-flux reconcile source git flux-system && flux reconcile kustomization flux-system
+# Force Flux to sync NOW (no flux CLI on the hosts — annotate the objects)
+kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
+kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 
 # Check Flux status
-flux get kustomizations
 kubectl get kustomizations -n flux-system
+kubectl get gitrepositories -n flux-system
 
 # Test kustomization locally
 kubectl kustomize path/to/app/

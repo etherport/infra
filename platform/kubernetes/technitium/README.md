@@ -188,7 +188,6 @@ Current records are defined in `zones/wind.etherport.net.yaml`.
 | grafana | Grafana monitoring |
 | ha | Home Assistant |
 | plex | Plex media server |
-| kopia | Kopia backup UI |
 | prox | Proxmox web UI proxy |
 | wiki | Wiki.js |
 | ups1, ups2 | UPS management |

@@ -210,7 +210,7 @@ sops -d cloudflare-ddns/base/secret.enc.yaml | kubectl apply -f -
 # Encrypted files are SAFE to commit
 git add cloudflare-ddns/base/secret.enc.yaml
 git add cloudflare-ddns/.sops.yaml
-git commit -m "Add SOPS-encrypted Route53 credentials"
+git commit -m "Add SOPS-encrypted Cloudflare credentials"
 git push
 ```
 
@@ -350,52 +350,64 @@ export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
 
 ## Examples
 
-### Route53 DDNS Secret
+### Cloudflare DDNS Secret
+
+The `cloudflare-ddns` CronJob keeps the public DNS records in sync via the
+Cloudflare API (it migrated off Route53 on 2026-05-27 — the directory name is
+historical). It reads a single `CF_API_TOKEN` from the
+`cloudflare-credentials` secret.
 
 ```bash
 # Create encrypted secret
-sops cloudflare-ddns/base/secret.enc.yaml
+sops platform/kubernetes/cloudflare-ddns/base/cloudflare-credentials.sops.yaml
 
 # Edit content (SOPS opens your editor):
 apiVersion: v1
 kind: Secret
 metadata:
-  name: cloudflare-ddns-credentials
+  name: cloudflare-credentials
   namespace: cloudflare-ddns
 type: Opaque
 stringData:
-  AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
-  AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE
+  # Cloudflare API token scoped to Zone:Read + DNS:Edit on etherport.net
+  CF_API_TOKEN: REPLACE_WITH_CF_TOKEN
 
 # Save and exit - file is encrypted automatically
 
-# Deploy
-sops -d cloudflare-ddns/base/secret.enc.yaml | kubectl apply -f -
+# Deploy (or just commit + let Flux reconcile it)
+sops -d platform/kubernetes/cloudflare-ddns/base/cloudflare-credentials.sops.yaml | kubectl apply -f -
 
 # Commit safely
-git add cloudflare-ddns/base/secret.enc.yaml
-git commit -m "Add Route53 credentials"
+git add platform/kubernetes/cloudflare-ddns/base/cloudflare-credentials.sops.yaml
+git commit -m "Add Cloudflare DDNS credentials"
 ```
 
 ### S3 Backup Credentials
 
+> **SUPERSEDED by IRSA (M75).** In-cluster AWS workloads (velero, the s3-sync
+> backup family, CNPG Barman, …) no longer use a static `aws-backup-credentials`
+> secret. They get short-lived AWS creds via `AssumeRoleWithWebIdentity` using a
+> projected ServiceAccount token — **there is no static AWS key in etcd to
+> encrypt with SOPS.** See `docs/runbooks/irsa-workload-identity.md`. The recipe
+> below is retained only as a generic example of encrypting a key-style secret
+> for any non-IRSA case.
+
 ```bash
-# Same process for backup credentials
-sops backups/aws-s3/base/secret.enc.yaml
+# Generic example — encrypting a static key secret with SOPS
+sops platform/kubernetes/<app>/secret.sops.yaml
 
 # Edit:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: aws-backup-credentials
-  namespace: backups
+  name: <app>-credentials
+  namespace: <app>
 type: Opaque
 stringData:
-  AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
-  AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE
+  SOME_API_KEY: REPLACE_ME
 
 # Deploy
-sops -d backups/aws-s3/base/secret.enc.yaml | kubectl apply -f -
+sops -d platform/kubernetes/<app>/secret.sops.yaml | kubectl apply -f -
 ```
 
 ## Practical Workflows
