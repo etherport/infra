@@ -13,6 +13,45 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-28 (cont. 8) — adversarial review of recent work → 2 critical + 1 high FIXED
+
+Ran a multi-agent adversarial review of the 24h work (M71/M72/M74/M77/L24) — 15 confirmed
+issues, **zero false positives**. Coverage note verified a lot healthy (8/8 MD5 BGP sessions,
+M77 telephony intact, M71 trust-policy tight, M74 policies monitor-only). Fixed the load-bearing ones:
+
+- **🔴 CRITICAL — the Loki ruler was loading ZERO rules → EVERY LogQL alert silently dead** (the
+  H3 cilium-audit drop-alerts, IPMI/syslog, AND my new M74 Tetragon alerts — dead since the L4 ruler
+  setup). Two layered causes: (1) the ruler config block was under `loki.ruler`, a key the grafana/loki
+  6.x chart **silently ignores** (it renders the ruler from `loki.rulerConfig`/`structuredConfig`) — so
+  the ruler ran on chart defaults with **NO `alertmanager_url`** (alerts could never reach Alertmanager)
+  + a default `rule_path` mismatching the sidecar dir; (2) even after moving the sidecar `folder` to
+  `/var/loki/rules/fake`, the ruler's `rule_path` mapped into a **stale root-owned emptyDir mount point**
+  (`/var/loki/rules-temp/fake`) → "permission denied". **Fix:** moved the ruler block to
+  `loki.structuredConfig.ruler` (deep-merge — verified via `helm template` with the real values) + set
+  `rule_path: /var/loki/rules-scratch`. **Verified live:** `loki_ruler_managers_total=1`, 3 groups loaded
+  (cilium-netpol-audit/pve-ipmi-syslog/tetragon-runtime-detect = 9 rules), zero permission errors,
+  `alertmanager_url` present. Commits `97c27f4`+`38d3290`. ⚠️ This means my earlier "cilium drop-alerting
+  / Tetragon alerting is LIVE" claims were FALSE until now.
+- **🔴 CRITICAL — M72 `enforce=baseline` on github-actions-runner would reject every dispatched ARC
+  runner pod** (containerMode dind = privileged + `hostNetwork: true` → baseline violations) → silently
+  break the self-hosted CI apply path on the next job. My M72 `--dry-run=server` was BLIND because
+  `minRunners: 0` = no runner pod at rest. **Fix:** reverted that ns to `enforce=privileged` (privileged-
+  by-design like plex/wireguard); kept audit/warn=baseline. Live + verified (`71b732d`).
+- **🟠 HIGH — M71 RA Deny was bypassable:** `s3:GetObject`-literal (so `s3:GetObjectVersion` could read
+  the versioned AES256 **backup** buckets — etcd-snapshots = all K8s Secrets cleartext, velero, barman)
+  + no `ssm:Get*` (SecureString path). **Fix:** Deny now covers GetObject+GetObjectVersion+Torrent,
+  secretsmanager Get/BatchGet, ssm:GetParameter*, kms:Decrypt; scoped `DeleteObject` to `*.tflock`.
+  Re-applied via CI. Corrected the "can't exfiltrate secrets" overclaim in 3 docs (residual: whole-
+  tfstate-bucket read + plaintext-secrets-in-state is inherent to "can run plan"). (`71b732d`)
+- **Quick cleanups:** deleted the orphan `wind-l2`/`wind-pool` L2Advertisement + native MetalLB
+  ClusterRoleBindings (Velero-restore leftovers); confirmed **BGP graceful-restart is already ACTIVE**
+  (FRR default) and corrected the tracker. **⏳ Remaining LOW follow-ups** (tracked, not yet done):
+  M77 asterisk→Twilio source-scoping (telephony-careful), M74 setuid-root matchBinaries runc-exclusion
+  (cuts ~164k/day/node wasteful posts), Tetragon EXEC/EXIT cache-warmup doc note, MetalLB chart Renovate
+  pin, dns-fallback DoT/DoH comment, 3 "no-GR-yet" doc refs.
+
+---
+
 ## 2026-06-28 (cont. 7) — L24: MetalLB native→FRR migration + BGP TCP-MD5 (full, in-window)
 
 - **Did the whole L24 plan in one maintenance window** (operator at the UDM). End state: MetalLB runs

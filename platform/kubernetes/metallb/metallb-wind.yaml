@@ -60,5 +60,6 @@ spec:
 # L24 Phase 4 (2026-06-28): the TEMPORARY `primary-l2-temp-l24` L2Advertisement
 # safety net was REMOVED here once FRR-mode BGP + TCP-MD5 were verified (8/8
 # Established). Back to BGP-only for `primary` — which ends the L2 ARP/MAC churn
-# (the M36 .5/.71 UDM IP-conflict alerts seen during the window). The `wind-pool`
-# L2Advertisement (separate pool) is unaffected.
+# (the M36 .5/.71 UDM IP-conflict alerts seen during the window). NB a stale
+# `wind-l2` L2Advertisement (a Velero-restore orphan targeting a nonexistent
+# `wind-pool`) was deleted 2026-06-28 — `primary` is the only pool, BGP-only.
