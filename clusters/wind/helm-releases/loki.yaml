@@ -89,22 +89,33 @@ spec:
       # PrometheusRule can't express (PromQL only). M40 had a LogQL
       # rule placeholder that broke the kustomization until removed
       # 2026-05-23; this is the proper unblock (L4).
-      ruler:
-        enable_api: true
-        enable_alertmanager_v2: true
-        alertmanager_url: "http://monitoring-kube-prometheus-alertmanager.monitoring.svc.cluster.local:9093"
-        storage:
-          type: local
-          local:
-            directory: /var/loki/rules
-        # The ruler COPIES each rule file from storage.local.directory into rule_path/<tenant>
-        # for evaluation. rule_path must be a dir LOKI itself creates (writable by the loki
-        # uid) — NOT /var/loki/rules-temp, whose /fake subdir is a stale root-owned emptyDir
-        # mount point (the sidecar used to mount there) → "permission denied" mapping rules.
-        rule_path: /var/loki/rules-scratch
-        ring:
-          kvstore:
-            store: inmemory
+      #
+      # ⚠️ 2026-06-28: this MUST live under `loki.structuredConfig.ruler`, NOT a bare
+      # `loki.ruler` key. The grafana/loki 6.x chart renders the ruler section from
+      # `loki.rulerConfig` / `loki.structuredConfig` (its config template does
+      # `{{ include "loki.rulerConfig" . }}` + deep-merges structuredConfig) and SILENTLY
+      # IGNORES `loki.ruler`. Under the wrong key the ruler ran on chart defaults — NO
+      # alertmanager_url (alerts never reached Alertmanager) and a default rule_path that
+      # mismatched the sidecar dir → loki_ruler_managers_total=0, every LogQL alert dead.
+      # structuredConfig deep-merges (takes precedence), so this adds our fields on top of
+      # the chart's base ruler block (storage.type:local, wal.dir).
+      structuredConfig:
+        ruler:
+          enable_api: true
+          enable_alertmanager_v2: true
+          alertmanager_url: "http://monitoring-kube-prometheus-alertmanager.monitoring.svc.cluster.local:9093"
+          storage:
+            type: local
+            local:
+              directory: /var/loki/rules
+          # The ruler COPIES each rule file from storage.local.directory into rule_path/<tenant>
+          # for evaluation. rule_path must be a dir LOKI itself creates (writable by the loki
+          # uid) — NOT /var/loki/rules-temp, whose /fake subdir is a stale root-owned emptyDir
+          # mount point (the sidecar used to mount there) → "permission denied" mapping rules.
+          rule_path: /var/loki/rules-scratch
+          ring:
+            kvstore:
+              store: inmemory
 
     # Single-binary pod sizing + storage.
     singleBinary:
