@@ -97,7 +97,11 @@ spec:
           type: local
           local:
             directory: /var/loki/rules
-        rule_path: /var/loki/rules-temp
+        # The ruler COPIES each rule file from storage.local.directory into rule_path/<tenant>
+        # for evaluation. rule_path must be a dir LOKI itself creates (writable by the loki
+        # uid) — NOT /var/loki/rules-temp, whose /fake subdir is a stale root-owned emptyDir
+        # mount point (the sidecar used to mount there) → "permission denied" mapping rules.
+        rule_path: /var/loki/rules-scratch
         ring:
           kvstore:
             store: inmemory
