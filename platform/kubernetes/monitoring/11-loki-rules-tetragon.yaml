@@ -1,0 +1,104 @@
+---
+# LogQL alert rules for the loki-ruler — Tetragon runtime detections (M74 v2).
+# Mirrors the Cilium hubble-audit pattern (06-loki-rules-cilium-audit.yaml), but the
+# source is Tetragon's SELECTIVE JSON export rather than a dedicated file tail:
+#
+#   Tetragon agent → JSON export (allowlist = PROCESS_KPROBE/TRACEPOINT/UPROBE/LSM
+#   only; PROCESS_EXEC/EXIT firehose NOT exported; host-ns/system events denied) →
+#   the `export-stdout` sidecar tails it to the pod log → Alloy → Loki under
+#   {namespace="tetragon", container="export-stdout"} (Alloy labels every pod log
+#   with namespace/pod/container — see clusters/wind/helm-releases/alloy.yaml).
+#
+# Because the export is already filtered to TracingPolicy matches in POD namespaces,
+# *any* exported line is a real detection — these rules just split it by policy for
+# an appropriate severity + a useful message. The TracingPolicies live in
+# platform/kubernetes/tetragon/; the engine + export config in
+# clusters/wind/helm-releases/tetragon.yaml. OBSERVE-ONLY (Tetragon is monitor_only;
+# it detects, it does not kill).
+#
+# Picked up by the loki k8s-sidecar (label loki_rule="1") → the ruler. Tetragon JSON
+# field paths: process_kprobe.{policy_name,function_name,process.binary,
+# process.pod.{namespace,name}}.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-rules-tetragon
+  namespace: monitoring
+  labels:
+    loki_rule: "1"
+data:
+  tetragon.yaml: |
+    groups:
+      - name: tetragon-runtime-detect
+        interval: 1m
+        rules:
+          # CRITICAL: a container touched a credential/persistence file
+          # (/etc/shadow, /etc/gshadow, /etc/sudoers*, */.ssh/authorized_keys).
+          # Normal app containers never do this → cred theft or backdoor
+          # persistence. Host-ns access (legit useradd/sshd on the node) is already
+          # filtered out by the Tetragon export namespace-denylist, so a hit here is
+          # in-CONTAINER. for:0m — security signal, alert promptly.
+          - alert: TetragonCredFileAccess
+            expr: |
+              sum by (k8s_ns, k8s_pod, binary, func) (
+                count_over_time(
+                  {namespace="tetragon", container="export-stdout"}
+                  | json policy="process_kprobe.policy_name", func="process_kprobe.function_name", binary="process_kprobe.process.binary", k8s_ns="process_kprobe.process.pod.namespace", k8s_pod="process_kprobe.process.pod.name"
+                  | __error__=""
+                  | policy="detect-cred-file-access"
+                  [10m]
+                )
+              ) > 0
+            for: 0m
+            labels:
+              severity: critical
+              component: runtime-security
+              source: tetragon
+            annotations:
+              summary: "Tetragon: credential/persistence file accessed in container {{ $labels.k8s_ns }}/{{ $labels.k8s_pod }} ({{ $labels.binary }})"
+              description: |
+                Tetragon detected a process in container
+                "{{ $labels.k8s_ns }}/{{ $labels.k8s_pod }}" ({{ $labels.binary }})
+                accessing a credential/persistence file via {{ $labels.func }}
+                (TracingPolicy detect-cred-file-access: /etc/shadow, /etc/gshadow,
+                /etc/sudoers*, or */.ssh/authorized_keys). A normal app container has
+                no reason to touch these — investigate for credential theft or
+                backdoor persistence (assume-breach). This is detection only; the pod
+                was NOT blocked. Inspect the exact events in Grafana (Explore, Loki):
+                  {namespace="tetragon", container="export-stdout"} | json
+                  | process_kprobe_policy_name="detect-cred-file-access"
+                On a node: kubectl exec -n tetragon ds/tetragon -c tetragon --
+                  tetra getevents --pods {{ $labels.k8s_pod }} -o compact
+
+          # WARNING: a process inside a container called setuid(0) (escalate to root).
+          # runc's container-setup setuid(0) is host-ns → already export-filtered, so a
+          # hit here is an in-POD root escalation (su-exec/gosu entrypoints can do this
+          # legitimately — triage, don't assume malice).
+          - alert: TetragonSetuidRoot
+            expr: |
+              sum by (k8s_ns, k8s_pod, binary) (
+                count_over_time(
+                  {namespace="tetragon", container="export-stdout"}
+                  | json policy="process_kprobe.policy_name", binary="process_kprobe.process.binary", k8s_ns="process_kprobe.process.pod.namespace", k8s_pod="process_kprobe.process.pod.name"
+                  | __error__=""
+                  | policy="detect-setuid-root"
+                  [10m]
+                )
+              ) > 0
+            for: 5m
+            labels:
+              severity: warning
+              component: runtime-security
+              source: tetragon
+            annotations:
+              summary: "Tetragon: setuid(0) → root in container {{ $labels.k8s_ns }}/{{ $labels.k8s_pod }} ({{ $labels.binary }})"
+              description: |
+                A process in container "{{ $labels.k8s_ns }}/{{ $labels.k8s_pod }}"
+                ({{ $labels.binary }}) escalated to UID 0 via setuid(0), sustained 5m
+                (TracingPolicy detect-setuid-root). May be a legit su-exec/gosu
+                entrypoint — if so, it's expected for that workload (consider adding a
+                matchBinaries exclusion to 11-tp-setuid-root.yaml). If unexpected,
+                investigate for privilege escalation. Detection only; not blocked.
+                Tuples (Grafana Explore, Loki):
+                  {namespace="tetragon", container="export-stdout"} | json
+                  | process_kprobe_policy_name="detect-setuid-root"

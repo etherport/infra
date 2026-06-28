@@ -38,13 +38,29 @@ spec:
     remediation:
       retries: 3
   values:
-    # v1: NO stdout export → no Alloy/Loki firehose. Forensics via `tetra getevents`.
-    # NB: the disable key is `export.mode: ""` (empty = no sidecar). There is NO
-    # `export.stdout.enabled` flag — Helm silently drops unknown keys, so the wrong
-    # path leaves the chart default (mode: "stdout") active = full firehose. (chart 1.7)
+    # v2 (M74, 2026-06-28): SELECTIVE export. The stdout sidecar tails the agent's JSON
+    # export to the pod log → Alloy → Loki ({namespace="tetragon",
+    # container="export-stdout"}); the alert is monitoring/11-loki-rules-tetragon.yaml.
+    # The firehose is kept OUT by restricting the export ALLOWLIST to policy-driven event
+    # types only — PROCESS_EXEC/PROCESS_EXIT (the ~1.1M/day exec/exit stream) are NOT
+    # listed, so they never flow. exportDenyList drops health-checks + host/system
+    # namespaces (so e.g. runc's container-setup setuid(0), which is host-ns, is filtered).
+    # Net exported ≈ only real TracingPolicy matches in POD namespaces (near-zero steady
+    # state). Verify volume after any change: `kubectl logs -n tetragon ds/tetragon -c
+    # export-stdout --tail=20` should be quiet, not a stream.
+    # ⚠️ DS pods are now 2/2 (tetragon + export-stdout). For v2 that is CORRECT (the
+    # second container = export ON). Volume safety is the ALLOWLIST, not the sidecar's
+    # absence — do NOT "fix" 2/2 back to 1/1 (that disables detection export).
+    # NB chart-1.7 key locations (Helm silently drops unknowns): `export.mode`,
+    # `tetragon.exportAllowList`, `tetragon.exportDenyList` (verified vs the chart values).
     export:
-      mode: ""
+      mode: "stdout"
     tetragon:
+      exportAllowList: |-
+        {"event_set":["PROCESS_KPROBE", "PROCESS_TRACEPOINT", "PROCESS_UPROBE", "PROCESS_LSM"]}
+      exportDenyList: |-
+        {"health_check":true}
+        {"namespace":["", "cilium", "kube-system"]}
       resources:
         requests:
           cpu: 50m
