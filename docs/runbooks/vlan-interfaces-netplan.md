@@ -22,7 +22,7 @@ The manual steps below are kept for emergency use when ansible/SSH is broken.
 
 ## Problem
 
-After cluster reboot, VLAN network interfaces (`enp6s19/20/21` on every node) do not come up automatically, causing Multus networking to fail.
+After cluster reboot, the Multus VLAN parent interfaces (`enp6s19/20/21` on every node) do not come up automatically, causing Multus networking to fail. The same netplan file also declares the two DHCP storage NICs `enp6s22` (Ceph/VLAN 210) and `enp6s23` (NAS/VLAN 209) — `enp6s23` in particular MUST be declared before the NIC is added to the VM or `networkd-wait-online` hangs boot (2026-05-29 incident).
 
 **Symptoms:**
 - Home Assistant cannot reach Hue devices (VLAN 204 - IoT)
@@ -36,6 +36,12 @@ The VLAN parent interfaces are not configured in Netplan, so they remain DOWN af
 
 ## Manual recovery (emergency only)
 
+Prefer running the ansible playbook (above) — it writes the full, current file.
+Hand-write the netplan only if ansible/SSH is broken, and reproduce **all five**
+interfaces. A 3-NIC file is incomplete: it omits the Ceph (`enp6s22`) and NAS
+(`enp6s23`) storage NICs, and a missing `enp6s23` declaration hangs boot on
+`networkd-wait-online` (2026-05-29 incident).
+
 Create the netplan file on the affected node and apply:
 
 ```bash
@@ -43,6 +49,8 @@ sudo tee /etc/netplan/51-vlan-interfaces.yaml > /dev/null <<'NETPLAN'
 network:
   version: 2
   ethernets:
+    # Multus parent NICs (VLANs 202/204/205) — Multus brings them up per-pod
+    # via macvlan, so they just need to be declared so netplan doesn't fail.
     enp6s19:
       optional: true
       dhcp4: no
@@ -55,6 +63,28 @@ network:
       optional: true
       dhcp4: no
       dhcp6: no
+    # Ceph storage NIC (VLAN 210). dhcp4-overrides is critical — without it
+    # UniFi's DHCP pushes a default route + DNS host routes via the Ceph
+    # gateway and breaks routing (2026-05-18 incident). L2-only to the mon.
+    enp6s22:
+      optional: true
+      dhcp4: yes
+      dhcp4-overrides:
+        use-routes: no
+        use-dns: no
+      dhcp6: no
+      mtu: 9000
+    # NAS storage NIC (VLAN 209). MUST be declared (optional) BEFORE the NIC
+    # is added to the VM, else networkd-wait-online hangs boot on the
+    # unconfigured interface (2026-05-29 incident). Same L2-only rationale.
+    enp6s23:
+      optional: true
+      dhcp4: yes
+      dhcp4-overrides:
+        use-routes: no
+        use-dns: no
+      dhcp6: no
+      mtu: 9000
 NETPLAN
 
 sudo chmod 600 /etc/netplan/51-vlan-interfaces.yaml

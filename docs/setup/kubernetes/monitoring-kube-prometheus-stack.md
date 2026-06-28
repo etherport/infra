@@ -40,8 +40,8 @@ The monitoring stack is deployed via Flux GitOps using the kube-prometheus-stack
 ┌─────────────────────────────────────────────────────────────────┐
 │                    PrometheusRule CRDs                          │
 │  - comprehensive-alerts.yaml (GPU, services, pod health)        │
-│  - external-alerts.yaml (external-host node-exporter alerts,     │
-│       external-nodes job)                                        │
+│  - 02-external-alerts.yaml (external-host node-exporter alerts, │
+│       external-nodes job)                                       │
 │  - dns-health-alerts.yaml                                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -125,6 +125,12 @@ The IAM user `alertmanager-ses-smtp` provides SES SMTP access.
 | `home-automation` | Home Assistant availability |
 | `monitoring` | Grafana, Prometheus, Alertmanager health |
 | `traefik` | Ingress controller health |
+| `cert-manager` | Cert-manager controller and webhook health |
+| `flux-system` | Flux GitOps reconciliation health |
+| `backups` | Backup job success/failure |
+| `dns-services` | DNS (Technitium) service health |
+| `metallb` | MetalLB load-balancer health |
+| `media` | Plex/media workload health |
 | `gpu-workloads` | Plex, Ollama, GPU workload crash detection |
 | `gpu-operator` | NVIDIA driver and device plugin health |
 | `pod-health` | Generic pod crash/OOM detection |

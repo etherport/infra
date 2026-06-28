@@ -40,9 +40,11 @@ DHCP for sandbox networks.
 
 **General rule:** any VLAN with a `vmbr0.<N>` host sub-interface in `/etc/network/interfaces` is forbidden here. Check before adding new VNets.
 
-### Pre-flight constraint for VLAN 201 (servers)
+### Pre-flight constraint for VLAN 201 (servers) — historical
 
-PVE historically had a `vmbr0.201` sub-interface (vestigial 10.10.201.41 secondary IP). Single-node PVE doesn't need this — VMs reach PVE via the mgmt IP on VLAN 200 (DNS authoritative answer for `pve.wind.etherport.net`). **Before applying this module, the `vmbr0.201` stanza must be removed from `/etc/network/interfaces`** (via the Ansible `pve-network.yml` playbook). Otherwise the `servers` VNet collides with `vmbr0.201` and recreates the 2026-05-18 outage. See `docs/runbooks/proxmox-sdn-prep.md` (TODO).
+This module is already applied (7 VNet bridges live; standalone VMs migrated 2026-05-18, K8s VM NICs 2026-05-22 — see `docs/architecture/network.md`). This section records the one-time pre-flight that was completed before that apply; it is **not** a pending task.
+
+PVE historically had a `vmbr0.201` sub-interface (vestigial 10.10.201.41 secondary IP). Single-node PVE doesn't need this — VMs reach PVE via the mgmt IP on VLAN 200 (DNS authoritative answer for `pve.wind.etherport.net`). The `vmbr0.201` stanza was therefore removed from `/etc/network/interfaces` (via the Ansible `pve-network.yml` playbook) before this module was first applied, because the `servers` VNet collides with `vmbr0.201` and would recreate the 2026-05-18 outage. **Do not re-add a `vmbr0.201` stanza** while this module is in place. Full sequence: `docs/planning/archive/proxmox-sdn-implementation-2026-05-18.md`.
 
 ## Provider
 

@@ -268,7 +268,9 @@ resources:
 ```
 platform/kubernetes/metallb/
 ├── kustomization.yaml
-└── metallb-wind.yaml
+├── metallb-wind.yaml
+├── 02-bgp-md5-secret.sops.yaml   # L24 TCP-MD5 key (also demonstrates Pattern 4)
+└── README.md
 ```
 
 **kustomization.yaml**:
@@ -278,6 +280,8 @@ kind: Kustomization
 
 resources:
   - metallb-wind.yaml
+  # L24 Phase 3 — TCP-MD5 key (SOPS). Applied first; the BGPPeer references it.
+  - 02-bgp-md5-secret.sops.yaml
 ```
 
 **When to use**: Simple configuration resources that don't need a namespace or complex structure.

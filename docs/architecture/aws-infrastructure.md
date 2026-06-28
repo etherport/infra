@@ -437,7 +437,7 @@ All Terraform state is stored in S3 with native S3 locking:
 | homelab-review | Read-only infrastructure audit | homelab-review |
 | claude-admin | AI assistant infrastructure access | homelab |
 
-**Current status (as of 2026-04-10):**
+**Account identity:**
 ```
 aws --profile homelab sts get-caller-identity
 Account: 830881980142

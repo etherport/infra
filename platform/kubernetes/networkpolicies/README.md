@@ -87,11 +87,12 @@ that order). `kube-system`, `flux-system`, `wireguard` (hostNetwork → node ide
   `:8000` from `cnpg-system` (operator→instance-manager) + `:9187` from `monitoring`;
   egress `:5432` intra (CNPG replication) + `:443` to `world` (barman backups to S3).
   cue-api uses its **own** `cue-db` in ns `cue`, NOT this cluster. **Enforce-ready.**
+- `11-tier-cue.yaml`, `12-tier-dns.yaml`, `13-tier-traefik.yaml`, `14-tier-monitoring.yaml`
+  — the remaining four tiers (CNP `cue-tier`/`dns-tier`/`traefik-tier`/`monitoring-tier`),
+  each allowlist written from that namespace's Phase-1 audit data, not guessed. See
+  "Current state" below for the per-tier specifics.
 
-The per-tier allowlists (`1x-tier-*.yaml`) beyond postgres are **intentionally absent**
-— they get written from Phase-1 audit data, not guessed.
-
-## Current state (2026-06-22)
+## Current state (2026-06-28)
 
 Enforcing. `cilium_policy_audit_mode: false`. Enforced tiers:
 - **`postgres`** (`10-tier-postgres.yaml`) — verified 0 AUDIT over 7d before the flip;
@@ -112,15 +113,27 @@ Enforcing. `cilium_policy_audit_mode: false`. Enforced tiers:
   → flipped audit OFF. Ingress: public entrypoints (:80/:443/:8088) from `all`, mgmt
   (:8080/:8443) in-cluster. Verified post-flip: all routes 200/302/303/404 (working), 0
   drops. (Labelled via `clusters/wind/namespace-pss-labels.yaml` — Helm-created ns.)
+- **`monitoring`** (`14-tier-monitoring.yaml`) — the widest-fanout namespace (Prometheus
+  scrapes every ns + external hosts; Alloy ingests logs/syslog; AM/ai-advisor egress
+  externally). Like traefik, deliberately PERMISSIVE so scraping never cuts: egress
+  `cluster` any-port + `world` on enumerated ports (SES :587/:465/:25, APIs :443/:80,
+  external node-exporters :9100, pve-IPMI :9290); ingress `cluster` any-port + `world`
+  :9091/:3100/:514 (push/logs/syslog) + kube-apiserver (operator webhook). Verified via
+  the audit toggle: 0 would-be-drops over 24h incl. periodic paths (391 AM notifications,
+  0 failed) → audit OFF. (Labelled via `clusters/wind/namespace-pss-labels.yaml`.)
 
 All other namespaces are unlabeled = allow-all.
 
-> **Monitoring gap:** the audit→Loki pipeline (`CiliumNetpolAuditFlow`) only catches
-> `AUDIT` verdicts, which no longer occur once a tier ENFORCES. A wrongly-dropped flow on an
-> enforced tier therefore does NOT alert — you find it via the app breaking or a manual
-> `hubble observe --verdict DROPPED`. Follow-up (tracked under H3): export `verdict=DROPPED`
-> for enforced namespaces → Loki → alert. (CNPG backup failures are still caught separately
-> by `CNPGBackupFailed`.)
+> **DROP alerting is LIVE.** The hubble export now carries both verdicts
+> (`hubble-export-allowlist` = `verdict:[AUDIT,DROPPED]`) → Loki `{job="hubble-audit"}` →
+> the loki-ruler rules in `platform/kubernetes/monitoring/06-loki-rules-cilium-audit.yaml`:
+> `CiliumNetpolDropFlow` (a real DROP to/from an enforced tier) +
+> `CiliumTraefikIngressDrop` (critical — a DROP on a Traefik public entrypoint container
+> port). So a wrongly-dropped flow on an enforced tier now alerts in ~10m instead of staying
+> silent until the app breaks. **Remaining gap:** `CiliumNetpolDropFlow` excludes `world`
+> sources (scan noise), so a wrongly-dropped EXTERNAL client to a *non-traefik* enforced tier
+> still won't auto-alert — find those with `hubble observe --verdict DROPPED`. (CNPG backup
+> failures are still caught separately by `CNPGBackupFailed`.)
 
 ## ⚠️ Adding or changing a service (operational tax)
 

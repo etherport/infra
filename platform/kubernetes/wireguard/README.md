@@ -26,14 +26,15 @@ For full architecture documentation, see [docs/architecture/vpn-wireguard.md](..
 │                                                             │
 │  Deployment: wireguard (replicas: 1)                        │
 │  ┌─────────────────────────────────────────────────────┐    │
-│  │  Pod (hostNetwork: true, prefers k8s-w1)            │    │
+│  │  Pod (hostNetwork: true, any worker, no cp)        │    │
 │  │  ┌─────────────────┐  ┌─────────────────┐           │    │
 │  │  │   wireguard     │  │   keepalived    │           │    │
 │  │  │   container     │  │   sidecar       │           │    │
 │  │  │                 │  │                 │           │    │
-│  │  │  - wg0 tunnel   │  │  - VIP mgmt     │           │    │
-│  │  │  - Site-to-site │  │  - VRRP pri 150 │           │    │
-│  │  │  - Port 51820   │  │  - Health check │           │    │
+│  │  │ - wg0 (s2s)     │  │  - VIP mgmt     │           │    │
+│  │  │   Port 9820     │  │  - VRRP pri 150 │           │    │
+│  │  │ - wg1 (remote)  │  │  - Health check │           │    │
+│  │  │   Port 9821     │  │                 │           │    │
 │  │  └─────────────────┘  └─────────────────┘           │    │
 │  └─────────────────────────────────────────────────────┘    │
 │                                                             │
@@ -70,7 +71,7 @@ kubectl apply -k platform/kubernetes/wireguard/
 | Setting | Value | Notes |
 |---------|-------|-------|
 | hostNetwork | true | Direct host networking for tunnel |
-| Node affinity | Prefers k8s-w1 | Falls back to any worker |
+| Node affinity | Any worker, control-plane excluded | `required` rule excludes control-plane only (no per-node preference) |
 | tolerationSeconds | 10 | Fast eviction on node failure |
 | VRRP priority | 150 | Higher than vpn-local (100) |
 | VIP | 10.10.201.20 | Floating between K8s and vpn-local |
@@ -84,10 +85,11 @@ kubectl apply -k platform/kubernetes/wireguard/
 
 ### Probes
 
-| Probe | Target | Initial Delay | Period |
-|-------|--------|---------------|--------|
-| Liveness | `ip link show wg0` | 90s | 10s |
-| Readiness | `wg show wg0` | 60s | 10s |
+| Probe | Target | Initial Delay | Period | Failure Threshold |
+|-------|--------|---------------|--------|-------------------|
+| Startup | `which wg && ip link show wg0` | 30s | 10s | 30 (≈5 min for apt-get install) |
+| Liveness | `ip link show wg0 && ip link show wg1` | — | 10s | 3 |
+| Readiness | `wg show wg0 && wg show wg1` | — | 10s | 3 |
 
 ## Operations
 

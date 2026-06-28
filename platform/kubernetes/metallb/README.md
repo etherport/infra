@@ -30,7 +30,7 @@ MetalLB provides LoadBalancer-type Service support for bare-metal Kubernetes clu
 
 - **IP Address Pool**: 10.10.201.5/32 and 10.10.201.70-10.10.201.90
 - **Mode**: **BGP** (eBGP peer = UDM `10.10.201.1` ASN 64512; VIP /32s via `BGPAdvertisement`)
-- **Namespace**: `metallb-system` (MetalLB operator installed via Helm separately)
+- **Namespace**: `metallb-system` (operator Helm/Flux-managed in FRR mode — see Prerequisites)
 
 ## Architecture
 
@@ -73,14 +73,14 @@ MetalLB provides LoadBalancer-type Service support for bare-metal Kubernetes clu
 
 ## Prerequisites
 
-MetalLB operator must be installed separately (typically via Helm):
+The MetalLB operator itself is **Helm/Flux-managed in FRR mode** via the HelmRelease at
+[`../../../clusters/wind/helm-releases/metallb.yaml`](../../../clusters/wind/helm-releases/metallb.yaml)
+(`speaker.frr.enabled=true`, `crds: Skip`) — **not** a standalone `helm install`, and **not**
+the kubespray native addon (`metallb_enabled: false`). That HelmRelease is the engine source of
+truth; change the install/upgrade there.
 
-```bash
-helm repo add metallb https://metallb.github.io/metallb
-helm install metallb metallb/metallb -n metallb-system --create-namespace
-```
-
-This repo only manages the **configuration** (IPAddressPool + BGPAdvertisement + BGPPeer), not the MetalLB installation itself.
+Both the operator (controller + speaker) **and** its CRs (IPAddressPool + BGPAdvertisement +
+BGPPeer, in this directory) are **GitOps-managed**.
 
 ## Deployment
 

@@ -15,8 +15,11 @@ configured NFS share. Daily-report CronJob aggregates these into the
 - NFS mount failure — share unmounted / server unreachable from the
   pod's node (most common; NFS server is the same UNAS that's also
   a Velero/Kopia target).
-- AWS S3 credential expiration or IAM policy change (less frequent
-  since H6 transferred SG rules to Lambda).
+- AWS auth failure — since M75 the s3-sync CronJob assumes
+  `wind-irsa-s3-sync` via `AssumeRoleWithWebIdentity` (no static key),
+  so a failure means the projected SA token / OIDC trust / IAM policy
+  broke. Check the `[preflight] aws sts get-caller-identity` output in
+  the pod log.
 - The s3-sync container OOMKilled on a large share — pairs with
   `PodOOMKilled` on the share's job.
 - ttlSecondsAfterFinished misconfig hiding the failed Job from

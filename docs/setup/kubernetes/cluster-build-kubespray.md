@@ -3,10 +3,11 @@
 ## Repo layout
 - Kubespray is a git submodule: `infra/kubespray/kubespray`
 - Wrapper scripts: `infra/kubespray/kubespray.sh` and `infra/kubespray/setup.sh`
-- Inventory lives in a single file at the kubespray dir root:
-  `infra/kubespray/inventory/inventory.ini` (with `group_vars/` and
-  `pre-flight.yml` alongside it). The legacy `inventory/wind/` layout
-  is no longer used.
+- Inventory: `infra/kubespray/inventory/inventory.ini` is a symlink to
+  `../../ansible/inventory/wind/inventory.ini` (the single shared homelab
+  inventory; standalone-VM hosts are ignored by the `k8s_cluster` group), with
+  `group_vars/` and `pre-flight.yml` alongside it. The `inventory/wind/` dir is
+  still present and holds `credentials/kubeadm_certificate_key.sops.yaml`.
 
 ## First-time Setup
 

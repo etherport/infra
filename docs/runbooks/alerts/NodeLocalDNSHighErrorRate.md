@@ -43,10 +43,14 @@ Often correlates with sibling `NodeLocalDNSTimeout`.
 
 ## Advisor action guidance
 
-- Preferred (auto): `restart_pods(namespace=kube-system, selector=k8s-app=node-local-dns, node=<nodename>)`
-  — restarts only the affected DaemonSet pod, no broad disruption.
-- Avoid restarting all node-local-dns pods at once — that briefly
-  blackholes DNS cluster-wide. The action defaults to single-node.
+- Auto action: `restart_pods(namespace=kube-system, selector=k8s-app=node-local-dns)`
+  — ⚠️ `restart_pods` takes ONLY `(namespace, selector)`; there is **no
+  per-node scoping**. It deletes EVERY pod matching the label selector, so
+  this restarts node-local-dns on **all nodes at once**, briefly blackholing
+  DNS cluster-wide — the exact disruption cautioned against below. (Per-node
+  scoping is a feature gap; until the action supports a node/field selector,
+  prefer `noop` + a manual single-node `kubectl delete pod <pod>` for the
+  affected node.)
 - If `TechnitiumDNSDown` is also firing, defer to that runbook —
   restarting node-local-dns won't help if the upstream is gone.
 - `noop` is appropriate if logs show a conntrack-full or kernel-side

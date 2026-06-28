@@ -286,7 +286,7 @@ Built and published automatically via GitHub Actions:
 
 ### Base Image
 
-`public.ecr.aws/aws-cli/aws-cli:2.32.16` (Amazon Linux)
+`public.ecr.aws/aws-cli/aws-cli:2.34.62` (Amazon Linux) — see [`image/Dockerfile`](image/Dockerfile)
 
 ### Installed Tools
 
@@ -311,12 +311,18 @@ Built and published automatically via GitHub Actions:
 #### Production Policy (Normal Operations)
 
 > **Source of truth:** the live policy is
-> [`infra/terraform/aws/iam-policies/s3-backup-kubernetes-policy.json`](../../../../infra/terraform/aws/iam-policies/s3-backup-kubernetes-policy.json)
-> (IAM policy `s3-backup-kubernetes-policy`, applied out-of-band via `aws iam
-> create-policy-version`). The JSON below mirrors it — if they differ, trust the
-> file. **Do not** re-apply an older copy of this block: the `approvals/*` grant
-> is what makes the delete-approval flow work, and dropping it silently breaks
-> approvals.
+> [`infra/terraform/aws/iam-policies/s3-backup-kubernetes-policy.json`](../../../../infra/terraform/aws/iam-policies/s3-backup-kubernetes-policy.json).
+> Under M75 IRSA the active jobs run this JSON **inline** on the
+> `wind-irsa-s3-sync` role, attached via Terraform
+> ([`infra/terraform/aws/cluster-irsa/main.tf`](../../../../infra/terraform/aws/cluster-irsa/main.tf)
+> `file(... s3-backup-kubernetes-policy.json)`, applied by the
+> `terraform-cluster-irsa` CI workflow). The standalone managed policy
+> `s3-backup-kubernetes-policy` on the legacy `kubernetes-s3-backup` IAM user
+> (previously kept current via `aws iam create-policy-version`) is the old path
+> the jobs **no longer use**. The JSON below mirrors the file — if they differ,
+> trust the file. **Do not** re-apply an older copy of this block: the
+> `approvals/*` grant is what makes the delete-approval flow work, and dropping
+> it silently breaks approvals.
 
 Use this policy for day-to-day backup operations:
 

@@ -30,7 +30,13 @@ cert-manager has not yet renewed it.
 ## Verification steps
 
 1. Cert status from cert-manager:
-   `kubectl -n traefik describe certificate wildcard-wind-etherport-net`
+   `kubectl -n traefik describe certificate wildcard-wind-etherport-net-rsa`
+   (the alert metric `unifi_cert_sync_cert_not_after_seconds` is derived
+   from the **RSA** cert — `unifi-cert-sync` reads secret
+   `wildcard-wind-etherport-net-rsa-tls`, since UniFi OS rejects ECDSA.
+   Traefik serves the sibling ECDSA cert `wildcard-wind-etherport-net`,
+   but the UniFi appliances + this alert track the RSA variant, so renewing
+   the ECDSA cert won't move the metric or clear the alert.)
 2. CertificateRequest:
    `kubectl -n traefik get certificaterequest --sort-by=.metadata.creationTimestamp`
 3. ACME order detail (if stuck):
@@ -43,7 +49,7 @@ cert-manager has not yet renewed it.
 
 ## Advisor action guidance
 
-- `force_cert_renewal(namespace=traefik, certificate=wildcard-wind-etherport-net)`
+- `force_cert_renewal(namespace=traefik, certificate=wildcard-wind-etherport-net-rsa)`
   — annotates the Certificate to trigger immediate re-issuance. Safe;
   cert-manager queues. Auto-eligible in principle but watch the
   confidence threshold — if a recent renewal attempt already failed,

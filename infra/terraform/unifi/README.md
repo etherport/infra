@@ -107,7 +107,8 @@ Phase 1 order (lowest → highest risk):
 2. Static DHCP reservations (`unifi_user`) — only for infra hosts, not
    transient clients
 3. Port forwards (`unifi_port_forward`)
-4. Static routes (`unifi_static_route` — pending provider compatibility)
+4. Static routes (`unifi_static_route`) — shipped + imported; repointed to
+   the K8s WG VIP (`10.10.201.20`) after Servers/201 moved to UDM-routed
 
 ## Force-unlock procedure
 

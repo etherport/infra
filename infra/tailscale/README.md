@@ -98,8 +98,10 @@ would create drift.
 
 See the inline comments in [`policy.hujson`](policy.hujson). High-level:
 
-- **`tagOwners`**: 4 tags (`tag:k8s-operator`, `tag:subnet-router`,
-  `tag:homelab`, `tag:cluster-ingress`) and who can apply each.
+- **`tagOwners`**: 5 tags (`tag:k8s-operator`, `tag:k8s`,
+  `tag:subnet-router`, `tag:homelab`, `tag:cluster-ingress`) and who can
+  apply each. `tag:k8s` is the default tag the K8s operator applies to the
+  per-Service proxy devices it creates (e.g. `cue-db`).
 - **`grants`**: currently **allow-all** — every device can reach every
   other device on every port. Homelab posture; tighten when warranted.
 - **`autoApprovers`**: subnet routes the tailnet auto-accepts when a
@@ -108,6 +110,10 @@ See the inline comments in [`policy.hujson`](policy.hujson). High-level:
 - **`ssh`**: Tailscale SSH allowed only for `autogroup:member` →
   `autogroup:self`, gated by `action: check` (re-auth required at
   session start).
+- **`nodeAttrs`**: grants the `mullvad` exit-node attribute to
+  `autogroup:member` (the owner's devices can see + select Mullvad exit
+  nodes; the add-on is billed per-device so it's granted in the ACL, not
+  the admin console).
 
 ## Related code in this repo
 
@@ -117,5 +123,4 @@ See the inline comments in [`policy.hujson`](policy.hujson). High-level:
   CRDs that advertise the homelab subnets.
 - `platform/kubernetes/auto-remediation/approval-ingress.yaml` —
   uses the `tailscale` IngressClass; carries
-  `tailscale.com/tags: tag:subnet-router` until L12 swaps it to
-  `tag:cluster-ingress`.
+  `tailscale.com/tags: tag:cluster-ingress` (swapped under L12).

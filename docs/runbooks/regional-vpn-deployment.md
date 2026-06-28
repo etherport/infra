@@ -12,18 +12,18 @@ Deploy temporary WireGuard VPN endpoints in AWS regions closest to your travel l
 | Region | Tunnel IP | VPC CIDR | Status |
 |--------|-----------|----------|--------|
 | ap-south-1 (Mumbai) | 10.255.255.3 | 10.10.112.0/24 | Not deployed |
-| me-south-1 (Bahrain) | 10.255.255.4 | 10.10.116.0/24 | **OFFLINE** (region damaged) |
+| me-south-1 (Bahrain) | 10.255.255.4 | 10.10.116.0/24 | Not deployed |
 | eu-west-1 (Ireland) | 10.255.255.5 | 10.10.120.0/24 | Not deployed |
 
-**Note:** Bahrain (me-south-1) and UAE (me-central-1) regions are currently offline due to infrastructure damage. ETA for recovery unknown.
+**Note:** Check the [AWS Health Dashboard](https://health.aws.amazon.com/) for your target region before deploying.
 
 ## Quick Reference: Closest Regions
 
 | Location | AWS Region | Region Code | Latency | Status |
 |----------|------------|-------------|---------|--------|
 | India / Gulf | **ap-south-1** (Mumbai) | `mumbai` | ~10-20ms | Available |
-| Abu Dhabi / Dubai | me-central-1 (UAE) | `uae` | ~5ms | **OFFLINE** |
-| Bahrain / Gulf | me-south-1 (Bahrain) | `bahrain` | ~5ms | **OFFLINE** |
+| Abu Dhabi / Dubai | me-central-1 (UAE) | `uae` | ~5ms | Available |
+| Bahrain / Gulf | me-south-1 (Bahrain) | `bahrain` | ~5ms | Available |
 | Europe (West) | eu-west-1 (Ireland) | `ireland` | ~20ms | Available |
 | Europe (Central) | eu-central-1 (Frankfurt) | `frankfurt` | ~15ms | Available |
 | Asia (East) | ap-northeast-1 (Tokyo) | `tokyo` | ~30ms | Available |
@@ -36,10 +36,10 @@ The easiest way to deploy regional VPN infrastructure. No local tools required b
 
 ### Prerequisites
 
-1. Repository secrets configured:
-   - `AWS_ACCESS_KEY_ID` - terraform-homelab user
-   - `AWS_SECRET_ACCESS_KEY`
+1. The workflow assumes the `gh-actions-terraform` IAM role via GitHub OIDC (H29) —
+   there are no static AWS key secrets. Repository secrets required:
    - `SOPS_AGE_KEY` - Age private key for secret decryption
+   - `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ZONE_ID` - for the post-apply DNS update
 
 ### Deploy a New Region
 
@@ -319,7 +319,7 @@ sudo wg show
 
 # Check homelab tunnel
 ping 10.255.255.2  # K8s WireGuard endpoint
-ping 10.10.201.50  # Proxmox host
+ping 10.10.201.50  # k8s-cp1
 ```
 
 ## Troubleshooting

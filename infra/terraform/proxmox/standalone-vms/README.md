@@ -61,8 +61,8 @@ make sure these are in place on your workstation:
 | `ansible-playbook` binary         | on `$PATH`                             | `brew install ansible` (or `pipx install ansible-core`)      |
 | `gh` CLI (only for GH Actions path) | on `$PATH`                           | `brew install gh` and `gh auth login`                        |
 | `terraform` binary (only for local-apply path) | on `$PATH`              | `brew install terraform`                                     |
-| AWS credentials (only for local-apply path) | env or profile             | 1Password — item "AWS — claude-admin IAM keys"               |
-| Proxmox API token (only for local-apply path) | env vars                | 1Password — item "Proxmox VE Terraform Token"                |
+| AWS credentials (only for local-debug TF) | `~/.aws` `[homelab]` profile  | `scripts/render-aws-credentials.sh` (SOPS-backed — no 1P/op) |
+| Proxmox API token (only for local-debug TF) | injected per-run env vars   | `scripts/tf-proxmox.sh` decrypts `proxmox/secrets.sops.yaml` |
 
 Quick verification:
 
@@ -161,14 +161,16 @@ cd ~/code/infra/infra/terraform/proxmox/standalone-vms
 # 3. Init (downloads providers, hooks up S3 backend)
 terraform init
 
-# 4. Pull AWS + Proxmox credentials.
-#    AWS: aws-vault, direnv, or shell exports. The S3 state backend
-#         uses AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY env vars
-#         from your normal profile.
-#    Proxmox: TF_VAR_proxmox_token_id + TF_VAR_proxmox_token_secret
-#             from 1P item "Proxmox VE Terraform Token".
-export TF_VAR_proxmox_token_id="$(op read 'op://Private/Proxmox VE Terraform Token/token id')"
-export TF_VAR_proxmox_token_secret="$(op read 'op://Private/Proxmox VE Terraform Token/token secret')"
+# 4. Pull AWS + Proxmox credentials — SOPS-backed, headless (M82: no standing
+#    creds on the devbox/agents, and `op` doesn't work from agent bash).
+#    AWS:     scripts/render-aws-credentials.sh writes ~/.aws [homelab]
+#             (the S3 state backend uses profile = "homelab"). Throwaway.
+#    Proxmox: run terraform via scripts/tf-proxmox.sh — it decrypts
+#             infra/terraform/proxmox/secrets.sops.yaml and injects
+#             TF_VAR_proxmox_token_id / _secret for that run only.
+~/code/infra/scripts/render-aws-credentials.sh
+# then drive terraform via the wrapper, e.g. (from steps 5-6 below):
+#   ~/code/infra/scripts/tf-proxmox.sh standalone-vms plan -target=...
 
 # 5. Plan-first ALWAYS (this is shared state — see what TF wants to do)
 #    For runner-touching changes, scope with -target:

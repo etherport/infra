@@ -54,7 +54,7 @@ data:
   cf_zone_id: "c45213cbf36fc634b6b75ae9abd49c59"
 
   # Comma-separated record names within that zone
-  record_names: "wind.etherport.net"
+  record_names: "wind.etherport.net,sip.wind.etherport.net"
 
   # DNS record TTL in seconds
   ttl: "300"

@@ -32,7 +32,7 @@ PrometheusRule → Alertmanager → webhook (this controller)
 - **Namespace**: `auto-remediation`
 - **Service**: `remediation-webhook` (ClusterIP, port 8080) — Alertmanager target
 - **Tailscale Ingress**: `remediation-approve.<tailnet>.ts.net` — Approve/Reject URLs
-- **Public Ingress** (alt): `https://approve.etherport.net` via Traefik (current default APPROVAL_BASE_URL); ready to route through CF Tunnel after the NS-cutover
+- **Public Ingress** (current default APPROVAL_BASE_URL): `https://approve.etherport.net` served via CF Tunnel behind CF Access (Google SSO; cutover 2026-05-26). A Traefik IngressRoute at `approve.wind.etherport.net` is the legacy fallback (see `approval-public-ingress.yaml`)
 - **ConfigMaps**:
   - `remediation-rules` (`configmap.yaml`) — static alert→action mappings
   - `remediation-script` (`controller-configmap.yaml`) — controller Python; this is the real source of truth, the legacy `controller.py` placeholder is unused
@@ -40,8 +40,8 @@ PrometheusRule → Alertmanager → webhook (this controller)
 - **Secrets** (all SOPS):
   - `ai-advisor-anthropic-key` — Anthropic API key
   - `ai-advisor-approval-hmac` — HMAC signing key for Approve URLs
-  - `ai-advisor-aws-cloudwatch` — read-only CW Logs (M45 Phase B)
   - `advisor-ssh-key` — Tier 3 SSH key (deployed to dns-aws/dns-fallback/vpn-local/vpn-aws)
+  - (read-only CW Logs are now via IRSA role `wind-irsa-cloudwatch-read` — `AssumeRoleWithWebIdentity` + projected SA token, no static key)
 - **RBAC**: ServiceAccount + ClusterRole for pod/deployment patching across denylisted-namespaces-excluded set
 
 ## Files
@@ -56,7 +56,7 @@ PrometheusRule → Alertmanager → webhook (this controller)
 | `controller-configmap.yaml` | Real controller Python (~2400 lines) |
 | `advisor-prompt-configmap.yaml` | System prompt + action taxonomy |
 | `approval-ingress.yaml` | Tailscale Ingress |
-| `approval-public-ingress.yaml` | Traefik public Ingress for `approve.etherport.net` |
+| `approval-public-ingress.yaml` | Traefik IngressRoute (legacy fallback) for `approve.wind.etherport.net` |
 | `*.sops.yaml` | Secrets (SOPS-encrypted) |
 | `COVERAGE.md` | What static rules + advisor cover, where the gaps are |
 | `README.md` | This file |

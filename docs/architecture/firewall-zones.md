@@ -56,15 +56,15 @@ The homelab network uses a **dual-router architecture** with routing responsibil
 │                                         UDM Pro ("Windroute")                                            │
 │                                    Primary Router / Firewall / NAT                                       │
 │                                                                                                          │
-│   Routes: Default (untagged), Management (200), IoT (204), Security (205), Guest (206),                 │
-│           Unifi (212), Inter-VLAN (4040)                                                                 │
+│   Routes: Default (untagged), Management (200), Servers (201), IoT (204), Security (205),               │
+│           Guest (206), Unifi (212), Inter-VLAN (4040)                                                    │
 └─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
        │           │           │           │           │           │           │
        ▼           ▼           ▼           ▼           ▼           ▼           ▼
  ┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐
  │ Untagged ││ VLAN 200 ││ VLAN 204 ││ VLAN 205 ││ VLAN 206 ││ VLAN 212 ││ VLAN 4040│
  │ Default  ││Management││   IoT    ││ Security ││  Guest   ││  Unifi   ││ Transit  │
- │ Internal ││ Internal ││ IoT (★)  ││ Sec (★)  ││ Hotspot  ││Infra (★) ││ Internal │
+ │ Internal ││Mgmt  (★) ││ IoT (★)  ││ Sec (★)  ││ Hotspot  ││Infra (★) ││ Internal │
  │10.10.199 ││10.10.200 ││10.10.204 ││10.10.205 ││10.10.206 ││10.10.212 ││10.255.253│
  └──────────┘└──────────┘└──────────┘└──────────┘└──────────┘└──────────┘└────┬─────┘
                                                                               │
@@ -79,7 +79,9 @@ The homelab network uses a **dual-router architecture** with routing responsibil
  │                           L3 Switch ("Switch Rack PoE")                                 │
  │                              Secondary Router                                           │
  │                                                                                         │
- │   Routes: Servers (201), Clients (202), vSAN (209), Ceph (210)                         │
+ │   Routes: Clients (202), vSAN (209), Ceph (210)                                        │
+ │   (Servers/201 north-south is now UDM-routed/zoned — Trusted — since the BGP            │
+ │    migration; only 201↔202/209/210 east-west stays L2/switch-local)                     │
  │   Static routes to AWS (10.10.100.0/22, 10.255.255.0/29, 10.254.0.0/24)                │
  └────────────────────────────────────────────────────────────────────────────────────────┘
                 │              │              │             │
@@ -87,26 +89,28 @@ The homelab network uses a **dual-router architecture** with routing responsibil
           ┌──────────┐   ┌──────────┐   ┌──────────┐  ┌──────────┐
           │ VLAN 201 │   │ VLAN 202 │   │ VLAN 209 │  │ VLAN 210 │
           │ Servers  │   │ Clients  │   │   vSAN   │  │   Ceph   │
-          │ Internal │   │ Internal │   │ Internal │  │ Internal │
+          │ Trusted  │   │ Internal │   │ Internal │  │ Internal │
           │10.10.201 │   │10.10.202 │   │10.10.209 │  │10.10.210 │
           └──────────┘   └──────────┘   └──────────┘  └──────────┘
 
-  (★) IoT, Infrastructure (Unifi/212) and Security (205) are the three
-      custom zones on the controller (M30 migration, 2026-05-28/29).
-      "Internal" now holds only Default + Management/200. The switch-
-      routed VLANs (201/202/209/210/4040) are in no UDM zone — their
-      east-west security is enforced by L3-switch ACLs (see below).
+  (★) There are FIVE custom zones on the controller: Trusted (Servers/201),
+      Management (200), IoT (204), Infrastructure (Unifi/212), Security (205)
+      (M30 migration 2026-05-28/29; Trusted/Management added by M56 2026-05-31).
+      "Internal" now holds only the Default network. Servers/201 north-south is
+      UDM-routed (Trusted zone) since the BGP migration; the remaining switch-
+      routed VLANs (202/209/210/4040) are in no UDM zone — their east-west
+      security is enforced by L3-switch ACLs (see below).
 ```
 
 ### Firewall Implications of Dual-Router Architecture
 
-The UDM firewall only sees traffic that traverses the UDM. Traffic between L3-switch-routed VLANs (201 ↔ 202 ↔ 209 ↔ 210) **never passes through the UDM** and is unaffected by anything in this document.
+The UDM firewall only sees traffic that traverses the UDM. Since the BGP migration (M56) Servers/201 is **UDM-routed/zoned (Trusted)**, so routed 201↔202 flows now **transit the UDM** (matched by the `Trusted` zone policies). The only paths that truly **bypass** the UDM are L2/intra-VLAN: K8s↔Ceph stays **intra-VLAN-210 (L2)**, and the direct node↔NAS storage path runs on the vSAN/209 NIC — neither crosses an L3 boundary.
 
 | Traffic Path | Firewall Applies? | Example |
 |--------------|-------------------|---------|
-| Servers (201) ↔ Clients (202) | **No** — L3 switch only | Laptop → K8s service |
-| Servers (201) ↔ vSAN (209) | **No** — L3 switch only | Proxmox → vSAN storage |
-| Servers (201) ↔ Ceph (210) | **No** — L3 switch only | K8s nodes ↔ Ceph mons |
+| Servers (201) ↔ Clients (202) | **Yes** — routed via UDM (Trusted zone) | Laptop → K8s service |
+| Servers (201) → vSAN (209) | **No** — direct node↔NAS NIC, L2 storage path | Proxmox → vSAN storage |
+| K8s nodes ↔ Ceph (210) | **No** — intra-VLAN-210 (L2) | K8s nodes ↔ Ceph mons |
 | Servers (201) ↔ IoT (204) | **Yes** — crosses UDM | Server → Home Assistant |
 | Clients (202) ↔ Internet | **Yes** — crosses UDM | Web browsing |
 | IoT (204) ↔ Security (205) | **Yes** — crosses UDM (and blocked, see below) | (not allowed) |
@@ -116,9 +120,10 @@ The UDM firewall only sees traffic that traverses the UDM. Traffic between L3-sw
 
 | Traffic Flow | Where to Configure |
 |--------------|-------------------|
-| Between L3-switch VLANs (201, 202, 209, 210) | **L3 switch ACLs** (deployed via `infra/ansible/playbooks/usw-acls.yml`, M52 — see below) |
-| Between UDM-routed VLANs (200, 204, 205, 206, 212, 4040) and itself | UDM Zone-Based Firewall |
-| Between L3-switch and UDM-routed VLANs | UDM Zone-Based Firewall (traffic transits VLAN 4040) |
+| Servers/201 north-south (to/from any other VLAN or Internet) | **UDM Zone-Based Firewall** (`Trusted` zone, since M56) |
+| Between switch-routed VLANs (202, 209, 210) | **L3 switch ACLs** (deployed via `infra/ansible/playbooks/usw-acls.yml`, M52 — see below) |
+| Between UDM-routed VLANs (200, 201, 204, 205, 206, 212, 4040) and itself | UDM Zone-Based Firewall |
+| Between switch-routed and UDM-routed VLANs | UDM Zone-Based Firewall (traffic transits VLAN 4040) |
 | To/from Internet | UDM Zone-Based Firewall |
 
 ### L3-switch ACLs (M52 — deployed 2026-05-29)
@@ -202,13 +207,13 @@ UniFi Network creates a fixed set of built-in zones; you can add custom zones on
 
 ## Live Default Policies (Zone-to-Zone)
 
-Decoded from `firewall-policies.json` + `zone-matrix.json`. There are **114 total policies**: 110 predefined (auto-generated UniFi boilerplate for zone defaults) and **4 user-authored**.
+Decoded from `firewall-policies.json` + `zone-matrix.json`. The bulk are predefined (auto-generated UniFi boilerplate for zone defaults); the **user-authored** policies are now codified in `infra/ansible/playbooks/udm-firewall.yml` (`udm_firewall_policies`) — **~20 zone policies** (the `Trusted`/`Management` zone allows from M56, the IoT/Hotspot/External/syslog rules, etc.) plus supporting address/port groups, not the "4 user rules" of the pre-M56 audit. (The exact predefined total grows with each custom zone the controller adds; regenerate `/tmp/unifi-state/` via `scripts/unifi/dump-state.sh` for a current count.)
 
 ### Default behaviour from each source zone
 
 | Source → Dest | Live default | Notes |
 |---|---|---|
-| Internal → Internal | **Allow All Traffic** | Every documented "Trusted/Infrastructure/Security" rule between 200/201/202/205/209/210/212/4040 is satisfied by this default. |
+| Internal → Internal | **Allow All Traffic** | Internal now holds only the Default network; the switch-routed VLANs (202/209/210/4040) enter the UDM via the Internal transit. Servers/201 (Trusted) and Management/200 are in their own custom zones with explicit policies (see "M56" above), not this default. |
 | Internal → External | Allow All Traffic | Standard outbound internet. |
 | Internal → IoT | **Block All Traffic** | Servers cannot initiate to IoT devices. Practical impact: Home Assistant cross-VLAN control of a Hue bridge does not work without an explicit allow (none exists). |
 | Internal → Gateway | Allow All | LAN reaches UDM management surface. |
@@ -327,7 +332,7 @@ The v10 Zone-Based Firewall is **already migrated and enabled** (`ZONE_BASED_FIR
 
 **Navigation:** `Settings` → `Security` → `Firewall` → Zone Matrix tab.
 
-The matrix shows each (source, destination) zone pair as a cell; click into a cell to see/add policies for that flow. Built-in zones (Internal, External, Gateway, VPN, Hotspot, DMZ) cannot be deleted. Custom zones (today: `IoT`) are managed under the same Firewall page.
+The matrix shows each (source, destination) zone pair as a cell; click into a cell to see/add policies for that flow. Built-in zones (Internal, External, Gateway, VPN, Hotspot, DMZ) cannot be deleted. The five custom zones (`Trusted`, `Management`, `IoT`, `Infrastructure`, `Security`) are managed under the same Firewall page.
 
 If you are adding a new policy:
 
@@ -362,17 +367,19 @@ ping 10.10.205.10      # would-be NVR
 ping 10.10.202.5       # Client laptop
 ```
 
-### From a Servers/Clients/Management host (Internal zone)
+### From a Servers/201 host (Trusted zone)
 
 ```bash
-# Should work — Internal → Internal is Allow All
-ping 10.10.200.1       # Management gateway
-ping 10.10.205.10      # Anything in Security/205 (zone is Internal)
-ping 10.10.212.5       # Anything in Unifi/212
+# Should work — Trusted → Gateway/External allowed; Trusted → Infrastructure (all)
+ping 10.10.200.1       # Management gateway (Gateway zone surface)
+ping 10.10.212.5       # Anything in Unifi/212 (Infrastructure) — Trusted → Infrastructure (all)
 
-# Should FAIL — Internal → IoT is Block All by default (no allow)
+# Should FAIL — Trusted has no allow into IoT (204) or Security (205)
 ping 10.10.204.51      # Hue bridge or similar
+ping 10.10.205.10      # Anything in Security/205
 ```
+
+Note: Servers/201 is the `Trusted` custom zone, Management/200 is the `Management` zone — neither is `Internal` any more (M56). The broad `Trusted → {External,Gateway,Vpn,Internal,Infrastructure,Management}` egress allows keep workload connectivity behaviour-neutral vs the old `Internal`.
 
 ### From a Guest device (10.10.206.x, Hotspot zone)
 
@@ -407,7 +414,7 @@ ping 10.10.202.5       # Client
 
 ### Verify zone assignment
 
-`Settings` → `Networks` → click the network → check **Zone** field. Only VLAN 204 should show a custom zone (`IoT`); everything else shows `Internal`, plus Guest in `Hotspot`.
+`Settings` → `Networks` → click the network → check **Zone** field. The five custom-zoned networks: Servers/201 (`Trusted`), Management/200 (`Management`), IoT/204 (`IoT`), Unifi/212 (`Infrastructure`), Security/205 (`Security`). Default/199 shows `Internal`, Guest/206 shows `Hotspot`; the switch-routed VLANs (202/209/210/4040) show no UDM zone.
 
 ---
 

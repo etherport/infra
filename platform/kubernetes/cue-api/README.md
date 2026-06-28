@@ -11,6 +11,9 @@ package). The cluster pulls it via the `ghcr-cue` imagePullSecret. There is no
 local Docker build — CI is the source of truth.
 
 ## Topology
+- **ServiceAccount** `cue-api` (`00-serviceaccount.yaml`) — the IRSA subject; the
+  pod runs as this SA so its projected web-identity token can assume the AWS role
+  (see Config / secrets).
 - **Deployment** `cue-api` (1 replica). An **initContainer** runs
   `node dist/db/migrate.js` (idempotent drizzle migrations) before the app
   serves. `terminationGracePeriodSeconds: 15` (app does graceful SIGTERM ≤10s).
@@ -35,6 +38,14 @@ local Docker build — CI is the source of truth.
     ```
 - `ghcr-cue` Secret (`04-secret-ghcr.sops.yaml`, SOPS) — ghcr read-only pull
   cred. Created from a `read:packages` PAT.
+- **AWS / S3 media (M75 IRSA, no static keys).** The pod runs as the `cue-api` SA
+  (`00-serviceaccount.yaml`) and assumes the **`wind-irsa-cue-media`** IAM role
+  (`arn:aws:iam::830881980142:role/wind-irsa-cue-media`, trust locked to
+  `system:serviceaccount:cue:cue-api` in `infra/terraform/aws/cluster-irsa`) for
+  the Cue media S3 bucket (`CUE_MEDIA_BUCKET`). The AWS SDK auto-assumes it from
+  `AWS_ROLE_ARN` / `AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_REGION` using a projected
+  SA token (aud `sts.amazonaws.com`) — short-lived creds only, no static keys on
+  the pod.
 
 ## Public access — cloudflared tunnel + CF Access (per-path)
 `cue.etherport.net` is served by the wind-cluster cloudflared tunnel

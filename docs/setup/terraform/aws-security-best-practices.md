@@ -361,12 +361,15 @@ Instead of one giant policy, create modular policies per project:
 
 ```
 infra/terraform/aws/iam-policies/
-├── terraform-ddns-lambda.json      # DDNS Lambda project
+├── terraform-ddns-core.json        # DDNS Lambda/API GW core
+├── terraform-ddns-logs.json        # DDNS CloudWatch logs
+├── terraform-ddns-state.json       # DDNS state access
+├── terraform-ddns-secrets-iam.json # DDNS Secrets Mgr + IAM
 ├── terraform-state.json            # S3 backend (shared; S3-native lock)
 ├── terraform-networking.json       # VPC resources (future)
-├── terraform-compute.json          # EC2 resources (future)
-└── terraform-full.json             # Everything (use sparingly)
+└── terraform-compute.json          # EC2 resources (future)
 ```
+> Authoritative set: `ls infra/terraform/aws/iam-policies/` (see that dir's README).
 
 ---
 

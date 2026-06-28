@@ -84,8 +84,9 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: tailscale-operator
-  namespace: tailscale
+  namespace: flux-system
 spec:
+  targetNamespace: tailscale  # operator pods run here
   chart:
     spec:
       chart: tailscale-operator

@@ -9,8 +9,8 @@ auto-eligible action: `prune_host_logdir` (Tier 3 SSH).
 PrometheusRule `external-hosts.rules / ExternalHostLowDisk` firing on
 a Tier 3 SSH-managed host (`dns-aws`, `dns-fallback`, `vpn-local`,
 `vpn-aws`). Most commonly `dns-aws` — Technitium query logs accumulate
-in `/var/log/technitium/` and `/var/lib/technitium/logs/` and can
-fill a small EBS volume in days.
+in `/opt/technitium/config/logs/` and `/opt/technitium/config/stats/`
+and can fill a small EBS volume in days.
 
 ## Verified root cause(s)
 
@@ -37,7 +37,7 @@ fill a small EBS volume in days.
 1. Confirm filesystem pressure from outside (Prometheus):
    `(1 - (node_filesystem_avail_bytes{job="external-nodes",instance="<host>"} / node_filesystem_size_bytes{...})) * 100`
 2. SSH and identify the culprit directory:
-   `ssh <host> sudo du -sh /var/log/* /var/lib/*/logs/* 2>/dev/null | sort -h`
+   `ssh <host> sudo du -sh /opt/technitium/config/logs/ /opt/technitium/config/stats/ 2>/dev/null | sort -h`
 3. After action, watch the metric drop:
    `node_filesystem_avail_bytes{instance="<host>"}` should jump up
    within one scrape interval.
@@ -46,9 +46,12 @@ fill a small EBS volume in days.
 
 ## Advisor action guidance
 
-- Auto-eligible: `prune_host_logdir(host=<name>, path=<absolute>)`.
-  Wrapper script enforces a host allowlist + path prefix allowlist;
-  even if Claude proposes a wild path, the remote side rejects it.
+- Auto-eligible: `prune_host_logdir(host=<name>, logdir_key=technitium-logs|technitium-stats, days=<n>)`.
+  `logdir_key` is an enum the wrapper maps to a fixed directory
+  (`technitium-logs` → `/opt/technitium/config/logs`, `technitium-stats`
+  → `/opt/technitium/config/stats`) — there is no free-form path param,
+  so arbitrary paths are structurally impossible (not merely rejected by
+  a prefix allowlist). A host allowlist still bounds the SSH target.
 - Auto-eligible: `journal_vacuum(host=<name>, retain_days=<n>)` when
   `journalctl --disk-usage` indicates journal is the culprit.
 - `restart_systemd_unit` is allowed-but-manual — disruptive, use only

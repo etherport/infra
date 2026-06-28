@@ -26,8 +26,12 @@ when the next scheduled run completes.
 ## Fix history
 
 - 2026-05-22 (commit f5aa1e3): Rule authored as part of M46 backup
-  coverage. `max by (cluster, namespace)` aggregator already in
-  expr to handle replica-zero-value case.
+  coverage with the raw expr
+  `(time() - cnpg_collector_last_available_backup_timestamp) > 129600`
+  (no aggregator).
+- 2026-05-24 (commit 5808fba): Wrapped the metric in
+  `max by (cluster, namespace)` to mask stale-zero replicas, which
+  were firing the alert forever even on a healthy primary.
 
 ## Verification steps
 

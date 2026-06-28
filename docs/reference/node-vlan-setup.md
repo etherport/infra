@@ -18,8 +18,10 @@ All K8s nodes have six interfaces. The first is configured by cloud-init
 (VLAN 201 management); three are VLAN parents for Multus; two are
 storage interfaces (Ceph 210 + backup/NAS 209). The Multus VLAN parents
 are brought up by `/etc/netplan/51-vlan-interfaces.yaml` (baked into the
-Packer-built template VM 9001); the storage interfaces are brought up by
-`/etc/netplan/52-storage.yaml` and use DHCP-without-routes-or-DNS to
+Packer-built template VM 9001); the storage interfaces (enp6s22 Ceph/210,
+enp6s23 NAS/209) are configured in the same
+`/etc/netplan/51-vlan-interfaces.yaml` with `dhcp4: yes` + overrides
+(MTU 9000) and use DHCP-without-routes-or-DNS to
 avoid polluting the cluster-network routing table (post-2026-05-18).
 (Control-plane nodes omit `enp6s23` — VLAN 209 lands on workers + GPU only.)
 

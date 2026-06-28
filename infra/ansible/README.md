@@ -10,12 +10,13 @@ patches. Kubespray uses this directory's inventory as its single source of truth
 | Area | Playbook(s) | Notes |
 |------|-------------|-------|
 | Proxmox host | `proxmox.yml`, `proxmox-setup.yml`, `pve-network.yml`, `pve-cpu-boost.yml`, `pve-sshd.yml` | PVE host config, networking/SDN, sshd |
-| Standalone VMs | `technitium.yml`, `wireguard.yml`, `gh-runner.yml` | Per-service config for the `proxmox/standalone-vms` TF VMs |
+| Standalone VMs | `technitium.yml`, `wireguard.yml`, `gh-runner.yml`, `asterisk-sbc.yml` | Per-service config for the 6 `proxmox/standalone-vms` TF VMs (dns-fallback, vpn-local, gh-runner, asterisk-sbc, devbox, step-ca — see that stack's [README](../terraform/proxmox/standalone-vms/README.md)) |
+| step-ca / SSH CA (M76) | `step-ca.yml`, `step-ca-trust.yml`, `step-ca-hostcerts.yml`, `step-ca-remove-static-key.yml` | The cert-only SSH system on step-ca VM 1006 (`10.10.201.46`): install the user+host CA, distribute user-CA trust + host certs to the Ubuntu fleet, then strip the bootstrap static key from each enrolled host |
 | UDM / UniFi | `udm-firewall.yml`, `udm-firmware-policy.yml`, `usw-acls.yml` | Drives the internal `/proxy/network/v2/api/...` (zone firewall, DNS) — **full-reconciles** |
 | devbox | `devbox.yml` | Provisions the always-on dev-session host (`10.10.201.45`) |
 | K8s nodes | `k8s-node-fixes.yml`, `k8s-node-patch.yml`, `swap.yml` | Out-of-band node fixes/patches (kubespray is the primary node IaC) |
 | Monitoring/backup | `ipmi-monitoring.yml`, `cloudwatch-agent.yml`, `etcd-backup.yml`, `etcd-defrag.yml` | Exporters + etcd daily snapshot + weekly etcd defrag (H41). Re-run the etcd-* playbooks after a CP rebuild (systemd timers, not baked into the image). |
-| Misc | `asterisk-sbc.yml`, `tailscale.yml`, `base.yml`, `ceph/`, `ceph-msgr2.yml` | |
+| Misc | `tailscale.yml`, `base.yml`, `ceph/`, `ceph-msgr2.yml` | |
 
 ## Inventory
 

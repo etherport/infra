@@ -11,10 +11,17 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 
 ## Prerequisites
 
-- AWS credentials configured (`terraform-homelab` profile)
+- Terraform applies run **in CI, not locally** (M82, 2026-06-24): the devbox/mini
+  hold no standing AWS/PVE creds. Dispatch the relevant workflow (see each "Apply
+  Terraform" step). To dispatch you need the Actions:write PAT (M92) / `gh`.
 - Age key available for SOPS decryption
-- SSH access to existing instances
-- Terraform and Ansible installed
+- SSH access to existing instances (cert-only, M76 — `ssh ubuntu@<host>`)
+- Ansible installed (the playbook steps still run locally)
+- **Rare local-debug TF escape hatch (M82):** render throwaway creds with
+  `scripts/render-aws-credentials.sh` (writes `~/.aws` `[homelab]` from SOPS) and,
+  for proxmox stacks, run `scripts/tf-proxmox.sh <stack> <args>` (injects the PVE
+  token from SOPS). The standing AWS profile is named `homelab`, not
+  `terraform-homelab` (that's the IAM user/key name).
 
 ## Architecture
 
@@ -56,11 +63,12 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
    - Add `private_ip = "10.10.100.10"` if not present
    - Comment out `prevent_destroy = true` (temporarily)
 
-2. **Apply Terraform**
+2. **Apply Terraform** — dispatch the `Compute Terraform` workflow
+   (`terraform-compute.yml`, AWS via OIDC) with `action=plan` first to verify the
+   replacement, then `action=apply` (instance will be destroyed and recreated).
    ```bash
-   cd infra/terraform/aws/compute
-   terraform plan   # Verify replacement
-   terraform apply  # Instance will be destroyed and recreated
+   gh workflow run terraform-compute.yml -f action=plan   # verify replacement
+   gh workflow run terraform-compute.yml -f action=apply  # destroy + recreate
    ```
 
 3. **Capture new ENI ID** from Terraform output
@@ -75,10 +83,10 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
    }
    ```
 
-5. **Apply networking changes**
+5. **Apply networking changes** — dispatch the `Networking Terraform` workflow
+   (`terraform-networking.yml`, AWS via OIDC) after committing the new ENI.
    ```bash
-   cd infra/terraform/aws/networking
-   terraform apply
+   gh workflow run terraform-networking.yml -f action=apply
    ```
 
 6. **Run WireGuard Ansible playbook**
@@ -95,14 +103,15 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 
 8. **Restore lifecycle protection**
    - Uncomment `prevent_destroy = true` in compute/main.tf
-   - Run `terraform apply` to confirm no changes
+   - Commit, then dispatch `terraform-compute.yml -f action=apply` to confirm no changes
 
 ### Post-Migration Verification
 
 - [ ] WireGuard wg0 (site-to-site) handshake within last minute
 - [ ] WireGuard wg1 (remote access) accepting connections
 - [ ] nftables rules loaded (`sudo nft list ruleset`)
-- [ ] Routing from AWS to homelab working (`ping 10.10.201.5`)
+- [ ] Routing from AWS to homelab working (`dig @10.10.201.5 google.com`, or
+      `ping 10.10.201.6` — 10.10.201.5 is a BGP-only MetalLB VIP, ICMP fails by design)
 - [ ] Routing from homelab to AWS working
 
 ---
@@ -123,11 +132,11 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
    - Verify `private_ip = "10.10.100.5"` is set
    - Comment out `prevent_destroy = true` (temporarily)
 
-2. **Apply Terraform**
+2. **Apply Terraform** — dispatch the `Compute Terraform` workflow
+   (`terraform-compute.yml`, AWS via OIDC); `action=plan` then `action=apply`.
    ```bash
-   cd infra/terraform/aws/compute
-   terraform plan
-   terraform apply
+   gh workflow run terraform-compute.yml -f action=plan
+   gh workflow run terraform-compute.yml -f action=apply
    ```
 
 3. **Run Technitium Ansible playbook with restore**
@@ -189,12 +198,15 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 
 ### Migration Steps
 
-1. **Apply Terraform** (creates VM from cloud-init template)
+1. **Apply Terraform** (creates VM from cloud-init template) — dispatch the
+   `Proxmox Standalone VMs Terraform` workflow (`terraform-proxmox-standalone-vms.yml`;
+   runs on the self-hosted `lifecycle` runner with the PVE token as a GH secret).
    ```bash
-   cd infra/terraform/proxmox/standalone-vms
-   terraform plan -var-file=terraform.tfvars.local
-   terraform apply -var-file=terraform.tfvars.local
+   gh workflow run terraform-proxmox-standalone-vms.yml -f action=plan
+   gh workflow run terraform-proxmox-standalone-vms.yml -f action=apply
    ```
+   For rare local debugging (M82 escape hatch): `scripts/render-aws-credentials.sh`
+   then `scripts/tf-proxmox.sh standalone-vms plan` / `apply`.
 
 2. **Run WireGuard Ansible playbook**
    ```bash
@@ -245,12 +257,15 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 
 ### Migration Steps
 
-1. **Apply Terraform**
+1. **Apply Terraform** — dispatch the `Proxmox Standalone VMs Terraform` workflow
+   (`terraform-proxmox-standalone-vms.yml`; self-hosted `lifecycle` runner, PVE token
+   as a GH secret).
    ```bash
-   cd infra/terraform/proxmox/standalone-vms
-   terraform plan -var-file=terraform.tfvars.local
-   terraform apply -var-file=terraform.tfvars.local
+   gh workflow run terraform-proxmox-standalone-vms.yml -f action=plan
+   gh workflow run terraform-proxmox-standalone-vms.yml -f action=apply
    ```
+   For rare local debugging (M82 escape hatch): `scripts/render-aws-credentials.sh`
+   then `scripts/tf-proxmox.sh standalone-vms plan` / `apply`.
 
 2. **Run Technitium Ansible playbook**
    ```bash

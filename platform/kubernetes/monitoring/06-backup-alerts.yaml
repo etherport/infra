@@ -67,9 +67,9 @@ spec:
             component: backup
             namespace: backups
           annotations:
-            summary: "UniFi backup failed for {{ $labels.target }}"
+            summary: "UniFi backup failed for {{ $labels.device }}"
             description: |
-              The UDM/Protect backup for target `{{ $labels.target }}`
+              The UDM/Protect backup for device `{{ $labels.device }}`
               failed. Status code: {{ $value }}. Check pod logs:
               kubectl -n backups logs -l app=unifi-backup --tail=100
 
@@ -81,10 +81,10 @@ spec:
             component: backup
             namespace: backups
           annotations:
-            summary: "UniFi backup hasn't completed for {{ $labels.target }} in >36h"
+            summary: "UniFi backup hasn't completed for {{ $labels.device }} in >36h"
             description: |
-              Last successful UniFi backup for target
-              `{{ $labels.target }}` was {{ $value | humanizeDuration }}
+              Last successful UniFi backup for device
+              `{{ $labels.device }}` was {{ $value | humanizeDuration }}
               ago. Daily 04:00 PT schedule may be skipping.
 
     # ---------- CNPG / Barman postgres backups ----------

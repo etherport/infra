@@ -34,10 +34,27 @@ YAML in this repo when a new tag matches the policy.
 | `python:3.X-slim`                        | `python-slim`    | newest `3.<minor>-slim`                                |
 | `busybox:1.X.Y`                          | `busybox`        | newest `1.<minor>.<patch>` (excludes latest/stable)    |
 | `velero/velero-plugin-for-aws`           | `velero-plugin-aws` | semver `>=1.0.0`                                    |
+| `cloudflare/cloudflared`                 | `cloudflared`    | per-app pattern in `clusters/wind/image-automation/`   |
+| `blackbox-exporter`                      | `blackbox-exporter` | per-app pattern in `clusters/wind/image-automation/`|
+| `ghcr.io/sparked-diamond/cue:latest`     | `cue-api`        | tracks moving `:latest`, reflects its digest (see below) |
 | `home-assistant`, `ollama`, `open-webui`, `wikijs`, `plex`, `rclone`, `technitium` | per-app | per-app pattern in `clusters/wind/image-automation/` |
+
+`cue` is the **one exception** to "`ghcr.io/sparked-diamond/* = Bucket C`":
+it's an internally-built image but Flux-managed (Bucket A) because its
+tags are unsortable `sha-<commit>` plus a moving `:latest`, so automation
+tracks `:latest` and pins its reflected digest — see
+`clusters/wind/image-automation/cue.yaml`.
 
 **When to use:** the image is from a third party with semver-ish tags
 and we want the latest patch automatically.
+
+**Digest pinning (H30, done 2026-06-24):** every Flux-managed ImagePolicy
+now sets `digestReflectionPolicy: Always`, so the manifest line Flux writes
+is `tag@sha256:<digest>`, not just the tag. The selected tag still picks the
+version; the appended digest makes the pull immutable (a re-pushed tag can't
+silently change the running image, and rollback has the exact digest in git).
+Example of what Flux writes:
+`image: rclone/rclone:1.74.3@sha256:623378…dfb # {"$imagepolicy": "flux-system:rclone"}`
 
 ### Bucket B — Renovate
 
@@ -45,9 +62,13 @@ Configured in `/renovate.json`. Watches Dockerfiles, Helm
 charts, and (when not Flux-managed) container images. Renovate opens a
 PR per bump.
 
-`renovate.json` currently **disables Renovate** for every Bucket-A
-image (so Flux owns them) and for everything in
-`ghcr.io/sparked-diamond/*` (Bucket C below). What's left for Renovate:
+`renovate.json` **disables Renovate** for the Bucket-A images (so Flux
+owns them) and for everything in `ghcr.io/sparked-diamond/*` (Bucket C
+below). ⚠️ The Docker disable list is **incomplete**: it omits the three
+Bucket-A images added since the original write-up —
+`velero-plugin-for-aws`, `cloudflared`, and `blackbox-exporter` — so add
+them to the `packageRules` disable block (see "Adding a Bucket A image")
+to avoid Renovate and Flux double-bumping. What's left for Renovate:
 
 - Action versions in `.github/workflows/*.yml`
 - Terraform provider versions
@@ -70,6 +91,7 @@ Images we build ourselves and push to GHCR. The CI workflow tags both
 | `ghcr.io/sparked-diamond/aws-s3-sync:main`   | `.github/workflows/aws-s3-sync-image.yml` |
 | `ghcr.io/sparked-diamond/cloudflare-ddns:main`  | `.github/workflows/cloudflare-ddns-image.yml` |
 | `ghcr.io/sparked-diamond/ansible-runner:main`| `.github/workflows/ansible-runner-image.yml` |
+| `ghcr.io/sparked-diamond/cloudwatch-to-loki:main`| `.github/workflows/cloudwatch-to-loki-image.yml` |
 
 **Trade-off accepted:** `:main` is moving. Restarting a pod after a
 new push pulls the new image. That's deliberate — `imagePullPolicy:
@@ -144,7 +166,12 @@ new image → decide bucket → wire it
 
 ## Last audit
 
-2026-05-22 — Renovate disables list verified against
-`clusters/wind/image-automation/` and the `sparked-diamond` GHCR org;
-service-status-report cronjob's Python image tagged with the
-`python-slim` ImagePolicy marker so Flux owns the bump cadence.
+2026-06-28 — re-verified against `clusters/wind/image-automation/`,
+`renovate.json`, and the `sparked-diamond` GHCR org after H30 (digest
+pinning, 2026-06-24) and the `cue` `:latest`-tracking automation landed.
+Bucket A now also covers `cloudflared`, `blackbox-exporter`, and `cue`;
+Bucket C gained `cloudwatch-to-loki`. Noted gap: the `renovate.json`
+Docker disable list omits `velero-plugin-for-aws`, `cloudflared`, and
+`blackbox-exporter`. (Prior audit 2026-05-22 confirmed the
+service-status-report cronjob's Python image carries the `python-slim`
+ImagePolicy marker so Flux owns its bump cadence.)

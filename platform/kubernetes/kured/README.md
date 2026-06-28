@@ -29,6 +29,12 @@ Automated, safe node reboots for security updates.
 
 ## Installation
 
+**Kured is GitOps-managed by a Flux HelmRelease** (`clusters/wind/helm-releases/kured.yaml`,
+chart `5.10.x`, wired into that dir's `kustomization.yaml`). Flux installs and reconciles it
+into `kube-system` — a manual `helm install kured` is reverted on the next reconcile. Treat the
+steps below as bootstrap/verification context; **the live config source of truth is the
+HelmRelease's `spec.values`** (the `kured-values.yaml` in this dir is reference-only).
+
 ### 1. Configure Unattended Upgrades (First)
 
 Run Ansible playbook to configure all nodes:
@@ -60,19 +66,19 @@ sudo cat /var/log/unattended-upgrades/unattended-upgrades.log | tail -20
 ls -la /var/run/reboot-required 2>/dev/null && echo "Reboot pending" || echo "No reboot needed"
 ```
 
-### 2. Install Kured via Helm
+### 2. Install Kured via Flux
+
+Kured ships through Flux — edit the HelmRelease values (or commit a new
+`clusters/wind/helm-releases/kured.yaml`) and let Flux reconcile:
 
 ```bash
-# Add helm repo
-helm repo add kubereboot https://kubereboot.github.io/charts
-helm repo update
-
-# Install Kured
-helm install kured kubereboot/kured \
-  --namespace kube-system \
-  --values platform/kubernetes/kured/kured-values.yaml
+# Edit clusters/wind/helm-releases/kured.yaml (spec.values), commit + push to main,
+# then trigger a reconcile:
+kubectl annotate --overwrite -n flux-system kustomization/flux-system \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)"
 
 # Verify deployment
+kubectl get helmrelease -n flux-system kured
 kubectl get ds -n kube-system kured
 kubectl get pods -n kube-system -l app.kubernetes.io/name=kured
 ```
@@ -179,15 +185,13 @@ kubectl annotate node k8s-w1 kured.reboot.immediate=true
 
 ### Change Maintenance Window
 
-Edit `kured-values.yaml` and upgrade:
+Edit the HelmRelease values and let Flux reconcile:
 
 ```bash
-# Edit kured-values.yaml, change startTime/endTime
-
-# Upgrade release
-helm upgrade kured kubereboot/kured \
-  --namespace kube-system \
-  --values platform/kubernetes/kured/kured-values.yaml
+# Edit clusters/wind/helm-releases/kured.yaml (spec.values.configuration),
+# change startTime/endTime, commit + push to main, then reconcile:
+kubectl annotate --overwrite -n flux-system kustomization/flux-system \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ### Disable Kured Temporarily
@@ -201,20 +205,20 @@ does nothing (there is no Deployment to scale). To stop reboots, use one of:
 kubectl annotate ds/kured -n kube-system \
   weave.works/kured-most-recent-reboot-needed- 2>/dev/null || true
 
-# Simplest: set a rebootBlockerLabel / restrict the maintenance window in
-# kured-values.yaml and `helm upgrade` (chart-managed), e.g. an empty window
-# or a blocking node label, so no reboot ever fires.
+# Simplest: set a rebootBlockerLabel / restrict the maintenance window in the
+# HelmRelease values (clusters/wind/helm-releases/kured.yaml, chart-managed),
+# e.g. an empty window or a blocking node label, so no reboot ever fires.
 
-# Or, to fully stop the daemon, delete the DaemonSet (Helm/Flux recreates it):
+# Or, to fully stop the daemon, delete the DaemonSet (Flux recreates it on
+# the next reconcile):
 kubectl delete ds/kured -n kube-system
 
-# Re-enable by re-running the helm install/upgrade (or letting Flux reconcile):
-helm upgrade --install kured kubereboot/kured \
-  --namespace kube-system \
-  --values platform/kubernetes/kured/kured-values.yaml
+# Re-enable by letting Flux reconcile (annotate the kustomization to force it):
+kubectl annotate --overwrite -n flux-system kustomization/flux-system \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
-The clean approach is to manage the pause through the chart values
+The clean approach is to manage the pause through the HelmRelease values
 (`rebootBlockerLabel` / maintenance window) rather than poking the live object.
 
 ## Troubleshooting
@@ -299,9 +303,15 @@ groups:
 
 ## Uninstall
 
+Kured is Flux-managed, so `helm uninstall kured` is reverted on the next reconcile.
+**To truly remove it, delete the HelmRelease from git** (remove the `kured.yaml` entry from
+`clusters/wind/helm-releases/kustomization.yaml` and delete `kured.yaml`), commit + push, then
+let Flux prune it:
+
 ```bash
-# Remove Kured
-helm uninstall kured -n kube-system
+# After removing the HelmRelease from git, trigger a reconcile:
+kubectl annotate --overwrite -n flux-system kustomization/flux-system \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)"
 
 # Optionally remove unattended-upgrades from nodes
 ansible k8s_cluster -i inventory/mycluster/hosts.yaml \

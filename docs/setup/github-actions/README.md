@@ -27,7 +27,9 @@ Automatically build and push container images to GitHub Container Registry (GHCR
 **Features:**
 - Multi-arch builds via Docker Buildx
 - Tags: `main` and `sha-<commit>`
-- Automatic package visibility set to public
+- Package visibility is set to Public **manually** (one-time, via PAT/UI — `GITHUB_TOKEN`
+  can't flip GHCR visibility); the build then **verifies the image is publicly pullable
+  and fails if it regressed** to private
 
 ### 2. Terraform Infrastructure
 
@@ -55,7 +57,7 @@ The `terraform-regional-vpn.yml` workflow automates temporary travel VPN deploym
 │                                                                              │
 │  2. ENVIRONMENT SETUP                                                        │
 │     ├── Checkout repository                                                  │
-│     ├── Install Terraform 1.15.5                                            │
+│     ├── Install Terraform 1.14.3                                            │
 │     ├── Configure AWS credentials (GitHub→AWS OIDC, no static keys)         │
 │     ├── Install SOPS binary                                                  │
 │     └── Configure SOPS age key (for secret decryption)                      │

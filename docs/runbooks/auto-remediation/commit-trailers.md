@@ -4,9 +4,11 @@ When a commit fixes (or partially fixes) a Prometheus alert, an
 advisor regression, or anything else the AI advisor might re-encounter
 later, add structured **git trailers** to the commit message body.
 
-This makes the advisor's `search_git_log` tool precise: it can grep
-`--grep="Fixes-alert: KubeJobFailed"` and find every commit that has
-ever touched that alert, instead of guessing free-text keywords.
+This gives every fix-commit a stable token (e.g. `Fixes-alert:
+KubeJobFailed`) so the advisor's `search_git_log` tool — backed by the
+GitHub Search API, which does keyword/token matching, not exact
+`git log --grep` — reliably matches every commit that has ever touched
+that alert, instead of guessing free-text keywords.
 
 ## Trailers
 
@@ -53,9 +55,11 @@ Tags: velero, backup, prometheus
 
 - **`search_git_log` precision.** The advisor calls this tool when an
   alert has fired before (its `past_actions` history has entries).
-  Without trailers, queries rely on free-text keyword matching against
-  commit subjects + bodies — high recall, low precision. With trailers,
-  `--grep="Fixes-alert: <X>"` returns exactly the relevant history.
+  It's backed by the GitHub Search API (token/keyword matching), not a
+  local `git log --grep`. Without trailers, queries rely on free-text
+  keywords against commit subjects + bodies — high recall, low precision.
+  With trailers, the stable `Fixes-alert: <X>` token reliably surfaces
+  the relevant history.
 
 - **Operator searchability.** `git log --grep="Fixes-alert:" --all` is
   a one-liner audit of every alert-fixing commit in repo history.

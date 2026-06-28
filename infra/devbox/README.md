@@ -1,8 +1,8 @@
 # devbox — Claude Code dev host (Linux)
 
 devbox (`10.10.201.45`, ansible `playbooks/devbox.yml`, always-on Ubuntu VM, no
-FileVault gate) hosts the Claude Code **dev sessions** (cue, personal-web, and
-eventually infra), migrated off the Mac mini so they survive mini reboots and are
+FileVault gate) hosts the Claude Code **dev sessions** (cue, personal-web,
+infra), migrated off the Mac mini so they survive mini reboots and are
 remote-controllable from claude.ai. The mini keeps the macOS-only work (Photos/iCloud).
 
 ## Why devbox over the mini for sessions

@@ -17,6 +17,8 @@ mode anyway, bank the **resilience upside that mode unlocks**: BGP **graceful-re
 
 ## Why it's blocked on a migration (the core finding)
 
+*(Pre-migration state — now superseded; see header. Retained as the design record.)*
+
 - **MetalLB runs in NATIVE BGP mode** (v0.14.8, gobgp speaker, single container, no FRR sidecar).
   **Native mode does not implement TCP-MD5** — the `BGPPeer.spec.password`/`passwordSecret` fields
   exist but are **honored only in FRR / frr-k8s mode**. (Refs: MetalLB #1125 `setsockopt protocol

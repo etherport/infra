@@ -44,10 +44,10 @@ Provides HTTPS access to infrastructure devices with self-signed certificates:
 
 ### Proxmox VE
 
-Provides HTTPS access to Proxmox hypervisors:
+Provides HTTPS access to the Proxmox VE host and its IPMI/BMC:
 
-- **proxmox1.wind.etherport.net** → Proxmox node (HTTPS passthrough)
-- **proxmox2.wind.etherport.net** → Proxmox node (HTTPS passthrough)
+- **prox.wind.etherport.net** → `10.10.200.41:8006` (Proxmox VE web UI — HTTPS passthrough)
+- **prox-ipmi.wind.etherport.net** → `10.10.200.21:443` (Proxmox IPMI/BMC web UI)
 
 **Architecture**:
 ```
@@ -209,7 +209,7 @@ kubectl logs -n traefik -l app.kubernetes.io/name=traefik -f
 ```bash
 # Test HTTPS access
 curl -I https://ups1.wind.etherport.net
-curl -I https://proxmox1.wind.etherport.net
+curl -I https://prox.wind.etherport.net
 
 # Check certificate
 openssl s_client -connect ups1.wind.etherport.net:443 -servername ups1.wind.etherport.net < /dev/null

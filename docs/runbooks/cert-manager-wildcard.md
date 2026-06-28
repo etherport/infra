@@ -29,8 +29,8 @@ the modern shortlived profile.
    secret: wildcard-wind-etherport-net-tls       secret: wildcard-wind-etherport-net-rsa-tls
    ↓                                             ↓
    Consumer: Traefik (all *.wind.etherport.net   Consumer: unifi-cert-sync CronJob →
-   ingress goes through this — served via        UDM Pro Max, Protect, UNAS Pro
-   the TLSStore/default catch-all)
+   ingress goes through this — served via        UDM Pro Max, Protect, UNAS Pro,
+   the TLSStore/default catch-all)               Proxmox VE
 ```
 
 **Files of record:**
@@ -50,7 +50,9 @@ the modern shortlived profile.
 UDM Pro Max, UniFi Protect, UNAS Pro) silently rejects ECDSA certs
 *and* certs without CN in Subject — falling back to a
 `CN=unifi.local` self-signed cert. So unifi-cert-sync gets its own
-RSA+classic cert. Traefik gets the faster ECDSA+shortlived cert
+RSA+classic cert. (Proxmox VE's `pveproxy` is also pushed the RSA cert
+by the same CronJob — it replaces PVE's broken native ACME — and it
+likewise wants an RSA cert.) Traefik gets the faster ECDSA+shortlived cert
 because nothing on the K8s side cares about CN-in-Subject and shorter
 validity means less to revoke if a key ever leaks.
 
@@ -237,13 +239,30 @@ If an individual IngressRoute pins `tls.certResolver` or sets its own
 fields — `tls: {}` is enough to inherit the wildcard via
 TLSStore/default.
 
-### unifi-cert-sync logs `405` or `401` against UniFi OS
+### unifi-cert-sync fails to push to a target
 
-The UDM rotated its admin password or the script's stored session/CSRF
-expired. The script reauths from the `tf-admin` 1Password item — fix
-is on the UniFi side (rotate via UI, then update the 1P item, then
-`kubectl -n unifi-cert-sync delete configmap unifi-session` to force a
-fresh login on next run).
+The push is entirely SSH/SCP-based — no UniFi-OS web API, no login
+session/CSRF. The CronJob mounts the `unifi-cert-sync-ssh` Opaque
+secret (private key + `known_hosts`), reads the remote cert SHA over
+ssh, scps `tls.crt`/`tls.key`, then atomically renames + restarts the
+service over ssh. A per-target failure means one of:
+
+- the target is **SSH-unreachable** (host down, firewall, SSH disabled)
+  — the script logs `unable to read remote cert SHA — device
+  unreachable or path wrong` and marks `device_status=1`;
+- the configured **cert path is wrong** for that target;
+- the **`unifi-cert-sync-ssh` key is stale** (rotated on the device but
+  not in the secret) or its **`known_hosts` entry** no longer matches
+  (host key changed) → SSH auth/host-key check fails.
+
+Diagnose from the CronJob logs:
+```
+kubectl -n unifi-cert-sync logs job/<last-job> | grep -A2 "Device:"
+```
+Fix on the target side (re-enable SSH / correct the path), or update
+the secret from `02-secret.sops.yaml` if the key or `known_hosts`
+drifted, then re-run with `kubectl -n unifi-cert-sync create job
+manual-sync-$(date +%s) --from=cronjob/unifi-cert-sync`.
 
 ### `kubectl -n traefik describe certificate` shows correct state but the secret isn't updating
 

@@ -11,14 +11,17 @@ self-signed (and previously hand-managed acme.sh-on-device) certs.
 | udm  | `10.10.200.1` (gw) | UDM Pro Max — runs Network + Talk apps |
 | protect | `10.10.212.10` | UniFi Protect appliance |
 | sequoia | `sequoia.wind.etherport.net` (10.10.209.10) | UniFi UNAS Pro |
+| pve | `10.10.200.41` | Proxmox VE host — NOT UniFi OS (pveproxy paths, `:8006`) |
 
-All run UniFi OS, so the cert path + restart command are identical:
+The three UniFi-OS devices share an identical cert path + restart command:
 `/data/unifi-core/config/unifi-core.{crt,key}` + `systemctl restart unifi-core`.
+**Proxmox VE is the exception:** `/etc/pve/local/pveproxy-ssl.{pem,key}` +
+`systemctl restart pveproxy`, verified on port `:8006`.
 
 ## Architecture
 
 ```
-cert-manager  →  Secret traefik/wildcard-wind-etherport-net-tls
+cert-manager  →  Secret traefik/wildcard-wind-etherport-net-rsa-tls
                               │
                               │ (kubectl get, cross-namespace RBAC)
                               ▼
@@ -26,21 +29,23 @@ cert-manager  →  Secret traefik/wildcard-wind-etherport-net-tls
                               │
                               │ SSH + SCP
                               ▼
-              ┌───────────────┼───────────────┐
-              ▼               ▼               ▼
-            UDM            Protect          UNAS
-        (unifi-core.crt + unifi-core.key, then `systemctl restart unifi-core`)
+              ┌───────────────┼───────────────┬───────────────┐
+              ▼               ▼               ▼               ▼
+            UDM            Protect          UNAS             PVE
+        (UniFi OS: unifi-core.{crt,key} + `systemctl restart unifi-core`)
+        (PVE: pveproxy-ssl.{pem,key} + `systemctl restart pveproxy`, :8006)
 ```
 
-- **Source of truth:** cert-manager. Renews 60 days before expiry via
-  Cloudflare DNS-01 (migrated off Route53 2026-05-27).
+- **Source of truth:** cert-manager. The RSA wildcard is a "classic" ~90-day
+  Let's Encrypt cert that renews ~30 days before expiry via Cloudflare DNS-01
+  (migrated off Route53 2026-05-27).
 - **Cert type:** RSA 2048. cert-manager issues an RSA-keyed wildcard
   specifically for UniFi devices (`wildcard-wind-etherport-net-rsa`)
   alongside the ECDSA wildcard Traefik uses. **UniFi OS unifi-core
   silently rejects ECDSA certs and regenerates a self-signed
   `unifi.local` default — discovered the hard way on 2026-05-17.**
-- **Cadence:** weekly (Mon 04:00 local). cert-manager renews every ~60d,
-  but weekly cadence catches firmware-upgrade resets within 7d.
+- **Cadence:** weekly (Mon 04:00 local). cert-manager renews ~30d before
+  expiry, but weekly cadence catches firmware-upgrade resets within 7d.
 - **Idempotent:** computes SHA256 of (crt+key) and skips push if remote
   matches. Restart only fires when cert actually changed.
 - **Verification:** post-push, opens HTTPS to the device and confirms the
@@ -140,19 +145,25 @@ cert-manager  →  Secret traefik/wildcard-wind-etherport-net-tls
 
 If the CronJob is broken AND the cert expires:
 
-1. Manually run cert-manager refresh: `kubectl -n cert-manager delete
-   certificate wildcard-wind-etherport-net` (it'll recreate from the
-   resource and renew the cert)
-2. SSH to each device and copy the new cert by hand from the secret:
+1. Manually run cert-manager refresh: `kubectl -n traefik delete
+   certificate wildcard-wind-etherport-net-rsa` (it'll recreate from the
+   resource and renew the cert). ⚠️ Use the **RSA** cert — UniFi OS silently
+   rejects the ECDSA `wildcard-wind-etherport-net`.
+2. SSH to each device and copy the new cert by hand from the **RSA** secret:
    ```bash
-   kubectl -n traefik get secret wildcard-wind-etherport-net-tls \
+   kubectl -n traefik get secret wildcard-wind-etherport-net-rsa-tls \
      -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/crt
-   kubectl -n traefik get secret wildcard-wind-etherport-net-tls \
+   kubectl -n traefik get secret wildcard-wind-etherport-net-rsa-tls \
      -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/key
+   # UniFi-OS devices (udm / protect / sequoia):
    scp /tmp/crt root@10.10.200.1:/data/unifi-core/config/unifi-core.crt
    scp /tmp/key root@10.10.200.1:/data/unifi-core/config/unifi-core.key
    ssh root@10.10.200.1 'chmod 600 /data/unifi-core/config/unifi-core.key && systemctl restart unifi-core'
    # repeat for 10.10.212.10 and sequoia
+   # Proxmox VE (pve) — different paths, pveproxy restart:
+   scp /tmp/crt root@10.10.200.41:/etc/pve/local/pveproxy-ssl.pem
+   scp /tmp/key root@10.10.200.41:/etc/pve/local/pveproxy-ssl.key
+   ssh root@10.10.200.41 'systemctl restart pveproxy'
    ```
 
 ## Alerts (PrometheusRule)

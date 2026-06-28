@@ -93,7 +93,7 @@ Reuse it as the RA trust anchor instead of standing up AWS Private CA (~$400/mo)
   generous cert TTL (e.g. 24h, renewed every 8h) + the break-glass `[claude-admin]` (pulled from
   SOPS/laptop) for emergencies. **Reachability:** the mini (VLAN-202/tailnet) must reach step-ca
   `10.10.201.46:8443` — the M77 standalone-vms firewall allows `:8443` from the Servers VLAN +
-  tailnet; confirm the mini's path (tailnet `100.74.216.102`-style or a VLAN-202→201 allow) during
+  tailnet; confirm the mini's path (tailnet `100.79.165.113`-style or a VLAN-202→201 allow) during
   mini-side setup.
 - **SES SMTP / other static creds** are out of scope (protocol-bound, not IAM session creds).
 - Human laptops → **IAM Identity Center (SSO)** remains the target for interactive use (separate,

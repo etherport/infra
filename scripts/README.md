@@ -17,5 +17,7 @@ Helper scripts for the homelab. Index of the notable ones:
 | `dotfiles/ssh-config` | SSH config dotfile |
 
 See **CLAUDE.md** for how these fit into the operating model (e.g.
-`render-aws-credentials.sh` + `tf-proxmox.sh` are how Terraform runs headlessly on
-the devbox — §4).
+`render-aws-credentials.sh` + `tf-proxmox.sh` are for rare local-debug TF on the
+devbox only — Terraform normally runs CI-only via OIDC / the self-hosted runner
+(M82) and the devbox holds no standing creds, so these re-render creds on demand
+as throwaways — §4).

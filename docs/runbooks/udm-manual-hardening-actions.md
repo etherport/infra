@@ -99,13 +99,16 @@ use the key (then we drop the fallback):
 
 ---
 
-## 7. (Optional, lower priority) L24 — authenticate the MetalLB↔UDM BGP sessions
+## 7. ✅ DONE (2026-06-28) — L24 authenticate the MetalLB↔UDM BGP sessions
 
-Add a BGP password (MD5/auth) on both sides. UDM BGP is **UI/FRR-only** (no API): edit the
-FRR config in the UniFi BGP section (Settings → Routing → BGP, or the FRR config upload) to add
-`neighbor <peer> password <secret>`, and set the matching password on the MetalLB `BGPPeer`
-(`platform/kubernetes/metallb/`). Keep the git-stored FRR config in sync. Low urgency (the BGP
-fabric is internal/LAN).
+**No longer outstanding.** TCP-MD5 is live on the eBGP session and verified both ends.
+MetalLB was migrated **native (kubespray addon) → FRR mode on the Helm chart** (Flux-managed,
+`clusters/wind/helm-releases/metallb.yaml`) — FRR mode was the prerequisite, since native/gobgp
+can't honour `passwordSecret`. The key is the SOPS secret `bgp-md5`
+(`platform/kubernetes/metallb/02-bgp-md5-secret.sops.yaml`), referenced by the `BGPPeer/udm`
+`spec.passwordSecret`; the **same** value is set as the `neighbor metallb password …` on the UDM
+FRR peer-group (UI-only/no-API). ASN 64513 (cluster) ↔ 64512 (UDM @ `10.10.201.1`). Commits
+`67773a7` / `3c890bc` / `8a16805`. Full record: L24 in `docs/planning/outstanding-work.md`.
 
 ---
 

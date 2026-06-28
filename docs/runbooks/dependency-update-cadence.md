@@ -17,6 +17,8 @@ How updates flow into this repo, and where you need to step in by hand.
 gh pr list --label renovate
 ```
 
+> The `gh` CLI is **not** installed on the devbox — run this from a host that has it (the mini or your laptop), or list/triage the PRs in the GitHub web UI. The devbox dispatches GitHub Actions via the M92 Actions PAT/API, not `gh`.
+
 For each PR:
 - **Patch/minor on infra (TF providers, GH Actions, Helm minors, container minors)** → review the changelog link in the PR body, merge if no breaking notes. Flux/CI takes it from there.
 - **Major** on anything stateful (Cilium, CNPG, cert-manager, Traefik, Flux, kubespray itself) → close with comment, schedule for the next quarterly window. Don't auto-merge majors.

@@ -27,7 +27,7 @@ The local site WireGuard gateway runs in high availability mode with automatic f
 │   │                 │                    │   ┌───────────────────────────┐ │    │
 │   │  wg0: S2S       │                    │   │  K8s WireGuard Pod        │ │    │
 │   │  wg1: Remote    │                    │   │  (PRIMARY - priority 150) │ │    │
-│   └────────┬────────┘                    │   │  On k8s-w1 preferred      │ │    │
+│   └────────┬────────┘                    │   │  On any worker node       │ │    │
 │            │                             │   └─────────────┬─────────────┘ │    │
 │            │                             │                 │ VRRP          │    │
 │            │                             │   ┌─────────────▼─────────────┐ │    │
@@ -122,7 +122,7 @@ Update this section whenever:
 |----------|-------|
 | Namespace | wireguard |
 | Deployment | wireguard |
-| Node Affinity | Prefers k8s-w1, any worker allowed |
+| Node Affinity | Any worker node (control-plane excluded); no per-node preference |
 | VIP | 10.10.201.20 (managed by Keepalived sidecar) |
 | Tunnel IP | 10.255.255.2/29 |
 | Host/Listen Ports | wg0: 9820/UDP, wg1: 9821/UDP (hostPort = containerPort) |

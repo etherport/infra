@@ -1,4 +1,4 @@
-# Policy Baseline — Phase 1 (audit/warn only)
+# Policy Baseline — PSS labels + LimitRanges + object-count quotas
 
 > **Update 2026-06-24:** This directory is still just Phase 1 (PSS audit/warn + LimitRanges).
 > But **Phase 2 — enforced NetworkPolicies — is DONE**, implemented separately in
@@ -8,19 +8,25 @@
 > [`docs/runbooks/networkpolicy-tiers.md`](../../../docs/runbooks/networkpolicy-tiers.md).
 > The "Phase 2 … needs a Hubble observation window first" text below is historical.
 
-Cluster hardening primitives that are **observation-only** and impose no
-runtime risk: namespace labels (Pod Security Standards in audit + warn
-mode, not enforce) and LimitRanges (defaults for pods without explicit
-requests).
+Cluster hardening primitives: namespace labels (Pod Security Standards),
+LimitRanges (defaults for pods without explicit requests), and object-count
+ResourceQuotas (M5 runaway guardrails). PSS started observation-only
+(audit + warn), but as of M72 several baseline-clean namespaces now carry
+`enforce: baseline` too — those labels live in
+[`../../../clusters/wind/namespace-pss-labels.yaml`](../../../clusters/wind/namespace-pss-labels.yaml),
+not this directory. The LimitRanges and ResourceQuotas remain low-risk
+(they only fill in / cap, never override explicit specs).
 
 Designed by the Plan agent run on 2026-05-13. The full 3-phase rollout
 lives in `docs/planning/long-term-stability-review-2026-05-12.md`:
 
-- **Phase 1 (this directory)** — audit/warn + LimitRanges. Land now.
+- **Phase 1 (this directory)** — PSS labels + LimitRanges. Land now.
 - Phase 2 — enforced NetworkPolicies for tier-1 namespaces (HA, postgres,
   traefik, dns, monitoring). Needs Hubble observation window first.
-- Phase 3 — ResourceQuotas + PDBs for HPA-scaled workloads. Needs
-  resource-usage data + Helm-managed PDBs across the chart releases.
+- Phase 3 — ResourceQuotas + PDBs for HPA-scaled workloads. **Object-count
+  ResourceQuotas shipped** (M5; `resourcequotas/default-quota.yaml`, wired in
+  here). **Compute quotas (requests.cpu/memory) + PDBs still deferred** — they
+  need resource-usage data + Helm-managed PDBs across the chart releases.
 
 ## Directory layout
 
@@ -28,10 +34,14 @@ lives in `docs/planning/long-term-stability-review-2026-05-12.md`:
 policy-baseline/
 ├── README.md                          # this file
 ├── kustomization.yaml                 # aggregator
-├── 00-namespace-labels.yaml           # PSS audit/warn labels per ns
-└── limitranges/                       # default container requests/limits
-    ├── <namespace>-limits.yaml        # one per tenant ns
-    └── ...
+├── limitranges/
+│   └── default-limits.yaml            # default container requests/limits
+└── resourcequotas/
+    └── default-quota.yaml             # object-count guardrails per ns (M5)
+
+# NB: PSS namespace labels are NOT here — they live in
+# ../../../clusters/wind/namespace-pss-labels.yaml (applied via that
+# kustomization's patches:, so they can target Helm-created namespaces).
 ```
 
 ## What the labels do
@@ -63,8 +73,11 @@ graduate to Phase 2:
 | `kube-system` | system controllers (kube-proxy, etc.) |
 | `ceph-csi` | rbd device mounts on host |
 
-These are tagged below with `tier: system` so we can exclude them from
-tighter policies later.
+PSS labelling (including the `tier:` labels used to separate infra from
+tenant namespaces) lives in
+[`../../../clusters/wind/namespace-pss-labels.yaml`](../../../clusters/wind/namespace-pss-labels.yaml),
+not this directory — `tier: system` is set there on the privileged-by-design
+infra namespaces (e.g. `wireguard`, `plex`).
 
 ## What the LimitRanges do
 

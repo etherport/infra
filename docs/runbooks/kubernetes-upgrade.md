@@ -191,23 +191,31 @@ kubectl get nodes -o wide | awk '{print $NF}'
 
 ### 3.2 Helm Chart Upgrades
 
+The platform Helm charts (monitoring, loki, alloy, velero, metallb, …) are **Flux-managed
+HelmReleases** under `clusters/wind/helm-releases/`. Do **not** run a direct
+`helm upgrade` — it is out-of-band and gets reverted on the next Flux reconcile (and
+there is no `helm`/`flux` CLI on the hosts). Bump the chart `version:` in git, commit/push,
+then trigger a reconcile via annotation.
+
 ```bash
-# List installed releases
-helm list -A
+# Inspect what's installed (read-only)
+kubectl get helmrelease -A
 
-# Check for updates
-helm repo update
-helm search repo <chart-name> --versions
+# Bump the chart version in the HelmRelease spec, e.g. monitoring:
+#   clusters/wind/helm-releases/monitoring.yaml → spec.chart.spec.version
+vim clusters/wind/helm-releases/monitoring.yaml
+git commit -am "chore(deps): bump kube-prometheus-stack" && git push origin main
 
-# Upgrade specific release
-helm upgrade <release> <chart> -n <namespace> \
-  -f platform/kubernetes/<app>/values.yaml \
-  --version <new-version>
+# Trigger Flux to pull + apply (no flux CLI on the hosts)
+kubectl annotate --overwrite -n flux-system gitrepository/flux-system \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)"
+kubectl annotate --overwrite -n flux-system kustomization/flux-system \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)"
+kubectl annotate --overwrite -n flux-system helmrelease/monitoring \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)"
 
-# Example: Upgrade kube-prometheus-stack
-helm upgrade monitoring prometheus-community/kube-prometheus-stack \
-  -n monitoring \
-  -f platform/kubernetes/monitoring/values.yaml
+# Confirm the new revision applied
+kubectl get helmrelease -n flux-system monitoring -o wide
 ```
 
 ### 3.3 Flux Upgrade
@@ -216,9 +224,18 @@ helm upgrade monitoring prometheus-community/kube-prometheus-stack \
 # Check current controller versions (no flux CLI on the hosts)
 kubectl get pods -n flux-system -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
 
-# Upgrade Flux controllers by applying the versioned install manifest
-# (the components used in clusters/wind/flux-system/gotk-components.yaml)
-kubectl apply -f https://github.com/fluxcd/flux2/releases/download/v2.x.x/install.yaml
+# Upgrade Flux controllers GitOps-style: refresh the versioned install manifest in git
+# (clusters/wind/flux-system/gotk-components.yaml), commit/push, and let Flux self-apply
+# it on the next reconcile — a direct `kubectl apply` of the upstream manifest drifts
+# from git and is reverted by the next reconcile.
+curl -sL https://github.com/fluxcd/flux2/releases/download/v2.x.x/install.yaml \
+  -o clusters/wind/flux-system/gotk-components.yaml
+git commit -am "chore(flux): bump controllers to v2.x.x" && git push origin main
+
+kubectl annotate --overwrite -n flux-system gitrepository/flux-system \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)"
+kubectl annotate --overwrite -n flux-system kustomization/flux-system \
+  reconcile.fluxcd.io/requestedAt="$(date +%s)"
 
 # Verify the controllers came back Ready
 kubectl get pods -n flux-system
@@ -309,12 +326,13 @@ ssh ubuntu@10.10.201.50
 sudo ETCDCTL_API=3 etcdctl \
   --endpoints=https://127.0.0.1:2379 \
   --cacert=/etc/kubernetes/pki/etcd/ca.crt \
-  --cert=/etc/kubernetes/pki/etcd/server.crt \
-  --key=/etc/kubernetes/pki/etcd/server.key \
+  --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt \
+  --key=/etc/kubernetes/pki/etcd/healthcheck-client.key \
   endpoint health
 
-# Check etcd logs
-sudo crictl logs $(sudo crictl ps | grep etcd | awk '{print $1}')
+# Check etcd logs (etcd runs as a host systemd service — etcd_deployment_type: host —
+# so there is no etcd container; `crictl ps | grep etcd` returns nothing)
+sudo journalctl -u etcd -f
 ```
 
 ---

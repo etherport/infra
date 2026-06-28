@@ -8,7 +8,7 @@ Overview of the network topology and VLAN structure for the homelab.
 |-------|-------------|
 | Underlay | VLANs/subnets routed by L3 switch/router |
 | Node IPs | Kubelet, API server, etc. |
-| CNI Pod network | Pod-to-pod networking inside the cluster (Cilium/Calico/etc.) |
+| CNI Pod network | Pod-to-pod networking inside the cluster (Cilium) |
 | Service network | ClusterIP services inside cluster |
 | Ingress/LB | North-south traffic into cluster (MetalLB + Traefik) |
 

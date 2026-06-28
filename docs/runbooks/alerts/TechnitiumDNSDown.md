@@ -42,7 +42,7 @@ appliances; the in-cluster variant pages on the StatefulSet replicas.
    `ping <host>`, `ssh <host>`, or check ipmi/console (on-prem) /
    EC2 instance status (AWS).
 2. (External) Technitium service status:
-   `ssh <host> systemctl status technitium-dns`
+   `ssh <host> systemctl status technitium`
 3. (External) Disk health (cascade check):
    `ssh <host> df -h /var/log /var/lib`
 4. (In-cluster) StatefulSet status:
@@ -55,7 +55,7 @@ appliances; the in-cluster variant pages on the StatefulSet replicas.
 
 ## Advisor action guidance
 
-- (External) `restart_systemd_unit(host=<name>, unit=technitium-dns)`
+- (External) `restart_systemd_unit(host=<name>, unit=technitium)`
   is the textbook action — but it's Tier 3 manual-approval (NOT
   auto-eligible) precisely because DNS restarts are blast-radius-bearing.
 - (External) If sibling `ExternalHostLowDisk` is also firing, fix the

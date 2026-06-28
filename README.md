@@ -65,9 +65,11 @@ scripts/             Ad-hoc helpers (safety-check, service-status inventory drif
 
 The **Claude Code dev sessions** run on the **devbox** (`10.10.201.45`, tailnet
 `100.74.216.102`) — an always-on Linux host that auto-resumes per-repo `claude
---continue` tmux sessions across reboots. It's TF-capable (terraform 1.15.5 +
-`aws` CLI) plus `kubectl`/`sops`+age/`git`, so it can run Terraform and reconcile
-the cluster headlessly. Provisioned by `infra/ansible/playbooks/devbox.yml`
+--continue` tmux sessions across reboots. It has the `terraform` 1.15.5 + `aws`
+binaries plus `kubectl`/`sops`+age/`git`, but holds **no standing AWS/PVE creds**
+(M82) — TF is **CI-only**; rare local-debug TF is a throwaway, re-rendering creds
+on demand via `scripts/render-aws-credentials.sh` + `scripts/tf-proxmox.sh`. It
+reconciles the cluster headlessly. Provisioned by `infra/ansible/playbooks/devbox.yml`
 (+ `infra/devbox/README.md`).
 
 An always-on **Mac mini** (`10.10.202.101`, tailnet `100.79.165.113`) is the
@@ -91,9 +93,10 @@ kube-prometheus-stack (`monitoring.yaml`) · loki (single-binary) ·
 alloy (log collector + syslog ingester) · pushgateway · traefik ·
 velero · tailscale-operator + tailscale-connector ·
 github-actions-runner · kyverno (audit-only admission policy, M73) ·
-tetragon (observe-only eBPF runtime detection, M74).
+tetragon (observe-only eBPF runtime detection, M74) ·
+metallb (FRR mode, BGP + TCP-MD5 to UDM, L24).
 
-**Kustomization-only** (no Helm): metallb · technitium · ceph-csi ·
+**Kustomization-only** (no Helm): technitium · ceph-csi ·
 auto-remediation (+ auto-remediation-rbac) · cloudflared · blackbox-exporter ·
 cloudwatch-to-loki · policy-baseline · cnpg (Cluster CR) ·
 home-automation · plex · rclone-gdrive · rclone-onedrive · unas-health · wikijs · ollama ·
@@ -262,8 +265,11 @@ kubectl get helmreleases -A
 
 ### Terraform — via workflow dispatch (default)
 
-All TF projects run through GH Actions on the self-hosted gh-runner
-VM. Plan first, then apply:
+All TF projects run through GH Actions. **AWS** stacks run on
+GitHub-hosted `ubuntu-latest` via GitHub→AWS **OIDC** (H29); the
+**PVE/UniFi/Cloudflare/Google/Twilio** stacks run on the self-hosted
+`lifecycle` runner with PVE/CF/UDM creds as **GH secrets**. Plan first,
+then apply:
 
 ```bash
 gh workflow run terraform-<project>.yml -f action=plan

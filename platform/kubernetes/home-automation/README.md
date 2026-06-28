@@ -330,8 +330,9 @@ kubectl exec -n home-automation -it <pod-name> -- ip addr
 # Check Multus NetworkAttachmentDefinitions
 kubectl get network-attachment-definitions -n home-automation
 
-# Verify node VLAN configuration
-ssh k8s-w1 ip addr show | grep -E "eth[123]"
+# Verify node VLAN configuration (Multus parent interfaces, node side)
+ssh k8s-w1 ip -br link show enp6s19 enp6s20 enp6s21
+# In-pod NICs are net1/net2/net3 (not eth1-3); eth0 is the cluster network
 ```
 
 ### Home Assistant Configuration Invalid

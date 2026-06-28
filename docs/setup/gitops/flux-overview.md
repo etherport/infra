@@ -52,9 +52,11 @@ application/infrastructure kustomizations under `platform/kubernetes/`
 are all referenced from `clusters/wind/`.
 
 **Flux-managed HelmReleases** (`clusters/wind/helm-releases/` — regenerate with
-`ls`): alloy, cert-manager, cnpg, github-actions-runner, gpu-operator, kured,
-kyverno, loki, metallb, monitoring (kube-prometheus-stack), pushgateway,
-tailscale-connector, tailscale-operator, tetragon, traefik, velero.
+`ls`): alloy, cert-manager, cnpg, github-actions-runner (2 HelmReleases:
+arc-controller + arc-runner-homelab), gpu-operator, kured, kyverno, loki,
+metallb, monitoring (kube-prometheus-stack), pushgateway, tailscale-operator,
+tetragon, traefik, velero. (`tailscale-connector.yaml` in the same directory is
+a Flux Kustomization, not a HelmRelease.)
 
 **Flux-managed kustomizations** (selected — see
 `clusters/wind/kustomization.yaml` for the full list):

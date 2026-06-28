@@ -28,6 +28,25 @@ Function URL.
 
 ## Deploy
 
+### Deploy via CI (default)
+
+TF is CI-only (M82). Dispatch the workflow — it runs on the self-hosted
+`lifecycle` runner, gets AWS via OIDC (`gh-actions-terraform` role), and injects
+`TWILIO_AUTH_TOKEN` from a GH secret (no local `op`):
+
+```bash
+gh workflow run terraform-twilio-webhook.yml -f action=plan   # review the plan
+gh workflow run terraform-twilio-webhook.yml -f action=apply  # apply
+```
+
+(PRs that touch `infra/terraform/aws/twilio-webhook/**` auto-run a plan.) After
+apply, the run summary echoes the `function_url` + next steps.
+
+### Local debug (rarely used)
+
+`op` does not work from the headless agent — this path is for an interactive
+operator terminal only:
+
 ```bash
 cd infra/terraform/aws/twilio-webhook
 terraform init

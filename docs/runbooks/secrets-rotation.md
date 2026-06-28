@@ -103,7 +103,7 @@ the access-gating key first, then everything it could have decrypted.
 **2. Force-rotate the GitHub `SOPS_AGE_KEY` + Flux `sops-age` secret** (the leaked key still decrypts old git ciphertext, so step 3 is mandatory).
 
 **3. Rotate every downstream secret the old key exposed** — broadest-access first:
-1. **AWS keys** (tf backend, cloudwatch-to-loki, backups, alexa) — deactivate old IAM keys in console, create new, update 1P + the standalone `aws-cloudwatch-creds`.
+1. **AWS keys** (tf backend, M75-orphaned dedicated keys, SES SMTP) — deactivate old IAM keys in console, create new, update 1P. NB in-cluster AWS workloads (velero, s3-sync, CNPG barman, cloudwatch-to-loki, ai-advisor) are **IRSA-based (M75)** — they assume short-lived creds via `AssumeRoleWithWebIdentity`, hold no static keys, and need no rotation here; only standing IAM access keys do.
 2. **kubeconfig / cluster-admin** — if `admin.conf` leaked, rotate the kube admin cert (cross-ref cert rotation; out of this runbook's scope).
 3. **UDM creds** (1P items `di4fnt6r…`, `6e3ceofu…`, `vohajmkz…`) — change in UniFi, update 1P.
 4. **WireGuard keys** — regenerate server+client keypairs (`platform/wireguard/**`, `platform/kubernetes/wireguard/01-secrets.sops.yaml`); update both tunnel ends.

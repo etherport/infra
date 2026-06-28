@@ -76,10 +76,10 @@ QUARTERLY (Manual - requires maintenance window)
 | Container Images | 14 | Flux ImageUpdateAutomation | Hourly scan | None |
 | K8s Node OS | 8 nodes | unattended-upgrades | Daily | None |
 | K8s Node Reboots | 8 nodes | Kured | 2-6am when needed | None |
-| Standalone VM OS | 4 VMs | unattended-upgrades | Daily | None |
-| Standalone VM Reboots | 4 VMs | Staggered cron | 02:00-04:00 | None |
-| Helm Charts | 15 releases | Renovate PRs | On release | Merge PR |
-| Terraform Providers | 3 | Renovate PRs | On release | Merge PR |
+| Standalone VM OS | 6 local PVE + 2 AWS | unattended-upgrades | Daily | None |
+| Standalone VM Reboots | 4 staggered (others default) | Staggered cron | 02:00-04:00 | None |
+| Helm Charts | 16 releases | Renovate PRs | On release | Merge PR |
+| Terraform Providers | ~10 sources | Renovate PRs | On release | Merge PR |
 | GitHub Actions | varies | Renovate PRs | On release | Merge PR |
 | Proxmox Host | 1 | Ansible | Monthly | Run playbook |
 | Kubernetes Version | cluster | Kubespray | Quarterly | Run playbook |
@@ -143,7 +143,12 @@ ansible k8s_cluster -i infra/ansible/inventory/wind/inventory.ini \
 
 ### 1.3 Standalone VM OS
 
-**VMs and reboot schedule:**
+There are **6 local PVE standalone VMs** (1001 dns-fallback, 1002 vpn-local,
+1003 gh-runner, 1004 asterisk-sbc, 1005 devbox, 1006 step-ca) **+ 2 AWS VMs**
+(dns-aws, vpn-aws). Only the 4 below have explicit staggered reboot windows; the
+other VMs reboot on the default schedule.
+
+**VMs with staggered reboot windows:**
 | VM | IP | Purpose | Reboot Time |
 |----|-----|---------|-------------|
 | dns-fallback | 10.10.201.6 | Backup DNS | 02:00 |
@@ -184,7 +189,7 @@ gh pr list --label renovate
 **Current Helm releases tracked** (HelmRelease CRs in `clusters/wind/helm-releases/`;
 list live with `kubectl get helmrelease -A`): alloy, arc-controller,
 arc-runner-homelab, cert-manager, cnpg, gpu-operator, kured, kyverno, loki,
-monitoring, pushgateway, tailscale-operator, tetragon, traefik, velero.
+metallb, monitoring, pushgateway, tailscale-operator, tetragon, traefik, velero.
 
 ---
 

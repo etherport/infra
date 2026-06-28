@@ -48,7 +48,7 @@ items couldn't be backed up but the backup as a whole completed.
 
 ## Advisor action guidance
 
-- `trigger_velero_backup_now(schedule=<name>)` is appropriate only
+- `trigger_velero_backup_now(schedule_name=<name>)` is appropriate only
   after the operator has confirmed the root cause is fixed in source
   — otherwise the new run will be partial again.
 - `noop` is the most common correct outcome: the advisor should

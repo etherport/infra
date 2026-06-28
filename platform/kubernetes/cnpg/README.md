@@ -11,7 +11,7 @@ cnpg-system namespace (operator - Helm managed)
 postgres namespace (Flux managed)
 └── Cluster CRD → PostgreSQL pods (instances: 3 — standard HA shape)
     ├── primary (read-write)
-    └── 2 sync replicas (read-only)
+    └── 2 async streaming replicas (read-only)
 ```
 
 ## Prerequisites
@@ -209,7 +209,7 @@ kubectl exec -n postgres postgres-cluster-1 -- psql -c '\dt'
 ## Backups (Barman → S3)
 
 Barman is **live**, not optional — see
-[`docs/runbooks/postgres-barman.md`](../../../docs/runbooks/archive/postgres-barman-activation.md)
+[`docs/runbooks/archive/postgres-barman-activation.md`](../../../docs/runbooks/archive/postgres-barman-activation.md)
 for activation steps and the `postgres-barman.wind.etherport.net` S3
 bucket configuration. The day-2 ops (failover testing, switchover,
 monitoring continuous-archiving lag) are still being written up; for now

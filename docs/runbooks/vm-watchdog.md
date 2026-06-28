@@ -103,10 +103,11 @@ journalctl -u pve-ha-lrm -f         # if HA is also on, see triggers
 - Watchdog catches **VM-level hangs** (kernel, userspace deadlocks).
   It does NOT catch application-level failures (kubelet stops
   reporting Ready, etc.) — that's the K8s control plane's job.
-- An imported VM in `standalone-vms` (`vpn-local`, `dns-fallback`,
-  `gh-runner` if applicable) needs a stop+start to attach the
-  watchdog device. TF will trigger that on next `apply` if the
-  watchdog block is newly added.
+- All `standalone-vms` are fresh clones of template 9001 (`imported_vms`
+  is now empty — `vpn-local` was moved to `standalone_vms` for fresh
+  deployment), so the watchdog block is part of their initial config and
+  no import-style stop+start is needed. (Moot in practice while the
+  watchdog is BLOCKED — see the status banner.)
 - Single-node Proxmox (current state): the watchdog resets the VM on
   the same host. If you expand to a Proxmox cluster (see
   `docs/runbooks/proxmox-ha-expansion.md`), HA Manager can additionally

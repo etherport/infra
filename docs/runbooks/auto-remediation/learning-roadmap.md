@@ -51,7 +51,7 @@ Then `search_git_log` can grep with `--grep="Fixes-alert: <name>"` precisely —
 
 ### R2 — Mount memory files into the advisor
 
-**Problem.** The assistant has `~/.claude/projects/-Users-grahamsmith-code-infra/memory/*.md` — distilled cross-session learnings (python-kubernetes v31 auth bug, UDM zone-policy quirks, PVE ansible model, etc.). These are exactly the kind of context that prevents repeat investigation. The advisor doesn't see them.
+**Problem.** The assistant has `~/.claude/projects/-home-ubuntu-code-infra/memory/*.md` — distilled cross-session learnings (python-kubernetes v31 auth bug, UDM zone-policy quirks, PVE ansible model, etc.). These are exactly the kind of context that prevents repeat investigation. The advisor doesn't see them.
 
 **Solution.**
 1. Curate a subset suitable for the advisor (reference-type memories about infra quirks; skip user-preference / session-state ones).

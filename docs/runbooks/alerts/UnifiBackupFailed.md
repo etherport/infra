@@ -7,7 +7,7 @@ Severity: warning. No auto-action.
 ## Symptom
 
 PrometheusRule `unifi-backup.rules / UnifiBackupFailed` firing for a
-specific `target` label. The daily 04:00 PT backup of UDM config /
+specific `device` label. The daily 04:00 PT backup of UDM config /
 UniFi Protect config to NFS/S3 failed.
 
 ## Verified root cause(s)

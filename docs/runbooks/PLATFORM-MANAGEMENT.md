@@ -30,11 +30,12 @@ High-level overview of the homelab infrastructure with links to detailed runbook
 │  │  │ 10.10.201.6 │ │10.10.201.15 │ │ 10.10.100.5 │ │10.10.100.10 │   │   │
 │  │  │ Technitium  │ │ WireGuard   │ │ Technitium  │ │ WireGuard   │   │   │
 │  │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘   │   │
-│  │  ┌─────────────┐                                                    │   │
-│  │  │ gh-runner   │  GitHub Actions self-hosted runner (VM 1003,      │   │
-│  │  │10.10.201.x  │  10.10.201.x — see infra/ansible/playbooks/       │   │
-│  │  │ Actions     │  gh-runner.yml)                                   │   │
-│  │  └─────────────┘                                                    │   │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐   │   │
+│  │  │ gh-runner   │ │asterisk-sbc │ │   devbox    │ │  step-ca    │   │   │
+│  │  │10.10.201.30 │ │10.10.201.40 │ │10.10.201.45 │ │10.10.201.46 │   │   │
+│  │  │ Actions     │ │ Asterisk    │ │ Dev/Claude  │ │ SSH CA      │   │   │
+│  │  │ (VM 1003)   │ │ SBC (1004)  │ │ (M81, 1005) │ │ (M76, 1006) │   │   │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘   │   │
 │  │                                                                     │   │
 │  │  Updates: unattended-upgrades (automatic with staggered reboots)   │   │
 │  │  Config: Ansible playbooks                                         │   │
@@ -72,7 +73,12 @@ for host in 10.10.201.6 10.10.201.15 10.10.100.5 10.10.100.10; do
 done
 
 # DNS
-dig @10.10.201.5 google.com +short
+# .5 is the in-cluster Technitium MetalLB VIP — BGP-only/no-L2, so it is NOT
+# reachable from a host ON VLAN 201 (e.g. the devbox where these checks run):
+# same-subnet ARP for the VIP fails and the dig times out even when DNS is healthy.
+# From an on-201 host, query dns-fallback (.6) instead, or add a /32 route via the UDM.
+dig @10.10.201.5 google.com +short   # off-VLAN-201 only
+dig @10.10.201.6 google.com +short   # dns-fallback — use this from an on-201 host
 
 # VPN — cert-only SSH (M76)
 ssh ubuntu@10.10.201.15 "sudo wg show"
