@@ -149,14 +149,14 @@ cert_manager_enabled: false
 # platform/kubernetes/metallb/. Don't define `metallb_config.address_pools`
 # here — that creates duplicate pools and fights with the Flux-managed ones.
 #
-# ⚠️ L24 MIGRATION PENDING (docs/planning/l24-metallb-frr-migration-plan.md): this
-# kubespray addon installs MetalLB in NATIVE BGP mode, which cannot do TCP-MD5 and
-# has no FRR toggle. L24 Phase 2 (windowed) migrates MetalLB onto the Helm chart in
-# FRR mode (clusters/wind/helm-releases/metallb.yaml) — at which point set
-# `metallb_enabled: false` here so a kubespray run won't re-apply the native addon.
-# Leave it `true` until that cutover (changing it now doesn't uninstall anything,
-# but keep IaC honest about what's live).
-metallb_enabled: true
+# ✅ L24 CUTOVER 2026-06-28 (docs/planning/l24-metallb-frr-migration-plan.md): MetalLB
+# migrated OFF this native kubespray addon ONTO the Helm chart in FRR mode
+# (clusters/wind/helm-releases/metallb.yaml) — required for TCP-MD5 (Phase 3) and it
+# unlocks graceful-restart + BFD. `metallb_enabled: false` so a future kubespray run
+# will NOT re-apply the native addon and fight the Helm release. (Flipping this does
+# NOT uninstall the running addon — Phase 2 deleted the native workloads by hand and
+# Flux/Helm took over.) The Flux-managed CRs stay in platform/kubernetes/metallb/.
+metallb_enabled: false
 metallb_speaker_enabled: "{{ metallb_enabled }}"
 metallb_namespace: "metallb-system"
 # metallb_protocol: "layer2"

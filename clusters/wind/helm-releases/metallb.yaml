@@ -1,12 +1,11 @@
 # =============================================================================
-# MetalLB — Helm/Flux-managed, FRR MODE (L24).  ⚠️ INERT PREP — NOT YET ACTIVE.
+# MetalLB — Helm/Flux-managed, FRR MODE (L24).  ✅ ACTIVE since 2026-06-28 (Phase 2).
 #
-# This file is authored as L24 Phase-0 prep but is **deliberately NOT listed in
-# clusters/wind/helm-releases/kustomization.yaml**, so Flux does NOT apply it yet.
-# Applying it is the windowed L24 **Phase 2** (a BGP flap — see
-# docs/planning/l24-metallb-frr-migration-plan.md). Today MetalLB is the kubespray
-# addon (native BGP mode); the Flux-managed CRs in platform/kubernetes/metallb/
-# (IPAddressPool/BGPPeer/BGPAdvertisement) stay as-is and are compatible.
+# MetalLB now runs from THIS Helm release in FRR mode (controller=metallb-controller,
+# speaker=metallb-speaker DS with the frr/reloader/frr-metrics sidecars). The native
+# kubespray addon was deleted in the Phase-2 window and `metallb_enabled: false` set in
+# kubespray addons.yml. The Flux-managed CRs in platform/kubernetes/metallb/
+# (IPAddressPool/BGPPeer/BGPAdvertisement + the TEMPORARY Phase-1 L2Advertisement) drive it.
 #
 # WHY: native MetalLB cannot do TCP-MD5 — the BGPPeer password is honored ONLY in
 # FRR mode. Switching to FRR also unlocks BGP graceful-restart + BFD (fixes today's
