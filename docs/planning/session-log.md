@@ -13,6 +13,34 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-28 (cont. 3) — M72 tail CLOSED: 3 infra ns enforced + 7 stale ns deleted
+
+- **Enforced `pod-security.kubernetes.io/enforce=baseline`** on the last 3 clean infra namespaces —
+  `cert-manager`, `cnpg-system`, `github-actions-runner` (commit `93589a2`, Flux-applied + verified
+  live). cert-manager/cnpg-system via the central `clusters/wind/namespace-pss-labels.yaml` patch;
+  github-actions-runner in its own `platform/kubernetes/github-actions-runner/namespace.yaml`.
+- **Corrected an earlier-doc error:** the M72 residual + the bottom of `namespace-pss-labels.yaml` had
+  conflicting takes on these — the tracker called them "Helm-created, no build target" but
+  `helm-releases/{cert-manager,cnpg}.yaml` each ship a `kind: Namespace` so they ARE build targets
+  (the patch works). **Authoritative check used:** `kubectl label ns <ns>
+  pod-security.kubernetes.io/enforce=baseline --overwrite --dry-run=server` — PSA returns a warning
+  listing any existing pod that would violate. All 3 returned clean; gha correctly *fails* `restricted`
+  (ARC controller/runner need caps + allowPrivilegeEscalation) so baseline is its ceiling.
+- **plex deliberately left UNENFORCED** (against the tracker's inclusion of it): the pss-labels patch
+  marks plex `tier=system` "GPU passthrough needs privileged". Its pod is baseline-clean today, but
+  enforcing baseline would block a future privileged transcode config the operator deliberately
+  preserved — not worth it on a single media server. Kept tier=system, like wireguard.
+- **Deleted 7 stale/empty orphan namespaces** (`kopia`, `technitium-dns`, `rclone-gdrive`, `home`,
+  `media`, `infra`, `gpu-operator`). Verified each: 0 pods, only the auto-created `default` SA, **no git
+  source** + **no `targetNamespace` ref** (so Flux won't recreate — confirmed `gpu-operator.yaml`
+  manages `gpu-operator-system`, and the `home`/`gpu-operator` git "hits" were `home-automation`/
+  `gpu-operator-system` word-boundary false positives), 47 days idle. The live `dns`(3 pods)/`rclone`(6)/
+  `home-automation`(1) services they resemble stayed healthy. **User-authorized** (the safety classifier
+  gated the mass delete; asked explicitly, got a yes) → direct `kubectl delete ns` (they're unmanaged,
+  no git change). DNS re-verified after. M72 flipped 🟡→✅. **Now moving to M74 v2.**
+
+---
+
 ## 2026-06-28 (cont. 2) — M77 Stage 2: first 2 standalone VMs to default-deny inbound
 
 - **Flipped `dns-fallback` (1001) + `gh-runner` (1003) from Stage-1 permissive `ACCEPT` to Stage-2

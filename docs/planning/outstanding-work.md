@@ -387,13 +387,29 @@ orphaned. Not service-affecting on its own.
 - 🟢 **Progress 2026-06-24:** the **devbox is now clean** — M82 (CI-only TF) removed its standing `[homelab]` key; the devbox holds no standing AWS creds. **Remaining is mini-side only** (the mini's `[homelab]` + `[claude-admin]` standing keys + rotation) — needs admin creds / the mini, so it's a manual owner action (the agent can't reach it headlessly: no SSH to the mini, `op` doesn't authorize from agent bash, and the bounded homelab key has no IAM to rotate keys). **Step-by-step procedure: `docs/runbooks/udm-manual-hardening-actions.md` §8** (mini cred trim + rotation). Recommended order: do interim win (a) now (~0 effort, biggest cut), schedule (b) rotation, then the Roles-Anywhere/SSO target arch when ready.
 - **Effort:** M (Roles Anywhere) + S (interim a/b). See session-log 2026-06-17 for the full blast-radius assessment.
 
-### 🟡 M72. Pod Security Admission: audit/warn → enforce — SUBSTANTIALLY DONE 2026-06-24
+### ✅ M72. Pod Security Admission: audit/warn → enforce — DONE 2026-06-28 (tail closed)
 - **Source:** zero-trust assessment 2026-06-17. `policy-baseline/` ran PSA in audit/warn only (Phase 1). Same per-ns opt-in model as H3.
 - ✅ **Enforcing `baseline` (15 namespaces):** the 14 tier=data app namespaces (authentik, auto-remediation, backups, cloudflare-ddns, cloudflared, cloudwatch-to-loki, cue, dns, ollama, postgres, rclone, traefik, unifi-cert-sync, wikijs — done 2026-06-02) **+ `flux-system` (2026-06-24, `5a52b54`)** via the `namespace-pss-labels.yaml` patch (verified live; flux controllers healthy — baseline not restricted to avoid any future-upgrade wedge on the engine, though dry-run was restricted-clean). `unifi-poller` = enforce **restricted**.
 - ✅ **Exempt by design (legit elevated pods — verified via `--dry-run=server`):** `monitoring` (node-exporter host-ns/hostPath/hostPort, alloy), `tailscale` (privileged proxy), `home-automation` (HA privileged), `gpu-operator-system` (GPU operator host/privileged), `velero` (node-agent hostPath) → kept **audit/warn=baseline** (new violations still flagged). `blackbox`/`metallb`/`wireguard` = enforce privileged.
-- ⏳ **Residual (followups):**
-  - **Clean Helm-created namespaces** `cert-manager`, `cnpg-system`, `github-actions-runner`, `plex` are **baseline-clean** (dry-run) but **NOT yet enforced** — their ns is created by a HelmRelease (`createNamespace`), so a strategic-merge patch in `namespace-pss-labels.yaml` has no build target (breaks the build, per that file's header). Label them **at the creation source**: add an explicit `00-namespace.yaml` (with PSS labels) + set the release `createNamespace: false`, per release. **Effort:** S each.
-  - **Stale/empty namespaces** (0 pods, likely leftovers): `kopia` (decommissioned), `technitium-dns`, `rclone-gdrive`, `home`, `media`, `infra`, `gpu-operator` — **delete** (separate cleanup, confirm truly unused first), don't label. `cilium-secrets`/`pg-recovery`/`ceph-csi`/`multus-system` are legit-empty system ns — leave.
+- ✅ **Residual CLOSED 2026-06-28 (commit `93589a2`):**
+  - **3 infra namespaces enforced → baseline:** `cert-manager`, `cnpg-system` (via the central
+    `namespace-pss-labels.yaml` patch — their Namespace manifest **does** ship in
+    `helm-releases/{cert-manager,cnpg}.yaml`, so they *are* build targets; the earlier "no build
+    target" worry was wrong) + `github-actions-runner` (labeled in its own
+    `platform/kubernetes/github-actions-runner/namespace.yaml` — applied by the platform kustomization,
+    outside clusters/wind's build). Each verified non-violating via `kubectl label … --dry-run=server`
+    (gha fails `restricted` — ARC needs caps — so baseline is its ceiling). All 3 live `enforce=baseline`.
+  - **plex deliberately NOT enforced** — corrects this item's earlier inclusion of plex. plex keeps its
+    existing `tier=system` "GPU passthrough needs privileged" carve-out (alongside wireguard). Its pod is
+    baseline-clean *today*, but enforcing would block a future privileged transcode config the operator
+    chose to preserve; marginal gain on a single media server isn't worth removing that option.
+  - **7 stale/empty orphan namespaces DELETED** (`kopia`, `technitium-dns`, `rclone-gdrive`, `home`,
+    `media`, `infra`, `gpu-operator`) — each had 0 pods / only the auto-created `default` SA, **no git
+    source** (Flux won't recreate; `helm-releases/gpu-operator.yaml` manages `gpu-operator-system`, not
+    the empty `gpu-operator`) and **no `targetNamespace` ref**; the live `dns`/`rclone`/`home-automation`
+    services (the names they resemble) stayed healthy. User-authorized direct `kubectl delete`. DNS
+    re-verified post-delete. `cilium-secrets`/`pg-recovery`/`ceph-csi`/`multus-system` are legit-empty
+    system ns — left.
 
 ### ✅ M73. Admission policy engine (Kyverno) — BOTH GUARDRAILS ENFORCING 2026-06-28
 - **✅ `require-resource-requests` → Enforce (2026-06-28, commit `dcd4f02`).** The audit-fail workloads
