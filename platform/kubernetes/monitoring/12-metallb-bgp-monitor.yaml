@@ -23,3 +23,56 @@ spec:
   podMetricsEndpoints:
     - port: monitoring
       path: /metrics
+---
+# L24 Phase 4 — close the silent-BGP-withdrawal gap. metallb_bgp_session_up{peer,vrf}
+# (from the frr-metrics sidecar :7473) is 1=up/0=down per speaker×peer (8 sessions:
+# one per node to the UDM). A total withdrawal blackholes the Traefik + Technitium
+# VIPs for EXTERNAL clients while CiliumTraefikIngressDrop stays silent (no packets
+# reach the pod) — this rule is the dedicated detector.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: metallb-bgp
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: metallb-bgp
+      rules:
+        # CRITICAL: every speaker→UDM session down = all VIPs withdrawn = external
+        # ingress + DNS blackhole. for:2m rides out a brief reconverge/rolling restart.
+        - alert: MetallbBGPAllSessionsDown
+          expr: sum(metallb_bgp_session_up) == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: network
+            source: metallb
+          annotations:
+            summary: "MetalLB: ALL BGP sessions to the UDM are DOWN — VIPs withdrawn (ingress + DNS blackhole)"
+            description: |
+              Every MetalLB speaker→UDM (10.10.201.1) eBGP session is down, so all
+              LoadBalancer VIPs (Traefik 10.10.201.70, Technitium DNS .5/.71/.72,
+              alloy-syslog .73) are withdrawn from the UDM → unreachable for off-subnet
+              clients. This is a silent site-wide outage (CiliumTraefikIngressDrop can't
+              fire — no packets reach the pod). Check the metallb-speaker DS + the FRR
+              sidecars, the UDM BGP config (peer-group `metallb`, incl. the MD5 password),
+              and TCP-179 reachability. L2 fallback is OFF (L24 Phase 4).
+        # WARNING: some (not all) sessions persistently down — a node not peering
+        # (degraded ECMP / one node's VIPs missing). for:15m skips node drains/restarts.
+        - alert: MetallbBGPSessionDown
+          expr: count(metallb_bgp_session_up == 0) > 0
+          for: 15m
+          labels:
+            severity: warning
+            component: network
+            source: metallb
+          annotations:
+            summary: "MetalLB: {{ $value }} BGP session(s) to the UDM down >15m (degraded ECMP)"
+            description: |
+              One or more MetalLB speaker→UDM BGP sessions have been down for 15m+
+              (not all — see MetallbBGPAllSessionsDown for total loss). VIP reachability
+              is degraded (fewer ECMP next-hops) but not lost. If it's not a planned node
+              drain, check that node's metallb-speaker/FRR sidecar + the MD5 key.
+              Per-peer: metallb_bgp_session_up == 0 in Grafana/Prometheus.
