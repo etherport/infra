@@ -9,8 +9,13 @@
 #     the AWS peer for WireGuard) before denying anything. This avoids repeating
 #     the H37 Ceph/IPMI latent-break class (a needed allow missing from a
 #     default-deny that only bites later).
-#   STAGE 2 (later, per-VM, deliberate): flip `local.vm_input_policy` ACCEPT ->
+#   STAGE 2 (per-VM, deliberate): flip `local.vm_input_policy.<vm>` ACCEPT ->
 #     DROP for a VM once its log is clean, after scoping the external sources.
+#     STARTED 2026-06-28: dns-fallback (1001) + gh-runner (1003) -> DROP (the two
+#     safe first candidates — no external-source scoping needed; allow-lists are
+#     fully internal/baseline). The remaining 4 stay ACCEPT pending source scoping
+#     (vpn-local AWS peer, asterisk Twilio ranges) or extra care (devbox session,
+#     step-ca fleet clients).
 #
 # The NIC firewall flag (`firewall = true`) is set in ../standalone-vms/main.tf.
 # Apply THIS stack FIRST so the rules exist before the NIC firewall activates
@@ -18,18 +23,29 @@
 # intentionally NOT allowed -> the eventual default-deny closes that exposure.
 #
 # Per-VM required inbound (from `ss -tlnp/-ulnp`, 2026-06-25):
-#   dns-fallback 1001: 53 tcp+udp (DNS clients), 5380 (mgmt), + baseline
+#   dns-fallback 1001: 53 tcp+udp (DNS clients), 5380 (mgmt), + baseline   [Stage 2: DROP 2026-06-28]
 #   vpn-local    1002: WireGuard udp (AWS peer — scope at Stage 2), + baseline
-#   gh-runner    1003: baseline only (outbound-only runner)
+#   gh-runner    1003: baseline only (outbound-only runner)                [Stage 2: DROP 2026-06-28]
 #   asterisk-sbc 1004: SIP 5060/5061 + RTP range (Twilio+LAN — scope at Stage 2), + baseline
 #   devbox       1005: tailscale udp + baseline (Claude session lives here — Stage 2 with care)
 #   step-ca      1006: step-ca API :8443 (cert clients + tailnet) + baseline (M76 SSH CA)
 # =============================================================================
 
 locals {
-  # Stage 1: permissive everywhere (nothing denied). Flip to "DROP" per-VM at
-  # Stage 2 by overriding this per resource (or split the local) once observed.
-  vm_input_policy = "ACCEPT"
+  # M77 per-VM inbound policy. "ACCEPT" = Stage-1 permissive (nothing denied);
+  # "DROP" = Stage-2 default-deny inbound — only the per-VM allow-list below
+  # passes. PVE's firewall is STATEFUL, so established/related replies to
+  # outbound-initiated connections are always allowed regardless of this policy
+  # (a DROP only blocks NEW unsolicited inbound). Flip a VM to DROP once its
+  # Stage-1 allow-list is confirmed complete (ss-enumerated listeners, above).
+  vm_input_policy = {
+    dns_fallback = "DROP"   # Stage 2 (2026-06-28): listeners = 53 tcp/udp + 5380(mgmt) + baseline → all allow-listed
+    vpn_local    = "ACCEPT" # Stage 1 — scope the AWS WireGuard peer source IP first
+    gh_runner    = "DROP"   # Stage 2 (2026-06-28): outbound-only runner; baseline (SSH + 9100) only
+    asterisk_sbc = "ACCEPT" # Stage 1 — scope Twilio SIP/RTP source ranges first
+    devbox       = "ACCEPT" # Stage 1 — Claude session host; flip with extra care (keep SSH + tailnet)
+    step_ca      = "ACCEPT" # Stage 1 — confirm the fleet + tailnet cert clients in the log first
+  }
 }
 
 # Baseline allows every standalone VM gets: SSH from trusted admin (mgmt-admin
@@ -63,7 +79,7 @@ resource "proxmox_virtual_environment_firewall_options" "dns_fallback" {
   node_name     = var.node_name
   vm_id         = 1001
   enabled       = true
-  input_policy  = local.vm_input_policy
+  input_policy  = local.vm_input_policy.dns_fallback
   output_policy = "ACCEPT"
   log_level_in  = "info"
 }
@@ -108,7 +124,7 @@ resource "proxmox_virtual_environment_firewall_options" "vpn_local" {
   node_name     = var.node_name
   vm_id         = 1002
   enabled       = true
-  input_policy  = local.vm_input_policy
+  input_policy  = local.vm_input_policy.vpn_local
   output_policy = "ACCEPT"
   log_level_in  = "info"
 }
@@ -136,7 +152,7 @@ resource "proxmox_virtual_environment_firewall_options" "gh_runner" {
   node_name     = var.node_name
   vm_id         = 1003
   enabled       = true
-  input_policy  = local.vm_input_policy
+  input_policy  = local.vm_input_policy.gh_runner
   output_policy = "ACCEPT"
   log_level_in  = "info"
 }
@@ -156,7 +172,7 @@ resource "proxmox_virtual_environment_firewall_options" "asterisk_sbc" {
   node_name     = var.node_name
   vm_id         = 1004
   enabled       = true
-  input_policy  = local.vm_input_policy
+  input_policy  = local.vm_input_policy.asterisk_sbc
   output_policy = "ACCEPT"
   log_level_in  = "info"
 }
@@ -203,7 +219,7 @@ resource "proxmox_virtual_environment_firewall_options" "devbox" {
   node_name     = var.node_name
   vm_id         = 1005
   enabled       = true
-  input_policy  = local.vm_input_policy
+  input_policy  = local.vm_input_policy.devbox
   output_policy = "ACCEPT"
   log_level_in  = "info"
 }
@@ -234,7 +250,7 @@ resource "proxmox_virtual_environment_firewall_options" "step_ca" {
   node_name     = var.node_name
   vm_id         = 1006
   enabled       = true
-  input_policy  = local.vm_input_policy
+  input_policy  = local.vm_input_policy.step_ca
   output_policy = "ACCEPT"
   log_level_in  = "info"
 }
