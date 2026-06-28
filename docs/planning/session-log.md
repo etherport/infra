@@ -13,6 +13,44 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-28 (cont. 4) — M74 v2 LIVE: Tetragon runtime-detection pipeline
+
+- **Built the Tetragon detection pipeline** (observe-only assume-breach layer), in **two staged
+  commits** so a wrong policy couldn't flood Loki: **part 1 `13e675d`** = the TracingPolicies with
+  export still OFF (prove matches via `tetra getevents`, zero Loki risk); **part 2 `5584529`** =
+  enable selective export + the alert.
+- **TracingPolicies** (`platform/kubernetes/tetragon/`, cluster-scoped, wired into clusters/wind
+  kustomization): `detect-cred-file-access` (`security_file_permission`+`security_path_truncate` on
+  `/etc/shadow`,`/etc/gshadow`,`/etc/sudoers*`,`*/.ssh/authorized_keys`) + `detect-setuid-root`
+  (`sys_setuid` uid==0). Modelled on the upstream `filename_monitoring.yaml`/`sys_setuid.yaml`
+  examples (fetched to get exact kprobe syntax), narrowed to keep volume near-zero. Both pass
+  `--dry-run=server`; agents loaded them `enabled`/`monitor_only`.
+- **Selective export** (HelmRelease values, chart-1.7 keys verified vs the chart's values.yaml):
+  `export.mode: stdout` + `tetragon.exportAllowList` restricted to
+  `PROCESS_KPROBE/TRACEPOINT/UPROBE/LSM` so the `PROCESS_EXEC/EXIT` firehose (~1.1M/day) never flows;
+  namespace denylist drops host/system. **Key debugging win:** right after the rollout the export
+  briefly showed `process_exit` lines — turned out to be **stale export-file backlog** the
+  freshly-restarted `export-stdout` sidecars re-read; once consumed, **steady-state = 0 lines/min**.
+  Also confirmed the noisy `setuid(0)` source is **runc in host-ns** (NPOST=59) which the namespace
+  denylist filters from export — so exported volume stays ~0.
+- **Alert** (`monitoring/11-loki-rules-tetragon.yaml`, mirrors the hubble-audit ruler pattern):
+  `TetragonCredFileAccess` (critical) + `TetragonSetuidRoot` (warning) off
+  `{namespace="tetragon",container="export-stdout"}` (Alloy tails the sidecar's pod log). The
+  rules-sidecar logged `Writing …/tetragon.yaml` → loaded into the ruler.
+- **e2e PROVEN:** triggered `head -c1 /etc/shadow` inside a Tetragon pod (a pod ns) → `detect-cred-file-access`
+  matched → exported through the sidecar → **every alert JSON field-path resolves**
+  (`process_kprobe.policy_name`='detect-cred-file-access', `…process.binary`='/usr/bin/head',
+  `…process.pod.namespace`='tetragon', etc.). ⚠️ **That test read will fire ONE `TetragonCredFileAccess`
+  critical** (tetragon/tetragon-8rpqn, binary `head`) that self-resolves in ~10m — it's the validation,
+  not a real incident.
+- **⏳ Deferred:** shell-in-container (the exec firehose is export-denied → needs a kprobe-on-execve
+  policy), `sys_ptrace`/`sys_mount`, and enforcement (`matchActions` kill) after the observe phase is
+  trusted. **M74 flipped 🟡→✅** (detection pipeline = the goal; enforcement is optional-later).
+  Docs: tetragon README + tracker. **All 3 requested arc items (M77 Stage 2 partial, M72 tail, M74 v2)
+  are done.**
+
+---
+
 ## 2026-06-28 (cont. 3) — M72 tail CLOSED: 3 infra ns enforced + 7 stale ns deleted
 
 - **Enforced `pod-security.kubernetes.io/enforce=baseline`** on the last 3 clean infra namespaces —
