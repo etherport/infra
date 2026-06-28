@@ -69,7 +69,7 @@ data "aws_iam_policy_document" "ra_assume" {
 
 resource "aws_iam_role" "mini_ra" {
   name                 = "wind-mini-roles-anywhere"
-  description          = "M71: mini assumes this via IAM Roles Anywhere (step-ca cert) — replaces the standing [homelab] static key"
+  description          = "M71: mini assumes this via IAM Roles Anywhere (step-ca cert) - replaces the standing [homelab] static key"
   assume_role_policy   = data.aws_iam_policy_document.ra_assume.json
   max_session_duration = var.session_duration_seconds
 }
