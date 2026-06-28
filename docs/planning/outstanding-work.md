@@ -358,7 +358,16 @@ orphaned. Not service-affecting on its own.
   - **Clean Helm-created namespaces** `cert-manager`, `cnpg-system`, `github-actions-runner`, `plex` are **baseline-clean** (dry-run) but **NOT yet enforced** — their ns is created by a HelmRelease (`createNamespace`), so a strategic-merge patch in `namespace-pss-labels.yaml` has no build target (breaks the build, per that file's header). Label them **at the creation source**: add an explicit `00-namespace.yaml` (with PSS labels) + set the release `createNamespace: false`, per release. **Effort:** S each.
   - **Stale/empty namespaces** (0 pods, likely leftovers): `kopia` (decommissioned), `technitium-dns`, `rclone-gdrive`, `home`, `media`, `infra`, `gpu-operator` — **delete** (separate cleanup, confirm truly unused first), don't label. `cilium-secrets`/`pg-recovery`/`ceph-csi`/`multus-system` are legit-empty system ns — leave.
 
-### 🟡 M73. Admission policy engine (Kyverno) — ENFORCE PHASE-1 2026-06-27
+### ✅ M73. Admission policy engine (Kyverno) — BOTH GUARDRAILS ENFORCING 2026-06-28
+- **✅ `require-resource-requests` → Enforce (2026-06-28, commit `dcd4f02`).** The audit-fail workloads
+  were third-party Helm sidecars + dynamically-created pods (tailscale proxies, ARC ephemeral runners,
+  ceph csi) that no chart edit reliably covers. Solved with **`02-add-default-resource-requests`** — a
+  Kyverno **mutate** that injects a tiny default request (10m/32Mi) on any container missing one, BEFORE
+  the validate webhook (only adds where absent; never overrides). **Verified safe across every path:**
+  bare pod, multi-container sidecar (each gap filled), existing-requests preserved, and — the critical
+  Flux/Renovate case — a request-less Deployment template is admitted with requests mutated in (Kyverno
+  autogen covers controllers). No pods disrupted. Belt-and-suspenders with the policy-baseline LimitRange
+  defaults in app namespaces. Existing 58 audit-report entries clear as controllers next reconcile.
 - **✅ ENFORCING `disallow-latest-tag` (2026-06-27, commit `ba130f9`).** Audit review found **0
   violations** for this policy (cue-api excluded; all operators use tagged/pinned images so even
   dynamically-created pods pass), so flipped both its rules `failureAction: Audit→Enforce`. **Verified

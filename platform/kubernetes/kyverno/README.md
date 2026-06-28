@@ -7,10 +7,14 @@ chart 3.8.x / Kyverno v1.18); this directory holds the **ClusterPolicies**.
 ## Safety model (why this can't wedge the cluster)
 
 1. **Audit-first, enforce-when-clean.** A rule sets `validate.failureAction: Audit` →
-   violations are *reported* (PolicyReports), never blocked; flip to `Enforce` only once its
-   report is clean. **Current:** `disallow-latest-tag` = **Enforce** (0 violations, 2026-06-27);
-   `require-resource-requests` = **Audit** (third-party Helm charts + dynamically-created pods
-   lack requests — see its header for the enforce prereq).
+   violations are *reported* (PolicyReports), never blocked; flip to `Enforce` only once it's
+   safe. **Current: both resource guardrails ENFORCE.** `disallow-latest-tag` = Enforce (0
+   violations, 2026-06-27). `require-resource-requests` = Enforce (2026-06-28) — made safe by
+   `02-add-default-resource-requests` (a **mutate** that injects a tiny default request on any
+   container missing one, *before* the validate webhook), so no pod can be blocked: sidecars,
+   dynamically-created pods (tailscale proxies, ARC runners, ceph csi), and request-less
+   Deployment/StatefulSet templates (Kyverno autogen) all get a request injected at admission.
+   Belt-and-suspenders with the policy-baseline `LimitRange` defaults in app namespaces.
 2. **Fail-open.** `spec.webhookConfiguration.failurePolicy: Ignore` → if the admission
    controller is down/slow, admission proceeds without the policy (never blocks).
 3. **Control-plane excluded.** Policies `exclude` `kube-system`/`flux-system`/`kyverno`
@@ -22,10 +26,11 @@ chart 3.8.x / Kyverno v1.18); this directory holds the **ClusterPolicies**.
 
 ## Policies
 
-| File | Policy | Mode | What it flags | Notable excludes |
+| File | Policy | Mode | What it does | Notable excludes |
 |---|---|---|---|---|
-| `00-require-resource-requests.yaml` | `require-resource-requests` | **Audit** | containers without cpu+memory requests | system + operator ns |
-| `01-disallow-latest-tag.yaml` | `disallow-latest-tag` | **Enforce** | untagged images + `:latest` | system + operator ns, **`cue`** (intentional `:latest`, H30/M64) |
+| `00-require-resource-requests.yaml` | `require-resource-requests` | **Enforce** | every container must have cpu+memory requests | system + operator ns |
+| `01-disallow-latest-tag.yaml` | `disallow-latest-tag` | **Enforce** | forbid untagged images + `:latest` | system + operator ns, **`cue`** (intentional `:latest`, H30/M64) |
+| `02-add-default-resource-requests.yaml` | `add-default-resource-requests` | **Mutate** | inject 10m/32Mi requests where absent (makes 00 enforceable) | same as 00 (system + operator ns) |
 
 ## Operating
 

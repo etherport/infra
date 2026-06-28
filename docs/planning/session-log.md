@@ -13,6 +13,27 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-28 — overnight-alert investigation (→ H41 etcd) + M73 require-resource-requests ENFORCING
+
+- **Investigated 2 overnight AI-advisor emails** (non-iCloud): `TargetDown` (kube-scheduler) +
+  `KubePodCrashLooping` (ceph csi-snapshotter). Both `noop` per-instance, but symptoms of a real pattern:
+  **all CP leader-election components restart-looping** (scheduler 54/71/74, controller-manager 43/79/87,
+  csi-snapshotter 17/23 over ~4d; apiservers stable). Mechanism: **etcd raft term 79 in 4d (~20 elections/
+  day)** → write stalls → apiserver lease `Put` exceeds the 5s deadline → lease holders restart. etcd healthy
+  now (DB 248MB, 7ms commits) → periodic instability, self-recovering, no outage. Filed **H41** (commit
+  `6cbc61f`) with 2 enabling gaps: etcd metrics not scraped + CSI VolumeSnapshot CRDs missing.
+- **M73 `require-resource-requests` → Enforce** (commits `1abdacb` mutate, `dcd4f02` enforce). The audit
+  fails were Helm sidecars + dynamically-created pods (tailscale proxies, ARC runners, ceph csi) that
+  chart-editing can't reliably cover. Added a Kyverno **mutate** (`02-add-default-resource-requests`,
+  10m/32Mi where absent, never overrides), then flipped validate to Enforce. Verified safe: bare pod,
+  multi-container sidecar, existing-requests-preserved, and request-less **Deployment template** (autogen →
+  Flux/Renovate-safe) all admit with requests injected; 0 disruption. Both Kyverno resource guardrails
+  (00 requests, 01 latest-tag) now ENFORCE. M73 ✅.
+- **Earlier today:** fixed the `secret-scan` CI flood (gitleaks allowlist broke when localtuya was archived
+  + vendored kubespray fixtures — commit `043225b`; both workflows green).
+- **Next:** M74 Tetragon detection→alerting; M72 PSA enforce tail; H41 etcd (fix metrics scrape → diagnose);
+  M77 Stage 2; L24; M71 RA apply. Owner: rotate the Tuya Cloud secret (iot.tuya.com).
+
 ## 2026-06-28 — cairn photos rc=1 (NAS contention) → reschedule 22:00 + SMB-heal retry (v0.1.3)
 
 **What:** second overnight `ICloudBackupFailed` (photos rc=1), **different cause** from 06-27 (v0.1.2's
