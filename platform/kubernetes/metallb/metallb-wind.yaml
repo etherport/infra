@@ -57,22 +57,8 @@ spec:
     - primary
   aggregationLength: 32   # advertise each VIP as a /32
 
-# =============================================================================
-# ⚠️ TEMPORARY — L24 Phase 1 SAFETY NET (added 2026-06-28). Re-adds L2/ARP
-# advertisement for the `primary` pool ALONGSIDE the BGP advertisement above, so
-# the VIPs (Traefik .70, Technitium DNS .5/.71/.72) stay reachable via the UDM's
-# connected /24 + ARP during the Phase-2 native→FRR speaker swap (a BGP flap).
-# This briefly re-introduces the L2 ARP/MAC churn that Phase-D removed (may re-trip
-# M36 .5/.71 IP-conflict alerts) — accepted for the migration window only.
-# 🔻 REMOVE THIS BLOCK in L24 Phase 4 once FRR mode + graceful-restart/BFD are live
-#    (back to BGP-only). See docs/planning/l24-metallb-frr-migration-plan.md.
-# =============================================================================
----
-apiVersion: metallb.io/v1beta1
-kind: L2Advertisement
-metadata:
-  name: primary-l2-temp-l24
-  namespace: metallb-system
-spec:
-  ipAddressPools:
-    - primary
+# L24 Phase 4 (2026-06-28): the TEMPORARY `primary-l2-temp-l24` L2Advertisement
+# safety net was REMOVED here once FRR-mode BGP + TCP-MD5 were verified (8/8
+# Established). Back to BGP-only for `primary` — which ends the L2 ARP/MAC churn
+# (the M36 .5/.71 UDM IP-conflict alerts seen during the window). The `wind-pool`
+# L2Advertisement (separate pool) is unaffected.
