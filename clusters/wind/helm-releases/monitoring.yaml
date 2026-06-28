@@ -37,6 +37,24 @@ spec:
     remediation:
       retries: 3
   values:
+    # H41: scrape the external (systemd, not in-cluster) etcd on its no-auth :2381
+    # metrics port — etcd_metrics_port=2381 in the kubespray inventory binds it on
+    # each CP's node IP. Plain http, no client cert (the :2381 endpoint serves only
+    # non-sensitive perf metrics — fsync/commit latency, leader changes). This
+    # populates the kube-etcd Endpoints (were empty → no scrape) so the etcd
+    # dashboards/alerts work.
+    kubeEtcd:
+      enabled: true
+      endpoints:
+        - 10.10.201.50
+        - 10.10.201.51
+        - 10.10.201.52
+      service:
+        enabled: true
+        port: 2381
+        targetPort: 2381
+      serviceMonitor:
+        scheme: http
     alertmanager:
       enabled: true
       # HA: AlertManager dedupes alerts across replicas via gossip.

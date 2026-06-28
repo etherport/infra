@@ -23,3 +23,11 @@ etcd_snapshot_count: 100000
 ## Periodic compaction: discard etcd revisions older than this duration to
 ## prevent unbounded etcd disk growth.
 etcd_compaction_retention: "8"
+
+## H41: expose etcd metrics on a no-auth HTTP port (:2381) bound to the node IP
+## + localhost, so Prometheus can scrape etcd health (fsync/commit latency, leader
+## changes) WITHOUT an etcd client cert in a k8s secret. The :2381 endpoint serves
+## only non-sensitive performance metrics (no key data). kube-prometheus-stack's
+## kubeEtcd ServiceMonitor targets these node IPs:2381 (clusters/wind/helm-releases/
+## monitoring.yaml). The etcd role templates ETCD_LISTEN_METRICS_URLS from this var.
+etcd_metrics_port: 2381
