@@ -9,13 +9,14 @@
 #     the AWS peer for WireGuard) before denying anything. This avoids repeating
 #     the H37 Ceph/IPMI latent-break class (a needed allow missing from a
 #     default-deny that only bites later).
-#   STAGE 2 (per-VM, deliberate): flip `local.vm_input_policy.<vm>` ACCEPT ->
-#     DROP for a VM once its log is clean, after scoping the external sources.
-#     STARTED 2026-06-28: dns-fallback (1001) + gh-runner (1003) -> DROP (the two
-#     safe first candidates — no external-source scoping needed; allow-lists are
-#     fully internal/baseline). The remaining 4 stay ACCEPT pending source scoping
-#     (vpn-local AWS peer, asterisk Twilio ranges) or extra care (devbox session,
-#     step-ca fleet clients).
+#   STAGE 2 (per-VM, deliberate): flip `local.vm_input_policy.<vm>` ACCEPT -> DROP.
+#     ✅ COMPLETE 2026-06-28 — ALL 6 standalone VMs are now default-deny inbound:
+#       batch 1: dns-fallback (1001) + gh-runner (1003) — internal/baseline only.
+#       batch 2: step-ca (1006), devbox (1005), vpn-local (1002), asterisk (1004).
+#     The existing per-VM port allows are kept; the flip closes UNLISTED ports
+#     (rpcbind:111 etc.). ⏳ Stage 2b (external-SOURCE narrowing) still open for two:
+#       asterisk SIP/RTP -> Twilio ranges (TELEPHONY-CRITICAL, 911 — call-path review),
+#       vpn-local WG -> AWS EIP 44.240.60.80 (marginal — WG is crypto-authenticated).
 #
 # The NIC firewall flag (`firewall = true`) is set in ../standalone-vms/main.tf.
 # Apply THIS stack FIRST so the rules exist before the NIC firewall activates
@@ -24,11 +25,11 @@
 #
 # Per-VM required inbound (from `ss -tlnp/-ulnp`, 2026-06-25):
 #   dns-fallback 1001: 53 tcp+udp (DNS clients), 5380 (mgmt), + baseline   [Stage 2: DROP 2026-06-28]
-#   vpn-local    1002: WireGuard udp (AWS peer — scope at Stage 2), + baseline
+#   vpn-local    1002: WireGuard udp (any-src; AWS peer 44.240.60.80), + baseline  [Stage 2: DROP 2026-06-28]
 #   gh-runner    1003: baseline only (outbound-only runner)                [Stage 2: DROP 2026-06-28]
-#   asterisk-sbc 1004: SIP 5060/5061 + RTP range (Twilio+LAN — scope at Stage 2), + baseline
-#   devbox       1005: tailscale udp + baseline (Claude session lives here — Stage 2 with care)
-#   step-ca      1006: step-ca API :8443 (cert clients + tailnet) + baseline (M76 SSH CA)
+#   asterisk-sbc 1004: SIP 5060/5061 + RTP range (any-src; Twilio scope=2b), + baseline  [Stage 2: DROP 2026-06-28]
+#   devbox       1005: tailscale udp + baseline (Claude session host)      [Stage 2: DROP 2026-06-28]
+#   step-ca      1006: step-ca API :8443 (cert clients + tailnet) + baseline (M76 SSH CA)  [Stage 2: DROP 2026-06-28]
 # =============================================================================
 
 locals {
@@ -39,12 +40,20 @@ locals {
   # (a DROP only blocks NEW unsolicited inbound). Flip a VM to DROP once its
   # Stage-1 allow-list is confirmed complete (ss-enumerated listeners, above).
   vm_input_policy = {
-    dns_fallback = "DROP"   # Stage 2 (2026-06-28): listeners = 53 tcp/udp + 5380(mgmt) + baseline → all allow-listed
-    vpn_local    = "ACCEPT" # Stage 1 — scope the AWS WireGuard peer source IP first
-    gh_runner    = "DROP"   # Stage 2 (2026-06-28): outbound-only runner; baseline (SSH + 9100) only
-    asterisk_sbc = "ACCEPT" # Stage 1 — scope Twilio SIP/RTP source ranges first
-    devbox       = "ACCEPT" # Stage 1 — Claude session host; flip with extra care (keep SSH + tailnet)
-    step_ca      = "ACCEPT" # Stage 1 — confirm the fleet + tailnet cert clients in the log first
+    dns_fallback = "DROP" # Stage 2 (2026-06-28): 53 tcp/udp + 5380(mgmt) + baseline → all allow-listed
+    gh_runner    = "DROP" # Stage 2 (2026-06-28): outbound-only runner; baseline (SSH + 9100) only
+    # Stage 2 batch 2 (2026-06-28): the remaining 4 → default-deny inbound. The existing per-VM
+    # port allows are KEPT as-is (source narrowing is a separate, deliberate follow-up — see notes),
+    # so the flip only closes UNLISTED ports (e.g. rpcbind:111). PVE firewall is stateful, so live
+    # sessions (WG tunnel, SIP registrations, the devbox session) survive the policy change.
+    step_ca      = "DROP" # :8443 from Servers VLAN + tailnet, SSH from mgmt — allows ALREADY source-scoped.
+    devbox       = "DROP" # closes rpcbind:111; access kept via SSH(mgmt-admin) + tailscale (devbox-initiated
+    #                       → conntrack); no VNC listener. Recoverable via CI (apply runs on gh-runner, not devbox).
+    vpn_local    = "DROP" # WireGuard 9820-9821 (any-source kept — WG is crypto-authenticated, so IP-scoping
+    #                       is marginal; the single peer is the AWS EIP 44.240.60.80 if ever wanted) + baseline.
+    asterisk_sbc = "DROP" # SIP 5060/5061 + RTP 10000-20000 (any-source KEPT) + baseline. ⚠️ SIP/RTP are
+    #                       INTERNET-exposed (UDM forwards :5061+RTP to .40 for Twilio); narrowing to Twilio
+    #                       ranges is a TELEPHONY-CRITICAL (911) follow-up — do with call-path review, not a guess.
   }
 }
 
