@@ -3,3 +3,5 @@ kind: Kustomization
 
 resources:
   - metallb-wind.yaml
+  # L24 Phase 3 — TCP-MD5 key (SOPS). Applied first; the BGPPeer references it.
+  - 02-bgp-md5-secret.sops.yaml
