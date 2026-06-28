@@ -3,14 +3,18 @@ kind: Namespace
 metadata:
   name: github-actions-runner
   labels:
-    # M72 tail (2026-06-28): tier=system infra, baseline-clean. ARC controller +
-    # runner pods pass `baseline` but fail `restricted` (they need caps /
-    # allowPrivilegeEscalation), so baseline is the enforced ceiling. Verified via
-    # `kubectl label ns github-actions-runner pod-security.kubernetes.io/enforce=baseline
-    # --dry-run=server` (no existing-pod violations). Labeled here (not the central
-    # clusters/wind namespace-pss-labels.yaml patch) because this ns is applied by the
-    # platform-level kustomization, outside clusters/wind's build.
+    # tier=system, PRIVILEGED-by-design (like plex/wireguard) — do NOT enforce baseline.
+    # ⚠️ 2026-06-28: M72 briefly set enforce=baseline here; that was WRONG. The ARC
+    # ephemeral runner pods use containerMode: dind (a PRIVILEGED container) + the
+    # runner template sets hostNetwork: true (github-actions-runner.yaml) — both
+    # baseline VIOLATIONS. enforce=baseline would REJECT every dispatched CI runner pod
+    # → silently break the self-hosted TF/Ansible CI apply path. The M72 --dry-run=server
+    # check was BLIND because minRunners: 0 means no runner pod exists at rest (only the
+    # controller + listener, which DO pass baseline). So: enforce=privileged; keep
+    # audit/warn=baseline so any NEW non-runner workload's violations still surface.
+    # (Future: migrate ARC to rootless/kubernetes container mode + drop hostNetwork,
+    # then this can become baseline.)
     tier: system
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
-    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce: privileged

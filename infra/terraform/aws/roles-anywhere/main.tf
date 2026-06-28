@@ -76,22 +76,35 @@ resource "aws_iam_role" "mini_ra" {
 
 # ---- Permissions: PLAN/DEBUG scope (M71 decision 2026-06-28) -----------------------------
 # The mini does rare LOCAL `terraform plan`/inspect; real applies run via CI (M82). So the
-# RA role gets broad READ (ReadOnlyAccess) for plan refresh + tfstate read/write — but is
-# DENIED object/secret data reads so a short-lived debug session can't exfiltrate backups
-# or secrets. Far less than the write-capable [homelab] static key it replaces, and no
-# managed-policy-per-role quota issue (vs attaching the ~20 terraform-* policies).
+# RA role gets broad READ (ReadOnlyAccess) for plan refresh + tfstate read — and Denies
+# the high-value exfiltration paths (object DATA on the backup buckets, Secrets Manager,
+# SSM SecureString, KMS decrypt). Far less than the write-capable [homelab] static key it
+# replaces, no managed-policy-per-role quota issue (vs ~20 terraform-* policies).
+# ⚠️ RESIDUAL (do NOT claim otherwise): the role CAN s3:GetObject the *whole* tfstate
+# bucket, and TF state stores PLAINTEXT secrets (IAM access keys, CF/UniFi/Twilio tokens).
+# So a debug session can still read secrets that are committed to state — an inherent cost
+# of "can run plan". The Deny closes the dedicated backup/secret stores, not state-as-secret.
 resource "aws_iam_role_policy_attachment" "readonly" {
   role       = aws_iam_role.mini_ra.name
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }
 
 data "aws_iam_policy_document" "tfstate" {
-  # Terraform state read/write/lock (S3-native use_lockfile) on the state bucket only.
+  # Terraform state read + write on the state bucket only.
   statement {
     sid       = "TfStateRW"
     effect    = "Allow"
-    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    actions   = ["s3:GetObject", "s3:PutObject"]
     resources = ["arn:aws:s3:::${var.tfstate_bucket}/*"]
+  }
+  # S3-native locking (use_lockfile) deletes the per-state `<key>.tflock` on unlock.
+  # Scope DeleteObject to the lock objects ONLY — plan/apply never delete state objects,
+  # so this denies a debug session the ability to delete arbitrary state.
+  statement {
+    sid       = "TfStateLockDelete"
+    effect    = "Allow"
+    actions   = ["s3:DeleteObject"]
+    resources = ["arn:aws:s3:::${var.tfstate_bucket}/*.tflock"]
   }
   statement {
     sid       = "TfStateList"
@@ -99,19 +112,31 @@ data "aws_iam_policy_document" "tfstate" {
     actions   = ["s3:ListBucket", "s3:GetBucketLocation"]
     resources = ["arn:aws:s3:::${var.tfstate_bucket}"]
   }
-  # Defense-in-depth: ReadOnlyAccess can read object data + secret values. A plan/debug
-  # role must not. Deny object reads everywhere EXCEPT the state bucket, plus secret/KMS
-  # decrypt (Deny beats the ReadOnlyAccess Allow).
+  # Defense-in-depth: ReadOnlyAccess can read object DATA. Deny the object-data reads
+  # (including the s3:GetObjectVersion bypass on the VERSIONED AES256 backup buckets —
+  # etcd-snapshots / velero / barman) everywhere EXCEPT the state bucket. We enumerate the
+  # data actions rather than s3:Get* on purpose: s3:Get* would also deny the bucket-config
+  # reads (GetBucketPolicy/Versioning/...) that `terraform plan` needs to refresh S3
+  # resources. (Deny beats the ReadOnlyAccess Allow.)
   statement {
     sid           = "DenyObjectDataReads"
     effect        = "Deny"
-    actions       = ["s3:GetObject"]
+    actions       = ["s3:GetObject", "s3:GetObjectVersion", "s3:GetObjectTorrent", "s3:GetObjectVersionTorrent"]
     not_resources = ["arn:aws:s3:::${var.tfstate_bucket}/*"]
   }
+  # Secret / parameter / KMS reads — flat Deny everywhere. Includes SSM SecureString
+  # (ssm:GetParameter*) which the prior version missed, leaving an un-governed secret path.
   statement {
-    sid       = "DenySecretAndKmsDecrypt"
-    effect    = "Deny"
-    actions   = ["secretsmanager:GetSecretValue", "kms:Decrypt"]
+    sid    = "DenySecretAndKmsDecrypt"
+    effect = "Deny"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:BatchGetSecretValue",
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "ssm:GetParametersByPath",
+      "kms:Decrypt",
+    ]
     resources = ["*"]
   }
 }

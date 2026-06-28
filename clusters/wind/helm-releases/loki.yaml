@@ -134,9 +134,17 @@ spec:
 
     # k8s-sidecar to pick up LogQL alert rules from labeled ConfigMaps.
     # Sidecar watches for ConfigMaps with label `loki_rule: "1"` (any
-    # namespace) and writes them under /var/loki/rules-temp/fake/
-    # (the "fake" tenant when auth_enabled=false). The ruler scans
-    # this directory and pushes any firing alerts to Alertmanager.
+    # namespace) and writes them under <ruler.storage.local.directory>/fake/
+    # (the "fake" tenant when auth_enabled=false). The ruler reads its rules
+    # from storage.local.directory (= /var/loki/rules above) — so the sidecar
+    # `folder` MUST be /var/loki/rules/fake, NOT /var/loki/rules-temp/fake.
+    # ⚠️ 2026-06-28: it WAS /var/loki/rules-temp/fake (= the ruler's `rule_path`
+    # SCRATCH dir, not its rule-source dir) → the ruler loaded ZERO rules
+    # (loki_ruler_managers_total=0) so EVERY Loki alert (cilium-audit drop
+    # alerts, IPMI, Tetragon) was silently dead. The sc-rules-volume emptyDir
+    # mounts at this `folder` path in both the sidecar and the loki container,
+    # so moving it to /var/loki/rules/fake makes the ruler see the files;
+    # `rule_path: /var/loki/rules-temp` stays a SEPARATE scratch dir.
     # Same pattern as our Grafana dashboards sidecar (grafana_dashboard
     # label) — L4 from outstanding-work.md, 2026-05-24.
     sidecar:
@@ -144,7 +152,7 @@ spec:
         enabled: true
         label: loki_rule
         labelValue: "1"
-        folder: /var/loki/rules-temp/fake
+        folder: /var/loki/rules/fake
         searchNamespace: ALL
 
     # The chart wants to pull in a MinIO subchart for object storage by

@@ -14,8 +14,12 @@ step-ca X.509 client cert instead of the standing static `~/.aws/credentials [ho
   anchor, (b) Subject CN `mini.wind.etherport.net`, (c) issuer CN `wind Homelab CA Intermediate CA`;
   permissions = **plan/debug scope** (see below).
 - `aws_iam_role_policy_attachment.readonly` + `aws_iam_role_policy.tfstate` — `ReadOnlyAccess` plus
-  an inline policy that allows S3 state RW on `terraform.wind.etherport.net` only and **Denies** every
-  other `s3:GetObject` + `secretsmanager:GetSecretValue`/`kms:Decrypt`.
+  an inline policy that allows S3 state read/write + lock on `terraform.wind.etherport.net` only and
+  **Denies** object-data reads (`s3:GetObject`+`GetObjectVersion`) on every *other* bucket +
+  `secretsmanager:GetSecretValue`/`BatchGetSecretValue` + `ssm:GetParameter*` + `kms:Decrypt`
+  (hardened 2026-06-28). ⚠️ **Residual:** the role can still read the *whole* tfstate bucket, and TF
+  state holds plaintext secrets — so it is NOT a full secret-exfil block, just the dedicated
+  backup/secret stores. `DeleteObject` is scoped to `*.tflock` (lock release only).
 - `aws_rolesanywhere_profile.mini` (`wind-mini`) — 1h sessions.
 
 ## ✅ APPLIED 2026-06-28 (AWS-side)

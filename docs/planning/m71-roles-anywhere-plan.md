@@ -60,7 +60,11 @@ Reuse it as the RA trust anchor instead of standing up AWS Private CA (~$400/mo)
    the mini only does rare local `terraform plan`/inspect → `ReadOnlyAccess` + the inline tfstate-RW /
    deny-data-reads policy above. This sidesteps the 10-managed-policy-per-role quota entirely (no
    `terraform-*` policy attachments, no group-membership problem) and is least-privilege: a short-lived
-   debug session can refresh/plan but cannot read backup objects or secret values.
+   debug session can refresh/plan; the Deny blocks the dedicated **backup buckets** (object data incl.
+   the `s3:GetObjectVersion` bypass on the versioned AES256 stores) + **Secrets Manager / SSM
+   SecureString / KMS decrypt** (hardened 2026-06-28 — the original Deny missed `GetObjectVersion` +
+   `ssm:Get*`). ⚠️ It CAN still read the whole **tfstate** bucket, and TF state stores plaintext
+   secrets, so "cannot read secret values" is not absolute — an inherent residual of "can run plan".
 3. **⏳ Mini-side setup — THE ONLY REMAINING WORK** (the agent can't reach the mini): issue the leaf
    cert from step-ca, install `aws_signing_helper`, wire `credential_process` (the 3 ARNs are already
    filled into the runbook), install the renewal timer — full runbook:
