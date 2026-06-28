@@ -13,6 +13,32 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-28 (cont. 5) — M77 Stage 2 COMPLETE: all 6 standalone VMs default-deny inbound
+
+- **Flipped the remaining 4** standalone VMs ACCEPT→DROP (commit `4bbf2ce`, apply run `28334106865`,
+  plan `0 add / 4 change / 0 destroy`): `step-ca`(1006), `devbox`(1005), `vpn-local`(1002),
+  `asterisk-sbc`(1004). With batch 1 (dns-fallback+gh-runner) that's **all 6 standalone VMs at
+  default-deny inbound** — M77 ✅.
+- **Approach = flip-only (keep existing port allows).** The flip closes UNLISTED ports (e.g.
+  `rpcbind:111`); the services' own ports stay allowed, and PVE's stateful firewall keeps live
+  sessions (WG tunnel, SIP registrations, my devbox session) up. I deliberately did NOT narrow the
+  external sources in this pass (see Stage 2b below).
+- **Pre-flip fact-finding (so each was safe):** `devbox` listeners (read LOCALLY since I'm on it) =
+  22/9100/**111**/tailscale — only rpcbind:111 gets newly closed; no VNC; tailscale is devbox-initiated
+  so survives via conntrack, SSH from mgmt-admin stays allowed; and a bad devbox rule is reversible via
+  CI (apply runs on **gh-runner**, not devbox). `asterisk` (.40) SIP TLS:5061 + RTP are **internet-
+  exposed** (UDM port-forwards for Twilio) → kept any-source so calls/911 are untouched. `vpn-local` WG
+  peer = static AWS EIP `44.240.60.80` (kept any-source — WG is crypto-auth'd). `step-ca` allows already
+  source-scoped.
+- **Verified post-apply:** step-ca `:8443` `{"status":"ok"}` reachable under DROP (cert minting fine),
+  apiserver reachable from devbox (my session/outbound intact), DNS via `.6` still resolves,
+  `Apply complete 0/4/0`.
+- **⏳ Stage 2b (optional external-SOURCE narrowing) deferred with rationale:** asterisk→Twilio ranges
+  is TELEPHONY-CRITICAL (911) and needs verified Twilio IP ranges + a call-path review, not a guess;
+  vpn-local→AWS-EIP is low value (WG crypto-auth). **Now: M74 follow-up.**
+
+---
+
 ## 2026-06-28 (cont. 4) — M74 v2 LIVE: Tetragon runtime-detection pipeline
 
 - **Built the Tetragon detection pipeline** (observe-only assume-breach layer), in **two staged
