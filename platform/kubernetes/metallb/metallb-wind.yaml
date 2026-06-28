@@ -39,6 +39,12 @@ spec:
   myASN: 64513          # MetalLB (cluster) ASN
   peerASN: 64512        # UDM ASN
   peerAddress: 10.10.201.1   # UDM VLAN-201 SVI (gateway since Phase B)
+  # L24 Phase 3 — TCP-MD5 auth (FRR mode required; native MetalLB silently ignored this).
+  # The matching key is set on the UDM peer-group `metallb` (neighbor metallb password …).
+  # Secret = 02-bgp-md5-secret.sops.yaml (basic-auth, key `password`).
+  passwordSecret:
+    name: bgp-md5
+    namespace: metallb-system
 
 ---
 apiVersion: metallb.io/v1beta1
