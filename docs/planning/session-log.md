@@ -13,6 +13,25 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-28 (cont. 6) — M74 follow-up: ptrace-inject + pivot-root detections
+
+- **Added 2 more Tetragon TracingPolicies** (commit `c5e3100`, observe-only): `detect-ptrace-inject`
+  (`sys_ptrace` filtered to `PTRACE_ATTACH`(16)/`PTRACE_SEIZE`(16902) = attach to another process =
+  injection / live-memory cred-dump; self-trace excluded) + `detect-pivot-root` (`sys_pivot_root` from
+  a non-init process via `matchPIDs NotIn` ns-pid 0/1 = container breakout). Syntax taken from the
+  upstream `sys_ptrace.yaml`/`sys_pivot_root.yaml` examples. Plus 2 **critical** loki alerts
+  (`TetragonPtraceInject`, `TetragonPivotRoot`) appended to `11-loki-rules-tetragon.yaml`.
+- **Verified:** both `--dry-run=server` clean, loaded `enabled`/`monitor_only` on the agents with
+  **NPOST=0** (zero false-positives — host-ns runc is export-filtered, ptrace self-trace + pivot ns-pid
+  0/1 excluded); cluster export still **0 lines/60s**. (Flux fetch of the commit was slow ~3min — the
+  gitrepo sat `Reconciling` on the prior revision before advancing to `c5e3100`; not an error.)
+- **Shell-in-container deliberately NOT added** — a naive shell-exec policy (`security_bprm_check` on
+  `/bin/sh` etc.) would fire constantly on liveness/exec-probes + container entrypoints, flooding Loki
+  and causing alert fatigue. A useful version needs interactive/tty-only detection (the exec firehose
+  is export-denied), which is a separate design. Documented as deferred. **Next: L24 (BGP auth).**
+
+---
+
 ## 2026-06-28 (cont. 5) — M77 Stage 2 COMPLETE: all 6 standalone VMs default-deny inbound
 
 - **Flipped the remaining 4** standalone VMs ACCEPT→DROP (commit `4bbf2ce`, apply run `28334106865`,

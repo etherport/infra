@@ -44,6 +44,12 @@ for high-signal runtime events, still **observe-only** (`monitor_only`, no kill)
      theft / backdoor.
    - **`11-tp-setuid-root.yaml`** (`detect-setuid-root`) — `sys_setuid` kprobe filtered to `uid==0`
      (escalate to root). "Unexpected privileged syscall."
+   - **`12-tp-ptrace-inject.yaml`** (`detect-ptrace-inject`) — `sys_ptrace` filtered to
+     `PTRACE_ATTACH`/`PTRACE_SEIZE` (attach to ANOTHER process = injection / live cred-dump).
+     Self-trace (`TRACEME`) excluded. NPOST=0 in practice.
+   - **`13-tp-pivot-root.yaml`** (`detect-pivot-root`) — `sys_pivot_root` from a non-init
+     (`matchPIDs NotIn` ns-pid 0/1) process = container breakout. runc's host-ns setup pivot is
+     export-filtered. NPOST=0 in practice.
 2. **Selective export** (`clusters/wind/helm-releases/tetragon.yaml`): `export.mode: stdout`
    **with `tetragon.exportAllowList` restricted to
    `{"event_set":["PROCESS_KPROBE","PROCESS_TRACEPOINT","PROCESS_UPROBE","PROCESS_LSM"]}`** — the
@@ -55,9 +61,10 @@ for high-signal runtime events, still **observe-only** (`monitor_only`, no kill)
 3. **Alert** (`platform/kubernetes/monitoring/11-loki-rules-tetragon.yaml`): two loki-ruler rules off
    `{namespace="tetragon", container="export-stdout"}` (Alloy tails the sidecar's pod log) — parsing
    `process_kprobe.{policy_name,function_name,process.binary,process.pod.{namespace,name}}`:
-   **`TetragonCredFileAccess`** (critical, `for:0m`) + **`TetragonSetuidRoot`** (warning, `for:5m`).
-   Verified: a triggered `/etc/shadow` read exported with all field-paths resolving; the rules-sidecar
-   loaded `tetragon.yaml` into the ruler.
+   **`TetragonCredFileAccess`** (critical, `for:0m`) + **`TetragonSetuidRoot`** (warning, `for:5m`)
+   + **`TetragonPtraceInject`** (critical) + **`TetragonPivotRoot`** (critical). Verified: a triggered
+   `/etc/shadow` read exported with all field-paths resolving; the rules-sidecar loaded `tetragon.yaml`
+   into the ruler.
 4. **(Deferred) enforcement mode** — Tetragon can `kill`/`override` on match; left for after the
    observe phase is trusted (would add `matchActions` to a policy).
 
@@ -66,7 +73,8 @@ for high-signal runtime events, still **observe-only** (`monitor_only`, no kill)
   shell-exec signal is naturally a `PROCESS_EXEC` event, which the selective-export allowlist
   deliberately drops. Doing it without re-opening the exec firehose needs a kprobe/tracepoint-on-execve
   approach (emitting `PROCESS_KPROBE`) — a separate policy. Tracked for v2.1.
-- **More privileged syscalls** — `sys_ptrace` (process injection), `sys_mount` (breakout) are
-  good low-false-positive additions (example policies exist upstream).
+- **More privileged syscalls** — ✅ `sys_ptrace` + `sys_pivot_root` added (2026-06-28). Further
+  low-false-positive candidates if wanted: kernel-module load (`finit_module`), `sys_mount` (but
+  mount is noisier — CSI plugins mount; would need binary exclusions).
 - **Tuning** — if `detect-setuid-root` is noisy from a known `su-exec`/`gosu` entrypoint, add a
   `matchBinaries` `NotIn` exclusion to `11-tp-setuid-root.yaml`.
