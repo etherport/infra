@@ -129,10 +129,31 @@ _Completed items keep a one-line ✅ header here (grep-able by ID); their **full
 
 ## HIGH — production-readiness; 1–2 weeks
 
-### ⏳ H41. etcd leader-election instability → CP leader-components restart-looping
-- **Found 2026-06-28** investigating two overnight AI-advisor emails (`TargetDown` kube-scheduler + `KubePodCrashLooping` csi-snapshotter — both `noop` per-instance, but symptoms of a bigger pattern). **All CP leader-election components are restart-looping:** kube-scheduler **54/71/74**, kube-controller-manager **43/79/87**, ceph `csi-snapshotter` **17/23** restarts over ~4d (apiservers stable 2/0/0). **Mechanism:** every component dies with leader-election lease-renewal `context deadline exceeded` (5s `Put` to `coordination.k8s.io` leases) → "Leaderelection lost" → restart. **Root signal: etcd RAFT TERM = 79 in 4 days (~20 elections/day)** — frequent etcd leader elections → brief write stalls → apiserver lease writes time out → lease holders restart. etcd is healthy *now* (DB 248MB ok, 7ms commits, CP load 0.12) → **periodic** instability, not a hard fault. Self-recovering (no outage) but a real reliability risk on the crown-jewel.
-- **Two enabling gaps found:** (1) **etcd metrics are NOT scraped by Prometheus** (`etcd_disk_wal_fsync_duration`, `etcd_server_leader_changes` queries return empty) → can't see the fsync/election timeline → **fix the etcd ServiceMonitor first** to diagnose. (2) **CSI VolumeSnapshot CRDs are missing** (`snapshot.storage.k8s.io` absent) → the csi-snapshotter sidecar spams `could not find … volumesnapshotcontents` errors (volume snapshots non-functional; RBD provisioning unaffected) — install the snapshot CRDs + snapshot-controller, or drop the unused sidecar.
-- **Likely cause to chase:** etcd disk fsync latency spikes (CP VM disk contention — e.g. nightly backups / Ceph activity on shared backing store) or inter-CP network blips losing heartbeats. **Next:** fix etcd-metrics scrape → read the election/fsync timeline → check CP etcd disk latency (`etcdctl check perf`, host iostat) → tune (heartbeat/election timeout, dedicated/faster etcd disk) as indicated. **Tier: HIGH** (control-plane reliability). **Effort: M.**
+### 🟡 H41. etcd apply-latency spikes → CP leader-components restart-looping — defrag DONE, disk fix windowed
+- **🟢 PARTIAL FIX 2026-06-28 (commit `2d1a22c`).** Refined root cause: NOT ongoing elections (death-window
+  10:00-10:14 logs showed **no leader changes**, raft term steady at 79). The real cause is **etcd
+  apply-latency spikes** — bursts of 280-320ms `read-only range`/lease applies that **back up behind each
+  other** until an apiserver lease `Put` exceeds its 5s deadline → the holder loses its lease + restarts.
+  Two drivers found: (a) **etcd was 62% FRAGMENTED** (248MB on disk vs **95MB** in use) — bloated DB =
+  bigger fsyncs/worse cache → **FIXED: rolling defrag (followers→leader) brought all 3 members to 97MB**,
+  no disruption; (b) etcd's WAL shares the CP VM **root disk** (`/dev/sda1`, ~5-6ms writes, spikes under
+  contention). etcd timeouts are already generous (election 5000ms / heartbeat 250ms); `etcdctl check
+  perf` PASSES when isolated (13.8ms). **Added a staggered weekly defrag timer** (`playbooks/etcd-defrag.yml`,
+  Sun 02:00/03:00/04:00 UTC per CP, never two at once) so fragmentation can't rebuild. Kyverno reports are
+  NOT a significant load (386 polr / 2 ephemeral).
+- **⏳ Remaining (maintenance window):** (1) **dedicated/faster etcd disk** — give each CP VM a separate
+  virtual disk for `/var/lib/etcd` so the WAL fsync stops contending with OS/container/log I/O (the real
+  fix if the defrag isn't enough; TF + rolling per-CP migration). (2) **Fix the etcd metrics scrape** —
+  `kube-etcd` Endpoints are empty + etcd only serves `:2379` (cert) not `:2381`; either enable
+  `--listen-metrics-urls=http://<ip>:2381` (rolling etcd restart, no cert in a secret) or scrape `:2379`
+  with the etcd client cert in a monitoring secret. Then we can SEE the fsync/election timeline + alert.
+  (3) **CSI VolumeSnapshot CRDs missing** (`snapshot.storage.k8s.io`) → csi-snapshotter error-spam (volume
+  snapshots non-functional; RBD provisioning fine) — install the CRDs + snapshot-controller or drop the
+  sidecar. **Watch:** re-check the scheduler/CM restart RATE over the next few days now that the DB is
+  defragged — if it drops sharply, the disk fix may be deferrable. **Tier: HIGH. Effort: M.**
+- **Original symptom (for grep):** kube-scheduler 54/71/74, controller-manager 43/79/87, csi-snapshotter
+  17/23 restarts over ~4d; each dies on leader-election lease `context deadline exceeded` (5s `Put` to
+  `coordination.k8s.io`). apiservers stable. Self-recovering, no outage. Full triage in session-log 2026-06-28.
 
 ### ✅ H3. NetworkPolicies — ALL 5 TARGET TIERS ENFORCED + drop-alerting live 2026-06-23  — _full detail in [archive/completed-2026-H1.md](archive/completed-2026-H1.md)_
 ### ✅ H35. Cilium/kubespray durability hardening (post-incident) — DONE 2026-06-15  — _full detail in [archive/completed-2026-H1.md](archive/completed-2026-H1.md)_

@@ -22,6 +22,21 @@ that tracker's "Recently completed" blocks and the dated planning docs
   day)** → write stalls → apiserver lease `Put` exceeds the 5s deadline → lease holders restart. etcd healthy
   now (DB 248MB, 7ms commits) → periodic instability, self-recovering, no outage. Filed **H41** (commit
   `6cbc61f`) with 2 enabling gaps: etcd metrics not scraped + CSI VolumeSnapshot CRDs missing.
+- **H41 PARTIAL FIX (commit `2d1a22c`).** Deeper diagnosis refined the cause: NOT ongoing elections (the
+  death-window logs showed no leader changes; term steady 79) but **etcd apply-latency spikes** that back up
+  past the 5s lease deadline. Found etcd **62% fragmented** (248MB disk / 95MB in-use) → **rolling defrag**
+  (followers→leader, verified quorum between) brought all 3 to **97MB**, no disruption. Added
+  **`playbooks/etcd-defrag.yml`** = a staggered weekly defrag timer (Sun 02:00/03:00/04:00 UTC per CP, never
+  two at once) so frag can't rebuild — applied to all 3 CPs. etcd timeouts already generous (5000/250),
+  check-perf PASSES isolated (13.8ms); Kyverno reports not a real load (386/2). **Remaining (window):**
+  dedicated etcd disk (WAL shares the root `/dev/sda1`), fix the metrics scrape (kube-etcd endpoints empty,
+  :2381 not enabled), install CSI snapshot CRDs. **Watch the scheduler/CM restart rate over the next days** —
+  if it drops post-defrag, the disk fix may be deferrable.
+- **Tuya cloud project = safe to DISABLE entirely.** Confirmed HA uses **localtuya** (`xZetsubou/hass-localtuya`
+  fork) for LOCAL control — no runtime cloud dependency, no Tuya secret in-cluster. The Cloud API was a
+  one-time key-extraction. Since Tuya doesn't rotate API secrets, disabling the project is the correct way
+  to kill the leaked secret. Only cost: re-extracting keys if a new Tuya device is added / a device resets
+  its local_key (one-time re-setup then). **Owner action: disable the Tuya Cloud project.**
 - **M73 `require-resource-requests` → Enforce** (commits `1abdacb` mutate, `dcd4f02` enforce). The audit
   fails were Helm sidecars + dynamically-created pods (tailscale proxies, ARC runners, ceph csi) that
   chart-editing can't reliably cover. Added a Kyverno **mutate** (`02-add-default-resource-requests`,
