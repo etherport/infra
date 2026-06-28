@@ -148,14 +148,19 @@ _Completed items keep a one-line ✅ header here (grep-able by ID); their **full
   `iothread=0` on the CP `scsi0` disks** (scsihw is already `virtio-scsi-single`) → etcd's fsync shares the
   single QEMU main thread instead of a dedicated I/O thread. `etcdctl check perf` slowest was 13.8ms with
   iothread off; enterprise-NVMe+PLP should be sub-ms.
-- **⏳ Remaining:** (1) **Enable `iothread=1` on the CP VM `scsi0` disks** (infra/terraform/proxmox/k8s-vms/)
-  + rolling CP VM restart (one at a time, verify etcd quorum + rejoin — the k8s-node-patch rolling-CP
-  pattern) — the targeted fix, no disk migration. (2) **Fix the etcd metrics scrape** (kube-etcd Endpoints
-  empty, `:2381` not enabled) so we can measure `etcd_disk_wal_fsync_duration` p99 + alert — do this BEFORE
-  iothread so we can prove the delta. (3) **CSI VolumeSnapshot CRDs missing** (`snapshot.storage.k8s.io`) →
-  csi-snapshotter error-spam (snapshots non-functional; RBD fine) — install CRDs + snapshot-controller or
-  drop the sidecar. **Watch the scheduler/CM restart RATE over the next few days post-defrag** — if it
-  drops, defrag sufficed; if not, do iothread. **Tier: HIGH. Effort: S–M** (iothread is small).
+- **✅ iothread=1 DONE 2026-06-28 (commit `0e2469d`).** Added `iothread = true` to the CP `scsi0` disk in
+  `infra/terraform/proxmox/k8s-vms/main.tf` (scsihw already virtio-scsi-single). Applied per-CP via the CI
+  workflow `-target` (config-only, no reboot from the provider), then **rolling `qm reboot` to activate**
+  (cp2→cp3→cp1-last, verified etcd quorum + node Ready + iothread live in each qemu process between steps;
+  one expected re-election, term 79→80). **Durable in IaC:** TF declares it, full `terraform plan` =
+  **"No changes"** (state reconciled), so any future apply/rebuild keeps it; iothread re-activates on any
+  boot. (Workers left iothread=0 for now — they'd need a drained rolling reboot; revisit if needed.)
+- **⏳ Remaining:** (1) **Fix the etcd metrics scrape** (kube-etcd Endpoints empty, `:2381` not enabled) so
+  we can measure `etcd_disk_wal_fsync_duration` p99 + alert — the one gap to confirm the iothread+defrag
+  delta quantitatively. (2) **CSI VolumeSnapshot CRDs missing** (`snapshot.storage.k8s.io`) → csi-snapshotter
+  error-spam (snapshots non-functional; RBD fine) — install CRDs + snapshot-controller or drop the sidecar.
+  **Watch the scheduler/CM restart RATE over the next few days** — should drop now that DB is defragged +
+  etcd has a dedicated I/O thread. **Tier: HIGH. Effort: S.**
 - **Original symptom (for grep):** kube-scheduler 54/71/74, controller-manager 43/79/87, csi-snapshotter
   17/23 restarts over ~4d; each dies on leader-election lease `context deadline exceeded` (5s `Put` to
   `coordination.k8s.io`). apiservers stable. Self-recovering, no outage. Full triage in session-log 2026-06-28.

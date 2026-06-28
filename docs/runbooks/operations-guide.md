@@ -88,6 +88,7 @@ ansible dns_servers -i inventory/wind/inventory.ini -i inventory/aws/inventory.i
 | swap.yml | Provision swap files on standalone VMs | dns_servers + vpn_servers |
 | cloudwatch-agent.yml | Install AWS cw-agent on external VMs (dns-aws, vpn-aws) | aws hosts |
 | etcd-backup.yml | Install systemd timer for daily etcd snapshots | k8s_cp |
+| etcd-defrag.yml | Install weekly staggered etcd defrag timer (H41 — reclaims boltdb fragmentation) | k8s_cp |
 | proxmox.yml + proxmox-setup.yml | PVE host management (root-over-key, see `pve-ansible-model`) | proxmox_hosts |
 | pve-sshd.yml | Manage `/etc/ssh/sshd_config.d/` on PVE (PerSourcePenalty fix) | proxmox_hosts |
 | pve-network.yml | Manage PVE bridges + VLANs (idempotent netplan-equivalent) | proxmox_hosts |
