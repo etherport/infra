@@ -142,6 +142,37 @@ def check_service(kind, namespace, target):
         if last_sched is not None and (now - last_sched) <= 24 * 3600:
             return ("degraded", 0, 1)
         return ("down", 0, 1)
+    elif kind == "mini_metric":
+        # A cairn/mini pushgateway gauge where >=1 means healthy. `target` is the
+        # metric name (mini_health_up, cairn_healthy). The mini pushes from a
+        # cron-driven agent, so a stale push (no mini_health check in >6h) means the
+        # agent stopped reporting → degraded rather than a false "up".
+        val = first_value(prom_query(target))
+        if val is None:
+            return ("unknown", None, None)
+        last = first_value(prom_query("mini_health_last_check_timestamp_seconds"))
+        now = datetime.now(timezone.utc).timestamp()
+        if last is not None and (now - last) > 6 * 3600:
+            return ("degraded", 0, 1)  # stale — mini stopped pushing
+        return ("up", 1, 1) if val >= 1 else ("down", 0, 1)
+    elif kind == "mini_backup_rollup":
+        # Rollup across all cairn per-category backups (cairn_backup_last_rc{job=...},
+        # 0 = ok). up iff every category's last run succeeded; ready/desired shows
+        # the succeeding-category count (e.g. 8/9). Also degrade if the mini stopped
+        # pushing (stale), so a frozen all-zero snapshot isn't read as healthy.
+        worst = first_value(prom_query("max(cairn_backup_last_rc)"))
+        ok = first_value(prom_query("count(cairn_backup_last_rc == 0)"))
+        tot = first_value(prom_query("count(cairn_backup_last_rc)"))
+        if worst is None or tot is None:
+            return ("unknown", None, None)
+        ok_i, tot_i = int(ok or 0), int(tot)
+        last = first_value(prom_query("mini_health_last_check_timestamp_seconds"))
+        now = datetime.now(timezone.utc).timestamp()
+        if last is not None and (now - last) > 6 * 3600:
+            return ("degraded", ok_i, tot_i)  # stale push
+        if worst == 0:
+            return ("up", ok_i, tot_i)
+        return ("down", ok_i, tot_i) if ok_i == 0 else ("degraded", ok_i, tot_i)
     else:
         return ("unknown", None, None)
 

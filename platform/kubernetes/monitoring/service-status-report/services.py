@@ -44,12 +44,18 @@ SERVICES = [
     ("GitOps", "Flux notification-controller", "deployment", "flux-system",    "notification-controller"),
 
     # Networking + VPN
-    ("Networking", "MetalLB controller",     "deployment", "metallb-system", "controller"),
-    ("Networking", "MetalLB speakers",       "daemonset",  "metallb-system", "speaker"),
+    # NB MetalLB workloads are `metallb-controller`/`metallb-speaker` (FRR-mode Helm
+    # chart, L24) — NOT the kubespray `controller`/`speaker` (those names were retired).
+    ("Networking", "MetalLB controller",     "deployment", "metallb-system", "metallb-controller"),
+    ("Networking", "MetalLB speakers",       "daemonset",  "metallb-system", "metallb-speaker"),
     ("Networking", "Multus CNI",             "daemonset",  "kube-system",    "kube-multus-ds-amd64"),
     ("Networking", "WireGuard",              "deployment", "wireguard",      "wireguard"),
     ("Networking", "Cloudflare Tunnel",      "deployment", "cloudflared",    "cloudflared"),
     ("Networking", "CloudWatch→Loki forwarder", "cronjob", "cloudwatch-to-loki", "cloudwatch-to-loki"),
+
+    # Security (admission + runtime detection — added 2026-06-28)
+    ("Security", "Kyverno admission",  "deployment", "kyverno",  "kyverno-admission-controller"),
+    ("Security", "Tetragon",           "daemonset",  "tetragon", "tetragon"),
 
     # Storage / data
     ("Storage / data", "CNPG operator",         "deployment", "cnpg-system", "cnpg-cloudnative-pg"),
@@ -69,11 +75,27 @@ SERVICES = [
     ("Apps", "Ollama",         "deployment", "ollama",          "ollama"),
     ("Apps", "Cue API",        "deployment", "cue",             "cue-api"),
 
-    # External edge (probed via external-nodes scrape job)
+    # External edge — node_exporter on the standalone PVE VMs + AWS VMs, via the
+    # `external-nodes` scrape job (01-external-scrape-config.yaml). Fleet is 6 local
+    # PVE VMs (1001-1006) + 2 AWS; the M77 firewalls allow :9100 from the K8s VLAN.
     ("External edge", "dns-fallback", "external", "external-nodes", "dns-fallback"),
-    ("External edge", "dns-aws",      "external", "external-nodes", "dns-aws"),
     ("External edge", "vpn-local",    "external", "external-nodes", "vpn-local"),
+    ("External edge", "gh-runner",    "external", "external-nodes", "gh-runner"),
+    ("External edge", "devbox",       "external", "external-nodes", "devbox"),
+    ("External edge", "dns-aws",      "external", "external-nodes", "dns-aws"),
     ("External edge", "vpn-aws",      "external", "external-nodes", "vpn-aws"),
+    # ⏳ asterisk-sbc (1004 .40) + step-ca (1006 .46) NOT yet monitored: node_exporter
+    #    isn't running on them (base.yml not applied — :9100 returns no listener, while
+    #    gh-runner/.30 + vpn-local/.15 answer fine, so it's not the M77 firewall). Run
+    #    base.yml on both, add them to 01-external-scrape-config.yaml, then list here.
+
+    # Mac mini — cairn iCloud-backup agent (M103/M105). Pushgateway metrics:
+    # mini_health_up (host), cairn_healthy (agent), cairn_backup_last_rc{job=<cat>}
+    # per backup category (0 = last run ok). See gen-dashboard "Mac mini — iCloud
+    # backups" + 10-icloud-backups-alerts.yaml.
+    ("Mac mini (cairn)", "Mac mini host",      "mini_metric",  "mini_health", "mini_health_up"),
+    ("Mac mini (cairn)", "cairn agent",        "mini_metric",  "cairn_health", "cairn_healthy"),
+    ("Mac mini (cairn)", "iCloud backups",     "mini_backup_rollup", "cairn", "cairn_backup_last_rc"),
 
     # Appliances (probed via blackbox-exporter HTTPS — see
     # platform/kubernetes/blackbox-exporter/). namespace arg is unused

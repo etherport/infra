@@ -42,6 +42,12 @@ def query_for(kind, namespace, target):
             f'((time() - kube_cronjob_status_last_successful_time'
             f'{{namespace="{namespace}",cronjob="{target}"}}) < 86400)'
         )
+    if kind == "mini_metric":
+        # cairn/mini pushgateway gauge where >=1 means up (mini_health_up, cairn_healthy).
+        return target
+    if kind == "mini_backup_rollup":
+        # 1 when EVERY cairn backup category's last run succeeded (rc==0), else 0.
+        return "(max(cairn_backup_last_rc) == bool 0)"
     raise ValueError(kind)
 
 
