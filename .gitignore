@@ -57,6 +57,8 @@ platform/kubernetes/cloudflare-ddns/base/secret.yaml
 # should never have raw keys committed; these patterns are defense in depth.
 **/*.key
 **/*.pem
+# Exception: step-ca ROOT CA is a PUBLIC cert (RA trust-anchor source, M71) — safe to commit
+!infra/terraform/aws/roles-anywhere/step-ca-root.pem
 **/id_rsa
 **/id_rsa.pub
 **/id_ed25519
