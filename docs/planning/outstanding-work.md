@@ -155,12 +155,18 @@ _Completed items keep a one-line ✅ header here (grep-able by ID); their **full
   one expected re-election, term 79→80). **Durable in IaC:** TF declares it, full `terraform plan` =
   **"No changes"** (state reconciled), so any future apply/rebuild keeps it; iothread re-activates on any
   boot. (Workers left iothread=0 for now — they'd need a drained rolling reboot; revisit if needed.)
-- **⏳ Remaining:** (1) **Fix the etcd metrics scrape** (kube-etcd Endpoints empty, `:2381` not enabled) so
-  we can measure `etcd_disk_wal_fsync_duration` p99 + alert — the one gap to confirm the iothread+defrag
-  delta quantitatively. (2) **CSI VolumeSnapshot CRDs missing** (`snapshot.storage.k8s.io`) → csi-snapshotter
-  error-spam (snapshots non-functional; RBD fine) — install CRDs + snapshot-controller or drop the sidecar.
-  **Watch the scheduler/CM restart RATE over the next few days** — should drop now that DB is defragged +
-  etcd has a dedicated I/O thread. **Tier: HIGH. Effort: S.**
+- **✅ etcd metrics scrape DONE 2026-06-28 (commit `2dfeef2`).** Enabled `etcd_metrics_port=2381` (kubespray
+  inventory, durable) + rolling etcd restart; pointed kube-prometheus-stack `kubeEtcd` at the CP node IPs
+  `:2381` over http (no client cert in a secret). All 3 targets `up=1`; **fsync p99 = 3.3–3.6 ms** (healthy
+  baseline post-iothread/defrag; the alert threshold is 500ms). This activated the chart's **15 dormant etcd
+  alert rules** (etcdHighFsyncDurations, etcdHighNumberOfLeaderChanges, etcdNoLeader, **etcdDatabaseHigh-
+  FragmentationRatio** — which would have caught the 62% frag — etcdHighCommitDurations, etcdMembersDown, …)
+  → H41's failure mode now auto-alerts.
+- **⏳ Only remaining (minor):** **CSI VolumeSnapshot CRDs missing** (`snapshot.storage.k8s.io`) →
+  csi-snapshotter error-spam (volume snapshots non-functional; RBD provisioning fine) — install the CRDs +
+  snapshot-controller, or drop the unused sidecar. **Watch the scheduler/CM restart RATE over the next few
+  days** (now defragged + dedicated I/O thread + monitored). The etcd-stability core of H41 is fixed +
+  observable; this CRD cleanup is cosmetic. **Tier: now LOW.**
 - **Original symptom (for grep):** kube-scheduler 54/71/74, controller-manager 43/79/87, csi-snapshotter
   17/23 restarts over ~4d; each dies on leader-election lease `context deadline exceeded` (5s `Put` to
   `coordination.k8s.io`). apiservers stable. Self-recovering, no outage. Full triage in session-log 2026-06-28.
