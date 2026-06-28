@@ -10,11 +10,6 @@ variable "aws_profile" {
   default     = "homelab"
 }
 
-variable "account_id" {
-  description = "AWS account ID"
-  type        = string
-  default     = "830881980142"
-}
 
 variable "trust_anchor_cert_file" {
   description = "Path to the step-ca ROOT CA cert PEM used as the RA trust anchor (public cert; committed)"
@@ -49,42 +44,8 @@ variable "mini_cert_issuer_cn" {
   default     = "wind Homelab CA Intermediate CA"
 }
 
-variable "attached_policy_names" {
-  description = <<-EOT
-    Customer-managed IAM policy NAMES to attach to the mini's RA role (resolved to
-    arn:aws:iam::<account_id>:policy/<name>). ⚠️ DECISION (see m71-roles-anywhere-plan.md
-    §"three owner-gated steps" #2):
-      * Default below = FULL parity with terraform-homelab (~20 policies) → REQUIRES raising
-        the per-role managed-policy quota (Service Quotas L-0DA4ABF3, default 10, max 20)
-        BEFORE apply, or apply fails with LimitExceeded.
-      * Or trim to a ≤10 curated subset (TF is CI-only since M82 — the mini's local TF is
-        rare debug, so a state+read+the-few-stacks-you-debug subset is defensible).
-    ⚠️ The agent derived these names from the iam-policies/terraform-*.json filenames (README
-    says they match AWS policy names). CONFIRM against the account before apply:
-      aws iam list-attached-user-policies --user-name terraform-homelab   (from claude-admin)
-      aws iam list-groups-for-user --user-name terraform-homelab  +  list-attached-group-policies
-  EOT
-  type        = list(string)
-  default = [
-    "terraform-storage",
-    "terraform-compute",
-    "terraform-networking",
-    "terraform-dns",
-    "terraform-dns-restrict-ip",
-    "terraform-cloudfront",
-    "terraform-twilio-webhook",
-    "terraform-state",
-    "terraform-iam-users",
-    "terraform-lambda-manage",
-    "terraform-snapshot-archive",
-    "terraform-ec2-security-groups",
-    "terraform-email-forward",
-    "terraform-eventbridge",
-    "terraform-external-monitoring",
-    "terraform-homeassistant-alexa",
-    "terraform-ddns-core",
-    "terraform-ddns-logs",
-    "terraform-ddns-secrets-iam",
-    "terraform-ddns-state",
-  ]
+variable "tfstate_bucket" {
+  description = "S3 Terraform state bucket the mini RA role may read/write (for local `terraform plan`/state ops). All other object/secret reads are denied."
+  type        = string
+  default     = "terraform.wind.etherport.net"
 }

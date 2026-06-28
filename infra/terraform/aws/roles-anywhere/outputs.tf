@@ -15,8 +15,3 @@ output "role_arn" {
   description = "IAM role the mini assumes (--role-arn)"
   value       = aws_iam_role.mini_ra.arn
 }
-
-output "attached_policy_count" {
-  description = "How many managed policies are attached to the role (raise the per-role quota if >10)"
-  value       = length(var.attached_policy_names)
-}

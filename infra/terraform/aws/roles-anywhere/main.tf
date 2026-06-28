@@ -74,12 +74,52 @@ resource "aws_iam_role" "mini_ra" {
   max_session_duration = var.session_duration_seconds
 }
 
-# Permissions = parity with terraform-homelab (or a curated subset — see variables.tf).
-# ⚠️ If the list has >10 entries, raise the per-role managed-policy quota (L-0DA4ABF3) first.
-resource "aws_iam_role_policy_attachment" "mini_ra" {
-  for_each   = toset(var.attached_policy_names)
+# ---- Permissions: PLAN/DEBUG scope (M71 decision 2026-06-28) -----------------------------
+# The mini does rare LOCAL `terraform plan`/inspect; real applies run via CI (M82). So the
+# RA role gets broad READ (ReadOnlyAccess) for plan refresh + tfstate read/write — but is
+# DENIED object/secret data reads so a short-lived debug session can't exfiltrate backups
+# or secrets. Far less than the write-capable [homelab] static key it replaces, and no
+# managed-policy-per-role quota issue (vs attaching the ~20 terraform-* policies).
+resource "aws_iam_role_policy_attachment" "readonly" {
   role       = aws_iam_role.mini_ra.name
-  policy_arn = "arn:aws:iam::${var.account_id}:policy/${each.value}"
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+}
+
+data "aws_iam_policy_document" "tfstate" {
+  # Terraform state read/write/lock (S3-native use_lockfile) on the state bucket only.
+  statement {
+    sid       = "TfStateRW"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["arn:aws:s3:::${var.tfstate_bucket}/*"]
+  }
+  statement {
+    sid       = "TfStateList"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket", "s3:GetBucketLocation"]
+    resources = ["arn:aws:s3:::${var.tfstate_bucket}"]
+  }
+  # Defense-in-depth: ReadOnlyAccess can read object data + secret values. A plan/debug
+  # role must not. Deny object reads everywhere EXCEPT the state bucket, plus secret/KMS
+  # decrypt (Deny beats the ReadOnlyAccess Allow).
+  statement {
+    sid           = "DenyObjectDataReads"
+    effect        = "Deny"
+    actions       = ["s3:GetObject"]
+    not_resources = ["arn:aws:s3:::${var.tfstate_bucket}/*"]
+  }
+  statement {
+    sid       = "DenySecretAndKmsDecrypt"
+    effect    = "Deny"
+    actions   = ["secretsmanager:GetSecretValue", "kms:Decrypt"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "tfstate" {
+  name   = "tfstate-rw-and-deny-data-reads"
+  role   = aws_iam_role.mini_ra.id
+  policy = data.aws_iam_policy_document.tfstate.json
 }
 
 # ---- RA profile: links the role, sets the session TTL -----------------------------------
