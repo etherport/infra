@@ -1,0 +1,35 @@
+---
+# M74 v2 follow-up — high-signal detection: `pivot_root(2)` from inside a container.
+# pivot_root swaps the process's root filesystem — a core **container-breakout** primitive
+# (an attacker pivoting onto the host root). The container runtime (runc) legitimately calls
+# it during container SETUP, but that runs in the HOST namespace → dropped by the Tetragon
+# export namespace-denylist, and the matchPIDs filter below also excludes the container's own
+# init (namespace pid 0/1). So a hit here = a non-init process in a container pivoting its
+# root = near-certain breakout attempt. Near-zero false positive.
+#
+# Based on Tetragon's `sys_pivot_root.yaml` example. OBSERVE-ONLY (no kill). Cluster-scoped.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "detect-pivot-root"
+spec:
+  kprobes:
+    - call: "sys_pivot_root"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"
+        - index: 1
+          type: "string"
+      selectors:
+        - matchPIDs:
+            - operator: NotIn
+              followForks: true
+              isNamespacePID: true
+              values:
+                - 1
+            - operator: NotIn
+              followForks: true
+              isNamespacePID: true
+              values:
+                - 0

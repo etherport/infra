@@ -8,3 +8,6 @@ kind: Kustomization
 resources:
   - 10-tp-cred-file-access.yaml
   - 11-tp-setuid-root.yaml
+  # M74 v2 follow-up (2026-06-28): breach-detection syscalls
+  - 12-tp-ptrace-inject.yaml
+  - 13-tp-pivot-root.yaml

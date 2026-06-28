@@ -102,3 +102,64 @@ data:
                 Tuples (Grafana Explore, Loki):
                   {namespace="tetragon", container="export-stdout"} | json
                   | process_kprobe_policy_name="detect-setuid-root"
+
+          # CRITICAL: ptrace PTRACE_ATTACH/SEIZE onto another process inside a container
+          # = process injection / live credential dump. Almost nothing legit does this in
+          # a container; host-ns debuggers are export-filtered. for:0m.
+          - alert: TetragonPtraceInject
+            expr: |
+              sum by (k8s_ns, k8s_pod, binary) (
+                count_over_time(
+                  {namespace="tetragon", container="export-stdout"}
+                  | json policy="process_kprobe.policy_name", binary="process_kprobe.process.binary", k8s_ns="process_kprobe.process.pod.namespace", k8s_pod="process_kprobe.process.pod.name"
+                  | __error__=""
+                  | policy="detect-ptrace-inject"
+                  [10m]
+                )
+              ) > 0
+            for: 0m
+            labels:
+              severity: critical
+              component: runtime-security
+              source: tetragon
+            annotations:
+              summary: "Tetragon: ptrace process-injection in {{ $labels.k8s_ns }}/{{ $labels.k8s_pod }} ({{ $labels.binary }})"
+              description: |
+                A process in container "{{ $labels.k8s_ns }}/{{ $labels.k8s_pod }}"
+                ({{ $labels.binary }}) used ptrace PTRACE_ATTACH/SEIZE against ANOTHER
+                process (TracingPolicy detect-ptrace-inject) — the classic process-
+                injection / live-memory credential-dump primitive. Almost nothing
+                legitimately does this inside a container; investigate for compromise
+                (assume-breach). Detection only; not blocked.
+                  {namespace="tetragon", container="export-stdout"} | json
+                  | process_kprobe_policy_name="detect-ptrace-inject"
+
+          # CRITICAL: pivot_root from a non-init process inside a container = breakout
+          # primitive (swap the root FS onto the host). runc's setup pivot_root is host-ns
+          # (filtered) + the policy excludes ns-pid 0/1, so a hit ≈ breakout. for:0m.
+          - alert: TetragonPivotRoot
+            expr: |
+              sum by (k8s_ns, k8s_pod, binary) (
+                count_over_time(
+                  {namespace="tetragon", container="export-stdout"}
+                  | json policy="process_kprobe.policy_name", binary="process_kprobe.process.binary", k8s_ns="process_kprobe.process.pod.namespace", k8s_pod="process_kprobe.process.pod.name"
+                  | __error__=""
+                  | policy="detect-pivot-root"
+                  [10m]
+                )
+              ) > 0
+            for: 0m
+            labels:
+              severity: critical
+              component: runtime-security
+              source: tetragon
+            annotations:
+              summary: "Tetragon: pivot_root (container breakout) in {{ $labels.k8s_ns }}/{{ $labels.k8s_pod }} ({{ $labels.binary }})"
+              description: |
+                A non-init process in container "{{ $labels.k8s_ns }}/{{ $labels.k8s_pod }}"
+                ({{ $labels.binary }}) called pivot_root (TracingPolicy detect-pivot-root)
+                — a container-breakout primitive that swaps the process root filesystem.
+                runc's legit setup pivot_root is host-ns (filtered); a hit here is a
+                near-certain breakout attempt. Investigate immediately. Detection only.
+                  {namespace="tetragon", container="export-stdout"} | json
+                  | process_kprobe_policy_name="detect-pivot-root"

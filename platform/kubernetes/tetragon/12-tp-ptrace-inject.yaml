@@ -1,0 +1,31 @@
+---
+# M74 v2 follow-up — high-signal detection: a process using ptrace to ATTACH to
+# ANOTHER process (PTRACE_ATTACH / PTRACE_SEIZE). This is the classic process-injection
+# / live-memory-credential-dump primitive (e.g. dumping secrets out of another pod's
+# process, or hijacking it). Filtered to the attach requests so it does NOT fire on the
+# benign self-trace (PTRACE_TRACEME=0) that debuggers/crash handlers use.
+#
+# Very low false-positive in normal container workloads (almost nothing legitimately
+# attaches to other processes inside a container). Host-ns ptrace (host debuggers) is
+# dropped by the Tetragon export namespace-denylist, so a hit here is in-CONTAINER.
+# OBSERVE-ONLY (no kill). Cluster-scoped.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "detect-ptrace-inject"
+spec:
+  kprobes:
+    - call: "sys_ptrace"
+      syscall: true
+      args:
+        - index: 0
+          type: "int" # request
+        - index: 1
+          type: "int" # pid (the TARGET process)
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Equal"
+              values:
+                - "16"    # PTRACE_ATTACH
+                - "16902" # PTRACE_SEIZE (0x4206)
