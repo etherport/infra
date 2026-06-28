@@ -167,7 +167,20 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   forward-auth (internal apps)**. Each is detailed below. Tell **timeout** (firewall SYN
   drop) from **refused** (dead process) to localize fast.
 - **MetalLB is BGP-only, not L2** (M18/M36). Traefik VIP = `10.10.201.70`. Raw ICMP to
-  VIPs fails by design; TCP works.
+  VIPs fails by design; TCP works. **A VLAN-201 host (incl. the devbox, and TS/WG remote
+  clients that egress via a VLAN-201 subnet-router/`vpn-local`) CANNOT reach a BGP VIP**
+  (no L2 → ARP fails); only off-subnet clients via the UDM (which holds the `/32` BGP route)
+  reach them. Use the `.6` Technitium VM fallback or a `/32 via .1` route. Memory:
+  `vlan201-host-cant-reach-metallb-vip`.
+- **⚠️ MetalLB is now Helm/Flux-managed in FRR mode (L24, 2026-06-28) — NOT the kubespray addon.**
+  `metallb_enabled: false` in kubespray; the engine is `clusters/wind/helm-releases/metallb.yaml`
+  (chart 0.14.x, `speaker.frr.enabled=true`, `crds: Skip`), CRs in `platform/kubernetes/metallb/`.
+  Change it via the **HelmRelease**, never kubespray (a kubespray run won't re-add it, but don't
+  re-enable the native addon — it'd fight). The MetalLB↔UDM eBGP session is **TCP-MD5-authenticated**
+  (`BGPPeer.spec.passwordSecret: bgp-md5` ↔ UDM peer-group `metallb` `neighbor … password`; FRR-mode
+  only). A mismatch on either end drops ALL sessions → VIP/ingress/DNS withdrawal (no L2 fallback) —
+  the `MetallbBGPAllSessionsDown` alert (`metallb_bgp_session_up`) now catches that. Migration detail:
+  `docs/planning/l24-metallb-frr-migration-plan.md`.
 - **DNS = Technitium split-horizon** at `10.10.201.5` (k8s VIP) + `10.10.201.6` (VM
   fallback). It returns internal A + NODATA AAAA for `*.wind.etherport.net`. The UDM's
   own dnsmasq forwards to external upstreams (so it resolves internal names to the CF

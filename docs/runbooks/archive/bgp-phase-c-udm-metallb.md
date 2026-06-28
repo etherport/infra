@@ -20,6 +20,7 @@ router bgp 64512
  no bgp ebgp-requires-policy
  neighbor metallb peer-group
  neighbor metallb remote-as 64513
+ neighbor metallb password <BGP_MD5_KEY>
  bgp listen range 10.10.201.0/24 peer-group metallb
  address-family ipv4 unicast
   neighbor metallb activate
@@ -28,6 +29,13 @@ router bgp 64512
 ```
 - `listen range 10.10.201.0/24` accepts all 8 node speakers without listing each.
 - `no bgp ebgp-requires-policy` is REQUIRED — without it FRR drops the eBGP-learned VIP routes.
+- **`neighbor metallb password <BGP_MD5_KEY>` — L24 (2026-06-28): TCP-MD5 auth.** The peer-group
+  password covers all 8 dynamic listen-range neighbors at once. `<BGP_MD5_KEY>` is the SAME value as
+  the cluster secret **`bgp-md5`** (`platform/kubernetes/metallb/02-bgp-md5-secret.sops.yaml`, key
+  `password`) referenced by `BGPPeer/udm` `spec.passwordSecret`. **Retrieve on rebuild:** `sops -d`
+  that file (or `kubectl get secret -n metallb-system bgp-md5 -o jsonpath='{.data.password}' | base64 -d`).
+  This is honored ONLY in MetalLB **FRR mode** (L24 migrated off the native kubespray addon for exactly
+  this). ⚠️ Mismatch on EITHER end drops all sessions → VIPs withdraw (no L2 fallback since Phase 4).
 
 ## Verification (UDM UI: Routing → BGP, 2026-05-31)
 - Config `metallb` / Windroute / **Enabled**.

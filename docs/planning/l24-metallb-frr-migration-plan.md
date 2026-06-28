@@ -1,8 +1,12 @@
 # L24 — MetalLB native→FRR migration + BGP TCP-MD5 auth (plan)
 
-**Status:** 📋 PLANNED (decided 2026-06-25 — path **A**, "FRR migration + MD5", chosen over
-lighter mitigation/defer). **NOT a quick "add a password" change** — see why below.
-**Tier/effort:** was tracked LOW/S; reality is **MED/M** (a backend migration + 2 flap windows).
+**Status:** ✅ **DONE 2026-06-28** — executed in one window (operator at the UDM). All 4 phases
+landed: native→FRR migration (seamless flap — L2 net + pre-pulled frr image), TCP-MD5 (proven via
+the drop-while-one-sided→re-establish-when-matched behavior), L2 net removed, `metallb_bgp_session_up`
+PodMonitor + `MetallbBGP{AllSessionsDown,SessionDown}` alerts. 8/8 Established w/ MD5. Outstanding-work
+L24 has the commit list. ⏳ Optional FRR upsides NOT done: graceful-restart + BFD (need UDM-side too);
++ a VLAN-201→VIP `/32 via .1` route so TS/WG remote clients can reach the BGP VIPs.
+**Effort (actual):** ~one focused window. Original tracking LOW/S was wrong; it was a backend migration.
 
 **Goal:** authenticate the single MetalLB↔UDM eBGP session with **TCP-MD5** (defense-in-depth
 vs a rogue host on VLAN 201 injecting routes) — *and*, since it requires moving MetalLB to FRR

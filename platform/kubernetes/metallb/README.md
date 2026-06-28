@@ -1,5 +1,15 @@
 # MetalLB Load Balancer Configuration
 
+> ⚠️ **ENGINE = Helm/Flux in FRR mode (L24, 2026-06-28) — NOT the kubespray addon.** MetalLB
+> migrated off the kubespray native addon (`metallb_enabled: false`) onto the Helm chart in
+> **FRR mode** — engine: [`../../../clusters/wind/helm-releases/metallb.yaml`](../../../clusters/wind/helm-releases/metallb.yaml)
+> (`speaker.frr.enabled=true`, `crds: Skip`); CRs here. **Change MetalLB via that HelmRelease, never
+> kubespray.** FRR mode was required for **TCP-MD5** on the eBGP session (`BGPPeer.spec.passwordSecret:
+> bgp-md5` ↔ UDM peer-group password — `02-bgp-md5-secret.sops.yaml`) and unlocks graceful-restart/BFD
+> (not yet enabled). BGP health alert: `metallb_bgp_session_up` (frr-metrics `:7473`) →
+> `MetallbBGPAllSessionsDown` (`../monitoring/12-metallb-bgp-monitor.yaml`). Plan/runbook:
+> `docs/planning/l24-metallb-frr-migration-plan.md`.
+>
 > ⚠️ **MODE = BGP, not Layer 2 (since 2026-05-31; M18/M36).** MetalLB peers with the UDM
 > via **eBGP** (`BGPPeer` UDM `10.10.201.1`, ASN 64512) and advertises the VIP /32s via
 > `BGPAdvertisement`; the old `L2Advertisement` was **removed**. **Sections below that

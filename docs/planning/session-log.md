@@ -13,6 +13,48 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-28 (cont. 7) — L24: MetalLB native→FRR migration + BGP TCP-MD5 (full, in-window)
+
+- **Did the whole L24 plan in one maintenance window** (operator at the UDM). End state: MetalLB runs
+  Helm/Flux-managed in **FRR mode**, the MetalLB↔UDM eBGP session is **TCP-MD5-authenticated**, and a
+  **silent-withdrawal alert** is live. 8/8 sessions Established w/ MD5; UDM screenshots confirmed 5 routes
+  advertised per neighbor. Commits: `4731097`(P1 L2 net) `3c890bc`(P2 cutover wiring) `e48ccd4`(P3a secret)
+  `67773a7`(P3 MD5) `cb63ab0`(P4 L2 remove) `6337f5a`(PodMonitor) `b2086ef`(alert).
+- **Prep that made the flap seamless:** `helm template`'d the FRR chart (installed helm locally — no helm
+  on devbox) → learned the chart names resources `metallb-*` (no collision with the kubespray
+  `controller`/`speaker`, so delete-then-install, no import conflict) and pulls `quay.io/frrouting/frr:9.1.0`
+  (NOT on nodes) → **pre-pulled it via a throwaway DaemonSet**; captured a rollback snapshot of the native
+  install; verified the HelmRepository was live. **Phase 1** re-added a temporary L2Advertisement so the
+  VIPs stayed ARP-reachable through the swap.
+- **Phase 2 (the flap):** deleted the native kubespray workloads (KEEP CRDs + the Flux CRs) and immediately
+  `kubectl apply`'d the HelmRelease object (helm-controller installs instantly — no Flux-fetch latency),
+  annotate-reconciled. metallb-controller + metallb-speaker (4 containers: speaker/frr/reloader/frr-metrics)
+  Ready in **~34s**, BGP re-Established, **VIP `.70` never dropped** (L2 net + pre-pulled image). Then wired
+  the HelmRelease into `helm-releases/kustomization.yaml` + `metallb_enabled: false` in kubespray → Flux
+  adopted the release (Ready=True, no conflict).
+- **Phase 3 (MD5):** SOPS `02-bgp-md5-secret.sops.yaml` (basic-auth, key `password`) → `BGPPeer.spec.passwordSecret`.
+  Coordinated with the operator: they added `neighbor metallb password …` on the UDM peer-group, I patched
+  the live BGPPeer (instant) + committed. **MD5 proven** by FRR's `Connections established 2; dropped 1` —
+  the session dropped while one-sided then re-Established once both ends matched (rules out FRR #6921's
+  one-sided false-positive; tcpdump wasn't available in the frr image, so this behavior is the proof).
+- **Phase 4:** removed the temp L2Advertisement → BGP-only again (**cleared the M36 `.5`/`.71` UDM
+  IP-conflict alerts** the L2 net had re-introduced — operator confirmed seeing them). Added a **PodMonitor**
+  (the BGP metric `metallb_bgp_session_up` is on the **frr-metrics `:7473`** sidecar, NOT the speaker `:7472`
+  — that cost a debug cycle) + **PrometheusRule** `MetallbBGPAllSessionsDown`(critical)/`MetallbBGPSessionDown`(warning).
+- **Operator Qs answered during the window:** (1) the DNS VIP `.5` shows **2 ECMP hops** vs 5 for others
+  because `dns/technitium` is `externalTrafficPolicy: Local` with 2 replicas (k8s-w1/.53 + k8s-w4/.56) →
+  MetalLB advertises only from nodes with a local endpoint; `.70`/`.71`/`.72` are `etp: Cluster` (all nodes
+  advertise) and `.73` alloy is a DS-on-all-workers. (2) `.5` unreachable from the devbox / via TS+WG = the
+  `vlan201-host-cant-reach-metallb-vip` rule (BGP VIP, no L2; TS/WG egress via VLAN-201 hosts) — **not a
+  regression** (the temp L2 net had briefly masked it); DNS still works via the `.6` VM fallback (verified).
+  Technitium `.5` itself verified functional (resolves via the VIP from a Technitium node).
+- **⏳ Optional FRR upsides NOT done (follow-ups):** graceful-restart + BFD (need UDM-side config too) for
+  sub-second failover; and a `10.10.201.0/24`-host `/32 via .1` route so TS/WG remote clients can reach the
+  BGP VIPs (or advertise `.6` not `.5` as their DNS). **Then: the operator's 3 queued reviews** (24h doc/drift
+  sweep, adversarial review of recent work, service-status-email adversarial review incl. cairn).
+
+---
+
 ## 2026-06-28 (cont. 6) — M74 follow-up: ptrace-inject + pivot-root detections
 
 - **Added 2 more Tetragon TracingPolicies** (commit `c5e3100`, observe-only): `detect-ptrace-inject`
