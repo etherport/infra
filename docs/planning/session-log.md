@@ -13,6 +13,33 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-28 (cont. 2) — M77 Stage 2: first 2 standalone VMs to default-deny inbound
+
+- **Flipped `dns-fallback` (1001) + `gh-runner` (1003) from Stage-1 permissive `ACCEPT` to Stage-2
+  `DROP`** (default-deny inbound) — commit `74dc87f`, firewall apply run `28331175739`. Refactored
+  `local.vm_input_policy` from a single global string into a **per-VM map** so each VM flips
+  independently (future Stage-2 flips are now a one-line map edit). The other 4 VMs stay `ACCEPT`.
+- **Why these two first:** their allow-lists are **fully internal/baseline** — `gh-runner` is an
+  outbound-only CI runner (inbound = SSH + node_exporter `:9100` baseline only); `dns-fallback`'s only
+  listeners are `:53` tcp/udp (clients) + `:5380` (mgmt) — so **no external-source scoping** is needed
+  (unlike vpn-local's AWS peer or asterisk's Twilio ranges). The listeners were `ss`-enumerated at Stage 1
+  and PVE's firewall is **stateful**, so flipping the *inbound* default to DROP only blocks NEW unsolicited
+  inbound; established/return traffic for outbound-initiated connections is untouched.
+- **Verification (substituted a functional check for a PVE-log read — headless `pve` shell isn't in
+  scope from the devbox):** (1) the plan was **exactly** `0 add / 2 change / 0 destroy`, in-place, no
+  reboot; (2) **gh-runner self-test** — the apply *runs on* the gh-runner self-hosted runner, flipped it
+  to DROP, and still completed + reported success to GitHub → the runner survived its own flip (proving
+  it's outbound-only as designed, and that there's no CI-lockout risk); (3) **DNS** — `dig @10.10.201.6`
+  resolves `auth.wind.etherport.net`→`10.10.201.70` (internal split-horizon A) + forwards `github.com`,
+  AAAA NODATA → `:53` serves fine under DROP.
+- **State:** M77 stays 🟡 (4 VMs remain ACCEPT). **Next Stage-2 candidates** (each needs its noted
+  prerequisite before DROP): `vpn-local` (scope the AWS WireGuard peer source IP), `asterisk-sbc` (scope
+  Twilio SIP/RTP source ranges), `step-ca` (confirm the fleet + tailnet cert clients), `devbox` (LAST,
+  extra care — the Claude session lives on it; keep SSH from mgmt-admin + the tailnet + tailscale UDP).
+  Tracker + the `standalone-vms.tf` header updated. **Now moving to M72 tail.**
+
+---
+
 ## 2026-06-28 (cont.) — M71 IAM Roles Anywhere: AWS-side APPLIED (mini-side cert remains)
 
 - **Applied the `roles-anywhere` TF stack via CI** (run `28330240921`, sha `fc32bf2`) — the mini's
