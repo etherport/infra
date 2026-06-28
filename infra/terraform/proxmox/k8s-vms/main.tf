@@ -124,6 +124,11 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
     file_format  = "raw"
     discard      = "on"
     ssd          = true
+    # H41: dedicated QEMU I/O thread for the disk (scsihw is virtio-scsi-single).
+    # etcd's WAL fsync was sharing the VM's main qemu thread (iothread off) →
+    # apply-latency spikes under load → periodic CP leader-lease timeouts/restarts.
+    # ⚠️ APPLY ONE CP AT A TIME (-target), cp1 LAST — this reboots the VM.
+    iothread = true
   }
 
   # MTU 9000 on every NIC to match bond0/vmbr0/SDN-zone jumbo frames.
