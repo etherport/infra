@@ -1,0 +1,58 @@
+# M73 — Kyverno MUTATE: inject a small default resources.requests on any container
+# that lacks one, so `require-resource-requests` (00-) can ENFORCE without blocking
+# anything. Why a mutate instead of editing every chart: the validate rule needs EVERY
+# container to have requests — including injected sidecars (config-reloader, etc.) and
+# DYNAMICALLY-created pods (tailscale proxies, ARC ephemeral runners, csi) that no Helm
+# value can reliably cover. This mutate webhook runs BEFORE the validate webhook, adds
+# requests only where ABSENT (the `+(...)` anchors never override a real request the
+# chart already set), so every admitted pod ends up compliant. Existing running pods are
+# untouched; on their next rollout the new pod is mutated → passes.
+#
+# Scope = identical exclude list to 00-require-resource-requests.yaml (system/operator ns
+# manage their own pods). Defaults are deliberately tiny (10m / 32Mi) — a placement floor,
+# not a real sizing; well-configured workloads keep their own (larger) requests.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: add-default-resource-requests
+  annotations:
+    policies.kyverno.io/title: Add Default Resource Requests
+    policies.kyverno.io/severity: low
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/description: >-
+      Adds a small default cpu+memory request to any container missing one, so the
+      require-resource-requests validate policy can enforce without blocking pods
+      (sidecars, dynamically-created pods). Only adds where absent; never overrides.
+spec:
+  background: false   # mutate applies at admission; no background mutate of existing pods
+  rules:
+    - name: add-requests-if-missing
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - flux-system
+                - kyverno
+                - cilium-secrets
+                - metallb-system
+                - multus-system
+                - gpu-operator-system
+                - gpu-operator
+                - ceph-csi
+                - velero
+      mutate:
+        patchStrategicMerge:
+          spec:
+            containers:
+              - (name): "?*"
+                resources:
+                  requests:
+                    +(memory): "32Mi"
+                    +(cpu): "10m"
