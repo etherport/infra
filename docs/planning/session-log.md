@@ -13,6 +13,26 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-28 — cairn photos rc=1 (NAS contention) → reschedule 22:00 + SMB-heal retry (v0.1.3)
+
+**What:** second overnight `ICloudBackupFailed` (photos rc=1), **different cause** from 06-27 (v0.1.2's
+attach-leak fix confirmed working — clean detach, 1 attachment). Root cause: photos ran 23:30, attempt 1
+hit the **90-min local-mode export timeout** (`PhotosSource.perAttempt = 90*60`) landing at **01:00 =
+exactly when the cluster s3-sync reads `/Volumes/Backups` over NFS** → concurrent NFS-read + SMB-write
+**wedged the NAS** → the `/Volumes/Backups` remount failed once mid-heal → `unhealable` → rc=1. Keychain
+unlocked, NAS reachable, creds present — transient contention, not a persistent break.
+
+**Resolution (all done):**
+- **Immediate:** `mount-nas.sh` restored the stack; re-ran photos (✓ 43,914 items, 458s); pushed health
+  8/8 → alert cleared.
+- **Reschedule:** photos `23:30 → 22:00` (cairn.yaml + `cairn install` reload; agent fires 19:30/20:00/22:00)
+  — 3h buffer before the 01:00 sync instead of 1.5h, so the export finishes well clear of it.
+- **`ensureSMB` retry (cairn v0.1.3):** the heal did a single `open smb://` + 60s poll; now retries 3×
+  (open + 40s poll, 5s backoff) so a brief NAS-busy moment doesn't doom the run. Shipped via CI, deployed
+  (leaf `541075…`, version 0.1.3, retry present in the binary).
+- Docs: cairn README §6 (schedule NAS-heavy jobs clear of any offsite-sync window) + example + memory.
+  **Lesson:** cairn photos write-SMB vs s3-sync read-NFS on the same NAS = SMB wedge; separate them in time.
+
 ## 2026-06-27 (cont. 2) — M73 Kyverno: enforce disallow-latest-tag (audit→enforce, verified safe) + zero-trust archived
 
 **What:** closed out + archived the zero-trust assessment (`da7d6c6`), then did M73 enforce phase-1.

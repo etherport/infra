@@ -59,6 +59,11 @@ the infra-specific deployment + the cutover record + rollback.
 - **Offsite:** unchanged — the export dirs sit under the `Backups` share, which the k8s
   `s3-sync-backups` CronJob ships to `s3://archive.wind.etherport.net` (Glacier Deep Archive). cairn
   writes the **same layout** as the bash suite → **no S3 re-upload churn** on cutover.
+  - ⚠️ **Schedule photos to finish before the s3-sync window.** photos *writes* `/Volumes/Backups` over
+    SMB while the s3-sync *reads* the same NAS share over NFS — concurrent at the same time wedges SMB
+    (export timeout + a failed remount → `rc=1`, 2026-06-28). photos was moved **23:30 → 22:00** (3h
+    before the 01:00 s3-sync); the SMB heal also retries the mount 3× (cairn ≥ v0.1.3). If photos ever
+    fails on a mount/timeout, restore with `infra/macos/mini/mount-nas.sh` then re-run.
 
 ## 2. Build + sign (on the mini — has full Xcode)
 
