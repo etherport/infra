@@ -11,31 +11,34 @@ step-ca X.509 client cert instead of the standing static `~/.aws/credentials [ho
 - `aws_rolesanywhere_trust_anchor.wind` — trusts certs chaining to the step-ca root
   (`step-ca-root.pem`, the public CA cert).
 - `aws_iam_role.mini_ra` (`wind-mini-roles-anywhere`) — trust policy scoped to (a) this trust
-  anchor and (b) Subject CN `mini.wind.etherport.net`; permissions = the `terraform-*` policies.
+  anchor, (b) Subject CN `mini.wind.etherport.net`, (c) issuer CN `wind Homelab CA Intermediate CA`;
+  permissions = **plan/debug scope** (see below).
+- `aws_iam_role_policy_attachment.readonly` + `aws_iam_role_policy.tfstate` — `ReadOnlyAccess` plus
+  an inline policy that allows S3 state RW on `terraform.wind.etherport.net` only and **Denies** every
+  other `s3:GetObject` + `secretsmanager:GetSecretValue`/`kms:Decrypt`.
 - `aws_rolesanywhere_profile.mini` (`wind-mini`) — 1h sessions.
 
-## ⚠️ NOT YET APPLIED — three owner-gated prerequisites
+## ✅ APPLIED 2026-06-28 (AWS-side)
 
-This stack is **authored, not applied**. Before `apply`:
+Applied via CI (run `28330240921`, `4 added, 0 changed`). The 3 ARNs are baked into the mini runbook.
+The three original prerequisites resolved as:
 
-1. **CI rolesanywhere perms** — apply `../iam-policies/terraform-roles-anywhere.json` to the
-   `gh-actions-terraform` CI user (console; IAM is console-managed here). Without it the apply
-   fails (`gh-actions-terraform` has no `rolesanywhere:*`).
-2. **Policy-scope decision + quota** — `var.attached_policy_names` defaults to full
-   `terraform-homelab` parity (~20 policies). AWS caps managed policies per role at 10 (default;
-   max 20, raise via Service Quotas `L-0DA4ABF3`). Either raise the quota to ≥20, or trim the
-   list to ≤10 (TF is CI-only since M82, so a curated debug subset is defensible). **Confirm the
-   real policy names** against the account first (`aws iam list-attached-user-policies
-   --user-name terraform-homelab` + the groups, from `claude-admin`).
-3. **Mini-side** — `docs/runbooks/aws-roles-anywhere-mini.md` (step-ca leaf cert + signing helper).
+1. **CI rolesanywhere perms — already present.** `gh-actions-terraform` has **PowerUserAccess**, which
+   covers `rolesanywhere:*` (PowerUser = all services except iam/org/account). No extra grant; the
+   redundant `iam-policies/terraform-roles-anywhere.json` was deleted.
+2. **Scope = plan/debug-only** (not full `terraform-*` parity). TF is CI-only (M82), so the mini only
+   does rare local `plan`/inspect → `ReadOnlyAccess` + the inline tfstate-RW/deny-data-reads policy.
+   Sidesteps the 10-managed-policy-per-role quota entirely; least-privilege.
+3. **Mini-side** — the only remaining work: `docs/runbooks/aws-roles-anywhere-mini.md` (step-ca leaf
+   cert + signing helper). Owner-only (the agent can't reach the mini).
 
-## Apply (after the prerequisites)
+## Re-apply / change
 
 ```bash
-# via CI (preferred — OIDC, no local creds):
-#   GH Actions → "Roles Anywhere Terraform" → Run workflow → plan, review (clean create), → apply
-# or locally for debug (needs the homelab profile rendered):
-terraform init && terraform plan && terraform apply
+# via CI (the only path — OIDC, no local creds):
+#   GH Actions → "Roles Anywhere Terraform" → Run workflow → plan, review, → apply
+#   (or dispatch via the M92 PAT). NB a push-triggered plan run contends the S3 lockfile
+#   with a concurrent dispatched apply — let the plan run finish, then dispatch apply.
 ```
 
 Outputs `trust_anchor_arn` / `profile_arn` / `role_arn` feed the mini's `credential_process`.
@@ -44,8 +47,8 @@ Outputs `trust_anchor_arn` / `profile_arn` / `role_arn` feed the mini's `credent
 
 | File | Purpose |
 |------|---------|
-| `main.tf` | trust anchor + role (+ trust policy) + policy attachments + profile |
-| `variables.tf` | region/account, `mini_cert_cn`, `attached_policy_names` (the decision) |
+| `main.tf` | trust anchor + role (+ trust policy) + ReadOnlyAccess attach + inline tfstate policy + profile |
+| `variables.tf` | region, `mini_cert_cn`, `mini_cert_issuer_cn`, `tfstate_bucket`, session TTL |
 | `outputs.tf` | the 3 ARNs the mini needs |
-| `step-ca-root.pem` | step-ca root CA (public) — the trust-anchor source |
+| `step-ca-root.pem` | step-ca root CA (public) — the trust-anchor source (committed via a `.gitignore` negation) |
 | `backend.tf` / `providers.tf` | S3 state (`aws/roles-anywhere/…`) + aws ~> 6.0 |

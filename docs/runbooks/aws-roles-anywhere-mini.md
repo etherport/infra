@@ -1,9 +1,10 @@
 # Mini → AWS via IAM Roles Anywhere (M71 mini-side)
 
 How the **mini** mints short-lived AWS creds from a step-ca X.509 cert — no standing key.
-**Prereq:** the `roles-anywhere` TF stack is **applied** (you have the 3 ARNs) and the three
-owner-gated steps in [`../planning/m71-roles-anywhere-plan.md`](../planning/m71-roles-anywhere-plan.md)
-are done. This is the **mini-local** half (the agent can't reach the mini).
+**Prereq:** ✅ the `roles-anywhere` TF stack is **applied** (2026-06-28, the 3 ARNs are filled in
+below) and the AWS-side owner-gated steps in [`../planning/m71-roles-anywhere-plan.md`](../planning/m71-roles-anywhere-plan.md)
+are resolved (CI has `rolesanywhere:*` via PowerUserAccess; scope = plan/debug-only). **This file is
+the only remaining work** — the **mini-local** half (the agent can't reach the mini).
 
 All commands run **on the mini** (macOS, signed into `graham`).
 
@@ -65,9 +66,9 @@ credential_process = /usr/local/bin/aws_signing_helper credential-process \
   --certificate /Users/graham/.config/roles-anywhere/cert.pem \
   --intermediates /Users/graham/.config/roles-anywhere/cert.pem \
   --private-key /Users/graham/.config/roles-anywhere/key.pem \
-  --trust-anchor-arn  <TRUST_ANCHOR_ARN from terraform output> \
-  --profile-arn       <PROFILE_ARN from terraform output> \
-  --role-arn          <ROLE_ARN from terraform output>
+  --trust-anchor-arn  arn:aws:rolesanywhere:us-west-2:830881980142:trust-anchor/8cdc64d7-332c-4dc3-bf99-0705f92722d6 \
+  --profile-arn       arn:aws:rolesanywhere:us-west-2:830881980142:profile/67a6e3cb-8f88-4bc6-8c84-7dd7ac2917ee \
+  --role-arn          arn:aws:iam::830881980142:role/wind-mini-roles-anywhere
 ```
 `step ca certificate` writes `cert.pem` as a **bundle** (leaf + step-ca intermediate); the
 trust anchor is the step-ca **root**, so the helper must present the intermediate to complete

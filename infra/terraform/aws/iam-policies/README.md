@@ -174,7 +174,6 @@ to `terraform-homelab`, so exact principal enumeration needs `claude-admin`/cons
 | File(s) | Live principal |
 |---|---|
 | `terraform-{storage,compute,networking,dns,cloudfront,twilio-webhook,state,iam-users,lambda-manage,snapshot-archive,ec2-security-groups,email-forward,eventbridge,external-monitoring,homeassistant-alexa,dns-restrict-ip,ddns-*}` | `terraform-homelab` user (directly and/or via the `terraform-*` groups above) |
-| `terraform-roles-anywhere` | `terraform-homelab` user — IAM Roles Anywhere trust-anchor/profile mgmt (M71) |
 | `gh-actions-terraform-iam` | `gh-actions-terraform` role (this repo's GitHub OIDC) |
 | `gh-actions-personal-web-iam` | the personal-web repo's GitHub OIDC role |
 | `s3-backup-kubernetes-policy` | `kubernetes-s3-backup` user (in-cluster S3 backup sync) |

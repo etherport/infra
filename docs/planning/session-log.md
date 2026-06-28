@@ -13,6 +13,45 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-28 (cont.) — M71 IAM Roles Anywhere: AWS-side APPLIED (mini-side cert remains)
+
+- **Applied the `roles-anywhere` TF stack via CI** (run `28330240921`, sha `fc32bf2`) — the mini's
+  path off the standing static `[homelab]` key. **Live now (AWS-side):** trust anchor
+  `wind-homelab-step-ca` (source = the **public step-ca root** `step-ca-root.pem`), IAM role
+  `wind-mini-roles-anywhere` (trust-scoped to the trust anchor + cert Subject CN
+  `mini.wind.etherport.net` + issuer CN `wind Homelab CA Intermediate CA`), and RA profile `wind-mini`
+  (1h sessions). The 3 ARNs are baked into `docs/runbooks/aws-roles-anywhere-mini.md`.
+- **The 3 owner-gated steps resolved as:** (1) **CI perms — already had them**: `gh-actions-terraform`
+  carries **PowerUserAccess**, which covers `rolesanywhere:*` (PowerUser = everything except
+  iam/org/account; its IAM perms come from `gh-actions-terraform-iam.json`). The redundant
+  `iam-policies/terraform-roles-anywhere.json` was **deleted** (+ its iam-policies README row).
+  (2) **Scope decided = plan/debug-only** (not full `terraform-*` parity): since TF is CI-only (M82),
+  the role gets `ReadOnlyAccess` + an inline `tfstate-rw-and-deny-data-reads` (S3 state RW on
+  `terraform.wind.etherport.net` only; **Deny** all other `s3:GetObject` + `secretsmanager:GetSecretValue`
+  /`kms:Decrypt`). **Why:** a short-lived debug session can refresh/plan + touch state but can't
+  exfiltrate backup objects or secret values, and it sidesteps the 10-managed-policy-per-role quota
+  entirely (no group-membership-to-role problem). (3) **Mini-side cert + signing-helper = the ONLY
+  remaining work** (owner-only — the agent can't reach the mini).
+- **3 apply gotchas hit + fixed (all in this stack's history):** (a) IAM `CreateRole` **rejects an
+  em-dash** in `description` (regex `[	
+ -~¡-ÿ]` — U+2014 is out
+  of range) → ASCII hyphen; (b) the **public root PEM was gitignored** by `**/*.pem` → CI checkout was
+  missing it (`file()` "Invalid function argument") → added a `.gitignore` negation + `git add -f`
+  (gitleaks confirmed: it's a public CA cert, not a key); (c) a **`workflow_dispatch` apply contends
+  the S3 state lockfile** with the concurrent `push`-triggered plan run my own push fired
+  (`PreconditionFailed` on the lock) → re-dispatch the apply after the plan run finishes. Also a
+  monitoring footgun for future me: when polling for an apply, **filter runs by
+  `event=workflow_dispatch`** — a same-sha push plan run completes first and a naive "first new
+  completed run" match grabs the wrong one.
+- **State:** AWS-side done + idempotent (`4 added, 0 changed`; trust anchor was already in state from an
+  earlier partial run). Docs synced: tracker M71 entry, `m71-roles-anywhere-plan.md`, the stack README,
+  and the mini runbook (ARNs filled in). **Next (owner-only):** follow the mini runbook — step-ca leaf
+  cert + `aws_signing_helper` + `credential_process` + launchd renew timer → `aws sts
+  get-caller-identity --profile homelab-ra`, then rotate+remove the standing `[homelab]` key. Plus the
+  pre-existing interim win: pull `[claude-admin]` PowerUser off the mini (`udm-manual-hardening-actions.md` §8).
+
+---
+
 ## 2026-06-28 — overnight-alert investigation (→ H41 etcd) + M73 require-resource-requests ENFORCING
 
 - **Investigated 2 overnight AI-advisor emails** (non-iCloud): `TargetDown` (kube-scheduler) +

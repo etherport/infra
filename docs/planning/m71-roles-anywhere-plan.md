@@ -1,10 +1,11 @@
 # M71 — mini → IAM Roles Anywhere (kill the standing static AWS keys)
 
-> **Status: FOUNDATION AUTHORED 2026-06-27, NOT YET APPLIED.** The Terraform stack
-> (`infra/terraform/aws/roles-anywhere/`) + CI workflow + mini runbook are written but
-> **blocked on three owner-gated steps** (below). This doc is the design + the apply runway.
-> The agent cannot apply it (no admin AWS; the CI terraform role lacks `rolesanywhere:*`) or
-> reach the mini.
+> **Status: ✅ AWS-SIDE APPLIED 2026-06-28** (CI run `28330240921`, sha `fc32bf2`). The trust
+> anchor + IAM role + RA profile are live; the 3 ARNs are in
+> [`../runbooks/aws-roles-anywhere-mini.md`](../runbooks/aws-roles-anywhere-mini.md). Of the three
+> owner-gated steps below, **#1 (CI perms) and #2 (scope) are resolved**; **only #3 — the mini-side
+> cert + signing-helper — remains** (owner-only; the agent can't reach the mini). This doc is now the
+> design record + the mini-side runway.
 
 ## Goal
 
@@ -44,46 +45,39 @@ Reuse it as the RA trust anchor instead of standing up AWS Private CA (~$400/mo)
   `mini.wind.etherport.net` (RA exposes cert attrs as `aws:PrincipalTag/x509Subject/CN`). So only a
   step-ca-issued cert with that exact CN can assume the role.
 - **RA profile** `wind-mini` — links the role, `duration_seconds = 3600` (1h sessions).
-- **Permissions** = the `terraform-*` customer-managed policies (parity with `terraform-homelab`),
-  attached to the role. **⚠️ DECISION + QUOTA — see below.**
+- **Permissions = PLAN/DEBUG scope** (decision #2 below): `ReadOnlyAccess` (managed) for plan refresh
+  + an inline `tfstate-rw-and-deny-data-reads` that allows S3 state RW on `terraform.wind.etherport.net`
+  only and **Denies** all other `s3:GetObject` + `secretsmanager:GetSecretValue`/`kms:Decrypt`. Far
+  less than the write-capable `[homelab]` key it replaces, and dodges the per-role managed-policy quota.
 
-## ⚠️ Three owner-gated steps (the stack can't apply until these are done)
+## Three owner-gated steps — resolution
 
-1. **Grant CI the `rolesanywhere:*` perms.** The CI terraform OIDC role (`gh-actions-terraform`)
-   already has `iam:CreateRole/CreatePolicy/PassRole/AttachRolePolicy` but **no `rolesanywhere:*`**.
-   Apply the new policy doc `infra/terraform/aws/iam-policies/terraform-roles-anywhere.json` to the
-   CI terraform user/group (console — IAM is console-managed here, per `iam-policies/README.md`).
-   THEN CI can `terraform apply` this stack.
-2. **Decide the role's permission scope + raise the quota if needed.** `terraform-homelab` carries
-   ~20 `terraform-*` policies, kept under AWS's 10-policy-per-**user** limit via **IAM groups** —
-   but **a ROLE can't join groups**, and the default quota is **10 managed policies per role** (hard
-   max 20, raisable via Service Quotas `L-0DA4ABF3`). Options, operator's call (set
-   `var.attached_policy_names`):
-   - **(default) Full parity:** attach all ~20 `terraform-*` policies → **raise the per-role quota to
-     ≥20 first**. Drop-in replacement for `[homelab]`.
-   - **Narrow for debug:** since TF is **CI-only now (M82)**, the mini's local TF is rare debug —
-     attach a ≤10 curated subset (e.g. state + the stacks you actually debug locally), full apply via
-     CI. Least-privilege, no quota bump.
-   - ⚠️ The exact policy **ARNs/names must be confirmed** against the account (the agent guessed them
-     from the `iam-policies/terraform-*.json` filenames, which the README says match AWS names —
-     verify with `aws iam list-attached-group-policies` / `list-attached-user-policies` for
-     `terraform-homelab` from `claude-admin`).
-3. **Mini-side setup** (the agent can't reach the mini): issue the leaf cert from step-ca, install
-   `aws_signing_helper`, wire `credential_process`, install the renewal timer — full runbook:
+1. **✅ CI `rolesanywhere:*` perms — already had them.** `gh-actions-terraform` carries
+   **PowerUserAccess**, which covers `rolesanywhere:*` (PowerUser = all services *except* iam/org/account;
+   the role's own IAM perms come from `gh-actions-terraform-iam.json`). No extra grant was needed — the
+   redundant `iam-policies/terraform-roles-anywhere.json` was **deleted**.
+2. **✅ Scope decided 2026-06-28 = plan/debug-only** (no quota bump). Real applies run via CI (M82), so
+   the mini only does rare local `terraform plan`/inspect → `ReadOnlyAccess` + the inline tfstate-RW /
+   deny-data-reads policy above. This sidesteps the 10-managed-policy-per-role quota entirely (no
+   `terraform-*` policy attachments, no group-membership problem) and is least-privilege: a short-lived
+   debug session can refresh/plan but cannot read backup objects or secret values.
+3. **⏳ Mini-side setup — THE ONLY REMAINING WORK** (the agent can't reach the mini): issue the leaf
+   cert from step-ca, install `aws_signing_helper`, wire `credential_process` (the 3 ARNs are already
+   filled into the runbook), install the renewal timer — full runbook:
    `docs/runbooks/aws-roles-anywhere-mini.md`.
 
-## Apply sequence (owner)
+## Apply sequence
 
-1. (interim, do first) remove `[claude-admin]` from the mini (`§8` runbook) — biggest blast cut.
-2. Apply `terraform-roles-anywhere.json` to the `gh-actions-terraform` CI user (console).
-3. Confirm/populate `var.attached_policy_names` (decision #2); raise the per-role quota if full-parity.
-4. Dispatch the `terraform-roles-anywhere` workflow → `plan`, review (must be a clean create), → `apply`.
-5. Note the 3 outputs (trust_anchor_arn, profile_arn, role_arn).
-6. Mini-side: follow `docs/runbooks/aws-roles-anywhere-mini.md` → verify
-   `aws sts get-caller-identity --profile homelab-ra` returns the assumed-role ARN.
-7. Cut over: point the mini's TF usage at the `homelab-ra` profile; once verified, **rotate then
+1. ✅ (interim) remove `[claude-admin]` from the mini (`§8` runbook) — biggest blast cut. *(owner)*
+2. ✅ CI perms — PowerUser already covers `rolesanywhere:*` (no action).
+3. ✅ Scope = plan/debug-only (ReadOnlyAccess + tfstate inline); no quota bump.
+4. ✅ Dispatched `terraform-roles-anywhere` → `apply` (run `28330240921`, `4 added, 0 changed`).
+5. ✅ Outputs captured (trust_anchor / profile / role ARNs) → baked into the mini runbook.
+6. ⏳ **Mini-side:** follow `docs/runbooks/aws-roles-anywhere-mini.md` → verify
+   `aws sts get-caller-identity --profile homelab-ra` returns the assumed-role ARN. *(owner)*
+7. ⏳ Cut over: point the mini's TF usage at the `homelab-ra` profile; once verified, **rotate then
    remove** the standing `[homelab]` static key (don't delete the `terraform-homelab` IAM *user* —
-   H29 shared key; here we're removing the mini's *standing key file*, replaced by RA sessions).
+   H29 shared key; here we're removing the mini's *standing key file*, replaced by RA sessions). *(owner)*
 
 ## Verification
 
