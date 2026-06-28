@@ -1,0 +1,89 @@
+---
+# Periodic etcd defragmentation (H41). etcd never reclaims backend space after
+# compaction on its own, so the DB fragments over time (observed 62% — 248MB on
+# disk vs 95MB in use, 2026-06-28). A bloated/fragmented DB enlarges fsyncs and
+# worsens cache locality → the apply-latency spikes that periodically back up
+# apiserver lease writes past 5s → kube-scheduler/controller-manager/csi restarts.
+#
+# Each CP defrags ONLY ITS LOCAL member (via ETCD_ADVERTISE_CLIENT_URLS), and the
+# timers are STAGGERED by host index (Sun 02:00 / 03:00 / 04:00 UTC) so no two
+# members ever defrag at once — quorum is always preserved (defrag briefly blocks
+# the single member being compacted).
+#
+# Idempotent — re-runs replace the units in place.
+#
+# Usage:
+#   ansible-playbook -i inventory/wind/inventory.ini playbooks/etcd-defrag.yml --limit kube_control_plane
+#   (or the ansible-vm-fleet.yml GH workflow: playbook=etcd-defrag, limit=kube_control_plane)
+
+- name: Install weekly etcd defrag timer on control-plane nodes
+  hosts: kube_control_plane
+  become: true
+  remote_user: ubuntu
+
+  vars:
+    # Stagger: base 02:00 UTC Sunday + 1h per host index → 02:00 / 03:00 / 04:00.
+    _cp_index: "{{ groups['kube_control_plane'].index(inventory_hostname) }}"
+    defrag_oncalendar: "Sun *-*-* {{ '%02d' | format(2 + (_cp_index | int)) }}:00:00 UTC"
+
+  tasks:
+    - name: Verify this is an etcd member (etcd.env present)
+      ansible.builtin.stat:
+        path: /etc/etcd.env
+      register: _etcd_env
+      failed_when: not _etcd_env.stat.exists
+
+    - name: Install etcd-defrag oneshot service (defrags the LOCAL member only)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/etcd-defrag.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # MANAGED BY ANSIBLE — playbooks/etcd-defrag.yml (H41)
+          [Unit]
+          Description=Defragment the local etcd member
+          After=etcd.service
+          Requires=etcd.service
+
+          [Service]
+          Type=oneshot
+          # Source the etcd env for the client certs + this node's advertise URL,
+          # then defrag ONLY this member. --command-timeout bounds the block.
+          ExecStart=/bin/bash -c 'set -a; source /etc/etcd.env; set +a; \
+            ETCDCTL_API=3 /usr/local/bin/etcdctl \
+              --endpoints="$ETCD_ADVERTISE_CLIENT_URLS" \
+              --cacert="$ETCDCTL_CACERT" --cert="$ETCDCTL_CERT" --key="$ETCDCTL_KEY" \
+              defrag --command-timeout=120s'
+          # Never let defrag wedge: cap runtime.
+          TimeoutStartSec=180
+    - name: Install etcd-defrag timer (weekly, staggered per CP)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/etcd-defrag.timer
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # MANAGED BY ANSIBLE — playbooks/etcd-defrag.yml (H41)
+          [Unit]
+          Description=Weekly etcd defrag (staggered per control-plane node)
+
+          [Timer]
+          OnCalendar={{ defrag_oncalendar }}
+          Persistent=true
+          RandomizedDelaySec=300
+
+          [Install]
+          WantedBy=timers.target
+      register: _defrag_timer
+
+    - name: Enable + (re)start the etcd-defrag timer
+      ansible.builtin.systemd:
+        name: etcd-defrag.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Show the scheduled defrag time for this node
+      ansible.builtin.debug:
+        msg: "etcd-defrag.timer on {{ inventory_hostname }} → {{ defrag_oncalendar }}"
