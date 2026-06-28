@@ -187,6 +187,32 @@ metadata:
     pod-security.kubernetes.io/warn: baseline
     pod-security.kubernetes.io/enforce: baseline
 ---
+# Cluster-infra namespaces that are baseline-clean → enforce baseline (M72 tail,
+# 2026-06-28). tier=system (infra), but unlike plex/wireguard below these run NO
+# privileged pods, so baseline IS enforced. Verified clean via
+# `kubectl label ns <ns> pod-security.kubernetes.io/enforce=baseline --dry-run=server`
+# (no existing-pod violation warnings). Namespaces are build targets here (the
+# Namespace manifest ships in helm-releases/{cert-manager,cnpg}.yaml).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels:
+    tier: system
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cnpg-system
+  labels:
+    tier: system
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
+---
 # Privileged-by-design namespaces — tier=system, no PSS enforcement.
 apiVersion: v1
 kind: Namespace
