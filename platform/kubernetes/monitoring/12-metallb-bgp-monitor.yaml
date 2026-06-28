@@ -1,0 +1,25 @@
+---
+# L24 Phase 4 — scrape the MetalLB (FRR-mode) speaker BGP metrics so a BGP
+# withdrawal stops being SILENT (a withdrawal blackholes the Traefik + DNS VIPs for
+# external clients, and CiliumTraefikIngressDrop can't fire — no packets reach the
+# pod). The speaker exposes metallb_bgp_session_up{peer=...} on the plain-HTTP
+# `monitoring` port (7472). PodMonitor in `monitoring`, label release=monitoring so
+# the kube-prometheus-stack operator adopts it (same pattern as hubble-servicemonitor).
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: metallb-speaker
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - metallb-system
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: metallb
+      app.kubernetes.io/component: speaker
+  podMetricsEndpoints:
+    - port: monitoring
+      path: /metrics

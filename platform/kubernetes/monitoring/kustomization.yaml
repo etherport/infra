@@ -22,6 +22,8 @@ resources:
   # M74 v2: Tetragon runtime-detection alerts (cred-file access / setuid-root) off
   # the selective Tetragon export. See platform/kubernetes/tetragon/README.md.
   - 11-loki-rules-tetragon.yaml
+  # L24 Phase 4: scrape MetalLB (FRR) speaker BGP metrics (silent-outage alert below).
+  - 12-metallb-bgp-monitor.yaml
   - comprehensive-alerts.yaml
   - dns-health-alerts.yaml
   - grafana-admin-secret.sops.yaml
