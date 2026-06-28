@@ -1,0 +1,30 @@
+---
+# M74 v2 — high-signal detection: a process calling setuid(0) (escalating to UID 0 /
+# root) from inside a CONTAINER. Based on Tetragon's `sys_setuid.yaml` example, with
+# a selector pinning uid == 0 so it only fires on root-escalation (not benign drops to
+# an unprivileged uid). "Unexpected privileged syscall" per the M74 plan.
+#
+# Host-namespace setuid(0) (login/su/sudo/sshd on the node) is filtered OUT by the
+# Tetragon export namespace-denylist (empty ns = host), so only in-CONTAINER
+# root-escalation is exported → alerted. Most app containers never legitimately
+# setuid(0); a su-exec/gosu entrypoint may, so treat a hit as triage, not certainty.
+# OBSERVE-ONLY (no kill/override). Tunable: add a per-workload matchArgs exclusion if
+# a known entrypoint is noisy. Future siblings (deferred): sys_ptrace (injection),
+# sys_mount (container breakout), shell-in-container.
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "detect-setuid-root"
+spec:
+  kprobes:
+    - call: "sys_setuid"
+      syscall: true
+      args:
+        - index: 0
+          type: "int"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Equal"
+              values:
+                - "0"

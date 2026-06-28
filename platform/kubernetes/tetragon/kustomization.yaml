@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# M74 v2 — Tetragon TracingPolicies (the detections). Cluster-scoped CRs, applied by
+# the flux-system Kustomization via clusters/wind/kustomization.yaml. The Tetragon
+# ENGINE (HelmRelease + selective export config) lives in
+# clusters/wind/helm-releases/tetragon.yaml; the alert in
+# platform/kubernetes/monitoring/07-loki-rules-tetragon.yaml. See ./README.md.
+resources:
+  - 10-tp-cred-file-access.yaml
+  - 11-tp-setuid-root.yaml

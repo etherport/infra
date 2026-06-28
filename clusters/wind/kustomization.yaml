@@ -61,6 +61,9 @@ resources:
   # M73 Kyverno ClusterPolicies (engine = helm-releases/kyverno.yaml). All audit-only +
   # failurePolicy Ignore + control-plane-excluded. See platform/kubernetes/kyverno/README.md.
   - ../../platform/kubernetes/kyverno
+  # M74 v2 Tetragon TracingPolicies (the detections; engine = helm-releases/tetragon.yaml).
+  # Cluster-scoped, observe-only. Alert = monitoring/07-loki-rules-tetragon.yaml.
+  - ../../platform/kubernetes/tetragon
   # Database (CloudNativePG cluster - operator installed via Helm)
   - ../../platform/kubernetes/cnpg
   # Cue app database — dedicated single-instance CNPG cluster (cue ns).

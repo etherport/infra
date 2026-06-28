@@ -1,0 +1,76 @@
+---
+# M74 v2 — high-signal detection: access to credential / persistence files from a
+# CONTAINER. Modelled on Tetragon's canonical `filename_monitoring.yaml`
+# (security_file_permission + security_path_truncate kprobes), but narrowed from the
+# example's broad `/etc/` prefix to a handful of files that a normal app container
+# should essentially NEVER touch — so a match is meaningful, and the volume stays
+# near-zero (keeps the selective Loki export tiny):
+#   /etc/shadow, /etc/gshadow   — credential theft / offline cracking
+#   /etc/sudoers, /etc/sudoers.d/* — privilege-escalation persistence
+#   */.ssh/authorized_keys       — SSH backdoor persistence
+#
+# TracingPolicy is CLUSTER-SCOPED (kind: TracingPolicy). Host-namespace activity
+# (e.g. a legit `useradd` on the node touching /etc/shadow) is filtered OUT by the
+# Tetragon export namespace-denylist {"namespace":["", ...]} (empty ns = host/no-pod),
+# so only in-CONTAINER access is exported → alerted. OBSERVE-ONLY (no matchActions
+# kill/override; this is the assume-breach detection layer, not enforcement).
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "detect-cred-file-access"
+spec:
+  kprobes:
+    - call: "security_file_permission"
+      syscall: false
+      return: true
+      args:
+        - index: 0
+          type: "file"
+        - index: 1
+          type: "int" # access mask (MAY_READ=4/MAY_WRITE=2/MAY_APPEND=8); captured for context
+      returnArg:
+        index: 0
+        type: "int"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Equal"
+              values:
+                - "/etc/shadow"
+                - "/etc/gshadow"
+        - matchArgs:
+            - index: 0
+              operator: "Prefix"
+              values:
+                - "/etc/sudoers"
+        - matchArgs:
+            - index: 0
+              operator: "Postfix"
+              values:
+                - "/.ssh/authorized_keys"
+    - call: "security_path_truncate"
+      syscall: false
+      return: true
+      args:
+        - index: 0
+          type: "path"
+      returnArg:
+        index: 0
+        type: "int"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Equal"
+              values:
+                - "/etc/shadow"
+                - "/etc/gshadow"
+        - matchArgs:
+            - index: 0
+              operator: "Prefix"
+              values:
+                - "/etc/sudoers"
+        - matchArgs:
+            - index: 0
+              operator: "Postfix"
+              values:
+                - "/.ssh/authorized_keys"
