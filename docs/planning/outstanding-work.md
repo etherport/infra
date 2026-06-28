@@ -141,16 +141,21 @@ _Completed items keep a one-line ✅ header here (grep-able by ID); their **full
   perf` PASSES when isolated (13.8ms). **Added a staggered weekly defrag timer** (`playbooks/etcd-defrag.yml`,
   Sun 02:00/03:00/04:00 UTC per CP, never two at once) so fragmentation can't rebuild. Kyverno reports are
   NOT a significant load (386 polr / 2 ephemeral).
-- **⏳ Remaining (maintenance window):** (1) **dedicated/faster etcd disk** — give each CP VM a separate
-  virtual disk for `/var/lib/etcd` so the WAL fsync stops contending with OS/container/log I/O (the real
-  fix if the defrag isn't enough; TF + rolling per-CP migration). (2) **Fix the etcd metrics scrape** —
-  `kube-etcd` Endpoints are empty + etcd only serves `:2379` (cert) not `:2381`; either enable
-  `--listen-metrics-urls=http://<ip>:2381` (rolling etcd restart, no cert in a secret) or scrape `:2379`
-  with the etcd client cert in a monitoring secret. Then we can SEE the fsync/election timeline + alert.
-  (3) **CSI VolumeSnapshot CRDs missing** (`snapshot.storage.k8s.io`) → csi-snapshotter error-spam (volume
-  snapshots non-functional; RBD provisioning fine) — install the CRDs + snapshot-controller or drop the
-  sidecar. **Watch:** re-check the scheduler/CM restart RATE over the next few days now that the DB is
-  defragged — if it drops sharply, the disk fix may be deferrable. **Tier: HIGH. Effort: M.**
+- **🔎 Storage is NOT the gap (checked 2026-06-28):** the CP VMs are on `local-zfs` = a **mirror of two
+  enterprise Micron 7450 NVMe** (datacenter, **power-loss protection** → fast fsync), and the etcd zvol is
+  already well-tuned (`sync=standard`, `logbias=latency`, 16K, compression on). So a "dedicated etcd disk"
+  is NOT warranted — same good pool, only isolation, no media gain. **The actual lever is the VM I/O config:
+  `iothread=0` on the CP `scsi0` disks** (scsihw is already `virtio-scsi-single`) → etcd's fsync shares the
+  single QEMU main thread instead of a dedicated I/O thread. `etcdctl check perf` slowest was 13.8ms with
+  iothread off; enterprise-NVMe+PLP should be sub-ms.
+- **⏳ Remaining:** (1) **Enable `iothread=1` on the CP VM `scsi0` disks** (infra/terraform/proxmox/k8s-vms/)
+  + rolling CP VM restart (one at a time, verify etcd quorum + rejoin — the k8s-node-patch rolling-CP
+  pattern) — the targeted fix, no disk migration. (2) **Fix the etcd metrics scrape** (kube-etcd Endpoints
+  empty, `:2381` not enabled) so we can measure `etcd_disk_wal_fsync_duration` p99 + alert — do this BEFORE
+  iothread so we can prove the delta. (3) **CSI VolumeSnapshot CRDs missing** (`snapshot.storage.k8s.io`) →
+  csi-snapshotter error-spam (snapshots non-functional; RBD fine) — install CRDs + snapshot-controller or
+  drop the sidecar. **Watch the scheduler/CM restart RATE over the next few days post-defrag** — if it
+  drops, defrag sufficed; if not, do iothread. **Tier: HIGH. Effort: S–M** (iothread is small).
 - **Original symptom (for grep):** kube-scheduler 54/71/74, controller-manager 43/79/87, csi-snapshotter
   17/23 restarts over ~4d; each dies on leader-election lease `context deadline exceeded` (5s `Put` to
   `coordination.k8s.io`). apiservers stable. Self-recovering, no outage. Full triage in session-log 2026-06-28.
