@@ -1,17 +1,14 @@
 # M73 — Kyverno guardrail: every container must declare CPU + memory requests.
-# ⚠️ STAYS AUDIT-only (validate.failureAction: Audit) → reported via PolicyReports, nothing blocked.
-# failurePolicy: Ignore → a down/slow admission controller fails OPEN (never wedges admission).
-#
-# Why NOT enforce yet (audit 2026-06-27): ~6 third-party Helm charts ship pods without requests —
-# kube-prometheus-stack (node-exporter/grafana/pushgateway/prometheus/loki/alertmanager/operator/
-# kube-state-metrics), traefik, the tailscale-operator, ARC (github-actions-runner), the ceph
-# csi-rbdplugin (runs in `default`), and the s3-sync-daily-report CronJob. Several create pods
-# DYNAMICALLY (tailscale proxies, ARC ephemeral runners, csi on reschedule) — enforcing would BLOCK
-# those at admission = outages. PREREQ to enforce: add resources.requests to each chart's values
-# (+ the dynamic-pod templates), re-confirm `kubectl get polr -A` clean, THEN flip to Enforce.
+# ✅ ENFORCING (2026-06-28). Safe because 02-add-default-resource-requests.yaml MUTATES a tiny
+# default request (10m/32Mi) onto any container missing one BEFORE this validate webhook runs —
+# so NO pod can be blocked, including injected sidecars and dynamically-created pods (tailscale
+# proxies, ARC ephemeral runners, ceph csi). Well-configured charts (prometheus, grafana,
+# alertmanager, …) keep their own larger requests — the mutate only fills gaps. failurePolicy:
+# Ignore → a down/slow controller fails OPEN (never wedges admission). Existing pods aren't
+# evicted; they get mutated-compliant on their next rollout.
 # (Division of labour: PSA handles pod-security posture; Kyverno does the guardrails PSA can't —
 #  resource requests, image tags, later image-signature/provenance for H30.)
-# disallow-latest-tag (01-) is already ENFORCING — see its header.
+# disallow-latest-tag (01-) also ENFORCING — see its header.
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -52,7 +49,7 @@ spec:
                 - ceph-csi
                 - velero
       validate:
-        failureAction: Audit
+        failureAction: Enforce
         message: "Every container must set resources.requests.cpu and resources.requests.memory."
         pattern:
           spec:
