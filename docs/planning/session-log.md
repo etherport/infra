@@ -13,6 +13,26 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-29 — cairn photos overnight rc=1 ROOT CAUSE found → fresh sparsebundle reattach per run (v0.1.4)
+
+**What:** third consecutive overnight `ICloudBackupFailed` (photos rc=1). The osxphotos crash log
+(`~/.local/state/cairn/photos-reports/osxphotos_crash.log`) was the smoking gun: osxphotos' first step
+copies the library's hot `Photos.sqlite` off the sparsebundle and that read throws **`[Errno 5]
+Input/output error` once the sparsebundle mount has AGED** (attached since login, read overnight) — even
+though cairn's small liveness probe passes. **Daytime works only because a fresh `mount-nas.sh` reattaches
+first** (confirmed: a fresh attach gets past the EIO). The prior two fixes (v0.1.2 attach-leak, v0.1.3
+SMB-retry + 22:00 reschedule) were real but NOT the root.
+
+**Fix — cairn v0.1.4 (deployed):** PhotosSource now **proactively force-detaches/reattaches the
+sparsebundle FRESH at the start of every run** (image layer only; Personal-Drive stays mounted, like
+mount-nas.sh), while resources are fresh — instead of reacting after the EIO when the system is already
+starved (the reactive reattach had been failing with hdiutil `Resource temporarily unavailable`/`No child
+processes`). Today's re-run ✓ (43,980 items); alert cleared, 8/8. Built/signed/published via CI, deployed
+(leaf `541075…`, v0.1.4). **Real test = tonight's unattended 22:00 run** (daytime confirms the mechanism,
+not the night condition) — watching it; if it still fails the cause is night-specific (diagnose live).
+Also confirmed a **scheduling pile-up** (slow contacts holds the lock past 20:00 → the 20:00 messages fire
+is skipped → messages+photos stack onto the 22:00 fire) — noted, not yet the fix focus.
+
 ## 2026-06-29 — M77 Stage-2b: asterisk SBC firewall source-scoped to Twilio/Talk (applied)
 
 Closed the last open M77 follow-up (the telephony/911-critical one the cont.8 review explicitly
