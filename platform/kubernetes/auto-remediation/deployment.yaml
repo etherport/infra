@@ -16,7 +16,7 @@ spec:
       serviceAccountName: remediation-controller
       containers:
       - name: controller
-        image: python:3.14-slim@sha256:63a4c7f612a00f92042cbdcc7cdc6a306f38485af0a200b9c89de7d9b1607d15 # {"$imagepolicy": "flux-system:python-slim"}
+        image: python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1 # {"$imagepolicy": "flux-system:python-slim"}
         command:
         - /bin/bash
         - -c
@@ -158,7 +158,7 @@ spec:
       - name: aws-iam-token
         projected:
           sources:
-            - serviceAccountToken:
-                audience: sts.amazonaws.com
-                expirationSeconds: 3600
-                path: token
+          - serviceAccountToken:
+              audience: sts.amazonaws.com
+              expirationSeconds: 3600
+              path: token
