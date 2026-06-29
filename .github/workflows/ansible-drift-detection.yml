@@ -1,0 +1,193 @@
+name: Ansible Drift Detection
+
+# Scheduled `ansible-playbook --check --diff` over the ansible-managed UDM/switch
+# surfaces that nothing else watches:
+#   - udm-firewall : UDM zones/groups/policies (the Trusted/Management/IoT/
+#                    Infrastructure/Security model + the intra-Trusted hairpin allow).
+#   - usw-acls     : the L3-switch ACLs on Switch Rack PoE (202<->209<->210 east-west).
+# Both playbooks FULL-RECONCILE, so in --check mode `changed=0` == live matches IaC and
+# `changed>0` == DRIFT (the UDM or switch was changed out-of-band). Verified 2026-06-29:
+# both report changed=0 when aligned (idempotent), so the signal is clean / no false-positives.
+#
+# NOTIFICATION (no console-watching): on drift the `report` job opens/refreshes an
+# `ansible-drift` GitHub Issue listing the drifted playbook(s) with the --check --diff, and
+# calls core.setFailed -> the scheduled run goes RED -> GitHub emails the repo owner. A
+# clean run stays green/silent. Mirrors terraform-drift-detection.yml exactly.
+#
+# GAP THIS CLOSES: terraform-drift-detection.yml (TF, daily) + service-status-inventory-
+# drift.yml (monitoring inventory, weekly) already existed; the ansible-managed UDM
+# firewall/zones + switch ACLs had only a MANUAL `ansible-unifi.yml check`. This is the
+# surface where the 2026-06-29 "Servers/201 is switch-routed" model drift hid undetected.
+#
+# Corrections are applied via the ansible-unifi.yml workflow (run `check` to preview, then
+# `apply`), never by hand on the UDM/switch.
+#
+# NOT covered here (tracked follow-ups): (1) technitium DNS (separate inventory/creds);
+# (2) live network-TOPOLOGY assertions (routing/zone invariants, e.g. "201's gateway is the
+# UDM") — that class is NOT a live-vs-IaC diff; it needs an `ip route`/UDM-API probe and is
+# its own check. See docs/architecture/firewall-zones.md + the drift-resolution plan.
+
+on:
+  schedule:
+    # Daily at 15:30 UTC (08:30 PT) — staggered after the 14:00 UTC TF drift run.
+    - cron: '30 15 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  WORKING_DIR: infra/ansible
+
+jobs:
+  check:
+    name: ${{ matrix.playbook }} drift
+    # Lifecycle runner (gh-runner VM @ 10.10.201.30) has L3 reach to the UDM at
+    # 10.10.200.1; same runner + container + creds as ansible-unifi.yml.
+    runs-on: [self-hosted, lifecycle]
+    container:
+      image: ghcr.io/sparked-diamond/ansible-runner:main
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # udm-firewall reconciles its full intended state by default.
+          - playbook: udm-firewall
+            extra: ""
+          # usw-acls: assert the FULL intended ACL set (existing + storage-tier BLOCKs),
+          # so apply_new=true — matches the live state (verified changed=0 2026-06-29).
+          - playbook: usw-acls
+            extra: "-e usw_acls_apply_new=true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Run playbook in --check --diff
+        id: run
+        env:
+          # M47: UDM_API_KEY (X-API-Key) preferred; falls back to UDM_USERNAME/PASSWORD.
+          UDM_API_KEY: ${{ secrets.UDM_API_KEY }}
+          UDM_USERNAME: ${{ secrets.UDM_USERNAME }}
+          UDM_PASSWORD: ${{ secrets.UDM_PASSWORD }}
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          set -o pipefail
+          ansible-playbook \
+            -i inventory/wind/inventory.ini \
+            playbooks/${{ matrix.playbook }}.yml \
+            --check --diff -e ansible_become=false ${{ matrix.extra }} -v \
+            2>&1 | tee /tmp/run.log
+
+      - name: Evaluate drift from PLAY RECAP
+        id: drift
+        if: always()
+        run: |
+          if [ ! -f /tmp/run.log ]; then
+            echo "no run log — playbook errored before recap"
+            echo "drifted=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          recap=$(grep -E 'localhost[[:space:]]+: ok=' /tmp/run.log | tail -1)
+          changed=$(printf '%s' "$recap" | grep -oE 'changed=[0-9]+' | cut -d= -f2)
+          echo "RECAP: ${recap:-<none>}"
+          if [ "${changed:-0}" -gt 0 ]; then
+            echo "DRIFT: ${{ matrix.playbook }} changed=$changed"
+            echo "drifted=true" >> "$GITHUB_OUTPUT"
+            cp /tmp/run.log "/tmp/drift-${{ matrix.playbook }}.log"
+          else
+            echo "clean: ${{ matrix.playbook }} changed=${changed:-0}"
+            echo "drifted=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload drift diff
+        if: steps.drift.outputs.drifted == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: drift-${{ matrix.playbook }}
+          path: /tmp/drift-${{ matrix.playbook }}.log
+          retention-days: 14
+
+  report:
+    name: Report ansible drift
+    needs: [check]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: artifacts
+          pattern: drift-*
+        continue-on-error: true
+
+      - name: Compose drift summary
+        id: compose
+        run: |
+          set +e
+          drifted=$(ls artifacts 2>/dev/null | sed 's/^drift-//' | sort | paste -sd, -)
+          echo "drifted=$drifted" >> "$GITHUB_OUTPUT"
+          if [ -z "$drifted" ]; then
+            echo "No ansible drift detected." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "# Ansible drift detected"
+            echo
+            echo "Playbook(s) whose LIVE state differs from IaC (\`--check\` changed>0): \`$drifted\`"
+            echo
+            echo "Reconcile via the **ansible-unifi.yml** workflow — run \`check\` to preview the diff, then \`apply\`. Do NOT hand-edit the UDM/switch."
+            echo
+            for d in artifacts/drift-*; do
+              [ -d "$d" ] || continue
+              name=$(basename "$d" | sed 's/^drift-//')
+              echo "## $name"
+              echo
+              echo '<details><summary>--check --diff output (tail)</summary>'
+              echo
+              echo '```'
+              tail -c 6000 "$d"/*.log 2>/dev/null
+              echo '```'
+              echo
+              echo '</details>'
+            done
+          } > drift.md
+          cat drift.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open / refresh drift issue
+        if: steps.compose.outputs.drifted != ''
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('drift.md', 'utf8');
+            const title = `Ansible drift: ${{ steps.compose.outputs.drifted }}`;
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'ansible-drift',
+              per_page: 1,
+            });
+            if (existing.length) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing[0].number,
+                title,
+                body,
+              });
+              core.info(`Updated drift issue #${existing[0].number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['ansible-drift'],
+              });
+              core.info(`Opened drift issue #${created.data.number}`);
+            }
+            core.setFailed(`Ansible drift detected in: ${{ steps.compose.outputs.drifted }}`);
