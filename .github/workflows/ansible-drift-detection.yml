@@ -74,13 +74,19 @@ jobs:
           UDM_USERNAME: ${{ secrets.UDM_USERNAME }}
           UDM_PASSWORD: ${{ secrets.UDM_PASSWORD }}
         working-directory: ${{ env.WORKING_DIR }}
+        # NB the ansible-runner container runs steps with `sh` (dash), not bash, so no
+        # `set -o pipefail`/`tee` pipeline (that errors "Illegal option"). Capture to a
+        # file + re-emit + propagate ansible's real exit code (a broken detector -> red).
         run: |
-          set -o pipefail
+          set +e
           ansible-playbook \
             -i inventory/wind/inventory.ini \
             playbooks/${{ matrix.playbook }}.yml \
             --check --diff -e ansible_become=false ${{ matrix.extra }} -v \
-            2>&1 | tee /tmp/run.log
+            > /tmp/run.log 2>&1
+          rc=$?
+          cat /tmp/run.log
+          exit $rc
 
       - name: Evaluate drift from PLAY RECAP
         id: drift
