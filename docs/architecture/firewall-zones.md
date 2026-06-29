@@ -13,7 +13,7 @@ The zone migration is done. Final state: **three custom UDM zones** (IoT, Infras
 - **Phase 1 ✅:** Custom `Infrastructure` zone — VLAN 212 (Unifi / Protect+Talk+Access fleet) moved in.
 - **Phase 2 → M52 ✅:** vSAN/209 + Ceph/210 are L3-switch-routed (can't be UDM-zoned). East-west security is enforced by **switch ACLs** on Switch Rack PoE — applied + verified (see "L3-switch ACLs" section below).
 - **Phase 3 ✅:** Custom `Security` zone — VLAN 205 (SimpliSafe) moved in; legacy network-isolation toggle retired so the zone model is the single source of truth.
-- **Phase 4 — SUPERSEDED by M56 (2026-05-31).** This was skipped on the premise that Servers/201 was switch-routed and couldn't be UDM-zoned. The **MetalLB BGP migration (M18/M36)** then made 201 **UDM-routed for north-south**, so it *can* now be zoned — and the networking review judged the segmentation worth it. See "M56 — Trusted / Management zones" below.
+- **Phase 4 — SUPERSEDED by M56 (2026-05-31).** This was skipped on the premise that Servers/201 was switch-routed and couldn't be UDM-zoned. The **MetalLB BGP migration (M18/M36)** then made 201 **UDM-routed** (its default gateway is the UDM `10.10.201.1` — verified live: every inter-VLAN flow from a 201 host first-hops the UDM), so it *can* now be zoned — and the networking review judged the segmentation worth it. See "M56 — Trusted / Management zones" below.
 - **Phase 5 ✅:** this doc reconciled to the live state; planning companion archived.
 
 **Why the hybrid split:** the UDM is CPU-bound (~3.5-5 Gbps); Switch Rack PoE has a ~50 Gbps line-rate fabric. Storage (vSAN/Ceph at 10G + jumbo) and workstation→NAS flows MUST stay switch-routed for performance, so their security lives in switch ACLs, not UDM zones. Textbook firewall-north-south / L3-switch-east-west architecture.
@@ -79,27 +79,30 @@ The homelab network uses a **dual-router architecture** with routing responsibil
  │                           L3 Switch ("Switch Rack PoE")                                 │
  │                              Secondary Router                                           │
  │                                                                                         │
- │   Routes: Clients (202), vSAN (209), Ceph (210)                                        │
- │   (Servers/201 north-south is now UDM-routed/zoned — Trusted — since the BGP            │
- │    migration; only 201↔202/209/210 east-west stays L2/switch-local)                     │
+ │   Gateways ONLY for: Clients (202), vSAN (209), Ceph (210)                              │
+ │   (Servers/201 is NOT switch-routed — its gateway is the UDM `10.10.201.1` since the     │
+ │    M56/BGP migration, so 201 hangs under the UDM box above, not here. The switch is the  │
+ │    SOLE enforcement point only for 202↔209↔210 east-west, which never touches the UDM.)  │
  │   Static routes to AWS (10.10.100.0/22, 10.255.255.0/29, 10.254.0.0/24)                │
  └────────────────────────────────────────────────────────────────────────────────────────┘
-                │              │              │             │
-                ▼              ▼              ▼             ▼
-          ┌──────────┐   ┌──────────┐   ┌──────────┐  ┌──────────┐
-          │ VLAN 201 │   │ VLAN 202 │   │ VLAN 209 │  │ VLAN 210 │
-          │ Servers  │   │ Clients  │   │   vSAN   │  │   Ceph   │
-          │ Trusted  │   │ Internal │   │ Internal │  │ Internal │
-          │10.10.201 │   │10.10.202 │   │10.10.209 │  │10.10.210 │
-          └──────────┘   └──────────┘   └──────────┘  └──────────┘
+                                 │              │             │
+                                 ▼              ▼             ▼
+                           ┌──────────┐   ┌──────────┐  ┌──────────┐
+                           │ VLAN 202 │   │ VLAN 209 │  │ VLAN 210 │
+                           │ Clients  │   │   vSAN   │  │   Ceph   │
+                           │ Internal │   │ Internal │  │ Internal │
+                           │10.10.202 │   │10.10.209 │  │10.10.210 │
+                           └──────────┘   └──────────┘  └──────────┘
+  (Servers/201 — Trusted — is UDM-routed; it is a child of the UDM box above, not the switch.)
 
   (★) There are FIVE custom zones on the controller: Trusted (Servers/201),
       Management (200), IoT (204), Infrastructure (Unifi/212), Security (205)
       (M30 migration 2026-05-28/29; Trusted/Management added by M56 2026-05-31).
-      "Internal" now holds only the Default network. Servers/201 north-south is
-      UDM-routed (Trusted zone) since the BGP migration; the remaining switch-
-      routed VLANs (202/209/210/4040) are in no UDM zone — their east-west
-      security is enforced by L3-switch ACLs (see below).
+      "Internal" now holds only the Default network. Servers/201 is fully
+      UDM-routed (Trusted zone) since the BGP migration — ALL its inter-VLAN
+      traffic transits the UDM. The switch-routed VLANs (202/209/210) and the
+      4040 transit are in no UDM zone; switch ACLs are the sole enforcement only
+      for 202↔209↔210 east-west (the flows that never reach the UDM).
 ```
 
 ### Firewall Implications of Dual-Router Architecture
@@ -128,12 +131,12 @@ The UDM firewall only sees traffic that traverses the UDM. Since the BGP migrati
 
 ### L3-switch ACLs (M52 — deployed 2026-05-29)
 
-The switch-routed fabric (Servers/201, Clients/202, vSAN/209, Ceph/210) is policed by IP ACLs on **Switch Rack PoE** (US624P @ `10.10.200.232`), managed declaratively by `infra/ansible/playbooks/usw-acls.yml` (`/proxy/network/v2/api/site/default/acl-rules`). Switch default is allow-all, so these are explicit BLOCK overrides + one preserved ALLOW:
+The switch-routed fabric (Clients/202, vSAN/209, Ceph/210 — these three are gatewayed by the L3 switch) is policed by IP ACLs on **Switch Rack PoE** (US624P @ `10.10.200.232`), managed declaratively by `infra/ansible/playbooks/usw-acls.yml` (`/proxy/network/v2/api/site/default/acl-rules`). Switch default is allow-all, so these are explicit BLOCK overrides + one preserved ALLOW. **⚠️ Drift note (M56):** the playbook's header + the captured baseline predate M56 (2026-05-31) and still list **Servers/201 as switch-routed** — that is now FALSE (201's gateway is the UDM). Consequence: any ACL row with **201 as src/dst is dead or redundant** — a 205→201 or 201→x flow is routed by the UDM, so it's policed by the UDM `Trusted`/`Security` zones, NOT the switch (for 205→201, both ends are UDM-routed so the packet never reaches the switch at all). The switch ACLs are the SOLE enforcement only for **202↔209↔210**. These rows are harmless (the UDM enforces the real boundary) but should be pruned in a deliberate switch-ACL review — see the systemic-drift follow-up. Live rows:
 
 | # | Action | Flow | Purpose |
 |---|--------|------|---------|
 | 0 | ALLOW | Hue bridges (`204.51/52`) → Clients/202 | Return path for Clients→Hue control |
-| 1 | BLOCK | Security/205 → 201, 202, 209, 210 | Switch-side complement to the Security UDM zone (covers switch-routed dests the zone can't) |
+| 1 | BLOCK | Security/205 → 201, 202, 209, 210 | Switch-side complement to the Security UDM zone for the switch-routed dests **202/209/210**. ⚠️ The **→201 entry is DEAD** post-M56 (205 & 201 are both UDM-routed → the flow never traverses the switch; the UDM Security zone blocks it). Prune in the switch-ACL review. |
 | 2 | BLOCK | Ceph/210 → vSAN/209 | Separate storage backends, no cross-talk |
 | 3 | BLOCK | Clients/202 → Ceph/210 | No client workflow needs raw Ceph |
 | 4 | BLOCK | vSAN/209 → Ceph/210 | Separate storage backends |
@@ -150,6 +153,7 @@ The switch-routed fabric (Servers/201, Clients/202, vSAN/209, Ceph/210) is polic
 |------|------|--------|-----------|---------|
 | (untagged) | Default | 10.10.199.0/24 | Internal | Untagged native — should be empty, but DHCP `.100-.254` is still on. Talk service listens on `10.10.199.1` (see `unifi-talk.md`). |
 | 200 | Management | 10.10.200.0/24 | **Management (custom)** | Network equipment (UDM, switches, APs). Contained admin plane (M56). |
+| 201 | Servers | 10.10.201.0/24 | **Trusted (custom)** | K8s nodes, DNS (MetalLB `.5/.6`), infra services. **UDM-routed** (gateway = UDM `10.10.201.1`) since the M56/BGP migration — verified live (every inter-VLAN flow from a 201 host first-hops the UDM). ALL its inter-VLAN traffic transits the UDM and is policed by the `Trusted` zone; the 201↔202/209/210 path crosses the switch only as 202/209/210's gateway on the far side. |
 | 204 | IoT | 10.10.204.0/24 | **IoT (custom)** | Smart home devices |
 | 205 | Security | 10.10.205.0/24 | Internal | SimpliSafe gear (cameras retired) — Network Isolation = ON (see §"Known anomalies") |
 | 206 | Guest | 10.10.206.0/24 | Hotspot (built-in) | Guest WiFi |
@@ -158,9 +162,10 @@ The switch-routed fabric (Servers/201, Clients/202, vSAN/209, Ceph/210) is polic
 
 ### Networks Routed by L3 Switch
 
+(Gateway = L3 switch for hosts on these VLANs. Inter-VLAN traffic **between** them — 202↔209↔210 — never touches the UDM, so the switch ACLs are its sole enforcement. Servers/201 is **not** here — it moved to UDM-routed at M56, see the table above.)
+
 | VLAN | Name | Subnet | Live Zone | Purpose |
 |------|------|--------|-----------|---------|
-| 201 | Servers | 10.10.201.0/24 | **Trusted (custom)** | K8s nodes, DNS (MetalLB `.5/.6`), infra services. **North-south** is UDM-routed/zoned (Trusted) since the BGP migration (M56); **east-west** to 202/209/210 stays L3-switch-routed (switch ACLs). |
 | 202 | Clients | 10.10.202.0/24 | Internal | User laptops, phones |
 | 209 | vSAN | 10.10.209.0/24 | Internal | Storage network (Proxmox/NAS) |
 | 210 | Ceph | 10.10.210.0/24 | Internal | Dedicated Ceph storage (PVE mon `.41`, K8s nodes `.50-.60` via `enp6s22` MTU 9000). Migrated 2026-05-18 from VLAN 201. |
@@ -191,7 +196,7 @@ UniFi Network creates a fixed set of built-in zones; you can add custom zones on
 
 | Zone | Type | Member networks | Notes |
 |------|------|-----------------|-------|
-| **Internal** | built-in | Default/199 | Default = `Allow All Traffic` within the zone. Now holds only the Default network (Management/200 moved to `Management`, Servers/201 to `Trusted` — M56). **Switch-routed VLANs (Clients/202, vSAN/209, Ceph/210, InterVLAN/4040) are NOT members of any UDM zone** — east-west security is enforced by switch ACLs (see below); only their north-south traffic transits the UDM (via VLAN 4040). Servers/201 is now north-south-zoned (`Trusted`) but still switch-routed east-west. |
+| **Internal** | built-in | Default/199 | Default = `Allow All Traffic` within the zone. Now holds only the Default network (Management/200 moved to `Management`, Servers/201 to `Trusted` — M56). **Switch-routed VLANs (Clients/202, vSAN/209, Ceph/210) + the InterVLAN/4040 transit are NOT members of any UDM zone** — their east-west security (202↔209↔210) is enforced by switch ACLs (see below); traffic to/from a UDM-routed VLAN transits the UDM (via VLAN 4040) and is policed there. Servers/201 is **UDM-routed and zoned (`Trusted`)** — all its inter-VLAN traffic transits the UDM (it is no longer switch-routed). |
 | **Trusted** | custom | Servers/201 | M56 (2026-05-31). Trusted workload tier; broad egress + ingress for fronted services. Behaviour-neutral vs the old `Internal`. |
 | **Management** | custom | Management/200 | M56 (2026-05-31). Contained admin plane; reaches only External/Gateway/`Trusted` (DNS + syslog). |
 | **IoT** | custom | IoT/204 | Default block to other zones; one explicit allow for DNS. |

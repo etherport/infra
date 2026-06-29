@@ -2,11 +2,24 @@
 # L3-switch ACLs on Switch Rack PoE (US624P) via the UniFi v2 acl-rules API.
 #
 # Why this playbook exists (M52):
-#   Four VLANs are routed by the L3 switch, not the UDM — Servers/201,
-#   Clients/202, vSAN/209, Ceph/210 (gateway_type=switch). Their
-#   inter-VLAN (east-west) traffic never crosses the UDM, so the UDM
+#   Some VLANs are routed by the L3 switch, not the UDM (gateway_type=switch).
+#   Their inter-VLAN (east-west) traffic never crosses the UDM, so the UDM
 #   zone-based firewall can't police it. The only enforcement point is
 #   switch ACLs. This playbook brings them under IaC.
+#
+# ⚠️ DRIFT (M56, 2026-05-31 — this header + the captured baseline predate it):
+#   the baseline below was taken when FOUR VLANs were switch-routed
+#   (Servers/201, Clients/202, vSAN/209, Ceph/210). The MetalLB/BGP migration
+#   (M56) then moved **Servers/201 to UDM-routed** (its gateway is the UDM
+#   10.10.201.1 — verified live: a 201 host first-hops the UDM for every
+#   inter-VLAN dest). So only THREE remain switch-routed: 202, 209, 210.
+#   Consequence: ACL rows with **201 as src/dst are dead or redundant** — that
+#   traffic is routed (and policed) by the UDM Trusted/Security zones. The
+#   "Isolate 205 Security (L3)" rule's `201` dest is DEAD (205 & 201 are both
+#   UDM-routed → the flow never reaches this switch). These rows are harmless
+#   (the UDM enforces the real boundary) but should be PRUNED to 202/209/210 in
+#   a deliberate, --check-verified switch-ACL pass. Do NOT silently edit live
+#   ACLs here without that review. See docs/architecture/firewall-zones.md.
 #
 #   Design + rationale: docs/planning/l3-switch-acl-iac-2026-05-28.md
 #   Captured baseline:  docs/architecture/l3-switch-acl-state-2026-05-28.json
