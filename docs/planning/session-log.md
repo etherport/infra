@@ -13,6 +13,28 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-29 (cont. 2) — cairn photos: TRUE root cause (flaky SMB reattach) → retry fix v0.1.5
+
+**What:** the overnight photos rc=1 recurred a 4th time despite v0.1.4. Testing an **unattended launchd
+run on demand** (vs my interactive shell) cracked it — and showed v0.1.4 was actively HARMFUL.
+
+**Root cause:** the **SMB-backed sparsebundle `hdiutil attach` is FLAKY under launchd** — it intermittently
+hangs / fails `hdiutil: No child processes` / EIO, and intermittently succeeds (SMB link state varies;
+reproduced both outcomes the same afternoon via one-shot launchd test agents). The aged-mount EIO on the
+hot `Photos.sqlite` read is real, but cairn couldn't recover because `ensureImage` did **one** attach and
+gave up. **mount-nas.sh (bash, at login / interactive Aqua session) attaches reliably → that's why daytime
+always worked and my from-shell re-runs "passed."** v0.1.4's proactive force-reattach detached the working
+mount every run then hit the flaky attach → 100% failure (the unattended test caught it before tonight).
+
+**Fix — cairn v0.1.5 (deployed):** `ensureImage` retries the attach **5×** (bounded 120s + backoff,
+clearing stale attachments each try); reverted v0.1.4's proactive detach; reactive force-reattach now
+triggers on **timeout/stall too**, not just EIO. **Verified under launchd:** force-detached PhotosLib →
+cairn reattached via the retry → osxphotos ran (the exact failing path). Clean run ✓ (43,981 items),
+8/8 healthy, alert cleared. Built/signed/published via CI, deployed (leaf `541075…`, v0.1.5). **Real test =
+tonight's 22:00 run — watching.** **Method lesson:** reproduce mount/launchd bugs under a one-shot launchd
+agent, never the interactive Claude shell (it has the working session context that hides the failure).
+Docs: cairn README §6 + memory.
+
 ## 2026-06-29 (cont.) — full config-drift resolution: live-anchored re-audit + continuous detectors
 
 User flagged that the original error which prompted the whole doc-review exercise — `firewall-zones.md`
