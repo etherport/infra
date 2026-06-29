@@ -53,11 +53,15 @@ for high-signal runtime events, still **observe-only** (`monitor_only`, no kill)
 2. **Selective export** (`clusters/wind/helm-releases/tetragon.yaml`): `export.mode: stdout`
    **with `tetragon.exportAllowList` restricted to
    `{"event_set":["PROCESS_KPROBE","PROCESS_TRACEPOINT","PROCESS_UPROBE","PROCESS_LSM"]}`** — the
-   `PROCESS_EXEC/EXIT` firehose is NOT in the allowlist so it never flows. `exportDenyList` keeps the
-   chart-default health-check + namespace `["","cilium","kube-system"]` drops. **Measured steady-state
-   export volume: 0 lines/min** (only real policy matches in POD namespaces flow). NB: runc's
+   `PROCESS_EXEC/EXIT` firehose is NOT in the allowlist so the steady stream never flows. `exportDenyList`
+   keeps the chart-default health-check + namespace `["","cilium","kube-system"]` drops. **Steady-state
+   export volume ≈ 0 lines/min** (only real policy matches in POD namespaces flow). ⚠️ **Caveat:** the
+   allowlist does NOT suppress Tetragon's **process-cache warm-up dump** — on every agent restart/rollout
+   each agent emits a one-time ~80-line `PROCESS_EXEC/EXIT` burst to Loki (the dump isn't filterable via
+   exportAllowList). It's harmless: the alert rules match on `process_kprobe.policy_name`, which those exec
+   lines lack, so they never trigger an alert — just a small bounded burst, then quiet. NB: runc's
    container-setup `setuid(0)` is **host-ns** → caught by the namespace denylist, so it does NOT
-   export (its kprobe NPOST counter still ticks — that's pre-export-filter; ignore it).
+   export (and `detect-setuid-root` now also `matchBinaries NotIn runc` so it doesn't even post).
 3. **Alert** (`platform/kubernetes/monitoring/11-loki-rules-tetragon.yaml`): two loki-ruler rules off
    `{namespace="tetragon", container="export-stdout"}` (Alloy tails the sidecar's pod log) — parsing
    `process_kprobe.{policy_name,function_name,process.binary,process.pod.{namespace,name}}`:

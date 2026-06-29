@@ -65,9 +65,16 @@ spec:
     crds:
       enabled: false
     speaker:
-      # L24: FRR mode — required for TCP-MD5; also enables graceful-restart + BFD.
+      # L24: FRR mode — required for TCP-MD5; graceful-restart is active (FRR default,
+      # negotiated with the UDM). BFD still optional/not-enabled.
       frr:
         enabled: true
+      # Velero (defaultVolumesToFsBackup=true) tries to fs-backup the FRR sidecars'
+      # ephemeral emptyDir volumes → "BackupRepository not provisioned" → the
+      # infrastructure-daily backup goes PartiallyFailed (8 errors, 2026-06-29). These
+      # are runtime sockets/config/metrics, not data — exclude them from pod-volume backup.
+      podAnnotations:
+        backup.velero.io/backup-volumes-excludes: "frr-sockets,frr-conf,reloader,metrics"
       # speakers run on every node (incl. control-plane) as today.
       tolerations:
         - key: node-role.kubernetes.io/control-plane

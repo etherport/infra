@@ -370,9 +370,10 @@ data:
       - etcd snapshots — runs on PVE control-plane nodes (NOT in K8s)
 
     Cluster-specific quirks worth flagging if relevant:
-    - MetalLB is BGP-mode (eBGP to the UDM, no L2); raw ICMP to VIPs and
-      same-subnet ARP fail by design — TCP works. A speaker restart can
-      briefly blackhole VIPs (no graceful-restart/BFD yet, L24).
+    - MetalLB is BGP-mode FRR (eBGP + TCP-MD5 to the UDM, no L2; L24); raw
+      ICMP to VIPs and same-subnet ARP fail by design — TCP works. BGP
+      graceful-restart IS active (FRR default), so a speaker restart no
+      longer blackholes VIPs; BFD is the remaining optional follow-on.
     - CNPG Barman backups run nightly; if Postgres alerts during the
       backup window (03:00-04:00 PT), correlate timestamps before
       diagnosing as a real outage.

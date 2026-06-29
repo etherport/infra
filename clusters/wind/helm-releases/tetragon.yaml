@@ -43,7 +43,10 @@ spec:
     # container="export-stdout"}); the alert is monitoring/11-loki-rules-tetragon.yaml.
     # The firehose is kept OUT by restricting the export ALLOWLIST to policy-driven event
     # types only — PROCESS_EXEC/PROCESS_EXIT (the ~1.1M/day exec/exit stream) are NOT
-    # listed, so they never flow. exportDenyList drops health-checks + host/system
+    # listed, so the steady stream never flows. (Caveat: the allowlist does NOT suppress
+    # Tetragon's process-cache warm-up dump — each agent emits a one-time ~80-line
+    # PROCESS_EXEC/EXIT burst to Loki on restart. Harmless: alerts match policy_name, which
+    # those lines lack. See the tetragon README.) exportDenyList drops health-checks + host/system
     # namespaces (so e.g. runc's container-setup setuid(0), which is host-ns, is filtered).
     # Net exported ≈ only real TracingPolicy matches in POD namespaces (near-zero steady
     # state). Verify volume after any change: `kubectl logs -n tetragon ds/tetragon -c

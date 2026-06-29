@@ -66,6 +66,17 @@
       "matchPackageNames": [
         "/sparked-diamond/"
       ]
+    },
+    {
+      "description": "MetalLB Helm chart (Flux) is on the critical BGP path — it carries every ingress + DNS VIP with no L2 fallback (L24 FRR). Don't auto-merge a bump silently; let it land as a reviewable PR after a settle period (the MetallbBGPAllSessionsDown alert + BGP graceful-restart backstop a bad bump, but a human should sign off).",
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchPackageNames": [
+        "metallb"
+      ],
+      "automerge": false,
+      "minimumReleaseAge": "7 days"
     }
   ]
 }

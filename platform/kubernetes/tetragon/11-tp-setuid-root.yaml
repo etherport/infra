@@ -23,7 +23,17 @@ spec:
         - index: 0
           type: "int"
       selectors:
-        - matchArgs:
+        # Exclude the container runtime's host-ns setuid(0) at the KERNEL (the export
+        # namespace-denylist only filters it from Loki — it still posts ~22-24k
+        # events/node/day to userspace, wasting ring-buffer bandwidth + making NPOST
+        # meaningless). matchBinaries NotIn runc means only a NON-runtime binary calling
+        # setuid(0) posts → NPOST becomes a real in-container-escalation counter.
+        - matchBinaries:
+            - operator: "NotIn"
+              values:
+                - "/usr/local/bin/runc"
+                - "/usr/bin/runc"
+          matchArgs:
             - index: 0
               operator: "Equal"
               values:

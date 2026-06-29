@@ -5,8 +5,8 @@
 > **FRR mode** — engine: [`../../../clusters/wind/helm-releases/metallb.yaml`](../../../clusters/wind/helm-releases/metallb.yaml)
 > (`speaker.frr.enabled=true`, `crds: Skip`); CRs here. **Change MetalLB via that HelmRelease, never
 > kubespray.** FRR mode was required for **TCP-MD5** on the eBGP session (`BGPPeer.spec.passwordSecret:
-> bgp-md5` ↔ UDM peer-group password — `02-bgp-md5-secret.sops.yaml`) and unlocks graceful-restart/BFD
-> (not yet enabled). BGP health alert: `metallb_bgp_session_up` (frr-metrics `:7473`) →
+> bgp-md5` ↔ UDM peer-group password — `02-bgp-md5-secret.sops.yaml`). BGP **graceful-restart is active**
+> (FRR default, negotiated with the UDM — a speaker restart no longer blackholes VIPs); BFD optional/TODO. BGP health alert: `metallb_bgp_session_up` (frr-metrics `:7473`) →
 > `MetallbBGPAllSessionsDown` (`../monitoring/12-metallb-bgp-monitor.yaml`). Plan/runbook:
 > `docs/planning/l24-metallb-frr-migration-plan.md`.
 >
