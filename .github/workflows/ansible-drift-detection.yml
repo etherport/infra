@@ -197,3 +197,33 @@ jobs:
               core.info(`Opened drift issue #${created.data.number}`);
             }
             core.setFailed(`Ansible drift detected in: ${{ steps.compose.outputs.drifted }}`);
+
+      - name: Close resolved drift issue (clean run)
+        if: steps.compose.outputs.drifted == ''
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            // Clean run -> close any lingering ansible-drift issue so resolved
+            // drift doesn't linger as stale noise.
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'ansible-drift',
+              per_page: 20,
+            });
+            for (const issue of open) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: '✅ Resolved — a clean drift run (udm-firewall + usw-acls changed=0) completed; auto-closing.',
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+              });
+              core.info(`Closed resolved drift issue #${issue.number}`);
+            }

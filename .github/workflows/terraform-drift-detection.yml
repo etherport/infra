@@ -322,3 +322,34 @@ jobs:
             // repo owner — drift is surfaced by EMAIL (+ the tf-drift issue),
             // no need to watch the Actions console. Clean runs stay green.
             core.setFailed(`Terraform drift detected: ${{ steps.compose.outputs.drifted }}`);
+
+      - name: Close resolved drift issue (clean run)
+        if: steps.compose.outputs.drifted == ''
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            // A clean run means no stack drifted -> close any lingering tf-drift
+            // issue so resolved drift doesn't linger as stale noise (eroding trust
+            // in the signal). Without this the workflow only ever OPENS/updates.
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'tf-drift',
+              per_page: 20,
+            });
+            for (const issue of open) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: '✅ Resolved — a clean drift run (0 stacks drifted) completed; auto-closing.',
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+              });
+              core.info(`Closed resolved drift issue #${issue.number}`);
+            }
