@@ -305,9 +305,10 @@ Project → workflow map:
 | `infra/terraform/aws-regional-vpn` | `terraform-regional-vpn.yml` |
 | `infra/terraform/aws/github-oidc` | *(bootstrap once with admin; then CI uses OIDC — H29)* |
 
-Daily drift detection runs across all of these via
-`terraform-drift-detection.yml` and opens a GH issue if anything
-drifted.
+Daily drift detection runs across these via `terraform-drift-detection.yml`
+(see its matrix for the exact stack list) and opens a `tf-drift` GH issue if anything drifted. The
+ansible-managed UDM firewall + switch ACLs are covered by the separate daily
+`ansible-drift-detection.yml`.
 
 ### Ansible (Proxmox host, standalone VMs)
 
@@ -348,7 +349,8 @@ Configured (see `.pre-commit-config.yaml`):
 - `flux-validate.yml` — `kustomize build` every overlay + `kubeconform` the
   rendered cluster (pre-merge safety the Flux layer otherwise lacks).
 - `secret-scan.yml` — `gitleaks` server-side (the pre-commit hook only fires locally).
-- `terraform-drift-detection.yml` — daily; opens an issue on AWS drift.
+- `terraform-drift-detection.yml` — daily; opens a `tf-drift` GH issue on Terraform drift (AWS + cloudflare/unifi/proxmox/google/twilio).
+- `ansible-drift-detection.yml` — daily; opens an `ansible-drift` issue if the UDM firewall/zones (`udm-firewall.yml`) or L3-switch ACLs (`usw-acls.yml`) drift from IaC.
 
 ## Task runner
 

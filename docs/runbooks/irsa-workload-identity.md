@@ -22,13 +22,13 @@ pod (projected SA token, aud=sts.amazonaws.com, iss=<bucket-url>)
   (dotless bucket → single-label host → valid under `*.s3.us-west-2.amazonaws.com`).
 - The bucket holds the ONLY two public-read objects in the account: the discovery
   doc + the cluster's public SA signing keys (`keys.json`).
-- **Roles**: `wind-irsa-{velero,s3-sync,barman,cloudwatch-read}`, trust locked to
+- **Roles**: `wind-irsa-{velero,s3-sync,barman,cloudwatch-read,cue-media}` (5 live — `cue-media` assumed by cue-api for the cue-media S3 bucket), trust locked to
   exact namespace/ServiceAccount, least-priv inline policies. See the stack README.
 
 ## Status
 
 - ✅ **Phase 1–2 (2026-06-24):** bucket + discovery/JWKS published; IAM OIDC
-  provider + 4 roles + policies applied (via CI). **Verified from the public
+  provider + 5 roles + policies applied (via CI). **Verified from the public
   internet**: discovery `issuer` matches the URL, `jwks_uri` resolves, JWKS ==
   cluster keys. Harmless until Phase 3 + 4.
 - ✅ **Phase 3 DONE + e2e-verified (2026-06-24):** flipped all 3 CPs, then

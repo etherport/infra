@@ -136,7 +136,7 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   workloads (velero, the s3-sync family, CNPG barman ×2, ai-advisor, cloudwatch-to-loki) now get
   short-lived AWS creds via `AssumeRoleWithWebIdentity`; **no static AWS keys in etcd.** Pieces:
   TF stack `infra/terraform/aws/cluster-irsa/` (CI `terraform-cluster-irsa.yml`) = IAM OIDC provider
-  + 4 least-priv roles `wind-irsa-{velero,s3-sync,barman,cloudwatch-read}` + a **deliberately PUBLIC**
+  + 5 least-priv roles `wind-irsa-{velero,s3-sync,barman,cloudwatch-read,cue-media}` + a **deliberately PUBLIC**
   S3 bucket `wind-cluster-oidc-830881980142` (the issuer — serves the OIDC discovery doc + the
   cluster's *public* SA signing keys; public-read is **by design, not a leak**). The kube-apiserver
   `--service-account-issuer` = that bucket URL (**single issuer**), `--api-audiences` pinned;

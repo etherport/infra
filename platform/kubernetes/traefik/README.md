@@ -6,7 +6,7 @@ Custom IngressRoute configurations for Traefik reverse proxy.
 
 ## Overview
 
-This directory contains IngressRoute configurations for services that need custom routing beyond standard Ingress resources. The Traefik controller itself is installed via Helm (not managed by Flux), but these IngressRoutes **are** Flux-managed.
+This directory contains IngressRoute configurations for services that need custom routing beyond standard Ingress resources. The Traefik controller itself is installed via a **Flux-managed HelmRelease** (`clusters/wind/helm-releases/traefik.yaml`), and these IngressRoutes are likewise Flux-managed.
 
 - **Traefik Installation**: Flux HelmRelease at
   `clusters/wind/helm-releases/traefik.yaml` (values in `traefik-values.yaml`);

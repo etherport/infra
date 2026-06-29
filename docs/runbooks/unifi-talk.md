@@ -7,6 +7,18 @@ all SIP signalling and call routing directly on the gateway.
 Audited via the Talk REST API (`/proxy/talk/api/...`) on 2026-05-17 against
 Talk 5.1.2. See `## How this was audited` at the bottom for endpoints.
 
+> ⚠️ **STALE — external Twilio path changed (verified live 2026-06-29).** This runbook
+> describes the **original direct** path (Twilio → UDM Talk, UDP `6767`/`10000-60000` →
+> `10.10.199.1`). That was **superseded** by an **asterisk-sbc SIP bridge**: the live UDM
+> port-forwards are now **`Twilio-SIP` TCP `5061` → `10.10.201.40`** and **`Twilio-Media-Signal`
+> UDP `10000-20000` → `10.10.201.40`** (the asterisk SBC, VM 1004), which then bridges to UniFi
+> Talk internally on `10.10.199.1:6767`. Source of truth for the external/Twilio leg is now
+> **`infra/ansible/playbooks/asterisk-sbc.yml`** (+ the PVE firewall scoping in
+> `infra/terraform/proxmox/firewall/standalone-vms.tf`). The Talk extension/ring-group/internal
+> detail below is still accurate; the **Twilio-facing port-forward + signalling specifics are not**.
+> Full refresh tracked under M17. The legacy `Allow-Twilio-SIP-6767` / `…-10000-60000` UDM rules
+> are now vestigial (cleanup candidates).
+
 ## Architecture
 
 ```

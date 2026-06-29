@@ -28,7 +28,7 @@ Enabled by the BGP migration making Servers/201 UDM-routed. Two new custom zones
 |---|---|---|
 | **Trusted** | Servers/201 | Trusted workload tier. Broad egress (External, Gateway, Vpn, Internal, Infrastructure, Management) + ingress for the service paths it fronts. Behaviour-neutral vs the old `Internal` so the move didn't change workload connectivity. |
 | **Management** | Management/200 | **Contained** management plane. May reach only External, Gateway, and `Trusted` (DNS to `.5/.6` + syslog to Alloy `.73`). Ingress from `Trusted` (the cluster administers the UDM/devices — poller, gh-runner, backup, cert-sync), `Vpn` (remote admin), `Gateway`. Default-denied to IoT / Guest / Security. |
-| **Internal** | Default/199 | Now just the Default network; stays permissive. The Twilio media/SIP port-forwards land on `10.10.199.1` here and are unaffected. |
+| **Internal** | Default/199 | Now just the Default network; stays permissive. (Talk listens on `10.10.199.1` here, but the external Twilio port-forwards now target the asterisk-sbc on `10.10.201.40`, not `.199.1` — see Port Forwards.) |
 
 Rules are codified in `infra/ansible/playbooks/udm-firewall.yml` (`udm_firewall_policies`, v2 API) — 20 zone policies + supporting address/port groups. **Why separate Management:** production practice isolates the device/admin plane so a compromised workload (or device) can't pivot freely; the cost is a few explicit `Trusted↔Management` allows for the cluster's infra tooling.
 
@@ -155,7 +155,7 @@ The switch-routed fabric (Clients/202, vSAN/209, Ceph/210 — these three are ga
 | 200 | Management | 10.10.200.0/24 | **Management (custom)** | Network equipment (UDM, switches, APs). Contained admin plane (M56). |
 | 201 | Servers | 10.10.201.0/24 | **Trusted (custom)** | K8s nodes, DNS (MetalLB `.5/.6`), infra services. **UDM-routed** (gateway = UDM `10.10.201.1`) since the M56/BGP migration — verified live (every inter-VLAN flow from a 201 host first-hops the UDM). ALL its inter-VLAN traffic transits the UDM and is policed by the `Trusted` zone; the 201↔202/209/210 path crosses the switch only as 202/209/210's gateway on the far side. |
 | 204 | IoT | 10.10.204.0/24 | **IoT (custom)** | Smart home devices |
-| 205 | Security | 10.10.205.0/24 | Internal | SimpliSafe gear (cameras retired) — Network Isolation = ON (see §"Known anomalies") |
+| 205 | Security | 10.10.205.0/24 | Internal | SimpliSafe gear (cameras retired) — Network Isolation = **OFF** (disabled per M104; verified live `network_isolation_enabled=false` 2026-06-29). DHCP DNS still empty — remaining M104 step. See §"Known anomalies" #1. |
 | 206 | Guest | 10.10.206.0/24 | Hotspot (built-in) | Guest WiFi |
 | 212 | Unifi | 10.10.212.0/24 | **Infrastructure (custom)** | UniFi Protect cameras (~13), Talk phones (3 UVP-TOUCH), UniFi Access (UA-Gate, UA-Intercom), Protect controller `.10`. **Note: APs/switches are NOT here — they're on Management/200.** Moved to Infrastructure 2026-05-28 (M30 Phase 1). |
 | 4040 | Inter-VLAN | 10.255.253.0/24 | Internal | Transit between UDM and L3 switch |
@@ -178,15 +178,15 @@ The switch-routed fabric (Clients/202, vSAN/209, Ceph/210 — these three are ga
 | LTE WAN | External | Failover priority 4, never used. Tracked for retirement. |
 | WAN1 / WAN2 | External | Frontier (primary), Spectrum (failover-only). |
 
-### Static Routes (carried by both UDM and L3 switch)
+### Static Routes (UDM-carried)
 
 | Destination | Purpose | Next-hop |
 |-------------|---------|----------|
-| 10.10.100.0/22 | AWS Environment | 10.10.201.20 (vpn-local VIP, on L3 switch) / 10.255.253.3 (from UDM) |
-| 10.255.255.0/29 | WireGuard tunnel endpoint | same |
+| 10.10.100.0/22 | AWS Environment | 10.10.201.20 (vpn-local/keepalived VIP on Servers/201) |
+| 10.255.255.0/30 | WireGuard tunnel endpoint (AWS) | same |
 | 10.254.0.0/24 | WireGuard client tunnel | same |
 
-Note: `routing.json` shows each AWS route exists **twice** — once with `gateway_type=switch` and once with `gateway_type=default` — so both routers carry the logical routes and the UDM hands transit to the L3 switch.
+Note: live `routing` (UDM API, verified 2026-06-29) carries each route **once**, all `gateway_type=default`, next-hop `10.10.201.20`, with `gateway_device` = **Windroute (the UDM Pro Max)** — not the L3 switch. There is **no** `gateway_type=switch` duplicate and no `10.255.253.3` next-hop; the earlier "exists twice / hands transit to the switch" note was the old dual-router framing and is removed.
 
 ---
 
@@ -252,14 +252,14 @@ IoT      → {Internal:3, others:1}
 
 ## Explicit User-Authored Allow Rules
 
-These are the **only** firewall rules that aren't predefined boilerplate. Source: `firewall-policies.json` (`predefined: false`).
+These four were the original non-predefined rules. **Live (2026-06-29) there are 28 user-authored (`predefined:false`) policies** — the M56 zone migration added ~24 zone allows (Trusted/Management/Infrastructure, IoT/Hotspot→Trusted DNS, External→Trusted WireGuard, Vpn admin, syslog, trusted-admin-clients→Management, etc.). The zone policies are codified in `infra/ansible/playbooks/udm-firewall.yml` (`udm_firewall_policies`, drift-checked daily by `ansible-drift-detection.yml`); a few legacy rules (the Twilio-6767 pair below) are **UI-only, not in the playbook**. Source for this snapshot: live `firewall-policies` + `firewall-groups`.
 
 | Rule | Source | Destination | Protocol/Port | Purpose |
 |------|--------|-------------|---------------|---------|
 | **Allow IoT to DNS** | IoT zone (10.10.204.0/24) | `DNS-Servers` IP group (10.10.201.5, 10.10.201.6) | TCP/UDP `DNS-Ports` (53) | Lets IoT devices resolve via Technitium without exposing the rest of Servers. |
 | **Allow-Wireguard** | External UDP, any source | 10.10.201.20 (keepalived VIP) | UDP 9821 (`WG-Ports-Inbound` group) | Inbound WireGuard for site-to-site (backs the `Wireguard Local` port-forward). |
-| **Allow-Twilio-SIP-6767** | External UDP, `Twilio Signal IPs` group | Gateway zone (UDM itself) | UDP 6767 | Twilio SIP termination for UniFi Talk. Destination is the UDM (`10.10.199.1`), not a LAN host. |
-| **Allow-Twilio-Media-10000-60000** | External UDP, `Twilio Media IPs` group | Gateway zone (UDM itself) | UDP 10000-60000 | Twilio media (RTP) for UniFi Talk. |
+| **Allow-Twilio-SIP-6767** ⚠️ LEGACY | External UDP, `Twilio Signal IPs` group | Gateway zone (UDM itself) | UDP 6767 | **VESTIGIAL** — the OLD direct Twilio→UDM-Talk path. The active Twilio path now terminates on the **asterisk-sbc (`10.10.201.40`, TCP 5061 + RTP)** via the port-forwards below; external Twilio no longer hits `:6767` on the UDM. Candidate for cleanup (like the dead 205→201 switch ACL). |
+| **Allow-Twilio-Media-10000-60000** ⚠️ LEGACY | External UDP, `Twilio Media IPs` group | Gateway zone (UDM itself) | UDP 10000-60000 | **VESTIGIAL** — old UDM-Talk media range; superseded by the `Twilio-Media-Signal` port-forward (UDP 10000-20000 → `.40`). Candidate for cleanup. |
 
 **Firewall groups in use** (source: `firewall-groups.json`):
 
@@ -281,8 +281,8 @@ Source: `port-forwards.json`.
 
 | Rule | Direction | Port(s) | Target | Doc reference |
 |------|-----------|---------|--------|---------------|
-| `Twilio-SIP` | UDP inbound | 6767 | 10.10.199.1 (UDM Talk service) | `unifi-talk.md` |
-| `Twilio-Media-Signal` | UDP inbound | 10000-60000 | 10.10.199.1 (UDM Talk service) | `unifi-talk.md` |
+| `Twilio-SIP` | **TCP** inbound | **5061** | **10.10.201.40** (asterisk-sbc SIP bridge) | `infra/ansible/playbooks/asterisk-sbc.yml` |
+| `Twilio-Media-Signal` | UDP inbound | **10000-20000** | **10.10.201.40** (asterisk-sbc media) | `infra/ansible/playbooks/asterisk-sbc.yml` |
 | `Wireguard Local` | TCP+UDP inbound | 9821 | 10.10.201.20 (keepalived VIP) | `platform/wireguard/README.md` |
 | `Wireguard Travel` | UDP inbound | 9820 | 10.10.201.20 | **Disabled** (`enabled=false`). Per session notes, travel VPN is now site→AWS; this rule should be deleted (P2 #9 in audit). |
 
@@ -311,7 +311,7 @@ Source: `networks.json` (`dhcpd_dns_1`, `dhcpd_dns_2`).
 
 These are documented here so a reader doesn't mistake them for bugs in this doc. Each is tracked separately.
 
-1. **Security/205 Network Isolation = ON + DHCP DNS empty.** Network Isolation at L2 prevents any inter-VLAN traffic regardless of zone policy. With no DHCP DNS, SimpliSafe gear has no resolver. **Decision 2026-06-24 (owner): FIX** — disable isolation + set DHCP DNS to `.5`/`.6`. Pending UI action (the `unifi` TF provider lacks `network_isolation_enabled`; 205 not in TF). Tracked: **M104**.
+1. **Security/205 DHCP DNS empty (Network Isolation now OFF — M104 half-done).** Network Isolation was **disabled** per the M104 decision (verified live 2026-06-29: `network_isolation_enabled=false`), so the zone model is now the sole enforcement. **Remaining M104 step:** DHCP DNS is still empty (`dhcpd_dns_enabled=false`), so SimpliSafe gear still has no LAN resolver — set the DHCP Name Server to `10.10.201.5`/`10.10.201.6` (UI; the `unifi` TF provider lacks `network_isolation_enabled` and 205 isn't in TF). Tracked: **M104**.
 2. **Internal → Hotspot is Allow All.** Anything on the Servers VLAN can reach guest devices. Practical risk: low (guests ephemeral). Documented intent was Deny. Tracked: audit P2 #11.
 3. ~~**VPN zone is wired but unused.**~~ **RESOLVED 2026-06-24 (M42).** The `Vpn → Trusted/Management` allows were tightened from `all` → **TCP on `Vpn-Admin-Ports`** (22/53/80/443/6443/8006), logged, so a future break-glass WG client gets scoped admin access, not full LAN reach. The UDM backup WireGuard tunnel + `Vpn` zone are deliberately retained (break-glass for cluster/PVE VPN loss + future tunnels e.g. Teleport). (The built-in `VPN → Internal Allow-All` predefined policy can't be removed, but `Internal` no longer contains trusted server VLANs directly — those are reached via the scoped `Vpn → Trusted` rule.)
 4. **LTE WAN still configured.** Failover priority 4, never carried traffic. Slated for removal.
@@ -347,7 +347,7 @@ If you are adding a new policy:
 4. Set `Connection State: All` unless you specifically need to scope to new/established.
 5. Save and verify by watching `System Log` → `Triggers` for hits.
 
-**Before disabling Network Isolation on any network**, check what relies on it. With Internal → Internal currently `Allow All`, the only network whose isolation actively matters is Security/205 (see Known anomalies #1).
+**Before disabling Network Isolation on any network**, check what relies on it. With Internal → Internal currently `Allow All`, no network now depends on L2 Network Isolation for its enforcement — Security/205's isolation was disabled per M104 (zone model is sole enforcement); see Known anomalies #1 for its one remaining step (DHCP DNS).
 
 ---
 
@@ -412,7 +412,7 @@ ping 10.10.202.5       # Client
 |---------|-------|-----|
 | IoT device can't resolve DNS | IoT zone allow-rule disabled, or device not in VLAN 204 | Check `Allow IoT to DNS` in matrix (`IoT → Internal`). Verify device DHCP DNS is `.5/.6`. |
 | Server-side service can't reach Hue/IoT device | Internal → IoT is Block by default | Add an explicit allow in the `Internal → IoT` cell (none exists today). |
-| Security/205 device can't resolve | Network Isolation = ON + DHCP DNS empty | See Known anomalies #1. Either disable isolation + set DNS, or move .205 into a future custom zone with a DNS allow rule. |
+| Security/205 device can't resolve | DHCP DNS empty (Network Isolation now OFF) | See Known anomalies #1. Set DHCP Name Server to `.5`/`.6` (the remaining M104 step), or move .205 into a future custom zone with a DNS allow rule. |
 | Can't reach UDM management | Gateway zone access blocked | Don't add deny rules to `Internal → Gateway`. |
 | Traffic between Servers/Clients/vSAN/Ceph isn't filtered | Those VLANs route off the L3 switch — UDM never sees the traffic | Use L3 switch ACLs — now deployed via `usw-acls.yml` (M52). |
 | Guest reaches internal device | Internal → Hotspot is currently Allow All | See Known anomalies #2. |

@@ -8,7 +8,7 @@ Velero is our Kubernetes backup solution for disaster recovery and data protecti
 - **Storage**: S3 bucket `velero.wind.etherport.net` (us-west-2)
 - **Method**: File-system backup using Kopia
 - **Backup Frequency**: Daily at 2 AM
-- **Retention**: 30 days
+- **Retention**: 30 days (`monitoring-daily`: 7 days)
 - **Credentials**: IRSA — assumes IAM role `wind-irsa-velero` via `AssumeRoleWithWebIdentity` + a projected SA token (no static-key secret). See [docs/runbooks/irsa-workload-identity.md](../../../../docs/runbooks/irsa-workload-identity.md).
 
 ## Architecture
@@ -54,14 +54,14 @@ All namespaces with persistent data are backed up:
 | home-automation | home-assistant-config | 10Gi | ✅ |
 | plex | plex-config | 25Gi | ✅ |
 | dns | data-technitium-0, data-technitium-1 | 5Gi each | ✅ |
-| postgres | postgres-cluster-1 | 10Gi | ✅ |
+| postgres | postgres-cluster-1, -6, -8 (3 CNPG instances) | 10Gi each | ✅ |
 | wikijs | wiki-js-data | 5Gi | ✅ |
 | monitoring | grafana, prometheus, alertmanager | 5-10Gi | ✅ |
 | traefik | traefik-ceph-pvc | 5Gi | ✅ |
 
 ## Current Backup Schedules
 
-All schedules use file-system backup (Kopia) with 30-day retention.
+All schedules use file-system backup (Kopia) with 30-day (720h) retention, **except `monitoring-daily` which uses 7-day (168h) retention** (verified live + in `schedules/monitoring-daily.yaml`; the monitoring namespace also gets a 30-day copy via `infrastructure-daily`).
 
 | Schedule | Namespaces | Time (UTC) | Purpose |
 |----------|------------|------------|---------|
@@ -521,7 +521,7 @@ kubectl logs -n velero deployment/velero --tail=50 | grep -iE 'webidentity|assum
 
 ### Lifecycle Management
 
-Backups are automatically deleted after TTL (30 days). To adjust, edit the
+Backups are automatically deleted after TTL (30 days; `monitoring-daily` 7 days). To adjust, edit the
 schedule's `<name>.yaml` in `schedules/` (`spec.template.ttl`, e.g. `1440h` for
 60 days) and commit — Flux reconciles it. Do not use `velero schedule create`.
 

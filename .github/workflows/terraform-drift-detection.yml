@@ -1,11 +1,11 @@
 name: Terraform Drift Detection
 
 # Daily scheduled `terraform plan -detailed-exitcode` across ALL persistent TF
-# stacks (22). Manual dispatch supported.
+# stacks (24). Manual dispatch supported.
 #
 # Two plan jobs feed one report:
 #   - `plan`          AWS modules on ubuntu-latest (OIDC). incl. ai-advisor-iam,
-#                     twilio-webhook, github-oidc.
+#                     twilio-webhook, github-oidc, cluster-irsa, roles-anywhere.
 #   - `plan-internal` cloudflare / unifi / proxmox ×4 / google (GCP WIF) / twilio
 #                     on the self-hosted lifecycle runner (cluster-internal reach
 #                     + their GH-secret creds).
@@ -57,6 +57,8 @@ jobs:
           - { name: ai-advisor-iam,      dir: infra/terraform/aws/ai-advisor-iam,       region: us-west-2 }
           - { name: twilio-webhook,      dir: infra/terraform/aws/twilio-webhook,       region: us-west-2 }
           - { name: github-oidc,         dir: infra/terraform/aws/github-oidc,          region: us-west-2 }
+          - { name: cluster-irsa,        dir: infra/terraform/aws/cluster-irsa,         region: us-west-2 }
+          - { name: roles-anywhere,      dir: infra/terraform/aws/roles-anywhere,       region: us-west-2 }
           # aws-regional-vpn is deploy-on-demand (travel VPN); requires
           # `-var=region=X -var=region_short=Y -var=wg0_tunnel_ip=Z` and has no
           # persistent state to drift-check. Exclude.
