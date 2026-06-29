@@ -13,6 +13,44 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-29 — M77 Stage-2b: asterisk SBC firewall source-scoped to Twilio/Talk (applied)
+
+Closed the last open M77 follow-up (the telephony/911-critical one the cont.8 review explicitly
+deferred to "do with call-path review, not a guess"). The asterisk SBC (VM 1004) PVE firewall
+rules were any-source (Stage-2 `input_policy=DROP` only closed UNLISTED ports — SIP/RTP stayed
+wide open). Scoped them in `infra/terraform/proxmox/firewall/standalone-vms.tf`:
+
+- **Safety principle (why this is low-risk):** scope the firewall to **exactly the ranges the
+  SBC's own `pjsip identify` ACL already trusts** (`infra/ansible/playbooks/asterisk-sbc.yml`
+  `twilio_signaling_nets` + `twilio_media_net` + the Talk host). PVE's firewall is **stateful**
+  and this scope is a **superset-or-equal** of what the SBC would answer → it cannot drop a call
+  the SBC would have accepted on the signaling path. If Twilio ever rotates an edge outside the 8
+  /30s, the SBC's ACL was already going to reject it too (parity, not a new failure mode).
+- **What landed:** two new IPsets — `twilio-signaling` (the 8 Twilio signaling /30s) and
+  `asterisk-internal` (Talk `10.10.199.0/24` + Servers `10.10.201.0/24`) — and the 4 asterisk
+  rules scoped: **5061/tcp (SIP-TLS, internet-facing) ← twilio-signaling**; **5060/udp (plain SIP,
+  internal Talk leg) ← asterisk-internal**; **10000:20000/udp (RTP) ← Twilio media
+  `168.86.128.0/18` + asterisk-internal**. Also a comment-only note on the dns-fallback VM (1001)
+  documenting that DoT/DoH (853/443) are intentionally closed under default-deny (encrypted DNS
+  terminates at the k8s VIP `.5`, not the fallback `.6`).
+- **Ship path:** commit `bf906f3` → CI push **plan** (run `28352589004`) reviewed = `Plan: 2 to
+  add, 1 to change, 0 to destroy` (only the asterisk resources) → user-authorized **apply** (run
+  `28396740159`, classifier-gated as 911-critical; surfaced the plan + risk + revert path via
+  AskUserQuestion, user chose "apply now, I'll test a call") → `Apply complete! 2 added, 1 changed,
+  0 destroyed`. `terraform validate` was clean pre-push (offline, existing `.terraform`).
+- **⚠️ State at end / next step:** APPLIED but **NOT yet call-verified** — RTP media has no
+  app-layer backstop, and a live call can't be placed from the devbox. **User to place an inbound
+  + outbound call (ideally a 911/provider-test number) to confirm two-way audio.** If a call fails
+  (esp. one-way/no audio = RTP media source outside `168.86.128.0/18`): **revert = `git revert
+  bf906f3` + dispatch the firewall apply** → every rule back to any-source within minutes.
+- Notes for next agent: fmt is **not** CI-enforced on this stack (committed `standalone-vms.tf`
+  already fails `terraform fmt -check` due to the `local.vm_input_policy` trailing-comment
+  alignment; the workflow has no `fmt` step) — don't gratuitously reformat. Devbox dispatches CI
+  via the `github_dispatch_pat` in the SOPS ops bundle (no `gh` CLI); poll runs with
+  `event=workflow_dispatch` to avoid matching the push-plan run.
+
+---
+
 ## 2026-06-28 (cont. 8) — adversarial review of recent work → 2 critical + 1 high FIXED
 
 Ran a multi-agent adversarial review of the 24h work (M71/M72/M74/M77/L24) — 15 confirmed
