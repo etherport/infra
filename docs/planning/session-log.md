@@ -13,6 +13,62 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-29 (cont.) — full config-drift resolution: live-anchored re-audit + continuous detectors
+
+User flagged that the original error which prompted the whole doc-review exercise — `firewall-zones.md`
+calling Servers/201 switch-routed — was STILL wrong after the big review, and asked how to **fully
+resolve all config drift**. Root-caused the review's failure and built the durable fix.
+
+**Why the prior review missed it:** it reconciled docs ↔ repo (and docs ↔ each other). For UI-managed
+facts (UDM routing/zones) with no complete IaC, the **repo itself carried the stale premise** — so the
+review "harmonized" everything to a wrong model. Doc-vs-doc consistency ≠ truth.
+
+**Ground truth established (the method):** from the devbox (which is ON VLAN 201), `ip route get` for
+202/209/210/204/internet all first-hop the UDM `10.10.201.1`; tracepath to a 202 host goes UDM → switch.
+So **201 is fully UDM-routed** — there is no "201 east-west switch-routed" path. Fixed `firewall-zones.md`
+(moved 201 to the UDM table, redrew the dual-router diagram, fixed zone/ACL notes) + the stale premise
+baked into the **IaC** (`usw-acls.yml` header still called 201 switch-routed; its `205→201` ACL is now
+DEAD — both ends UDM-routed). Commit `570f629`.
+
+**Continuous detectors (the "keep it resolved" half):**
+- ✅ **`ansible-drift-detection.yml`** (new, `904723e`+`3dc14a0`) — daily `--check --diff` of
+  `udm-firewall.yml` + `usw-acls.yml` on the lifecycle runner; `changed>0` → opens `ansible-drift`
+  issue + red run (owner email). This is the exact gap that hid the 201 drift (those surfaces had only
+  a MANUAL check). Verified: both playbooks are `changed=0`/idempotent when aligned (no false-positives);
+  detector runs green end-to-end. **Gotcha:** the ansible-runner container runs steps with `sh` (dash),
+  not bash — `set -o pipefail` errors; use a redirect+`exit $rc` capture instead.
+- ✅ Existing coverage confirmed: `terraform-drift-detection.yml` (TF, daily) + `service-status-inventory-drift.yml`.
+- ⏳ **Topology-assertion detector** (the 201-class — routing/zone invariants, NOT a live-vs-IaC diff;
+  needs an `ip route`/UDM-API probe from a VLAN-201 host) — designed, not yet built.
+
+**Live-anchored doc RE-AUDIT (the "clear the backlog" half):** a 5-domain workflow (`w1jdr43sw`) where
+agents verified every architecture/runbook claim against **live** kubectl/UDM-API/on-host probes →
+**10 confirmed drifts** the doc-vs-doc review could never find. All re-verified by me against the live
+UDM API before fixing; applied in `be305a7`:
+- **205 Network Isolation is OFF** (live `network_isolation_enabled=false`), not ON — M104 is HALF done
+  (isolation disabled; **DHCP DNS still empty** = the only remaining M104 step). Tracker → 🟡.
+- **Twilio port-forwards** are TCP `5061` + UDP `10000-20000` → `10.10.201.40` (asterisk-sbc), not the
+  retired `6767`/`10000-60000` → `.199.1` UDM-Talk path. Same stale premise spanned `firewall-zones.md`
+  AND `unifi-talk.md` (banner-flagged; full refresh → M17). Legacy `Allow-Twilio-*-6767` UDM rules are
+  vestigial (cleanup candidates, like the dead 205→201 ACL).
+- AWS static routes carried ONCE (gateway_type=default, next-hop .201.20, gateway_device=UDM) — no
+  switch-typed duplicate; WG endpoint /30 not /29.
+- IRSA = **5** roles not 4 (added `wind-irsa-cue-media`) — CLAUDE.md + irsa runbook.
+- velero `monitoring-daily` = 7-day retention (not blanket 30); postgres = 3-instance CNPG (3 PVCs).
+- traefik README self-contradiction (Traefik IS Flux-managed).
+- **REAL GAP (not just docs):** `cluster-irsa` + `roles-anywhere` are persistent S3-backed stacks that
+  were **NOT in the TF drift matrix** → drifting silently. **Added both** to `terraform-drift-detection.yml`
+  (now 24 stacks). Dispatched a full drift run to validate + refresh the open `tf-drift` issue #73.
+- Systemic THEMES: stale-premise-propagated-across-docs+IaC (201, Twilio), doc-trails-IaC (IRSA count),
+  absolute-quantifier rot ("all/only/every" claims a single counter-example falsifies).
+
+**State:** all 10 doc/IaC drifts fixed + pushed; ansible detector live; TF matrix gap closed. **Next:**
+build the topology-assertion detector; confirm the drift run is green (validates the 2 new stacks) +
+triage issue #73; the mini-report-code hardening (cairn NAS-mount diagnosis — separate thread, now also
+root-caused mini-side per the entry below).
+
+---
+
 ## 2026-06-29 — cairn photos overnight rc=1 ROOT CAUSE found → fresh sparsebundle reattach per run (v0.1.4)
 
 **What:** third consecutive overnight `ICloudBackupFailed` (photos rc=1). The osxphotos crash log
