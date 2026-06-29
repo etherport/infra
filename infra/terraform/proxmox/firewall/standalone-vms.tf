@@ -51,9 +51,10 @@ locals {
     #                       → conntrack); no VNC listener. Recoverable via CI (apply runs on gh-runner, not devbox).
     vpn_local    = "DROP" # WireGuard 9820-9821 (any-source kept — WG is crypto-authenticated, so IP-scoping
     #                       is marginal; the single peer is the AWS EIP 44.240.60.80 if ever wanted) + baseline.
-    asterisk_sbc = "DROP" # SIP 5060/5061 + RTP 10000-20000 (any-source KEPT) + baseline. ⚠️ SIP/RTP are
-    #                       INTERNET-exposed (UDM forwards :5061+RTP to .40 for Twilio); narrowing to Twilio
-    #                       ranges is a TELEPHONY-CRITICAL (911) follow-up — do with call-path review, not a guess.
+    asterisk_sbc = "DROP" # SIP 5060/5061 + RTP 10000-20000 + baseline. Stage-2b (2026-06-29) SOURCE-SCOPED
+    #                       these: 5061←twilio-signaling IPset, 5060←asterisk-internal (Talk/LAN), RTP←Twilio
+    #                       media (168.86.128.0/18)+internal. Mirrors the SBC pjsip identify ACL (can't drop a
+    #                       call the SBC would accept). ⚠️ 911-CRITICAL: confirm with a live in/outbound call.
   }
 }
 
@@ -126,6 +127,10 @@ resource "proxmox_virtual_environment_firewall_rules" "dns_fallback" {
     log     = "nolog"
     comment = "Technitium admin UI from mgmt-admin only"
   }
+  # NB encrypted DNS (DoT tcp/853, DoH tcp/443) is intentionally NOT opened here: this is the
+  # plain-:53 VM FALLBACK resolver (10.10.201.6) — encrypted DNS terminates at the k8s Technitium
+  # VIP (10.10.201.5), not this box. Under the M77 default-deny, 853/443 are therefore closed BY
+  # DESIGN, not oversight. If DoT/DoH is ever enabled on this VM, add the matching allow(s) here.
 }
 
 # ---- vpn-local (1002): WireGuard site-to-site to AWS -------------------------
@@ -185,6 +190,33 @@ resource "proxmox_virtual_environment_firewall_options" "asterisk_sbc" {
   output_policy = "ACCEPT"
   log_level_in  = "info"
 }
+# ---- asterisk Stage-2b source scoping (2026-06-29) --------------------------------------
+# Twilio SIP-signaling /30s (8 edges) — the SAME set the SBC's pjsip `identify` ACL trusts
+# (infra/ansible/playbooks/asterisk-sbc.yml twilio_signaling_nets), so this firewall scope can
+# only ever be a SUPERSET-or-equal of what the SBC accepts → it cannot drop a call the SBC would
+# have answered. SIP-TLS :5061 is the INTERNET-facing leg (UDM forwards it to .40).
+resource "proxmox_virtual_environment_firewall_ipset" "twilio_signaling" {
+  name    = "twilio-signaling"
+  comment = "M77 Stage-2b: Twilio SIP signaling /30s (8 edges) — mirrors the SBC pjsip identify ACL"
+  dynamic "cidr" {
+    for_each = toset([
+      "54.172.60.0/30", "54.244.51.0/30", "54.171.127.192/30", "35.156.191.128/30",
+      "54.65.63.192/30", "54.169.127.128/30", "54.252.254.64/30", "177.71.206.192/30",
+    ])
+    content { name = cidr.value }
+  }
+}
+# Internal legs: the UniFi Talk bridge (VLAN-199) + the Servers VLAN (201, for SBC-local
+# mgmt/testing). 5060 (plain SIP) + RTP from these are LAN-only (NOT internet-facing).
+resource "proxmox_virtual_environment_firewall_ipset" "asterisk_internal" {
+  name    = "asterisk-internal"
+  comment = "M77 Stage-2b: internal SIP/RTP sources for the SBC — UniFi Talk (199) + Servers (201)"
+  dynamic "cidr" {
+    for_each = toset(["10.10.199.0/24", "10.10.201.0/24"])
+    content { name = cidr.value }
+  }
+}
+
 resource "proxmox_virtual_environment_firewall_rules" "asterisk_sbc" {
   node_name  = var.node_name
   vm_id      = 1004
@@ -194,29 +226,45 @@ resource "proxmox_virtual_environment_firewall_rules" "asterisk_sbc" {
     security_group = proxmox_virtual_environment_cluster_firewall_security_group.vm_baseline.name
     comment        = "M77 baseline (SSH + node_exporter)"
   }
+  # Plain SIP (udp 5060) — internal UniFi Talk bridge leg only (NOT Twilio; Twilio uses 5061/TLS).
   rule {
     type    = "in"
     action  = "ACCEPT"
+    source  = "+${proxmox_virtual_environment_firewall_ipset.asterisk_internal.name}"
     proto   = "udp"
     dport   = "5060"
     log     = "nolog"
-    comment = "SIP (udp). STAGE 2: scope source to Twilio SIP signaling ranges + LAN."
+    comment = "SIP (udp) from the internal Talk/LAN bridge only"
   }
+  # SIP-TLS (tcp 5061) — Twilio-only (internet-facing; backstopped by pjsip identify).
   rule {
     type    = "in"
     action  = "ACCEPT"
+    source  = "+${proxmox_virtual_environment_firewall_ipset.twilio_signaling.name}"
     proto   = "tcp"
     dport   = "5061"
     log     = "nolog"
-    comment = "SIP-TLS (tcp). STAGE 2: scope to Twilio + LAN."
+    comment = "SIP-TLS (tcp) from Twilio signaling edges only"
+  }
+  # RTP media (udp 10000:20000) — Twilio media range (the higher-value scope: RTP has NO app-layer
+  # ACL) + the internal Talk/LAN media. Two rules (different source sets).
+  rule {
+    type    = "in"
+    action  = "ACCEPT"
+    source  = "168.86.128.0/18" # twilio_media_net (asterisk-sbc.yml)
+    proto   = "udp"
+    dport   = "10000:20000"
+    log     = "nolog"
+    comment = "RTP media from Twilio (sRTP)"
   }
   rule {
     type    = "in"
     action  = "ACCEPT"
+    source  = "+${proxmox_virtual_environment_firewall_ipset.asterisk_internal.name}"
     proto   = "udp"
     dport   = "10000:20000"
     log     = "nolog"
-    comment = "RTP media range (asterisk rtp.conf). STAGE 2: scope to Twilio media ranges."
+    comment = "RTP media from the internal Talk/LAN bridge"
   }
 }
 
