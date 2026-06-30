@@ -21,7 +21,9 @@ runbooks below.
 
 - Both `google_project` resources (pre-created in console, **imported** into state; `prevent_destroy = true`)
 - `google_project_service` for the two APIs Nest needs (`smartdevicemanagement`, `pubsub`)
-- The CF SSO project needs **no** extra API enabled (OIDC uses Google defaults)
+- On the CF-SSO project (`homelab-infra-497414`): `google_project_service` for `apikeys.googleapis.com`
+  + `places.googleapis.com`, and a restricted `google_apikeys_key.cue_places` for the Cue **Find-food**
+  feature (Places API New, server-side nearby search). See **Runbook C** below.
 
 ## What it CAN'T manage (Google API limitations)
 
@@ -107,6 +109,41 @@ consent flow. HA auto-creates the Pub/Sub subscription for events.
 > **Note:** this project is intentionally **standalone** (not folded into
 > `homelab-infra`). It costs $0, and migrating the OAuth client + Device
 > Access link + re-authing HA would briefly break Nest for zero benefit.
+
+## Runbook C — Cue Find-food: Places API (New) key  (`homelab-infra-497414`)
+
+The Cue app's "Find food" feature calls **Places API (New)** server-side. Terraform
+manages it on the CF-SSO project: enables `apikeys.googleapis.com` + `places.googleapis.com`
+and creates a restricted key (`google_apikeys_key.cue_places`, API-restricted to
+`places.googleapis.com` only — no referrer/IP restriction, since calls are server-side
+from the cluster's dynamic-WAN egress).
+
+> ⚠️ **Service id:** Places API (New) = **`places.googleapis.com`**.
+> `places-backend.googleapis.com` is the **legacy** Places API — do not use it here. The
+> key restriction must match the endpoint the app calls (`https://places.googleapis.com/v1/...`).
+
+### 1. One-time IAM bootstrap (MANUAL — required before apply)
+The WIF SA `gh-actions-terraform@homelab-infra-497414.iam.gserviceaccount.com` has
+`serviceUsageAdmin` + `projectIamAdmin` + browser, but **no API-keys permission**, so a key
+create fails until you grant it. Run once, from a `gcloud auth login` machine with project
+admin (the devbox has no GCP creds), exactly as the SA was bootstrapped (L21):
+```bash
+gcloud projects add-iam-policy-binding homelab-infra-497414 \
+  --member="serviceAccount:gh-actions-terraform@homelab-infra-497414.iam.gserviceaccount.com" \
+  --role="roles/serviceusage.apiKeysAdmin"
+```
+
+### 2. Apply, then deliver the key to the app secret (out of band)
+After `terraform-google.yml` (action=apply) succeeds:
+```bash
+KEY=$(terraform -chdir=infra/terraform/google output -raw cue_places_key)
+sops set platform/kubernetes/cue-api/03-secret-app.sops.yaml \
+  '["stringData"]["CUE_GOOGLE_PLACES_KEY"]' "\"$KEY\""
+git add -A && git commit -m "feat(cue): Google Places API key for Find-food"
+```
+`envFrom: secretRef: cue-app` injects it into the pod (no Deployment edit). The feature stays
+OFF until `CUE_FIND_FOOD: 'true'` is added to the cue-api Deployment env — done separately when
+the cue side ships. (No automated TF→SOPS bridge by design — Flux owns the cluster.)
 
 ---
 

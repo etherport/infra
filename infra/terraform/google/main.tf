@@ -39,9 +39,53 @@ resource "google_project" "cloudflare_zero_trust" {
   }
 }
 
-// A Google OAuth/OIDC IdP needs NO extra API enabled beyond project defaults,
-// so there are intentionally no google_project_service resources here. Future
-// service-account work would add iam.googleapis.com / iamcredentials here.
+// --- API enablements on this project ----------------------------------------
+// The CF-Access OAuth IdP itself needs no extra API. These are for the Cue
+// "Find food" feature (sparked-diamond/cue), which calls Places API (New)
+// server-side for nearby-restaurant search.
+//
+// ⚠️ SERVICE ID: Places API (New) is `places.googleapis.com` (its endpoints are
+// https://places.googleapis.com/v1/...). `places-backend.googleapis.com` is the
+// LEGACY "Places API" — NOT this. The key restriction below must match the
+// endpoint the app actually calls, i.e. places.googleapis.com.
+locals {
+  cue_places_apis = [
+    "apikeys.googleapis.com", // lets Terraform create/manage google_apikeys_key
+    "places.googleapis.com",  // Places API (New) — Cue Find-food nearby search
+  ]
+}
+
+resource "google_project_service" "cloudflare_zero_trust" {
+  for_each = toset(local.cue_places_apis)
+
+  project = google_project.cloudflare_zero_trust.project_id
+  service = each.key
+
+  // Leave the API enabled if this resource is removed (matches the ha_nest style).
+  disable_on_destroy         = false
+  disable_dependent_services = false
+}
+
+// Restricted API key for Cue Find-food. The app calls Google SERVER-SIDE, so an
+// API restriction is the right (and only) scope — NO browser/referrer restriction.
+// No IP restriction for now: the cluster egresses via the homelab's dynamic WAN IP
+// (DDNS), so there's no stable source IP to pin (revisit if a static egress lands).
+// The secret material (.key_string) is delivered to the cue-app SOPS secret out of
+// band (see outputs.tf + the cue-api README) — Terraform never writes the k8s secret.
+resource "google_apikeys_key" "cue_places" {
+  name         = "cue-places-find-food"
+  display_name = "Cue Find-food (Places API New)"
+  project      = google_project.cloudflare_zero_trust.project_id
+
+  restrictions {
+    api_targets {
+      service = "places.googleapis.com"
+    }
+  }
+
+  // The apikeys API must be live before the key can be created.
+  depends_on = [google_project_service.cloudflare_zero_trust]
+}
 
 // ===========================================================================
 // Project 2 — Home Assistant · Nest (SDM)   (poised-lens-448222-d2)

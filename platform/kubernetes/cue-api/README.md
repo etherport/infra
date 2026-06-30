@@ -31,7 +31,9 @@ local Docker build — CI is the source of truth.
   **optional** `envFrom` so the pod is healthy before it's fully populated. Keys:
   `ANTHROPIC_API_KEY`, `CUE_WEB_TOKEN_SECRET`, `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`
   / `VAPID_SUBJECT` (Web Push), `CUE_HEALTHKIT_CF_CLIENT_ID` / `CUE_HEALTHKIT_CF_CLIENT_SECRET`
-  (the CF Access service token for `/ingest/healthkit`). Add/update a value with, e.g.:
+  (the CF Access service token for `/ingest/healthkit`), `CUE_GOOGLE_PLACES_KEY` (Places API
+  (New) key for **Find-food**, provisioned by `infra/terraform/google/`; gated behind
+  `CUE_FIND_FOOD`, off until the cue side ships). Add/update a value with, e.g.:
     ```bash
     sops set platform/kubernetes/cue-api/03-secret-app.sops.yaml \
       '["stringData"]["ANTHROPIC_API_KEY"]' '"sk-ant-..."'
