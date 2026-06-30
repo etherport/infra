@@ -41,6 +41,8 @@ jobs:
   query:
     name: Find resources missing ManagedBy=terraform
     runs-on: ubuntu-latest
+    outputs:
+      count: ${{ steps.q.outputs.count }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
@@ -167,3 +169,18 @@ jobs:
                 issue_number: issue.number, state: 'closed',
               });
             }
+
+  # Write the rollup status to the drift-status ConfigMap for the daily email (lifecycle
+  # runner — the query job is ubuntu-latest + can't reach the apiserver). count>0 = drift.
+  report-status:
+    name: Report drift status
+    needs: query
+    if: always()
+    runs-on: [self-hosted, lifecycle]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: ./.github/actions/report-drift-status
+        with:
+          detector: cloud-tag-drift
+          status: ${{ (needs.query.result == 'success' && needs.query.outputs.count == '0') && '0' || '1' }}
+          jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}

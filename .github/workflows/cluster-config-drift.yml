@@ -71,6 +71,16 @@ jobs:
           echo "report_b64=$(base64 -w0 < /tmp/report.txt)" >> "$GITHUB_OUTPUT"
           if [ "$rc" -ne 0 ]; then echo "drift=true" >> "$GITHUB_OUTPUT"; else echo "drift=false" >> "$GITHUB_OUTPUT"; fi
 
+      - name: Report drift status (daily email rollup)
+        if: always()
+        env:
+          KUBECONFIG: /tmp/wind-kubeconfig
+        run: |
+          kubectl create configmap drift-status -n monitoring 2>/dev/null || true
+          kubectl patch configmap drift-status -n monitoring --type merge \
+            -p "{\"data\":{\"cluster-config\":\"${{ steps.check.outputs.drift == 'true' && '1' || '0' }},$(date +%s)\"}}" \
+            || echo "::warning::drift-status write failed (non-fatal)"
+
       - name: Cleanup kubeconfig
         if: always()
         run: rm -f /tmp/wind-kubeconfig

@@ -354,3 +354,19 @@ jobs:
               });
               core.info(`Closed resolved drift issue #${issue.number}`);
             }
+
+  # Write the rollup status to the drift-status ConfigMap for the daily email. Runs on the
+  # lifecycle runner (the report job is ubuntu-latest + can't reach the apiserver). report
+  # succeeds when clean, fails (setFailed) on drift -> status 0/1.
+  report-status:
+    name: Report drift status
+    needs: report
+    if: always()
+    runs-on: [self-hosted, lifecycle]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: ./.github/actions/report-drift-status
+        with:
+          detector: tf-drift
+          status: ${{ needs.report.result == 'success' && '0' || '1' }}
+          jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}

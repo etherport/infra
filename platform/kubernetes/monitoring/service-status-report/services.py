@@ -69,6 +69,21 @@ SERVICES = [
     ("Backup", "Google Drive sync", "cronjob", "rclone", "gdrive-sync"),
     ("Backup", "OneDrive sync",     "cronjob", "rclone", "onedrive-sync"),
 
+    # Config drift — each CI detector writes its last result to the `drift-status` ConfigMap
+    # (monitoring ns) via .github/actions/report-drift-status; this pod mounts it at /drift.
+    # `target` = the detector name (the ConfigMap data key). up=clean, down=DRIFT,
+    # degraded=stale (no write in >26h), unknown=never reported. The full drift detail +
+    # remediation is in that detector's GitHub issue (label e.g. tf-drift); this is the rollup.
+    ("Config drift", "Terraform (24 stacks)",   "drift_status", "", "tf-drift"),
+    ("Config drift", "Cloud tags (AWS Config)",  "drift_status", "", "cloud-tag-drift"),
+    ("Config drift", "UDM firewall/zones",       "drift_status", "", "ansible-udm-firewall"),
+    ("Config drift", "L3-switch ACLs",           "drift_status", "", "ansible-usw-acls"),
+    ("Config drift", "Network topology",         "drift_status", "", "topology"),
+    ("Config drift", "Cluster config",           "drift_status", "", "cluster-config"),
+    ("Config drift", "step-ca PKI",              "drift_status", "", "step-ca-pki"),
+    # (service-status-inventory-drift is WEEKLY — omitted here; a daily email would always
+    #  show it "stale". It keeps its own GitHub issue.)
+
     # Apps
     ("Apps", "Home Assistant", "deployment", "home-automation", "home-assistant"),
     ("Apps", "Plex",           "deployment", "plex",            "plex"),

@@ -116,6 +116,14 @@ jobs:
           path: /tmp/drift-${{ matrix.playbook }}.log
           retention-days: 14
 
+      - name: Report drift status (daily email rollup)
+        if: always()
+        uses: ./.github/actions/report-drift-status
+        with:
+          detector: ansible-${{ matrix.playbook }}
+          status: ${{ steps.drift.outputs.drifted == 'true' && '1' || '0' }}
+          jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}
+
   report:
     name: Report ansible drift
     needs: [check]

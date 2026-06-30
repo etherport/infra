@@ -173,6 +173,21 @@ def check_service(kind, namespace, target):
         if worst == 0:
             return ("up", ok_i, tot_i)
         return ("down", ok_i, tot_i) if ok_i == 0 else ("degraded", ok_i, tot_i)
+    elif kind == "drift_status":
+        # A config-drift detector's last result, read from the `drift-status` ConfigMap
+        # mounted at /drift (one file per detector, content "status,timestamp"; status
+        # 0=clean, 1=drift). `target` = the detector name. Stale (>26h, these are daily) or
+        # absent => unknown/degraded so a frozen "0" can't masquerade as healthy.
+        try:
+            with open(f"/drift/{target}") as fh:
+                status_s, ts_s = fh.read().strip().split(",", 1)
+            val, ts = int(status_s), int(ts_s)
+        except Exception:
+            return ("unknown", None, None)
+        now = datetime.now(timezone.utc).timestamp()
+        if (now - ts) > 26 * 3600:
+            return ("degraded", 0, 1)  # detector hasn't reported in >26h
+        return ("up", 1, 1) if val == 0 else ("down", 0, 1)  # 0=clean→up, 1=drift→down
     else:
         return ("unknown", None, None)
 

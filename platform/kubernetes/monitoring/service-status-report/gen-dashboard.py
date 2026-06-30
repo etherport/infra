@@ -167,7 +167,11 @@ def build_dashboard():
     ]
 
     seen_cats = []
-    for cat, _, _, _, _ in SERVICES:
+    for cat, _, k, _, _ in SERVICES:
+        # drift_status is an email-only kind (reads a mounted ConfigMap, no PromQL) — the
+        # "Config drift" category has no Grafana panel.
+        if k == "drift_status":
+            continue
         if cat not in seen_cats:
             seen_cats.append(cat)
 
@@ -175,7 +179,7 @@ def build_dashboard():
         panels.append(text_panel(pid, f"### {cat}",
                                  {"h": HEADER_H, "w": 24, "x": 0, "y": y})); pid += 1
         y += HEADER_H
-        cat_svcs = [(n, k, ns, t) for c, n, k, ns, t in SERVICES if c == cat]
+        cat_svcs = [(n, k, ns, t) for c, n, k, ns, t in SERVICES if c == cat and k != "drift_status"]
         for idx, (name, kind, ns, target) in enumerate(cat_svcs):
             col = idx % 4
             row = idx // 4

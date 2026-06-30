@@ -62,6 +62,11 @@ spec:
                 - name: aws-iam-token
                   mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
                   readOnly: true
+                # Config-drift status, written by the CI detectors (report-drift-status
+                # action). optional — absent until the first detector reports.
+                - name: drift-status
+                  mountPath: /drift
+                  readOnly: true
               resources:
                 requests:
                   cpu: 50m
@@ -73,6 +78,13 @@ spec:
               configMap:
                 name: service-status-report-script
                 defaultMode: 0755
+            # NOT in the kustomization — created + merge-patched by the CI drift detectors
+            # (Flux would revert the patches). optional so the pod starts before any detector
+            # has run.
+            - name: drift-status
+              configMap:
+                name: drift-status
+                optional: true
             # M75 IRSA: projected SA token (aud sts.amazonaws.com) for web identity.
             - name: aws-iam-token
               projected:

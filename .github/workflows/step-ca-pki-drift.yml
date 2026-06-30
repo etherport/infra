@@ -88,3 +88,11 @@ jobs:
               });
               core.info(`Closed #${issue.number}`);
             }
+
+      - name: Report drift status (daily email rollup)
+        if: always()
+        uses: ./.github/actions/report-drift-status
+        with:
+          detector: step-ca-pki
+          status: ${{ steps.check.outputs.rc == '0' && '0' || '1' }}
+          jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}

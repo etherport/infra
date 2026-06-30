@@ -1,0 +1,49 @@
+name: Report drift status
+description: >
+  Write a config-drift detector's result into the `drift-status` ConfigMap (monitoring ns)
+  so the daily service-status email can render it. Tokenless: mints a short-lived step-ca SSH
+  cert, pulls the cp1 admin kubeconfig (the apiserver is a node IP on VLAN 201 — reachable from
+  the lifecycle runner, unlike the in-cluster pushgateway VIP), and merge-patches one key.
+  MUST run on the [self-hosted, lifecycle] runner (needs apiserver reach).
+
+inputs:
+  detector:
+    description: detector name (the ConfigMap data key, e.g. tf-drift)
+    required: true
+  status:
+    description: "0 = clean, 1 = drift"
+    required: true
+  jwk-password:
+    description: STEP_JWK_PASSWORD secret (for setup-ssh-cert)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Mint SSH cert (step-ca)
+      id: cert
+      uses: ./.github/actions/setup-ssh-cert
+      with:
+        jwk-password: ${{ inputs.jwk-password }}
+
+    - name: Write drift status to the ConfigMap
+      shell: bash
+      run: |
+        set -uo pipefail
+        if ! command -v kubectl >/dev/null 2>&1; then
+          curl -fsSL -o /tmp/kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          sudo install -m 0755 /tmp/kubectl /usr/local/bin/kubectl && rm -f /tmp/kubectl
+        fi
+        CP1="${CP1_IP:-10.10.201.50}"
+        ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -i "${{ steps.cert.outputs.key-file }}" "ubuntu@${CP1}" 'sudo cat /etc/kubernetes/admin.conf' > /tmp/drift-kc
+        sed -i "s|https://127.0.0.1:6443|https://${CP1}:6443|g" /tmp/drift-kc
+        export KUBECONFIG=/tmp/drift-kc
+        # Ensure the CM exists (NOT Flux-managed — Flux would revert these merge-patches),
+        # then merge just this detector's key so concurrent detectors don't clobber each other.
+        kubectl create configmap drift-status -n monitoring 2>/dev/null || true
+        kubectl patch configmap drift-status -n monitoring --type merge \
+          -p "{\"data\":{\"${{ inputs.detector }}\":\"${{ inputs.status }},$(date +%s)\"}}" \
+          && echo "drift-status[${{ inputs.detector }}] = ${{ inputs.status }}" \
+          || echo "::warning::failed to write drift-status for ${{ inputs.detector }} (non-fatal)"
+        rm -f /tmp/drift-kc
