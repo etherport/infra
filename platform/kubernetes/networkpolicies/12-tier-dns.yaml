@@ -69,6 +69,18 @@ spec:
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: dns
+    # dns-sync-watcher -> the two OFF-CLUSTER Technitium replicas' admin API (:5380):
+    # the VM fallback 10.10.201.6 and the AWS replica 10.10.100.5. These are external to
+    # the cluster (reserved:world), and the world egress above only opens the QUERY ports
+    # (53/443/853/53443) — so the hourly FULL_SYNC was POLICY_DENIED (~72 drops/hr, watcher
+    # "urlopen error timed out") for the ~8 days since the dns tier was enforced (2026-06-22).
+    # Least-privilege: just these two /32s on tcp/5380 (NOT 5380-to-all-world).
+    - toCIDR:
+        - 10.10.201.6/32
+        - 10.10.100.5/32
+      toPorts:
+        - ports:
+            - { port: "5380", protocol: TCP }
     # ICMP type 3 (Port Unreachable) to world — the pod kernel's courtesy reply to
     # late upstream UDP packets after a recursion query socket closed. Functionally
     # unnecessary but allowed to keep the enforced drop log clean.

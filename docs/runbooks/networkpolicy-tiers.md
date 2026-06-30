@@ -18,6 +18,14 @@ Everything else is dropped. Unlabelled namespaces are unaffected (allow-all).
 **Enforced tiers (2026-06):** `postgres`, `cue`, `dns`, `traefik`, `monitoring` (all 5 enforced).
 Never label `kube-system`, `flux-system`, `wireguard`, `metallb-system`.
 
+> ⚠️ **`dns` tier has OFF-CLUSTER egress deps — keep them.** `dns-sync-watcher` does an hourly
+> FULL_SYNC to the two **off-cluster** Technitium replicas — the VM fallback `10.10.201.6` and the
+> AWS replica `10.10.100.5` — on **tcp/5380** (admin API). Those targets are `reserved:world`, and
+> the dns-tier `world` egress only opens the QUERY ports (53/443/853/53443), so the sync needs an
+> explicit `toCIDR` egress for those two `/32`s on 5380 (`12-tier-dns.yaml`). It was missing
+> 2026-06-22 → 06-30: the sync silently failed (72 `CiliumNetpolDropFlow` drops/hr) for 8 days.
+> Don't drop that rule when editing the dns tier.
+
 ## ⚠️ Adding a new service WILL need NetworkPolicy work if it touches an enforced tier
 
 This is the operational tax of enforcement. Three cases — check each when adding or
