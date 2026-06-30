@@ -26,7 +26,9 @@ case "${1:-}" in
     ;;
   gh-get)
     # audit-helpers.sh gh-get <api-path>   — authenticated read-only GitHub API GET.
-    # e.g. `gh-get issues?state=open&labels=tf-drift`. Path is relative to the repo.
+    # The dispatch PAT is Actions:R/W + Contents:R ONLY (no Issues scope), so this is for
+    # Actions/Contents reads — e.g. `gh-get actions/runs?per_page=1` or `gh-get contents/README.md`.
+    # It will 403 on issues; read IaC-drift signal from the drift-status ConfigMap via kubectl instead.
     path="${2:?usage: gh-get <api-path>}"
     tok="$(sops_get github_dispatch_pat)"
     curl -fsS -H "Authorization: Bearer $tok" -H "Accept: application/vnd.github+json" \
@@ -34,8 +36,13 @@ case "${1:-}" in
     ;;
   dispatch-issue)
     # audit-helpers.sh dispatch-issue <clean|drift> [summary-file]
-    # Dispatches post-doc-drift-issue.yml (its GITHUB_TOKEN posts/refreshes/closes the
-    # doc-drift issue). clean -> close any open issue; drift -> post the base64'd summary.
+    # WRAPPER-ONLY (it's the agent's only POST/egress path, so it's gated): the wrapper sets
+    # AUDIT_WRAPPER=1; the scoped agent can't (env-prefixes + `export` are matcher-denied), so an
+    # agent calling this is refused. Dispatches post-doc-drift-issue.yml (its GITHUB_TOKEN
+    # posts/refreshes/closes the doc-drift issue). clean -> close any open issue; drift -> post summary.
+    if [ "${AUDIT_WRAPPER:-}" != "1" ]; then
+      echo "dispatch-issue is wrapper-only (AUDIT_WRAPPER unset)" >&2; exit 4
+    fi
     mode="${2:?usage: dispatch-issue <clean|drift> [summary-file]}"
     clean=false; [ "$mode" = clean ] && clean=true
     b64=""

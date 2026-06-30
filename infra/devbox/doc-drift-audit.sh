@@ -1,27 +1,36 @@
 #!/usr/bin/env bash
-# Weekly live-anchored doc/IaC drift audit. Runs ON THE DEVBOX because the audit needs LIVE
-# access (kubectl cluster-admin, UDM API via SOPS, on-host `ip route`) that a cloud-scheduled
-# run can't reach. Headless `claude` does the audit, AUTO-FIXES high-confidence DOC drift
-# (commit+push), and posts a summary (auto-changes + manual-review items) to the `doc-drift`
-# GitHub issue. IaC drift is reported, never auto-applied. Deployed + enabled by devbox.yml
-# (doc-drift-audit.service/.timer). Prompt + safety rules: doc-drift-audit-prompt.md.
+# Weekly live-anchored doc/IaC drift audit. Runs ON THE DEVBOX because it needs LIVE access
+# (kubectl cluster-admin, UDM API via the helper, on-host `ip route`) a cloud run can't reach.
+#
+# SECURITY MODEL (hardened after the 2026-06-30 adversarial review): a prefix allowlist CANNOT
+# enforce "docs-only write / no exfil" for an unattended agent — shell redirection (`> file`),
+# write-flags on allowed tools (`sort -o`, `curl -o`), `git restore`, and `git push` all bypass it.
+# So the agent's allowlist (doc-drift-audit-permissions.json) grants NO git, NO curl, NO sops, NO
+# dispatch — only reads + Edit/Write to docs + the helper (GET-only). The WRAPPER (this script,
+# trusted) owns ALL mutation: it stages ONLY doc paths, secret-scans before publishing, and does
+# the commit/push + issue-dispatch + email itself. A prompt-injected agent therefore cannot push to
+# the Flux-reconciled `main`, nor exfiltrate (its only outbound is the helper's UDM/GitHub GETs and
+# a wrapper-scanned summary). See doc-drift-audit-prompt.md. Deployed by devbox.yml.
 set -uo pipefail
 export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 REPO="/home/ubuntu/code/infra"
 PROMPT_FILE="$REPO/infra/devbox/doc-drift-audit-prompt.md"
+HELPER="$REPO/infra/devbox/audit-helpers.sh"
 LOG_DIR="$HOME/.local/state/doc-drift-audit"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/$(date +%Y%m%d-%H%M%S).log"
-# The agent writes these (for the email/issue step) via the Write tool. They live IN-REPO under a
-# gitignored dir because the Write tool is denied for out-of-repo paths even with --add-dir, whereas
-# in-repo writes (scoped in doc-drift-audit-permissions.json) work. Cleared so we never re-send last
-# week's.
+# The agent writes these (for the email/issue) via the Write tool, into an in-repo gitignored dir
+# (the Write tool is denied for out-of-repo paths). Cleared so we never re-send last week's.
 ARTIFACT_DIR="$REPO/infra/devbox/.audit-state"
 SUMMARY_FILE="$ARTIFACT_DIR/last-summary.md"
 STATUS_FILE="$ARTIFACT_DIR/last-status"
 mkdir -p "$ARTIFACT_DIR"
 rm -f "$SUMMARY_FILE" "$STATUS_FILE"
+
+# High-signal secret markers — used to (a) redact the published summary and (b) block a doc commit
+# if the agent somehow wrote a secret into a doc or the summary.
+SECRET_RE='AGE-SECRET-KEY-1|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|gh[opsu]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|sk-ant-[A-Za-z0-9_-]{20,}|aws_secret_access_key'
 
 cd "$REPO" || { echo "repo missing"; exit 1; }
 git pull --rebase origin main >>"$LOG" 2>&1 || true
@@ -32,12 +41,9 @@ if ! command -v claude >/dev/null 2>&1; then
 fi
 
 echo "[$(date -Is)] starting doc-drift audit" >>"$LOG"
-# Scoped permissions (NOT --dangerously-skip-permissions): the agent can read anything, write
-# only docs/READMEs/CLAUDE.md + the in-repo .audit-state artifacts, and mutate nothing but a GitHub
-# workflow_dispatch. The deny list (doc-drift-audit-permissions.json) hard-blocks terraform/ansible
-# apply, kubectl mutations, rm/destructive-git, and sops-encrypt. Exporting SOPS_AGE_KEY_FILE lets
-# the agent run plain `sops -d <file>` (the matcher rejects the `VAR=x sops -d` env-prefix form).
-export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"
+# The agent has NO git/curl/sops in its allowlist (the matcher can't keep them safe — see header).
+# SOPS_AGE_KEY_FILE is NOT exported to the agent; only the helper (which it runs) decrypts, and only
+# returns UDM/GitHub GET results — never raw secrets.
 claude -p "$(cat "$PROMPT_FILE")" \
   --permission-mode default \
   --settings "$REPO/infra/devbox/doc-drift-audit-permissions.json" \
@@ -45,10 +51,21 @@ claude -p "$(cat "$PROMPT_FILE")" \
 rc=$?
 echo "[$(date -Is)] doc-drift audit finished (rc=$rc) -> $LOG" | tee -a "$LOG"
 
-# --- Prometheus textfile metric (scraped by node_exporter --collector.textfile). Lets the
-# monitoring stack alert on a FAILED *or MISSED* run from off-box (DocDriftAudit* in
-# 02-external-alerts.yaml). last_success_timestamp is stamped only on rc==0, and the prior
-# marker is preserved on a failed run, so a failure can't refresh the staleness clock. ---
+# Resolve the run status once (from the agent's status artifact + rc).
+status="$(tr -dc 'a-zA-Z' < "$STATUS_FILE" 2>/dev/null | tr 'A-Z' 'a-z')"
+[ "$rc" -ne 0 ] && status="error"
+[ -z "$status" ] && status="ran"
+
+# --- Secret-scan the agent-authored summary; redact rather than publish a leaked secret. ---
+if [ -s "$SUMMARY_FILE" ] && grep -aEq "$SECRET_RE" "$SUMMARY_FILE"; then
+  echo "[security] ⚠ last-summary.md matched a secret pattern — REDACTING (not publishing it)" | tee -a "$LOG"
+  printf '## Summary withheld\n\nThe audit summary matched a secret pattern and was NOT published. Inspect the run log on the devbox: `%s`\n' "$LOG" > "$SUMMARY_FILE"
+  status="error"
+fi
+
+# --- Prometheus textfile metric (node_exporter --collector.textfile). Off-box alert on a FAILED
+# *or MISSED* run (DocDriftAudit* in 02-external-alerts.yaml). success-ts stamped only on rc==0; the
+# prior marker is preserved on failure so a fail can't refresh the staleness clock. ---
 TEXTFILE_DIR="/var/lib/node_exporter/textfile_collector"
 prom="$TEXTFILE_DIR/doc_drift_audit.prom"
 if [ -d "$TEXTFILE_DIR" ] && [ -w "$TEXTFILE_DIR" ]; then
@@ -71,14 +88,60 @@ else
   echo "[metric] $TEXTFILE_DIR missing/unwritable — skipped textfile metric (run base.yml on devbox)" | tee -a "$LOG"
 fi
 
-# --- Email the summary EVERY run (clean or drift) via SES SMTP. The devbox has no in-cluster
-# IRSA, so it sends over SMTP with creds decrypted from the alertmanager SES secret (it holds
-# the age key). Best-effort: a send failure must never fail the audit. ---
+# --- WRAPPER owns git: stage ONLY doc paths (the agent has no git), flag any non-doc modification
+# as a write-boundary violation (injection signal), secret-scan the staged diff, then commit+push. ---
+commit_doc_fixes() {
+  local f doc=() nondoc=()
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    case "$f" in
+      docs/*|CLAUDE.md|README.md|*/README.md) doc+=("$f") ;;
+      *) nondoc+=("$f") ;;
+    esac
+  done < <(git status --porcelain --untracked-files=all | cut -c4-)
+
+  if [ "${#nondoc[@]}" -gt 0 ]; then
+    echo "[git] ⚠ write-boundary: agent touched NON-doc paths — NOT committing them:" | tee -a "$LOG"
+    printf '   %s\n' "${nondoc[@]}" | tee -a "$LOG"
+  fi
+  [ "${#doc[@]}" -eq 0 ] && { echo "[git] no doc changes to commit" >>"$LOG"; return 0; }
+
+  local p; for p in "${doc[@]}"; do git add -- "$p" 2>>"$LOG" || true; done
+  git diff --cached --quiet && { echo "[git] nothing staged" >>"$LOG"; return 0; }
+
+  if git diff --cached | grep -aEq "$SECRET_RE"; then
+    echo "[security] ⚠ staged doc diff matched a secret pattern — ABORTING commit/push" | tee -a "$LOG"
+    git reset -q; return 0
+  fi
+  git commit -q -m "docs: weekly doc/IaC drift audit auto-fixes
+
+Automated doc fixes from the weekly live-anchored audit (committed by the wrapper, not the agent).
+Details: the doc-drift GitHub issue + ~/.local/state/doc-drift-audit/ on the devbox.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>" >>"$LOG" 2>&1
+  git pull --rebase origin main >>"$LOG" 2>&1 || true
+  if git push origin main >>"$LOG" 2>&1; then
+    echo "[git] pushed doc fixes (${#doc[@]} file(s))" | tee -a "$LOG"
+  else
+    echo "[git] push FAILED — see log" | tee -a "$LOG"
+  fi
+}
+commit_doc_fixes
+
+# --- Publish to the doc-drift GitHub issue (WRAPPER dispatches via the helper; AUDIT_WRAPPER=1
+# unlocks the helper's POST path, which the scoped agent cannot set). ---
+if [ "$status" = drift ] && [ -s "$SUMMARY_FILE" ]; then
+  AUDIT_WRAPPER=1 "$HELPER" dispatch-issue drift "$SUMMARY_FILE" >>"$LOG" 2>&1 \
+    && echo "[issue] posted doc-drift issue" | tee -a "$LOG" || echo "[issue] dispatch failed" | tee -a "$LOG"
+else
+  AUDIT_WRAPPER=1 "$HELPER" dispatch-issue clean >>"$LOG" 2>&1 \
+    && echo "[issue] clean — closed any open doc-drift issue" | tee -a "$LOG" || echo "[issue] dispatch failed" | tee -a "$LOG"
+fi
+
+# --- Email the summary EVERY run (clean or drift) via SES SMTP (creds from the alertmanager SOPS
+# secret — the devbox has no in-cluster IRSA). Best-effort: a send failure never fails the audit. ---
 email_summary() {
-  local sec creds status subject body tmpbody=""
-  status="$(tr -dc 'a-zA-Z' < "$STATUS_FILE" 2>/dev/null | tr 'A-Z' 'a-z')"
-  [ "$rc" -ne 0 ] && status="error"
-  [ -z "$status" ] && status="ran"
+  local sec creds subject body tmpbody=""
   case "$status" in
     clean) subject="Homelab doc/IaC drift — ✅ clean this week" ;;
     drift) subject="Homelab doc/IaC drift — ⚠️ review needed" ;;

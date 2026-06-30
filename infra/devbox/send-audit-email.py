@@ -110,6 +110,7 @@ def _buttons(line: str) -> tuple[str, str]:
 
 
 def _md_to_html(body: str) -> str:
+    body = body.replace("\x00", "")  # NUL would collide with the placeholder sentinels below
     out: list[str] = []
     in_ul = False
     para: list[str] = []
@@ -199,6 +200,10 @@ def main() -> int:
         body = ""
     if not body:
         body = "(the audit produced no summary text; see the devbox run log)"
+    # Strip NUL: the HTML renderer uses \x00-delimited placeholders internally, and html.escape
+    # does not escape NUL — a literal NUL in the body could collide/corrupt. (Defensive; LLM
+    # markdown realistically never contains NUL, but keep both parts clean.)
+    body = body.replace("\x00", "")
 
     msg = EmailMessage()
     msg["Subject"] = subject

@@ -166,19 +166,22 @@ audit can write). Prometheus alerts (`doc-drift-audit.rules` in `02-external-ale
 email already covers it). ⚠️ The audit is a systemd **user** unit, so node_exporter's *systemd*
 collector (system bus) can't see it — the textfile metric is the off-box signal, not unit-state.
 
-**Permission scope (NOT `--dangerously-skip-permissions`).** The agent runs `claude -p
---permission-mode default --settings doc-drift-audit-permissions.json --add-dir <logdir>`. That
-policy lets it **read anything, edit only `docs/**` + any `README.md` + `CLAUDE.md` (+ write its
-artifacts under the log dir), `git add/commit/push`, and dispatch ONE workflow** — while
-**hard-denying** `terraform`/`ansible` apply, `kubectl` mutations, `rm`/destructive-git, `sops`
-encrypt, and edits to any other `infra/`/`platform/`/`clusters/` file (the deny list beats any
-allow). Two matcher facts shaped the design: the bash gate **rejects `$(...)` substitution and
-`VAR=x cmd` env-prefixes**, so (a) the wrapper **exports `SOPS_AGE_KEY_FILE`** (plain `sops -d
-<file>` works) and (b) secret+curl ops go through **`audit-helpers.sh`** (`udm <endpoint>` /
-`gh-get <path>` / `dispatch-issue <clean|drift> [file]`) — one vetted command each, keeping
-decrypted secrets out of the log. Residual risk (intrinsic to the job): `sops -d` reads any
-encrypted file and `curl` can issue any method — both low blast-radius (the dispatch PAT is
-Actions:write-only). Empirically validated: allowed reads run; `kubectl delete`/`terraform` are blocked.
+**Permission scope (hardened after the 2026-06-30 adversarial review).** A prefix allowlist
+**cannot** enforce "docs-only write / no exfil" for an unattended agent — shell redirection
+(`echo x > file`, empirically proven), write-flags on allowed tools (`sort -o`, `curl -o`),
+`git restore`, and `git push` all bypass path-scoping, and `sops -d`+`curl` is a secret-exfil pair.
+So the model splits cleanly: **the agent gets NO `git`, NO `curl`/`wget`, NO `sops`** — only reads,
+`Edit`/`Write` to `docs/**`/`README.md`/`CLAUDE.md`/`.audit-state/`, and the **read-only** helper
+(`udm`/`gh-get` GETs). **The wrapper (`doc-drift-audit.sh`, trusted) owns ALL mutation:** it stages
+**only doc paths** (flagging any non-doc write the agent attempted), **secret-scans** the staged
+diff + the summary, then does the commit/push + issue-dispatch (`dispatch-issue` is gated behind a
+wrapper-only `AUDIT_WRAPPER=1`) + email itself. So a prompt-injected agent **cannot reach the Flux
+`main` branch or exfiltrate** — its only outbound is the helper's UDM/GitHub GETs and a
+wrapper-scanned summary. The deny list also blocks `terraform`/`ansible`/`kubectl` mutations,
+`rm`/`mv`/`tee`/`sed -i`, and **Reads of plaintext-secret paths** (`~/.config/sops`, `~/.ssh`,
+`~/.aws`, `~/.claude`, `*.sops.yaml`). Residual: the agent can *read* a secret into context (no read
+tool is fully path-scopeable) but has no un-scanned channel to emit it. Empirically validated:
+allowed reads run; `git`/`curl`/`sops`/`kubectl delete`/`terraform` are all blocked.
 
 ⚠️ **This is an UNATTENDED agent that commits to `main`**, so it is **NOT auto-enabled** — enable it deliberately:
 ```bash
