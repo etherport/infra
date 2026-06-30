@@ -13,6 +13,48 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-30 (cont.) — 4 new drift detectors (cluster-config, dns-sync, step-ca PKI, AWS Config)
+
+Built all 4 proposed drift detectors. With the existing TF/ansible/topology/inventory ones, the
+homelab now has **broad config-drift coverage across cloud + cluster + network + PKI**.
+
+1. **cluster-config invariants** (`cluster-config-drift.yml` + `scripts/k8s/cluster-config-assertions.sh`)
+   — asserts the LIVE control-plane matches the kubespray IaC (apiserver `--service-account-issuer` =
+   the IRSA bucket URL, `--api-audiences` pins sts.amazonaws.com, cilium `policy-audit-mode=false` +
+   `enable-wireguard=true`). These break SILENTLY (read once at startup) — the M75/cilium-incident class.
+   Daily on the lifecycle runner (kubeconfig from cp1). Verified green (8/8 assertions pass).
+2. **dns-sync** (`12-loki-rules-dns-sync.yaml`) — `DnsSyncWatcherSyncFailing` loki rule. **Pivoted from
+   "technitium.yml --check"** because that's a provisioning playbook (ok=7/changed=1/**failed=1** in check
+   mode → would be pure noise). DNS RECORDS are already GitOps-reconciled by dns-sync-watcher; the gap was
+   a SILENT sync failure (the 8-day netpol drop). Fires when the watcher logs sync failures.
+3. **step-ca PKI** (`step-ca-pki-drift.yml` + `scripts/pki/step-ca-pki-assertions.sh`) — step-ca /health
+   + CA-cert expiry margins (intermediate in the served chain + the committed root anchor, ≥30d). Catches
+   a dead CA (renewals silently stop → fleet lockout) or an anchor marching to expiry. Verified green.
+4. **AWS Config tag-drift** (`infra/terraform/aws/config/` + `cloud-tag-drift.yml`) — the cloud detector.
+   **Decided AWS Config over driftctl (EOL/archived) + over the free Tagging-API**, for ~100% coverage +
+   change-history at ~$2/mo (user choice). Designed + **adversarially verified by a workflow** before the
+   billable apply — which caught a FATAL flaw: **AWS Config SQL cannot express tag-ABSENCE** (no IS NULL /
+   NOT EXISTS / array-negation), so the query SELECTs all resources WITH tags + filters "missing
+   ManagedBy=terraform" **client-side in jq**. The verify also forced: a hand-rolled IAM role (not the
+   account-global SLR → EntityAlreadyExists), an **aggregator** (was missing), global types in ONE region,
+   DAILY recording, and confirmed `gh-actions-terraform` applies it with **zero IAM edits**. Marker
+   standardized: `default_tags{ManagedBy="terraform"}` added to the 5 untagged AWS stacks (12 already had
+   it). **APPLIED** (run `28457133384`, `15 added/0/0`, no collision/no DAILY-400); recorders live in both
+   regions; the query workflow validated green end-to-end. Stack `config` added to the TF drift matrix.
+
+**Detector inventory now:** TF plan (24 stacks) · ansible --check (UDM fw + switch ACLs) · topology
+(routing invariants) · cluster-config (CP invariants) · step-ca PKI · dns-sync · inventory · **AWS Config
+(cloud tag-drift)** — all open-on-drift / close-on-clean (the TF + ansible ones gained close-on-clean too).
+
+**Follow-ups:** (a) the 5 newly-`default_tags`-ed stacks (ddns-lambda, dns-restrict-ip, email-forward,
+homeassistant-alexa, twilio-webhook) must re-apply so their resources get the marker — until then they
+show in the cloud-tag-drift report (the tf-drift detector will flag the pending tag change). (b) tune the
+cloud-tag-drift ALLOWLIST from the first full run (AWS-managed untagged resources), then flip it from
+informational to hard-fail. (c) one-off `get-discovered-resource-counts` after ~24h to confirm the
+~$2/mo estimate. Still user-side: M104 (205 DHCP DNS), M106 (PVE vzdump cp1 stall).
+
+---
+
 ## 2026-06-30 — overnight alert-storm triage + 3rd drift detector (topology)
 
 Two asks: build the remaining drift detector, and investigate/resolve the many overnight
