@@ -5,9 +5,13 @@
 AWS resources in us-west-2 connected to local homelab via WireGuard VPN. The infrastructure supports:
 - Site-to-site VPN connectivity between AWS and homelab
 - Public DNS services with dynamic IP updates
-- Application Load Balancer forwarding web requests to homelab via VPN
 - Email forwarding and notification services
+- External monitoring (Route53 health checks → SNS)
 - Terraform state management
+
+**No ALB — the public edge is the Cloudflare Tunnel** (`infra/terraform/cloudflare/main.tf`);
+AWS holds no public HTTPS entry point for `*.wind.etherport.net`. See
+[Migration history](#migration-history).
 
 ## Network Architecture
 
@@ -110,13 +114,16 @@ AWS resources in us-west-2 connected to local homelab via WireGuard VPN. The inf
 | Inbound | TCP | 22 | 47.159.189.230/32 | SSH from restricted IP |
 | Outbound | All | All | 0.0.0.0/0 | All outbound |
 
-### ALB Public HTTPS Security Group (`sg-0a4bebabcd3bd4d20`)
+### ALB Public HTTPS Security Group (`sg-0a4bebabcd3bd4d20`) — ORPHANED
 **Name:** `private-infra_alb-public-443`
 
 | Direction | Protocol | Port | Source/Dest | Description |
 |-----------|----------|------|-------------|-------------|
 | Inbound | TCP | 443 | 0.0.0.0/0 | HTTPS from internet |
 | Outbound | All | All | 0.0.0.0/0 | All outbound |
+
+**Note:** Unattached — the ALB it fronted is gone (edge is the CF Tunnel). Still in
+`networking/security_groups.tf` (`aws_security_group.alb_public`); a cleanup candidate.
 
 ## Network ACLs
 
@@ -141,27 +148,13 @@ AWS resources in us-west-2 connected to local homelab via WireGuard VPN. The inf
 
 **Outbound Rules:** Allow all (0.0.0.0/0)
 
-## Application Load Balancer — DECOMMISSIONED 2026-05-27
+## Public edge
 
-The `private-infra-alb` (ARN suffix `b80aa78d7562bac7`, DNS name
-`private-infra-alb-687735217.us-west-2.elb.amazonaws.com`) was the
-external HTTPS entry point for `*.wind.etherport.net` services. It
-forwarded to Traefik over the WireGuard tunnel.
-
-It was decommissioned 2026-05-27 as part of the CF Tunnel + CF Access
-migration:
-- 9 services (wiki, ha, plex, kopia, grafana, technitium, ollama,
-  chat, approve.etherport.net) moved to CF Tunnel — see
-  `infra/terraform/cloudflare/main.tf` for the tunnel + ingress config
-- `*.wind.etherport.net` wildcard removed from the CF zone
-- Public hostnames that need infra-UI access (pdu/ups/prox/switch/
-  traefik-dashboard) are Tailscale-only — resolved internally via
-  Technitium to the Traefik LB IP (10.10.201.70)
-
-Saves ~$25/mo + transfer. Decom runbook: `docs/runbooks/archive/alb-decom.md`.
-ALB-related WAF Web ACL (`CreatedByALB-private-infra-alb`) was
-auto-deleted with the ALB. The `terraform/aws/load-balancing/` module
-was deleted from the repo at the same time.
+**There is no ALB.** Public HTTPS for `*.wind.etherport.net` enters via the **Cloudflare
+Tunnel** (`infra/terraform/cloudflare/main.tf`), not AWS. Infra-UI hostnames
+(pdu/ups/prox/switch/traefik-dashboard) are **Tailscale-only**, resolved internally via
+Technitium to the Traefik LB IP (`10.10.201.70`). The ALB → Traefik-over-WireGuard path is
+retired — see [Migration history](#migration-history).
 
 ## Traffic Flow: Internet to Homelab
 
@@ -174,9 +167,6 @@ was deleted from the repo at the same time.
    infra/terraform/cloudflare/main.tf ingress rules
 6. Backend service responds (Plex, HA, etc.)
 ```
-
-The historical ALB path (Internet → ALB → WAF → Traefik via WG
-tunnel) was retired 2026-05-27.
 
 ## Lambda Functions
 
@@ -193,7 +183,7 @@ All Lambda functions are managed via Terraform modules in `infra/terraform/aws/`
 | Timeout | 3 seconds |
 | Terraform Module | `infra/terraform/aws/dns-restrict-ip/` |
 
-**Purpose:** Maintains 2 security groups (DNS :53 + SSH :22) so they only allow current homelab WAN1/WAN2 IPs. Migrated 2026-05-27 from Route53 API to plain DNS resolution (1.1.1.1 + 8.8.8.8 public resolvers) — zone-provider-agnostic; works against CF or whatever else might serve those names.
+**Purpose:** Maintains 2 security groups (DNS :53 + SSH :22) so they only allow current homelab WAN1/WAN2 IPs. Resolves the target names via **public resolvers** (`1.1.1.1` then `8.8.8.8`) — zone-provider-agnostic, no API key; works against CF or whatever else serves those names.
 
 **Flow:**
 1. Triggered every 5 minutes (EventBridge)
@@ -213,7 +203,7 @@ All Lambda functions are managed via Terraform modules in `infra/terraform/aws/`
 | Timeout | 10 seconds |
 | Terraform Module | `infra/terraform/aws/ddns-lambda/` |
 
-**Purpose:** DynDNS-compatible endpoint. UDM-Pro POSTs the current WAN1/WAN2 IP; Lambda upserts the matching record. Migrated 2026-05-27 from Route53 to the Cloudflare REST API (CF token loaded from Secrets Manager alongside the router shared-secret).
+**Purpose:** DynDNS-compatible endpoint. UDM-Pro POSTs the current WAN1/WAN2 IP; Lambda upserts the matching record via the **Cloudflare REST API** (`https://api.cloudflare.com/client/v4`; CF token loaded from Secrets Manager alongside the router shared-secret).
 
 ### email-forward
 
@@ -335,19 +325,17 @@ infra/ansible/inventory/aws/
 
 ### Route53 Health Checks
 
-External monitoring from AWS edge locations to detect homelab outages.
-Per-endpoint status reflects post-ALB-decom reality (2026-05-27);
-several "Disabled (ALB issue)" entries from the ALB era should be
-re-enabled now that traffic flows through CF Tunnel. Tracked
-separately as a follow-up.
+External monitoring from AWS edge locations to detect homelab outages. Per-endpoint
+`enabled` flags live in `external-monitoring/variables.tf`. The two disabled checks are a
+re-enable follow-up (traefik has no public path — Tailscale-only).
 
 | Endpoint | FQDN | Health Check Path | Status |
 |----------|------|-------------------|--------|
 | Home Assistant | ha.wind.etherport.net | / | Enabled |
 | Plex | plex.wind.etherport.net | /identity | Enabled |
 | Chat (Open WebUI) | chat.wind.etherport.net | / | Enabled |
-| Grafana | grafana.wind.etherport.net | /api/health | Disabled (was ALB issue; re-evaluate post CF Tunnel) |
-| Traefik | traefik.wind.etherport.net | /ping | Disabled (Tailscale-only since 2026-05-27, no public path) |
+| Grafana | grafana.wind.etherport.net | /api/health | Disabled |
+| Traefik | traefik.wind.etherport.net | /ping | Disabled (Tailscale-only, no public path) |
 
 **Configuration:**
 - Checks from 3 regions: us-west-2, us-east-1, eu-west-1
@@ -391,14 +379,13 @@ All AWS infrastructure is managed via Terraform under `infra/terraform/aws/`.
 |--------|------------|-------------------|
 | `networking/` | `aws/networking/terraform.tfstate` | VPC, subnets, route tables, IGW, security groups, NACLs |
 | `compute/` | `aws/compute/terraform.tfstate` | EC2 instances, EIPs, IAM roles, CloudWatch alarms, SNS |
-| `acm/` | `aws/acm/terraform.tfstate` | SSL/TLS certificates (us-west-2): `*.etherport.net`, `*.wind.etherport.net`, `ha.wind.etherport.net`. Most ALB-era certs were deleted with the ALB 2026-05-27. |
+| `acm/` | `aws/acm/terraform.tfstate` | SSL/TLS certificates (us-west-2): `*.etherport.net`, `*.wind.etherport.net`, `ha.wind.etherport.net`. (Retained; no ALB consumer — HA uses in-cluster TLS.) |
 | `s3/` | `aws/s3/terraform.tfstate` | S3 buckets (velero, archive, email-fwd, `postgres-barman.wind.etherport.net` for CNPG Barman WAL/base backups). All buckets carry bucket-policy `Deny` statements on `s3:DeleteBucket` and `s3:DeleteBucketPolicy` for non-root principals. |
-| `ses/` | `aws/ses/terraform.tfstate` | SES domain/email identities + DKIM for etherport.net. Personal-domain SES bits (grahamsmith.net, smithforsb.com, stopthecastle.com) moved to the personal-web repo 2026-05-27. |
+| `ses/` | `aws/ses/terraform.tfstate` | SES domain/email identities + DKIM for **etherport.net only** (personal domains live in the [personal-web](https://github.com/sparked-diamond/personal-web) repo). |
 
-Deleted modules (2026-05-27):
-- `load-balancing/` — ALB + WAF decom'd; CF Tunnel + CF Access replaces it
-- `route53/` — etherport.net + `aws.etherport.net` private zone deleted; CF is authoritative now
-- `cloudflare-personal/` — migrated to [sparked-diamond/personal-web](https://github.com/sparked-diamond/personal-web) `terraform/cloudflare-dns/`
+> No `load-balancing/`, `route53/`, or `cloudflare-personal/` modules — those were removed in
+> the CF migration ([Migration history](#migration-history)). Cloudflare is authoritative for
+> etherport.net DNS; CF Tunnel is the edge.
 
 ### Lambda Modules
 
@@ -459,3 +446,14 @@ The email-forward Lambda code itself stays in this repo as a generic
 per-prefix forwarder; personal-web's receipt rules reference it via
 `data "aws_lambda_function"`. See the personal-web README for the
 homelab/personal-web boundary.
+
+## Migration history
+
+How this footprint reached its current shape — the 2026-05-27 **ALB → Cloudflare Tunnel +
+CF Access** cutover, the **Route53 → Cloudflare DNS** move (and the resulting
+ddns-updater/dns-restrict-ip rewrites), and the deleted `load-balancing/`/`route53/`/
+`cloudflare-personal/` modules — is archived in
+[`archive/aws-infrastructure-migration-history.md`](archive/aws-infrastructure-migration-history.md).
+See also the runbooks [`alb-decom.md`](../runbooks/archive/alb-decom.md),
+[`cloudflare-access-enable.md`](../runbooks/archive/cloudflare-access-enable.md), and
+[`ddns-updater-cf-migration.md`](../runbooks/archive/ddns-updater-cf-migration.md).

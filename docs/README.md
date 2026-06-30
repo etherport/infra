@@ -54,7 +54,8 @@ docs/
 | [networkpolicy-tiers.md](runbooks/networkpolicy-tiers.md) | H3 NetworkPolicy enforcement model + **catering for new services** (allowlist a new flow) + tier rollout + rollback |
 | [udm-manual-hardening-actions.md](runbooks/udm-manual-hardening-actions.md) | Console-only UDM hardening: Security/205 isolation+DNS (M104), unused/exposed switch ports → Disabled + VLAN-min + 802.1X/MAB (M105/#18), UDM_API_KEY GH secret (M47), BGP auth (L24) |
 | [secrets-rotation.md](runbooks/secrets-rotation.md) | SOPS age-key rotation (routine + post-compromise) + offline backup recipient |
-| [irsa-workload-identity.md](runbooks/irsa-workload-identity.md) | M75 in-cluster AWS workload identity (self-hosted IRSA): architecture, the disruptive apiserver issuer flip (Phase 3) + per-workload migration (Phase 4) + rollback |
+| [irsa-workload-identity.md](runbooks/irsa-workload-identity.md) | M75 in-cluster AWS workload identity (self-hosted IRSA) — **current state**: architecture, the 5 least-priv roles, the durable issuer-change gotchas, maintenance |
+| [archive/irsa-workload-identity-migration-history.md](runbooks/archive/irsa-workload-identity-migration-history.md) | 📦 Historical: the M75 rollout (Phase 1-4, the disruptive apiserver issuer flip, the Multus incident, rollback) |
 | [aws-roles-anywhere-mini.md](runbooks/aws-roles-anywhere-mini.md) | M71 mini-side: mint short-lived AWS creds from a step-ca X.509 cert via IAM Roles Anywhere (no standing key) |
 | [ceph-vlan-migration.md](runbooks/archive/ceph-vlan-migration.md) | Ceph mon/OSD migration to VLAN 210 (2026-05-18, done) |
 | [regional-vpn-deployment.md](runbooks/regional-vpn-deployment.md) | Multi-region AWS spoke VPN deployment |
@@ -70,7 +71,8 @@ docs/
 | [instance-migration.md](runbooks/instance-migration.md) | Planned VM/instance migration procedure |
 | [gpu-secureboot.md](runbooks/gpu-secureboot.md) | Disable Secure Boot on the GPU VM (120) for the NVIDIA driver |
 | [vm-watchdog.md](runbooks/vm-watchdog.md) | Proxmox VM hardware watchdog — ⚠️ **BLOCKED** (kernel module absent, M91) |
-| [twilio-talk.md](runbooks/twilio-talk.md) / [unifi-talk.md](runbooks/unifi-talk.md) | UniFi Talk + Twilio SIP phone system (two overlapping docs — merge candidate) |
+| [twilio-talk.md](runbooks/twilio-talk.md) / [unifi-talk.md](runbooks/unifi-talk.md) | UniFi Talk + Twilio SIP phone system — **current state** (asterisk-sbc bridge: Twilio→`.40` TLS 5061 + sRTP → Talk) |
+| [archive/unifi-talk-twilio-migration-history.md](runbooks/archive/unifi-talk-twilio-migration-history.md) | 📦 Historical: the retired direct Twilio→UDM-Talk path (6767/10000-60000 → `.199.1`) + the UDP→TLS+sRTP cutover |
 | [proxmox-ha-expansion.md](runbooks/proxmox-ha-expansion.md) | Forward-looking multi-node Proxmox HA design (not a runnable procedure) |
 | [alerts/](runbooks/alerts/) | Per-alert response runbooks (one per Prometheus alert) |
 | [auto-remediation/](runbooks/auto-remediation/) | Automated issue resolution system (legacy rule-based) |
@@ -99,7 +101,8 @@ docs/
 | [archive/firewall-zones-migration-history.md](architecture/archive/firewall-zones-migration-history.md) | 📦 Historical: how that design was built (M30 zones, M52 switch ACLs, BGP/201 move, M56 Trusted/Management, Twilio→asterisk) |
 | [vpn-wireguard.md](architecture/vpn-wireguard.md) | Site-to-site VPN (production traffic) |
 | [vpn-tailscale.md](architecture/vpn-tailscale.md) | Tailscale mesh VPN (remote access) |
-| [aws-infrastructure.md](architecture/aws-infrastructure.md) | AWS hybrid cloud components |
+| [aws-infrastructure.md](architecture/aws-infrastructure.md) | AWS hybrid cloud components — **current state** (CF-Tunnel edge, VPCs/Lambda/TF modules) |
+| [archive/aws-infrastructure-migration-history.md](architecture/archive/aws-infrastructure-migration-history.md) | 📦 Historical: the 2026-05-27 ALB→Cloudflare-Tunnel cutover + Route53→CF DNS move + deleted modules |
 
 ## Setup Guides
 

@@ -1,69 +1,90 @@
 # UniFi Talk + Twilio runbook
 
 How voice runs at Windtryst: UniFi Talk on the UDM Pro Max with Twilio
-Elastic SIP Trunking as the PSTN provider. No separate PBX — Talk hosts
-all SIP signalling and call routing directly on the gateway.
+Elastic SIP Trunking as the PSTN provider, fronted by an **asterisk-sbc** that
+terminates the external Twilio leg. There is no separate PBX — Talk hosts the
+extensions, ring groups, DIDs, and call routing; the SBC is a thin SIP/RTP edge
+between Twilio (TLS+sRTP) and Talk (plain UDP/RTP on the LAN).
 
-Audited via the Talk REST API (`/proxy/talk/api/...`) on 2026-05-17 against
-Talk 5.1.2. See `## How this was audited` at the bottom for endpoints.
-
-> ⚠️ **STALE — external Twilio path changed (verified live 2026-06-29).** This runbook
-> describes the **original direct** path (Twilio → UDM Talk, UDP `6767`/`10000-60000` →
-> `10.10.199.1`). That was **superseded** by an **asterisk-sbc SIP bridge**: the live UDM
-> port-forwards are now **`Twilio-SIP` TCP `5061` → `10.10.201.40`** and **`Twilio-Media-Signal`
-> UDP `10000-20000` → `10.10.201.40`** (the asterisk SBC, VM 1004), which then bridges to UniFi
-> Talk internally on `10.10.199.1:6767`. Source of truth for the external/Twilio leg is now
-> **`infra/ansible/playbooks/asterisk-sbc.yml`** (+ the PVE firewall scoping in
-> `infra/terraform/proxmox/firewall/standalone-vms.tf`). The Talk extension/ring-group/internal
-> detail below is still accurate; the **Twilio-facing port-forward + signalling specifics are not**.
-> Full refresh tracked under M17. The legacy `Allow-Twilio-SIP-6767` / `…-10000-60000` UDM rules
-> are now vestigial (cleanup candidates).
+Talk inventory audited via the Talk REST API (`/proxy/talk/api/...`) against
+Talk 5.1.2. See `## How this was audited` at the bottom for endpoints. The
+external/Twilio leg's source of truth is `infra/ansible/playbooks/asterisk-sbc.yml`
+(+ the PVE firewall scoping in `infra/terraform/proxmox/firewall/standalone-vms.tf`).
 
 ## Architecture
 
+The external Twilio leg terminates on the **asterisk-sbc** (VM 1004, `10.10.201.40`)
+over **TCP 5061 (SIP-TLS) + UDP 10000-20000 (sRTP)** and bridges internally to
+UniFi Talk on `10.10.199.1:6767` (plain UDP SIP + RTP on the LAN). The SBC is the
+stable, IaC-managed SIP edge so Talk's fragile built-in 3rd-party-SIP listener
+never faces the internet directly.
+
 ```
-PSTN  ──► Twilio Elastic SIP Trunk (FQDN: windtryst.pstn.umatilla.twilio.com:5060/UDP)
-            │
-            ▼   src=Twilio Signal/Media IPs (firewall groups)
-WAN  ──►  UDM Pro Max ("Windroute", 28704e203ed4)
-            │     ├─ Port-forward UDP 6767       → 10.10.199.1 (UDM Default VLAN IP)
-            │     └─ Port-forward UDP 10000-60000 → 10.10.199.1 (RTP media)
-            ▼
-        UniFi Talk service (controller v5.1.2, listens on TCP 3419 + SIP UDP 6767)
-            │
-            ├─ extension 0001 — Graham Smith         (UVP-TOUCH, Office, 10.10.212.250)
-            ├─ extension 0003 — Windtryst (user)     (UVP-TOUCH, Hallway, 10.10.212.100)
-            ├─ extension 0004 — Work Room            (UVP-TOUCH-W, Workroom, 10.10.212.114)
-            ├─ extension 0005 — Terraform Admin      (no handset)
-            ├─ extension 0007 — Smith SB             (no handset)
-            └─ ring group ext 0006 "Windtryst"       (rings 0001 → 0004 → 0003 simultaneously, then VM to Graham)
+PSTN ─► Twilio Elastic SIP Trunk ──TLS+sRTP──► [ asterisk-sbc ] ──UDP+RTP (LAN)──► UniFi Talk
+        (windtryst.pstn.twilio.com)             VM 1004                            10.10.199.1
+            │                                   10.10.201.40                       (Talk on the UDM)
+            ▼   src=Twilio Signal/Media IPs
+WAN ─► UDM Pro Max ("Windroute", 28704e203ed4)
+            ├─ Port-forward TCP 5061        → 10.10.201.40 (SBC, SIP-TLS)
+            └─ Port-forward UDP 10000-20000 → 10.10.201.40 (SBC, RTP media)
+                                                            │
+                                                            ▼
+                                    UniFi Talk service (controller v5.1.2; listens on TCP 3419 + SIP UDP 6767)
+                                            │
+                                            ├─ extension 0001 — Graham Smith         (UVP-TOUCH, Office, 10.10.212.250)
+                                            ├─ extension 0003 — Windtryst (user)     (UVP-TOUCH, Hallway, 10.10.212.100)
+                                            ├─ extension 0004 — Work Room            (UVP-TOUCH-W, Workroom, 10.10.212.114)
+                                            ├─ extension 0005 — Terraform Admin      (no handset)
+                                            ├─ extension 0007 — Smith SB             (no handset)
+                                            └─ ring group ext 0006 "Windtryst"       (rings 0001 → 0004 → 0003 simultaneously, then VM to Graham)
 ```
 
-Inbound flow: PSTN → Twilio → UDM WAN (signalling 5060/UDP from Twilio
-signal CIDRs, ports forwarded to UDP 6767 by NAT) → Talk service →
-ring group / extension handset over the Talk VLAN (`10.10.212.0/24`).
+Inbound flow: PSTN → Twilio → UDM WAN (SIP-TLS on TCP 5061 from Twilio signalling
+CIDRs, port-forwarded to the SBC at `10.10.201.40`) → asterisk-sbc → forwards the
+call to Talk on `10.10.199.1:6767` (plain UDP) → ring group / extension handset
+over the Talk VLAN (`10.10.212.0/24`).
 
-Outbound: handset → Talk service on UDM → SIP INVITE to
-`windtryst.pstn.umatilla.twilio.com:5060/UDP` → Twilio Oregon edge → PSTN.
-Twilio authenticates outbound via the source-IP ACL configured on the
-trunk (no SIP REGISTER — `register: "false"`).
+Outbound: handset → Talk service on the UDM → asterisk-sbc → SIP INVITE to
+`windtryst.pstn.twilio.com` (TLS) → Twilio edge → PSTN. Twilio authenticates the
+SBC via a credential list (`graham` + password); the SBC trusts inbound Twilio via
+its PJSIP `identify` ACL (the 8 Twilio signalling /30s). The Talk-side trunk no
+longer faces the WAN — it only speaks to the SBC on the LAN.
+
+The SBC's `external_signaling_address` is pinned to the WAN IP **literal**
+`47.159.189.5` (not the `sip.wind.etherport.net` hostname): the VM's split-horizon
+DNS can't resolve that name, so a hostname there silently falls back to the private
+bind IP and breaks Twilio's ACK (408 ACK Timeout). The same WAN IP literal is also
+hardcoded in the cloudflare + twilio TF modules — **if the residential WAN IP ever
+changes, update all three.** A `sbc-update-extip` systemd timer self-heals the
+external address across WAN failover/IP drift.
 
 ## Inventory
 
-### SIP trunk (Talk side)
+**External leg — Twilio ⇄ asterisk-sbc** (`infra/ansible/playbooks/asterisk-sbc.yml`):
 
 | Field | Value |
 |---|---|
-| Trunk name | `Twilio` (id=1, enabled) |
-| Twilio termination FQDN | `windtryst.pstn.umatilla.twilio.com:5060` |
-| Twilio edge region | Umatilla (`us-west`, Oregon) |
-| Transport | **UDP** — *not* TLS / not 5061 |
-| SIP REGISTER | disabled — IP-auth in both directions |
-| SIP listen port (UDM) | UDP 6767 (`nat_needs_static_port=true`, `static_port=6767`) |
+| Twilio trunk | Windtryst (`TK18c876a18dc3b0f64449d0c745d9aec6`), `domain_name` `windtryst.pstn.twilio.com` |
+| Twilio termination target (outbound) | `windtryst.pstn.twilio.com` (generic — Twilio picks the nearest healthy edge) |
+| Transport (external) | **TLS on TCP 5061** (signalling) + **sRTP** on UDP 10000-20000 (media) |
+| SBC TLS cert | Let's Encrypt for `sip.wind.etherport.net` (certbot DNS-01 via Cloudflare) |
+| Twilio auth (outbound) | credential list `graham` + SOPS password (`asterisk-sbc.sops.yaml`) |
+| Inbound trust (toll-fraud guard) | PJSIP `identify` ACL = the 8 Twilio signalling /30s (below) |
 | Audio codecs | `PCMU, PCMA` (G.711 µ-law / A-law) |
-| Inbound ACL (CIDRs) | `54.172.60.0/30`, `54.244.51.0/30`, `54.171.127.192/30`, `35.156.191.128/30`, `54.65.63.192/30`, `54.169.127.128/30`, `54.252.254.64/30`, `177.71.206.192/30`, `168.86.128.0/18` |
+| Twilio signalling CIDRs | `54.172.60.0/30`, `54.244.51.0/30`, `54.171.127.192/30`, `35.156.191.128/30`, `54.65.63.192/30`, `54.169.127.128/30`, `54.252.254.64/30`, `177.71.206.192/30` |
+| Twilio media (sRTP) range | `168.86.128.0/18` |
+| DIDs on trunk | `+1 (909) 414-2433` (active route), `+1 (909) 414-1003` (orphan — see TODOs) |
+
+**Internal leg — asterisk-sbc ⇄ UniFi Talk** (LAN):
+
+| Field | Value |
+|---|---|
+| Talk trunk name | `Twilio` (id=1, enabled) — now points at the SBC, not the WAN |
+| Talk listen target | `10.10.199.1:6767` (Talk's 3rd-party-SIP listener on the UDM Default VLAN) |
+| Transport (internal) | **plain UDP** SIP `6767` + RTP — LAN-only, never internet-facing |
+| SIP REGISTER | disabled — the SBC↔Talk leg is IP/static |
+| Audio codecs | `PCMU, PCMA` |
 | Routing scope | `route_all_countries: true` |
-| DIDs on trunk | `+1 (909) 414-1003`, `+1 (909) 414-2433` |
 
 ### DIDs
 
@@ -110,34 +131,44 @@ firmware `v1.21.17`, with `v1.24.8` available.
 
 | Secret | Where |
 |---|---|
-| Twilio console login / API keys | 1Password item **"Twilio"** (Private vault, id `bv3dqsbwdqjl7nqj6aqqd6343i`, last updated 2025-05-24). |
-| Twilio SIP trunk termination secret (configured on the Talk trunk) | Stored inside Talk: `third_party_sip/gateway_list[0].gateway_params.password`. Visible to any UDM `talk.management:admin`. **Not** mirrored to 1Password as of audit — TODO. |
+| Twilio console login / API keys | 1Password item **"Twilio"** (Private vault, id `bv3dqsbwdqjl7nqj6aqqd6343i`). Also `twilio-tf-api` for the API key (see Twilio API auth, below). |
+| Twilio SIP credential-list password (SBC ⇄ Twilio auth) | **SOPS-encrypted** in `infra/ansible/playbooks/secrets/asterisk-sbc.sops.yaml` (`twilio_sip_password`) — the SBC's credential-list secret. Same value Talk's hidden trunk `password` used. |
+| Cloudflare DNS-01 token (SBC TLS cert) | SOPS in the same `asterisk-sbc.sops.yaml` (`cloudflare_dns_token`, Zone:DNS:Edit). |
 | Per-extension SIP passwords (handset auth to Talk) | Stored inside Talk per-user (`users[*].sip_password`). Managed by Talk; not a user-facing credential. |
-| Stale legacy item | 1Password **"Twilio Credentials (windtryst)"** (Private, id `43lsajaf6bgzvnuqm26v32uxem`, last updated 2019-11-11). Predates Talk; **TODO: confirm + archive**. |
-| Misc supporting items | "Twilio SIP ACL (Campaign)" (2023), "Sendgrid - Twilio" (2023), two `www.twilio.com` login items (2020). All appear unrelated to current trunk. |
+| Stale legacy item | 1Password **"Twilio Credentials (windtryst)"** (Private, id `43lsajaf6bgzvnuqm26v32uxem`, 2019). Predates Talk; **TODO: confirm + archive**. |
+| Misc supporting items | "Twilio SIP ACL (Campaign)", "Sendgrid - Twilio", two `www.twilio.com` login items. All appear unrelated to the current trunk. |
 
-Note: this runbook intentionally does not store secrets in the repo — Talk
-holds the SIP password and the TF provider doesn't model Talk, so there's
-nothing to encrypt with SOPS.
+Note: the **SBC's** secrets are in SOPS (`asterisk-sbc.sops.yaml`), decrypted
+headlessly in CI/locally via the age key — so the external-leg auth is fully IaC.
+**Talk's own** config (extensions, ring groups, DIDs) is **not** in the repo: the
+`paultyng/unifi` provider doesn't model Talk, so that state lives only on the UDM.
 
 ## Port-forwards on the UDM
 
-Read-only audit (`/tmp/unifi-state/port-forwards.json`):
+The WAN port-forwards now target the **asterisk-sbc** (`10.10.201.40`), not the
+UDM itself:
 
 | Name | Proto | Dst port | Forward target | Source restriction (firewall group) |
 |---|---|---|---|---|
-| `Twilio-SIP` | UDP | `6767` | `10.10.199.1:6767` | **"Twilio Signal IPs"** (`6499f5c3…`) — 8 × /30 regional signalling CIDRs |
-| `Twilio-Media-Signal` | UDP | `10000-60000` | `10.10.199.1:10000-60000` | **"Twilio Media IPs"** (`6499f50a…`) — `168.86.128.0/18` |
+| `Twilio-SIP` | **TCP** | `5061` | `10.10.201.40:5061` (SBC, SIP-TLS) | **"Twilio Signal IPs"** — 8 × /30 regional signalling CIDRs |
+| `Twilio-Media-Signal` | UDP | `10000-20000` | `10.10.201.40:10000-20000` (SBC, RTP) | **"Twilio Media IPs"** — `168.86.128.0/18` |
 
-`10.10.199.1` is the UDM Pro Max's own IP on the Default VLAN — Talk runs
-on the gateway and listens on UDP/6767 for SIP and UDP/10000-60000 for RTP
-on that interface. (Confirmed by `setting/config.static_port=6767`.)
+The matching PVE host firewall on VM 1004 is source-scoped (M77 Stage-2b,
+`standalone-vms.tf`): `5061/TCP` ← the `twilio-signaling` ipset (8 /30s), RTP
+`10000-20000/UDP` ← `168.86.128.0/18` (Twilio media) + the internal Talk/LAN
+sources, and plain `5060/UDP` ← internal Talk/LAN only. Those firewall scopes are a
+superset-or-equal of the SBC's PJSIP `identify` ACL, so they can never drop a call
+the SBC would have answered.
 
-ACL audit against Twilio's current published ranges
-(https://www.twilio.com/docs/sip-trunking/ip-addresses, fetched
-2026-05-17): **all 9 CIDRs match Twilio's current list exactly** — Virginia,
-Oregon, Ireland, Frankfurt, Tokyo, Singapore, Sydney, São Paulo signalling
-+ the global media /18. No drift.
+> ⚠️ **Two legacy UDM user firewall rules remain vestigial:** `Allow-Twilio-SIP-6767`
+> and `Allow-Twilio-Media-10000-60000` (source = Twilio Signal/Media groups, dest =
+> the Gateway zone) — the old direct Twilio→UDM-Talk path. External Twilio no longer
+> hits `:6767` on the UDM; these are cleanup candidates.
+
+ACL note: the 8 Twilio signalling /30s + the global media `/18` match Twilio's
+published ranges (https://www.twilio.com/docs/sip-trunking/ip-addresses) —
+Virginia, Oregon, Ireland, Frankfurt, Tokyo, Singapore, Sydney, São Paulo
+signalling + the media /18. Re-check quarterly (Twilio may add ranges).
 
 ## Disaster recovery
 
@@ -158,15 +189,22 @@ Oregon, Ireland, Frankfurt, Tokyo, Singapore, Sydney, São Paulo signalling
 2. **Re-adopt the UVP-TOUCH handsets.** They auto-discover via L2 on the
    Talk VLAN (`10.10.212.0/24`) and re-register once Talk is online.
    Expect to re-enter each handset's PIN.
-3. **Verify Twilio trunk reach** before declaring done:
+3. **Re-point Talk's 3rd-party-SIP trunk at the SBC.** On a fresh Talk
+   install the trunk `proxy` must point at the SBC (`10.10.201.40`),
+   transport `udp`, port matching the SBC's Talk leg — not at a Twilio
+   edge directly. (The SBC, not Talk, holds the WAN-facing TLS leg.)
+4. **Re-provision the SBC if VM 1004 was lost** — re-run
+   `ansible-playbook -i inventory/wind playbooks/asterisk-sbc.yml`
+   (idempotent; re-issues the LE cert via DNS-01 and re-templates PJSIP).
+5. **Verify trunk reach** before declaring done:
    - Outbound: place a test call from ext 0001 to a mobile.
    - Inbound: call `+1-909-414-2433`; all three UVPs should ring.
-   - If inbound fails, check `/proxy/talk/api/third_party_sip/gateway_list`
-     — Talk sometimes resets the ACL list on a fresh install and you'll
-     need to re-add the Twilio CIDRs.
-4. **Twilio side** — no action needed unless the trunk's "Termination URI"
-   was rotated. The trunk is keyed off the UDM's source IP via Twilio's
-   IP-ACL, not a username/password registration.
+   - If inbound fails, check the SBC: `asterisk -rx "pjsip show endpoints"`
+     and the PVE/UDM firewall scopes (`:5061` from the Twilio signalling
+     IPset, RTP from the Twilio media `/18`).
+6. **Twilio side** — no action needed unless the trunk's Origination URL
+   (`sips:sip.wind.etherport.net:5061;transport=tls`) or the WAN IP changed.
+   Twilio authenticates the SBC via the credential list, not a registration.
 
 ### If only Talk is corrupted (rare)
 
@@ -184,13 +222,12 @@ Telnyx) for HA — the Talk API exposes adding multiple gateways via
 
 ## Known gaps / TODOs
 
-1. **Trunk transport is UDP, not TLS.** SIP signalling is unencrypted on
-   the WAN — anyone in the path between Twilio Oregon and the WAN edge
-   can read call metadata. Twilio supports SIP-over-TLS on port 5061 and
-   sRTP for media. Switching requires changing `transport: udp` → `tls`
-   on the trunk and updating the Twilio termination config + port-forward
-   (would also drop the 8 signal-IP ACL entries since TLS is mTLS-style
-   auth). **Action:** evaluate moving to TLS+sRTP.
+1. **The internal SBC↔Talk leg is plain UDP/RTP** (LAN-only). The WAN-facing
+   Twilio↔SBC leg is TLS+sRTP, so external call metadata + media are encrypted;
+   the cleartext segment is confined to the LAN between the SBC (`.40`) and Talk
+   (`10.10.199.1`). This is by design — UniFi Talk doesn't support sRTP, which is
+   the whole reason the SBC exists. Closing it fully would require Ubiquiti
+   shipping sRTP in Talk (then the SBC could be retired or the Talk leg secured).
 2. ✅ **Emergency address (911) — RESOLVED at the carrier (verified 2026-06-24).** The
    stale failure below was on the *old* PN `PN7b83e…2bccf`; the primary DID was
    re-released/re-acquired (2026-05-26) as **`PN2b496425…`**. Twilio API now confirms
@@ -220,10 +257,11 @@ Telnyx) for HA — the Talk API exposes adding multiple gateways via
    here. Until then, snapshot `/proxy/talk/api/third_party_sip/gateway_list`
    and `/proxy/talk/api/users` into source control on changes.
 8. **Twilio IP ranges drift.** Twilio explicitly warns "not all of these
-   IPs host active gateways at a given time" and may add ranges. The
-   audit-on `2026-05-17` matches exactly; **TODO: re-check quarterly**
-   or wire a script to diff `/proxy/talk/api/third_party_sip/gateway_list[0].acl_ip_cidr_list`
-   against https://www.twilio.com/docs/sip-trunking/ip-addresses.
+   IPs host active gateways at a given time" and may add ranges. **TODO:
+   re-check the Twilio signalling /30s + media /18 quarterly** — they're
+   pinned in three places (`asterisk-sbc.yml` `twilio_signaling_nets`, the
+   `twilio-signaling` ipset in `standalone-vms.tf`, and the UDM "Twilio Signal/Media
+   IPs" groups) — and diff against https://www.twilio.com/docs/sip-trunking/ip-addresses.
 
 ## How this was audited
 
@@ -257,11 +295,12 @@ proxy on 443 instead.
 
 ---
 
-## Twilio side — account, API auth, and migration notes
+## Twilio side — account, API auth
 
-> Merged from the former `twilio-talk.md` (2026-06-24). Covers the Twilio half of
-> the trunk: account/DID/emergency-address state, API auth + gotchas, and the
-> UDP→TLS migration history. The UniFi Talk half is documented above.
+Covers the Twilio half of the trunk: account/DID/emergency-address state and API
+auth + gotchas. The UniFi Talk + SBC half is documented above. (This section is
+the canonical home for the Twilio detail formerly in `twilio-talk.md`, which now
+redirects here.)
 
 ### Twilio account state
 
@@ -284,9 +323,11 @@ without first contacting Twilio support.
 **SIP Trunk Windtryst (`TK18c876a18dc3b0f64449d0c745d9aec6`):**
 
 - `domain_name`: `windtryst.pstn.twilio.com`
-- `secure`: false (sRTP unsupported by UniFi Talk — blocks full secure trunking; see task #80)
+- `secure`: false (UniFi Talk doesn't support sRTP; the SBC handles the secure
+  Twilio leg and bridges to Talk in cleartext on the LAN — see the architecture above)
 - `cnam_lookup`: true
-- Origination URL: `sips:sip.wind.etherport.net:5061;transport=tls` (TLS signaling, cleartext RTP media — set 2026-05-27)
+- Origination URL: `sips:sip.wind.etherport.net:5061;transport=tls` (TLS signalling
+  to the SBC; `sip.wind.etherport.net` → the UDM WAN, port-forwarded to the SBC `.40`)
 
 **Emergency address `AD1fe17`:**
 
@@ -328,42 +369,9 @@ export TWILIO_API_SECRET=$(op item get twilio-tf-api --fields credential --revea
    via `api:trunking:v1:trunks:phone-numbers:remove`, set emergency_status to
    Inactive (best-effort via SDK), then DELETE.
 
-### Migration: UDP → TLS+sRTP (task #22 / #80)
+## Migration history
 
-**Step 1 — restore inbound routing + TLS signaling (DONE 2026-05-27):**
-
-- CF DNS A record `sip.wind.etherport.net` → `47.159.189.5` (UDM WAN) added to
-  `cloudflare/variables.tf` dns_records_a.
-- Windtryst trunk Origination URL set to
-  `sips:sip.wind.etherport.net:5061;transport=tls` (replacing a dead legacy host
-  that had silently broken inbound).
-- UDM-side: proxy flipped to port 5061 + Custom Field `register-transport: tls`
-  in the UniFi Talk 3rd-party SIP config (UI change; no IaC for Talk yet).
-- `secure=false` on the Twilio trunk stays — sRTP support missing on UniFi Talk
-  would break calls under `secure=true`.
-
-**Step 2 — full TLS+sRTP (blocked, deferred to task #80):**
-
-- UniFi Talk does not support sRTP (multi-year open feature request).
-- Workaround: SBC (FreeSWITCH/Kamailio/Asterisk PJSIP) between Twilio (TLS+sRTP)
-  and UDM (plain RTP over LAN). Effort: half day to a day.
-- Or: wait for Ubiquiti to ship sRTP, then flip Twilio `secure=true`.
-
-**IaC for UniFi Talk config:** currently UI-managed; durable IaC is the goal.
-Pattern likely mirrors existing UniFi firewall IaC (Ansible playbook hitting the
-controller REST API directly, since the `paultyng` TF provider is broken on
-UniFi 10+).
-
-### Twilio-side history
-
-- 2026-05-26: Released `+19094141003` (orphan secondary Talk DID). Detached from
-  trunk via trunking endpoint; SDK DELETE succeeded.
-- 2026-05-26: Deleted duplicate Cabin emergency address `ADa91ea9`. Original
-  `AD1fe17` retained — it's the one attached to the keeper DID.
-- 2026-05-27: SIP origination URL migrated to
-  `sips:sip.wind.etherport.net:5061;transport=tls` (TLS signaling, cleartext
-  RTP). Restores inbound routing AND encrypts signaling. Full TLS+sRTP blocked by
-  UniFi Talk → task #80 (SBC).
-- Earlier: the previous origination host had been silently broken for inbound for
-  an unknown period (delegated to AWS NS but no hosted zone). Likely few/no
-  inbound calls noticed.
+How this got here — the original direct Twilio→UDM-Talk path, the UDP→TLS+sRTP push
+(task #22 / #80), and the Twilio-account cleanups (orphan-DID release, duplicate
+emergency-address delete, the 2026-05-27 origination-URL move) — is archived in
+[`archive/unifi-talk-twilio-migration-history.md`](archive/unifi-talk-twilio-migration-history.md).

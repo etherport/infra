@@ -16,9 +16,9 @@ interfaces on PVE (one bridge per VLAN), so VM resources declare
 - **Easier future moves.** Adding a new workload VLAN is one VNet entry +
   one apply, instead of editing every VM's `vlan_id`.
 
-## Scope (Phase 1)
+## Scope
 
-Phase 1 defines zone + VNets only. Subnets/DHCP/IPAM stay with UniFi
+This module defines zone + VNets only. Subnets/DHCP/IPAM stay with UniFi
 (authoritative DHCP today). Re-evaluate IPAM in PVE if we adopt PVE-managed
 DHCP for sandbox networks.
 
@@ -35,16 +35,10 @@ DHCP for sandbox networks.
 ### Excluded VLANs and why
 
 - **VLAN 200 (mgmt)** — PVE host has `vmbr0.200` carrying 10.10.200.41 (web UI / mgmt access). Modeling this VLAN as an SDN VNet creates a competing bridge in `/etc/network/interfaces.d/sdn` that `ifreload` honors over `vmbr0.200`, stealing the host's mgmt IP and requiring iKVM recovery (this is exactly what happened 2026-05-18). **Never model the host's mgmt VLAN here.**
-- **VLAN 210 (ceph)** — PVE host has `vmbr0.210` carrying 10.10.210.41 (Ceph mon + OSDs after the 2026-05-18 migration). Same conflict mode as VLAN 200. Storage networks should always stay manually-configured.
+- **VLAN 210 (ceph)** — PVE host has `vmbr0.210` carrying 10.10.210.41 (Ceph mon + OSDs). Same conflict mode as VLAN 200. Storage networks should always stay manually-configured. K8s VMs reach VLAN 210 via the legacy `vmbr0` + `vlan_id=210` pattern on NIC 5 (enp6s22), NOT via an SDN VNet.
 - **VLAN 4040 (intervl)** — UDM↔L3-switch inter-VLAN routing transit. UI-only L3 infrastructure, never carries VM traffic.
 
-**General rule:** any VLAN with a `vmbr0.<N>` host sub-interface in `/etc/network/interfaces` is forbidden here. Check before adding new VNets.
-
-### Pre-flight constraint for VLAN 201 (servers) — historical
-
-This module is already applied (7 VNet bridges live; standalone VMs migrated 2026-05-18, K8s VM NICs 2026-05-22 — see `docs/architecture/network.md`). This section records the one-time pre-flight that was completed before that apply; it is **not** a pending task.
-
-PVE historically had a `vmbr0.201` sub-interface (vestigial 10.10.201.41 secondary IP). Single-node PVE doesn't need this — VMs reach PVE via the mgmt IP on VLAN 200 (DNS authoritative answer for `pve.wind.etherport.net`). The `vmbr0.201` stanza was therefore removed from `/etc/network/interfaces` (via the Ansible `pve-network.yml` playbook) before this module was first applied, because the `servers` VNet collides with `vmbr0.201` and would recreate the 2026-05-18 outage. **Do not re-add a `vmbr0.201` stanza** while this module is in place. Full sequence: `docs/planning/archive/proxmox-sdn-implementation-2026-05-18.md`.
+**General rule:** any VLAN with a `vmbr0.<N>` host sub-interface in `/etc/network/interfaces` is forbidden here. Check before adding new VNets. Conversely, **do NOT re-add a `vmbr0.201` stanza** while this module is in place — the `servers` VNet (VLAN 201) collides with it (see `docs/planning/archive/proxmox-sdn-implementation-2026-05-18.md`).
 
 ## Provider
 
@@ -97,7 +91,9 @@ ssh root@pve.wind.etherport.net 'cat /etc/pve/sdn/vnets.cfg'
 # Expected: 7 vnet stanzas, one per VLAN
 ```
 
-## Migration plan reference
+## Migration history
 
-See `docs/planning/archive/proxmox-sdn-implementation-2026-05-18.md` for the full
-6-PR migration sequence and per-VM rollback procedures.
+How this module was built and rolled out (the 6-PR migration sequence — zone/VNet
+definition, the per-VM `vmbr0`+`vlan_id` → SDN-bridge cutover, and per-VM rollback
+procedures) is archived in
+[`docs/planning/archive/proxmox-sdn-implementation-2026-05-18.md`](../../../../docs/planning/archive/proxmox-sdn-implementation-2026-05-18.md).
