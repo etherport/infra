@@ -1,0 +1,90 @@
+name: step-ca PKI Health
+
+# Drift detector #3: step-ca health + CA-cert expiry margins. The fleet is SSH cert-only
+# (M76) + internal TLS is step-ca-issued; LEAF certs are short-lived/auto-renewed (not the
+# risk), but a dead CA (renewals silently stop) or a trust anchor (root/intermediate CA)
+# marching toward expiry ends in a fleet-wide lockout. scripts/pki/step-ca-pki-assertions.sh
+# checks: step-ca /health == ok; every CA cert in the served chain (intermediate) has
+# >= MIN_DAYS (30) left; the committed root trust anchor has >= MIN_DAYS left.
+#
+# Runs on the lifecycle runner (on VLAN 201, reaches step-ca @ 10.10.201.46:8443; needs only
+# curl + openssl + the repo for the root PEM — NO container, NO kubeconfig). On failure opens/
+# refreshes a `step-ca-pki` issue + core.setFailed (red run -> owner email); clean closes it.
+
+on:
+  schedule:
+    # Daily 17:00 UTC (10:00 PT) — after TF/ansible/topology/cluster-config drift runs.
+    - cron: '0 17 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: step-ca health + CA expiry
+    runs-on: [self-hosted, lifecycle]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Run step-ca PKI assertions
+        id: check
+        run: |
+          set +e
+          bash scripts/pki/step-ca-pki-assertions.sh > /tmp/pki.log 2>&1
+          rc=$?
+          cat /tmp/pki.log
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Open / refresh issue (on failure)
+        if: steps.check.outputs.rc != '0'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const fs = require('fs');
+            const log = fs.readFileSync('/tmp/pki.log', 'utf8');
+            const title = 'step-ca PKI: CA unhealthy or a cert is approaching expiry';
+            const body = `step-ca is unhealthy or a CA cert is nearing expiry. The fleet is SSH cert-only (M76) — a dead CA or an expired trust anchor = lockout (break-glass: PVE console + IPMI 10.10.200.21). Rotate the CA / restore step-ca before the window closes.\n\n\`\`\`\n${log}\n\`\`\``;
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'step-ca-pki', per_page: 1,
+            });
+            if (existing.length) {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing[0].number, title, body,
+              });
+              core.info(`Updated #${existing[0].number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['step-ca-pki'],
+              });
+              core.info(`Opened #${created.data.number}`);
+            }
+            core.setFailed('step-ca PKI health/expiry check failed');
+
+      - name: Close resolved issue (clean run)
+        if: steps.check.outputs.rc == '0'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'step-ca-pki', per_page: 20,
+            });
+            for (const issue of open) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number,
+                body: '✅ Resolved — step-ca healthy and all CA certs within margin; auto-closing.',
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number, state: 'closed',
+              });
+              core.info(`Closed #${issue.number}`);
+            }
