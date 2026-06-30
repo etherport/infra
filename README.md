@@ -92,7 +92,7 @@ cert-manager · cnpg (postgres operator) · gpu-operator · kured ·
 kube-prometheus-stack (`monitoring.yaml`) · loki (single-binary) ·
 alloy (log collector + syslog ingester) · pushgateway · traefik ·
 velero · tailscale-operator + tailscale-connector ·
-github-actions-runner · kyverno (audit-only admission policy, M73) ·
+github-actions-runner · kyverno (admission policy — both guardrails enforcing, M73) ·
 tetragon (observe-only eBPF runtime detection, M74) ·
 metallb (FRR mode, BGP + TCP-MD5 to UDM, L24).
 

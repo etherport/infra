@@ -204,7 +204,7 @@ Configuration layer:
 
 Security / policy:
 ├── policy-baseline + networkpolicies  Cilium NetworkPolicy tiers (H3, per-ns opt-in enforce)
-├── kyverno                 Audit-only admission policy (M73)
+├── kyverno                 Admission policy — both guardrails enforcing (M73)
 └── tetragon                Observe-only eBPF runtime detection (M74)
 
 Observability:
