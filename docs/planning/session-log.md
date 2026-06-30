@@ -13,6 +13,49 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-30 — overnight alert-storm triage + 3rd drift detector (topology)
+
+Two asks: build the remaining drift detector, and investigate/resolve the many overnight
+service-status + ai-advisor emails.
+
+**Topology drift detector (the 3rd class) — BUILT + verified (`6e75076`).** Routing/zone
+invariants ("Servers/201's gateway is the UDM") aren't a live-vs-IaC diff, so neither the TF
+nor ansible detector catches them — the 201 drift proved it. `scripts/network/topology-assertions.sh`
+probes `ip route` from a VLAN-201 host (every off-201 dest + internet must first-hop the UDM
+`10.10.201.1`); `network-topology-drift.yml` runs it daily on the lifecycle runner (ON 201, NO
+container so it reads the host netns) with the open-on-drift / close-on-clean pattern. Verified
+green on the runner (all 6 assert PASS). **Drift detection is now 3 layers: TF plan, ansible
+--check, topology probe** — plus I added close-on-clean to the TF + ansible detectors (`74a07c1`,
+so resolved issues like the stale `tf-drift` #73 auto-close) and the `cluster-irsa`+`roles-anywhere`
+matrix gap (`be305a7`).
+
+**Overnight email storm — root-caused (multi-agent triage `wmx86dg7f`) = THREE independent things:**
+1. **Cluster blip (recurs daily, PVE action needed → [[M106]]):** a ~10:05Z **vzdump snapshot of the
+   cp1 VM stalls its disk ~10 min** → freezes the etcd leader + apiserver writes (p99 48-58s) →
+   ~10 leader-election leases expire → mass component restart + technitium recreation. etcd quorum
+   never lost; self-heals ~10:25Z. **Fix = exclude k8s-cp1/2/3 from vzdump** (etcd is already
+   host-snapshot-backed); needs PVE (not IaC'd, no devbox creds). apiserver `--etcd-servers` already
+   lists all 3 ✅.
+2. **Real chronic netpol gap — FIXED (`06d508e`):** `dns-sync-watcher` (enforced `dns` tier) syncs
+   hourly to the two OFF-CLUSTER Technitium replicas (`10.10.201.6`, `10.10.100.5`) on tcp/5380, but
+   the dns-tier `world` egress only opened query ports → 5380 POLICY_DENIED (72 drops/hr, "urlopen
+   timed out") for **8 days** since the tier was enforced 06-22. Added a least-priv `toCIDR` egress
+   for those two /32s on 5380. **Verified live:** restarted the watcher → now `✓ Authenticated` to
+   both replicas, 47 records synced, **0 timeouts**. This was the `CiliumNetpolDropFlow` source.
+3. **Auto-remediation mismatch — FIXED (`9b32d6d`):** the external + in-cluster Technitium alerts both
+   used the name `TechnitiumDNSDown`, and the controller matches by alertname only — so an external
+   host (dns-aws) going down wrongly force-restarted the in-cluster StatefulSet pods (8× overnight).
+   Renamed the external alert → `TechnitiumExternalHostDown` (+ runbook stub). Follow-up: gate the
+   controller on an explicit `auto_remediate` label.
+
+**Velero partials = already resolved** by `8baa892` (06-30 runs Completed 0 errors); the old partials
+are stale history. CiliumTraefikIngressDrop never fired (no ingress break). Cluster healthy throughout
+the triage (8/8 nodes, 0 pods down). **Next:** the cluster-config-invariants detector (apiserver
+issuer / cilium policy-audit+encryption / etc. vs the kubespray IaC) — recommended as the highest-value
+remaining drift tool; and M106 on the PVE side.
+
+---
+
 ## 2026-06-29 (cont. 2) — cairn photos: TRUE root cause (flaky SMB reattach) → retry fix v0.1.5
 
 **What:** the overnight photos rc=1 recurred a 4th time despite v0.1.4. Testing an **unattended launchd
