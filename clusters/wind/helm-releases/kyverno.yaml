@@ -37,6 +37,16 @@ spec:
     remediation:
       retries: 3
   values:
+    # ⚠️ Disable ADMISSION reports (reporting-only; admission ENFORCEMENT is unaffected — :latest
+    # is still blocked, requests still required). Kyverno generated an ephemeralreport per pod
+    # admission; the daily ~10:00 UTC backup/CronJob fan-out (backups/rclone/cloudwatch-to-loki ns)
+    # created a mass ephemeralreport create/aggregate/delete storm on etcd that saturated the raft
+    # pipeline for ~15s → kube-apiserver 500s → cluster-wide leader-election cascade (~129 restarts/24h,
+    # 06-28→06-30; health check 2026-06-30). Background-scan policyReports stay on for periodic
+    # coverage. Sets --admissionReports=false on the controllers (verify in the live deploy args).
+    features:
+      admissionReports:
+        enabled: false
     # Single-owner homelab footprint. failurePolicy is set PER-POLICY (Ignore) so a
     # restarting/absent admission pod fails OPEN rather than blocking admission.
     admissionController:

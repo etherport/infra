@@ -12,15 +12,39 @@ spec:
   groups:
     - name: external-hosts.rules
       rules:
-        # Host availability
+        # Host availability. LOCAL hosts only at 2m — the AWS replica hosts (dns-aws/vpn-aws)
+        # are t4g.nano and suffer brief per-instance ENA-allowance packet blackouts (they flap
+        # 600+x/24h independently), so they get their own relaxed rules below to avoid false pages.
         - alert: ExternalHostDown
-          expr: up{job="external-nodes"} == 0
+          expr: up{job="external-nodes",location="local"} == 0
           for: 2m
           labels:
             severity: critical
           annotations:
             summary: "External host {{ $labels.instance }} is down"
             description: "{{ $labels.instance }} ({{ $labels.location }}) has been unreachable for more than 2 minutes."
+
+        # AWS replica hosts: only a SUSTAINED outage (>15m) pages — brief t4g.nano blackouts are
+        # expected and the services tolerate them (dns-sync is resilient; these are failover replicas).
+        - alert: AWSReplicaHostDown
+          expr: up{job="external-nodes",location="aws"} == 0
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "AWS replica host {{ $labels.instance }} sustained-down (>15m)"
+            description: "{{ $labels.instance }} (aws) unreachable >15m — beyond the expected brief t4g.nano packet blackouts. Check the EC2 instance / ENA allowance / CPU credits (needs AWS access)."
+
+        # The flap itself, tracked as a WARNING (dashboard-only, does not page) so it's a known
+        # condition not silence. Root fix = right-size the t4g.nano (see outstanding-work).
+        - alert: AWSReplicaHostFlapping
+          expr: changes(up{job="external-nodes",location="aws"}[1h]) > 12
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "AWS replica host {{ $labels.instance }} is flapping (t4g.nano allowance)"
+            description: "{{ $labels.instance }} node_exporter scrape flapped >12x/h — intermittent per-instance packet blackouts (t4g.nano ENA/CPU-credit allowance). Service is usually fine; right-size the instance to resolve."
 
         # High CPU usage
         - alert: ExternalHostHighCPU
@@ -121,8 +145,10 @@ spec:
         # dns-fallback) going down wrongly force-restarted the in-cluster technitium StatefulSet
         # pods (8x overnight 06-29/30). Distinct name => the restart_pods rule no longer fires
         # for an external probe. This still alerts/emails normally.
+        # location="local" => the AWS dns replica (dns-aws) is handled by AWSReplicaHostDown/Flapping
+        # above (its brief blackouts shouldn't page); this stays tight (1m) for the LOCAL dns-fallback.
         - alert: TechnitiumExternalHostDown
-          expr: up{job="external-nodes",instance=~"dns-.*"} == 0
+          expr: up{job="external-nodes",instance=~"dns-.*",location="local"} == 0
           for: 1m
           labels:
             severity: critical
@@ -133,8 +159,10 @@ spec:
     # VPN-specific alerts
     - name: vpn-service.rules
       rules:
+        # location="local" => the AWS vpn gateway (vpn-aws) is covered by AWSReplicaHostDown above;
+        # this stays tight (2m) for the LOCAL vpn-local endpoint.
         - alert: VPNGatewayDown
-          expr: up{job="external-nodes",instance=~"vpn-.*"} == 0
+          expr: up{job="external-nodes",instance=~"vpn-.*",location="local"} == 0
           for: 2m
           labels:
             severity: critical

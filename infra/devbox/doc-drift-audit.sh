@@ -82,6 +82,7 @@ if [ -d "$TEXTFILE_DIR" ] && [ -w "$TEXTFILE_DIR" ]; then
       grep '^doc_drift_audit_last_success_timestamp_seconds ' "$prom" 2>/dev/null || true
     fi
   } > "$tmp"
+  chmod 0644 "$tmp"   # mktemp makes 0600; node_exporter (uid node_exporter) must be able to READ it
   mv -f "$tmp" "$prom"
   echo "[metric] wrote $prom (rc=$rc)" >>"$LOG"
 else
