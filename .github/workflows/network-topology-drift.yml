@@ -1,0 +1,95 @@
+name: Network Topology Drift
+
+# Asserts network-TOPOLOGY invariants that no live-vs-IaC diff can catch — the
+# "201-class" drift. Routing/zone facts ("Servers/201's gateway is the UDM") aren't a
+# terraform plan or an ansible --check diff; the 2026-06-29 "201 is switch-routed" error
+# lived undetected in BOTH the docs and the usw-acls IaC, and only a live `ip route` probe
+# from a VLAN-201 host revealed the truth. This job encodes those probes
+# (scripts/network/topology-assertions.sh) so the same drift trips an alert automatically.
+#
+# Runs on the lifecycle runner (gh-runner VM @ 10.10.201.30, ON VLAN 201) with NO container,
+# so `ip route` reads the real host routing table. On drift it opens/refreshes a
+# `topology-drift` GitHub Issue + core.setFailed (red run -> owner email); a clean run closes
+# any lingering issue. Mirrors terraform-drift-detection.yml / ansible-drift-detection.yml.
+#
+# Authoritative model: docs/architecture/firewall-zones.md.
+
+on:
+  schedule:
+    # Daily 16:00 UTC (09:00 PT) — after the TF (14:00) + ansible (15:30) drift runs.
+    - cron: '0 16 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  assert:
+    name: Assert routing invariants (VLAN-201)
+    # Self-hosted lifecycle runner is ON VLAN 201. NO `container:` — the assertions must
+    # read the HOST network namespace's routing table, not a container's.
+    runs-on: [self-hosted, lifecycle]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Run topology assertions
+        id: assert
+        run: |
+          set +e
+          bash scripts/network/topology-assertions.sh > /tmp/topo.log 2>&1
+          rc=$?
+          cat /tmp/topo.log
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Open / refresh drift issue (on failure)
+        if: steps.assert.outputs.rc != '0'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const fs = require('fs');
+            const log = fs.readFileSync('/tmp/topo.log', 'utf8');
+            const title = 'Network topology drift: a routing invariant changed';
+            const body = `A network-topology assertion FAILED — a routing/zone invariant changed (e.g. Servers/201's gateway is no longer the UDM). Re-verify against \`docs/architecture/firewall-zones.md\` + the live UDM config; update both if intentional.\n\n\`\`\`\n${log}\n\`\`\``;
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'topology-drift', per_page: 1,
+            });
+            if (existing.length) {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing[0].number, title, body,
+              });
+              core.info(`Updated topology-drift issue #${existing[0].number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['topology-drift'],
+              });
+              core.info(`Opened topology-drift issue #${created.data.number}`);
+            }
+            core.setFailed('Network topology drift detected');
+
+      - name: Close resolved drift issue (clean run)
+        if: steps.assert.outputs.rc == '0'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'topology-drift', per_page: 20,
+            });
+            for (const issue of open) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number,
+                body: '✅ Resolved — topology assertions all pass; auto-closing.',
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number, state: 'closed',
+              });
+              core.info(`Closed resolved topology-drift issue #${issue.number}`);
+            }
