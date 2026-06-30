@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly live-anchored doc/IaC drift audit (headless claude; docs-only auto-fix)
+Documentation=https://github.com/sparked-diamond/infra/blob/main/infra/devbox/doc-drift-audit-prompt.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/ubuntu/code/infra/infra/devbox/doc-drift-audit.sh
+# The audit + any fixes can take a while; cap it well under the weekly cadence.
+TimeoutStartSec=2700

@@ -127,3 +127,29 @@ were once committed `0644` and only ran from a hand-`chmod`'d live copy, a laten
 - Copy the user's `~/.claude/.../memory/` files mini → devbox (not in git, didn't migrate).
 - Migrate the cilium-audit `/loop` here as a systemd timer (see memory:
   project_devbox_cilium_audit_job).
+
+## Weekly doc/IaC drift audit (`doc-drift-audit.timer`)
+
+A live-anchored doc/IaC drift audit runs **weekly** on the devbox (it needs `kubectl` +
+UDM-API + on-host `ip route` access a cloud-scheduled run can't reach). Headless `claude`
+compares docs + IaC against LIVE state, **auto-fixes high-confidence DOC drift** (commit +
+push), and posts a summary (auto-changes + manual-review items) to the `doc-drift` GitHub
+issue. **IaC drift is reported, never auto-applied.** Files: `doc-drift-audit-prompt.md`
+(prompt + hard safety rules), `doc-drift-audit.sh` (runner → `~/.local/state/doc-drift-audit/`
+logs), `doc-drift-audit.{service,timer}`.
+
+⚠️ **This is an UNATTENDED agent that commits to `main`** via `claude -p
+--dangerously-skip-permissions`, so it is **NOT auto-enabled** — enable it deliberately:
+```bash
+ln -sf "$PWD/infra/devbox/doc-drift-audit.service" ~/.config/systemd/user/
+ln -sf "$PWD/infra/devbox/doc-drift-audit.timer"   ~/.config/systemd/user/
+loginctl enable-linger ubuntu          # if not already
+systemctl --user daemon-reload
+systemctl --user enable --now doc-drift-audit.timer
+systemctl --user list-timers doc-drift-audit.timer   # confirm next run
+# Validate once before trusting the schedule:
+systemctl --user start doc-drift-audit.service && tail -f ~/.local/state/doc-drift-audit/*.log
+```
+The safety rails are in the prompt (docs-only edits; no terraform/ansible apply; no secret/file
+deletion; "if unsure, report don't edit"). To tighten further, replace `--dangerously-skip-permissions`
+in `doc-drift-audit.sh` with a scoped `--permission-mode`/`--allowedTools` allowlist.

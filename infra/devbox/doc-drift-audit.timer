@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the doc/IaC drift audit weekly (Mondays)
+
+[Timer]
+# Weekly, Monday 14:37 local — off the :00/:30 marks; Persistent catches a missed run after a
+# devbox reboot. Things change weekly, so this keeps the docs honest between manual reviews.
+OnCalendar=Mon *-*-* 14:37:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
