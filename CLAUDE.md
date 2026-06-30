@@ -300,6 +300,22 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   → roles reset to Viewer each login; we use `skip_org_role_sync: true` + manual server-admin grant.
   (3) Dark theme = brand `attributes.settings.theme.base=dark` (no UI toggle in 2024.12). Full pass +
   rationale: H38 in outstanding-work + session-log 2026-06-23 (cont. 3).
+- **Kyverno admission policies ENFORCE (M73, since 2026-06-28) — they reject manifests.** Three
+  cluster policies in `platform/kubernetes/kyverno/` (per-rule `validate.failureAction: Enforce`):
+  `disallow-latest-tag` + `require-image-tag` → **a workload with a `:latest` or untagged image is
+  DENIED at admission** (pin a tag/digest), and `require-resource-requests` → containers need CPU/mem
+  requests. A **mutate** `add-default-resource-requests` auto-injects a tiny default (10m/32Mi) on any
+  container missing one *before* the validate webhook, so the requests rule rarely bites (third-party
+  sidecars/dynamic pods get the default) — **the gotcha that bites is `:latest` → rejected.** Renovate
+  pins digests, so most images are fine; hand-written manifests must carry a real tag. README:
+  `platform/kubernetes/kyverno/README.md`.
+- **Tetragon runtime detection is OBSERVE-ONLY (M74, since 2026-06-28) — it blocks NOTHING.** eBPF DS
+  on all 8 nodes (`tetragon` ns; pods **2/2** = `tetragon` + `export-stdout` — correct for v2, not a
+  bug). 4 cluster `TracingPolicies` (`monitor_only`): cred-file-access, setuid-root, ptrace-inject,
+  pivot-root → Loki alerts `TetragonCredFileAccess`/`TetragonSetuidRoot`/…. ⚠️ The stdout export is
+  **allowlist-limited** (`PROCESS_EXEC/EXIT` excluded — that's the ~1.1M-events/day firehose) to spare
+  single-binary Loki; **don't widen `tetragon.exportAllowList`** or you flood it. README:
+  `platform/kubernetes/tetragon/README.md`.
 
 ## 6. Maintenance rules (keep this memory alive)
 
