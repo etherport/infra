@@ -1,0 +1,68 @@
+name: Post doc-drift issue
+
+# Publishes the weekly doc/IaC drift audit's summary to a `doc-drift` GitHub issue. The audit
+# (infra/devbox/doc-drift-audit.sh, headless claude on the devbox) can DISPATCH this with its
+# Actions:write PAT but can't post issues directly (PAT lacks issues:write). This workflow's
+# GITHUB_TOKEN has issues:write, so it does the posting — no PAT scope change / no new cred.
+# Mirrors the open-on-drift / close-on-clean pattern of the other drift detectors.
+
+on:
+  workflow_dispatch:
+    inputs:
+      summary_b64:
+        description: base64 of the markdown summary body (when clean=false)
+        required: false
+        default: ""
+      clean:
+        description: "true = no drift this week -> close any open doc-drift issue"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const clean = `${{ inputs.clean }}` === 'true';
+            const body = `${{ inputs.summary_b64 }}`
+              ? Buffer.from(`${{ inputs.summary_b64 }}`, 'base64').toString('utf8')
+              : '_(no summary provided)_';
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'doc-drift', per_page: 5,
+            });
+            if (clean) {
+              for (const issue of open) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: '✅ Resolved — the weekly audit found no doc/IaC drift; auto-closing.',
+                });
+                await github.rest.issues.update({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: issue.number, state: 'closed',
+                });
+                core.info(`Closed resolved doc-drift issue #${issue.number}`);
+              }
+              return;
+            }
+            const title = 'Doc/IaC drift — weekly audit';
+            if (open.length) {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: open[0].number, title, body,
+              });
+              core.info(`Updated doc-drift issue #${open[0].number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['doc-drift'],
+              });
+              core.info(`Opened doc-drift issue #${created.data.number}`);
+            }

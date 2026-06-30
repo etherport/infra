@@ -28,11 +28,16 @@ and `CLAUDE.md` against actual live state:
    note each commit SHA. Apply the current-state/archive split convention (CLAUDE.md §6) when a
    doc has accreted migration narrative.
 2. **Do NOT auto-change** IaC, ambiguous cases, or anything needing an apply/judgment — collect them.
-3. **Post a summary** to a GitHub issue labelled `doc-drift` (open/refresh via the dispatch PAT;
-   `GET/POST .../repos/sparked-diamond/infra/issues`). The body MUST contain:
+3. **Publish a summary** to the `doc-drift` GitHub issue. ⚠️ The dispatch PAT is Actions:write only
+   (it 403s on `/issues`), so do NOT POST `/issues` directly — instead **dispatch the
+   `post-doc-drift-issue.yml` workflow** (its `GITHUB_TOKEN` has issues:write):
+   `POST .../actions/workflows/post-doc-drift-issue.yml/dispatches` with
+   `{"ref":"main","inputs":{"clean":"<true|false>","summary_b64":"<base64 of the markdown body>"}}`
+   using the dispatch PAT (`github_dispatch_pat` in the SOPS ops bundle). The markdown body MUST contain:
    - **Auto-fixed this run** — a bullet list of the KEY doc changes made, each with its commit SHA.
    - **Needs manual review** — IaC drift + ambiguous doc cases (file + what's wrong + the live value).
-   - If nothing drifted: comment "✅ clean — no doc/IaC drift this week" and close any open `doc-drift` issue.
+   If nothing drifted, dispatch with `clean:"true"` (no summary needed) — that closes any open `doc-drift`
+   issue. Always ALSO write the full summary to your run log (it's the report of record).
 
 ## Safety (hard rules)
 - **NEVER** run `terraform apply`, `ansible-playbook` (non-check), or any mutating infra command.
