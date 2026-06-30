@@ -115,14 +115,20 @@ spec:
     # DNS-specific alerts
     - name: dns-service.rules
       rules:
-        - alert: TechnitiumDNSDown
+        # Renamed from TechnitiumDNSDown 2026-06-30: it shared a name with the IN-CLUSTER
+        # alert (comprehensive-alerts.yaml), and the auto-remediation controller matches by
+        # alertname ONLY (controller.py — no auto_remediate gate), so an EXTERNAL host (dns-aws/
+        # dns-fallback) going down wrongly force-restarted the in-cluster technitium StatefulSet
+        # pods (8x overnight 06-29/30). Distinct name => the restart_pods rule no longer fires
+        # for an external probe. This still alerts/emails normally.
+        - alert: TechnitiumExternalHostDown
           expr: up{job="external-nodes",instance=~"dns-.*"} == 0
           for: 1m
           labels:
             severity: critical
           annotations:
-            summary: "Technitium DNS host {{ $labels.instance }} is down"
-            description: "DNS server {{ $labels.instance }} has been unreachable for more than 1 minute. DNS resolution may be affected."
+            summary: "External Technitium DNS host {{ $labels.instance }} is down"
+            description: "External DNS server {{ $labels.instance }} has been unreachable for more than 1 minute. (In-cluster DNS is unaffected; this does NOT auto-restart the in-cluster pods.)"
 
     # VPN-specific alerts
     - name: vpn-service.rules

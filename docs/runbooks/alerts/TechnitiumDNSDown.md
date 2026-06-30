@@ -1,13 +1,20 @@
 # TechnitiumDNSDown
 
-Two rules share this name:
-- `dns-service.rules / TechnitiumDNSDown` — external Technitium hosts
-  (dns-aws, dns-fallback) unreachable for 1 minute.
-- `dns-services / TechnitiumDNSDown` — in-cluster `technitium` StatefulSet
-  has <2 ready replicas for 3 minutes.
+Two related rules (split by name 2026-06-30 — see note):
+- **`dns-services / TechnitiumDNSDown`** (this name) — in-cluster `technitium`
+  StatefulSet has <2 ready replicas for 3 minutes. **Auto-remediation: `restart_pods`.**
+- **`dns-service.rules / TechnitiumExternalHostDown`** (renamed) — external Technitium
+  hosts (dns-aws, dns-fallback) unreachable for 1 minute. **No auto-action.**
 
-Severity: critical. No auto-action — DNS is a foundational dependency
-of the advisor itself (Loki, GitHub API, SMTP all need DNS).
+> **Why the rename (2026-06-30):** the two alerts previously shared the name
+> `TechnitiumDNSDown`. The auto-remediation controller matches by alertname only, so an
+> **external** host going down wrongly force-restarted the **in-cluster** StatefulSet pods
+> (8× overnight 06-29/30). Renaming the external one decouples it; `TechnitiumDNSDown` now
+> means only the in-cluster degradation that `restart_pods` can actually fix.
+
+Severity: critical. The in-cluster variant is the only one that auto-restarts pods; the
+external variant pages/emails only (DNS is a foundational dependency — Loki, GitHub API,
+SMTP all need DNS).
 
 ## Symptom
 
