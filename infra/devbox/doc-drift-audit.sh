@@ -13,9 +13,14 @@ PROMPT_FILE="$REPO/infra/devbox/doc-drift-audit-prompt.md"
 LOG_DIR="$HOME/.local/state/doc-drift-audit"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/$(date +%Y%m%d-%H%M%S).log"
-# The audit writes these for the email step; clear stale ones so we never re-send last week's.
-SUMMARY_FILE="$LOG_DIR/last-summary.md"
-STATUS_FILE="$LOG_DIR/last-status"
+# The agent writes these (for the email/issue step) via the Write tool. They live IN-REPO under a
+# gitignored dir because the Write tool is denied for out-of-repo paths even with --add-dir, whereas
+# in-repo writes (scoped in doc-drift-audit-permissions.json) work. Cleared so we never re-send last
+# week's.
+ARTIFACT_DIR="$REPO/infra/devbox/.audit-state"
+SUMMARY_FILE="$ARTIFACT_DIR/last-summary.md"
+STATUS_FILE="$ARTIFACT_DIR/last-status"
+mkdir -p "$ARTIFACT_DIR"
 rm -f "$SUMMARY_FILE" "$STATUS_FILE"
 
 cd "$REPO" || { echo "repo missing"; exit 1; }
@@ -28,16 +33,14 @@ fi
 
 echo "[$(date -Is)] starting doc-drift audit" >>"$LOG"
 # Scoped permissions (NOT --dangerously-skip-permissions): the agent can read anything, write
-# only docs/READMEs/CLAUDE.md + the log dir, and mutate nothing but a GitHub workflow_dispatch.
-# The deny list (doc-drift-audit-permissions.json) hard-blocks terraform/ansible apply, kubectl
-# mutations, rm/destructive-git, and sops-encrypt. Exporting SOPS_AGE_KEY_FILE lets the agent run
-# plain `sops -d <file>` (the matcher rejects the `VAR=x sops -d` env-prefix form). --add-dir lets
-# the Write tool create last-summary.md/last-status under the (out-of-repo) log dir.
+# only docs/READMEs/CLAUDE.md + the in-repo .audit-state artifacts, and mutate nothing but a GitHub
+# workflow_dispatch. The deny list (doc-drift-audit-permissions.json) hard-blocks terraform/ansible
+# apply, kubectl mutations, rm/destructive-git, and sops-encrypt. Exporting SOPS_AGE_KEY_FILE lets
+# the agent run plain `sops -d <file>` (the matcher rejects the `VAR=x sops -d` env-prefix form).
 export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"
 claude -p "$(cat "$PROMPT_FILE")" \
   --permission-mode default \
   --settings "$REPO/infra/devbox/doc-drift-audit-permissions.json" \
-  --add-dir "$LOG_DIR" \
   >>"$LOG" 2>&1
 rc=$?
 echo "[$(date -Is)] doc-drift audit finished (rc=$rc) -> $LOG" | tee -a "$LOG"

@@ -85,3 +85,6 @@ platform/kubernetes/cloudflare-ddns/base/secret.yaml
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Weekly doc-audit run artifacts (last-summary.md/last-status) — state, not source
+infra/devbox/.audit-state/

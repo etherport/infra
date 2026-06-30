@@ -41,16 +41,17 @@ and `CLAUDE.md` against actual live state:
    note each commit SHA. Apply the current-state/archive split convention (CLAUDE.md §6) when a
    doc has accreted migration narrative.
 2. **Do NOT auto-change** IaC, ambiguous cases, or anything needing an apply/judgment — collect them.
-3. **Write the email/issue artifacts** (the runner emails these EVERY run, clean or drift):
-   - Write your full markdown summary body to `~/.local/state/doc-drift-audit/last-summary.md`
-     (for a clean week a one-line "✅ clean — no doc/IaC drift" is fine). It MUST contain:
+3. **Write the email/issue artifacts** with the **Write tool** (the runner emails these EVERY run):
+   - Write your full markdown summary body to `infra/devbox/.audit-state/last-summary.md` (this
+     in-repo dir is gitignored + write-allowed; the Write tool is denied for out-of-repo paths). For
+     a clean week a one-line "✅ clean — no doc/IaC drift" is fine. It MUST contain:
      - **Auto-fixed this run** — a bullet list of the KEY doc changes made, each with its commit SHA.
      - **Needs manual review** — IaC drift + ambiguous doc cases (file + what's wrong + the live value).
-   - Write a single status word to `~/.local/state/doc-drift-audit/last-status`: `clean` if nothing
+   - Write a single status word to `infra/devbox/.audit-state/last-status`: `clean` if nothing
      drifted, otherwise `drift`. (If you skip this, the runner still emails a log-tail fallback.)
 4. **Publish to the `doc-drift` GitHub issue — via the helper** (the dispatch PAT can't post issues
    directly; the helper dispatches `post-doc-drift-issue.yml`, whose `GITHUB_TOKEN` does the posting):
-   - drift: `infra/devbox/audit-helpers.sh dispatch-issue drift ~/.local/state/doc-drift-audit/last-summary.md`
+   - drift: `infra/devbox/audit-helpers.sh dispatch-issue drift infra/devbox/.audit-state/last-summary.md`
    - clean: `infra/devbox/audit-helpers.sh dispatch-issue clean` — closes any open `doc-drift` issue.
    Always ALSO ensure the full summary is in your run log (it's the report of record).
 
