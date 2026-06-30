@@ -343,6 +343,8 @@ spec:
             # within 2h — refinements/re-asks skip the billed web search.
             - name: CUE_LOOKUP_CACHE
               value: 'true'
+            - name: CUE_FIND_FOOD
+              value: 'true'
           # ANTHROPIC_API_KEY, CUE_WEB_TOKEN_SECRET, VAPID_*, and the CF healthkit
           # service token come from the cue-app Secret.
           # optional: true so the pod is healthy before the secret is populated
