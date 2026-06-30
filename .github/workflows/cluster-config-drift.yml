@@ -1,0 +1,150 @@
+name: Cluster-Config Drift Detection
+
+# Asserts that load-bearing LIVE control-plane config matches the kubespray IaC — the
+# "cluster-config" drift class that NO live-vs-IaC diff (terraform plan / ansible --check)
+# covers. These values are defined only in the kubespray inventory, read once at startup,
+# and SILENTLY break security/identity/networking when they drift (CLAUDE.md §4-5):
+#   - apiserver --service-account-issuer == the IRSA bucket URL (M75; drift -> IRSA + Multus down)
+#   - apiserver --api-audiences pins sts.amazonaws.com (drift -> in-cluster tokens 401)
+#   - cilium policy-audit-mode == false (drift -> NetworkPolicy enforcement silently off)
+#   - cilium enable-wireguard == true (drift -> east-west encryption off)
+# Assertions: scripts/k8s/cluster-config-assertions.sh.
+#
+# Runs on the lifecycle runner (mints a step-ca SSH cert + pulls a kubeconfig from k8s-cp1,
+# same pattern as service-status-inventory-drift.yml). On drift it opens/refreshes a
+# `cluster-config-drift` issue + core.setFailed (red run -> owner email); a clean run closes
+# any lingering issue. Mirrors the other drift detectors.
+
+on:
+  schedule:
+    # Daily 16:30 UTC (09:30 PT) — after TF (14:00), ansible (15:30), topology (16:00).
+    - cron: '30 16 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: Assert control-plane invariants
+    runs-on: [self-hosted, lifecycle]
+    timeout-minutes: 10
+    outputs:
+      drift: ${{ steps.check.outputs.drift }}
+      report_b64: ${{ steps.check.outputs.report_b64 }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Install kubectl
+        run: |
+          if ! command -v kubectl >/dev/null 2>&1; then
+            curl -fsSL -o /tmp/kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            sudo install -m 0755 /tmp/kubectl /usr/local/bin/kubectl
+            rm -f /tmp/kubectl
+          fi
+
+      - name: Mint SSH cert (step-ca)
+        id: sshcert
+        uses: ./.github/actions/setup-ssh-cert
+        with:
+          jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}
+
+      - name: Fetch kubeconfig from k8s-cp1
+        run: |
+          CP1_IP="${CP1_IP:-10.10.201.50}"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+              -i ${{ steps.sshcert.outputs.key-file }} ubuntu@"$CP1_IP" 'sudo cat /etc/kubernetes/admin.conf' \
+              > /tmp/wind-kubeconfig
+          sed -i "s|https://127.0.0.1:6443|https://${CP1_IP}:6443|g" /tmp/wind-kubeconfig
+          chmod 600 /tmp/wind-kubeconfig
+
+      - name: Run cluster-config assertions
+        id: check
+        env:
+          KUBECONFIG: /tmp/wind-kubeconfig
+        run: |
+          set +e
+          bash scripts/k8s/cluster-config-assertions.sh > /tmp/report.txt 2>&1
+          rc=$?
+          cat /tmp/report.txt | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "report_b64=$(base64 -w0 < /tmp/report.txt)" >> "$GITHUB_OUTPUT"
+          if [ "$rc" -ne 0 ]; then echo "drift=true" >> "$GITHUB_OUTPUT"; else echo "drift=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Cleanup kubeconfig
+        if: always()
+        run: rm -f /tmp/wind-kubeconfig
+
+  report:
+    name: Report cluster-config drift
+    needs: check
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open / refresh drift issue (on drift)
+        if: needs.check.outputs.drift == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          REPORT_B64: ${{ needs.check.outputs.report_b64 }}
+        with:
+          script: |
+            const report = Buffer.from(process.env.REPORT_B64 || '', 'base64').toString('utf8');
+            const title = 'Cluster-config drift: a live control-plane invariant changed';
+            const body = [
+              '## Cluster-config drift detected',
+              '',
+              'A load-bearing live control-plane setting diverged from the kubespray IaC. These break',
+              'SILENTLY (often only on the next pod restart): apiserver issuer/audiences (IRSA + Multus),',
+              'cilium policy-audit-mode (NetworkPolicy enforcement), cilium wireguard (encryption).',
+              '',
+              '### Assertion output',
+              '```',
+              report,
+              '```',
+              '',
+              '### How to fix',
+              "1. If the change was NOT intended: re-apply via kubespray (`infra/kubespray/kubespray.sh`) — for cilium, the live `cilium-config` ConfigMap + `kubectl -n kube-system rollout restart ds/cilium`; for the apiserver issuer, see CLAUDE.md §4 (and roll CPs one at a time, cp1 last). ⚠️ After ANY issuer change, `kubectl -n kube-system rollout restart ds/kube-multus-ds-amd64`.",
+              '2. If it WAS intended: update the kubespray inventory AND the EXPECTED constants in `scripts/k8s/cluster-config-assertions.sh`.',
+              '',
+              '_Workflow: `.github/workflows/cluster-config-drift.yml`._',
+            ].join('\n');
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'cluster-config-drift', per_page: 1,
+            });
+            if (existing.length) {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing[0].number, title, body,
+              });
+              core.info(`Updated #${existing[0].number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['cluster-config-drift'],
+              });
+              core.info(`Opened #${created.data.number}`);
+            }
+            core.setFailed('Cluster-config drift detected');
+
+      - name: Close resolved drift issue (clean run)
+        if: needs.check.outputs.drift == 'false'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'cluster-config-drift', per_page: 20,
+            });
+            for (const issue of open) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number,
+                body: '✅ Resolved — all control-plane invariants match the IaC; auto-closing.',
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number, state: 'closed',
+              });
+              core.info(`Closed resolved cluster-config-drift issue #${issue.number}`);
+            }
