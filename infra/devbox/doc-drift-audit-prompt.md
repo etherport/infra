@@ -8,16 +8,29 @@ Find docs + IaC that **contradict LIVE state** — the "201-class" drift that no
 diff (terraform plan / ansible --check) catches. **Auto-fix the high-confidence DOC cases;
 report everything else.** Things change weekly, so this runs every week.
 
+## ⚠️ Permission scope (you are running with a scoped allowlist, NOT skip-permissions)
+You can read anything, **edit only `docs/**`, any `README.md`, and `CLAUDE.md`** (+ write your
+artifacts under `~/.local/state/doc-drift-audit/`), run read-only commands, `git add/commit/push`,
+and dispatch ONE GitHub workflow. `terraform`/`ansible` apply, `kubectl` mutations, `rm`/destructive
+git, and edits to any `infra/`, `platform/`, `clusters/` file (other than READMEs) are **hard-denied**.
+The bash matcher also **rejects `$(...)` command substitution and `VAR=x cmd` env-prefixes** — so:
+- `SOPS_AGE_KEY_FILE` is already exported; just run `sops -d <file>` (no prefix, no `$()`).
+- For ops that compose a secret into curl, use the **helper** (below) instead of hand-rolling.
+- Run commands **stepwise** (read a value from one command's output, then inline it literally into
+  the next) rather than capturing with `$(...)`.
+
 ## Method (live-anchored — compare to LIVE, never doc-to-repo)
 Verify the checkable claims in `docs/architecture/*`, `docs/runbooks/*`, key component READMEs,
 and `CLAUDE.md` against actual live state:
-- `kubectl` for cluster/Flux/workload/namespace/label facts.
-- UDM API (read-only GET only): `KEY=$(SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops -d
-  infra/ansible/playbooks/secrets/homelab-ops.sops.yaml | grep '^udm_api_key:' | sed -E 's/^udm_api_key: *//;s/"//g')`,
-  then `curl -sk -H "X-API-Key: $KEY" 'https://10.10.200.1/proxy/network/api/s/default/rest/<endpoint>'`
-  (networkconf, portforward, firewall-policies, routing). GET ONLY.
+- `kubectl get/describe ...` for cluster/Flux/workload/namespace/label facts (read verbs only).
+- **UDM API (read-only GET), via the helper** — `infra/devbox/audit-helpers.sh udm <endpoint>`
+  (e.g. `udm networkconf`, `udm firewall-policies`, `udm portforward`, `udm routing`). The helper
+  decrypts the key + curls internally, so the secret never hits the log. GET only.
+- **IaC drift signal** — read the `drift-status` ConfigMap the continuous detectors write:
+  `kubectl get configmap drift-status -n monitoring -o yaml` (each key is a detector → `status,timestamp`;
+  `0`=clean, `1`=drift). This is the accessible source (the dispatch PAT can't read GitHub issues).
+  `infra/devbox/audit-helpers.sh gh-get '<path>'` exists for Actions/Contents reads, but NOT issues.
 - `ip route get <dst>` for routing/topology claims (the devbox is on VLAN 201).
-- The open `tf-drift` / `ansible-drift` / `cluster-config-drift` GitHub issues for IaC drift signal.
 - You MAY use the Workflow tool to fan the audit out across doc areas; a single thorough pass is fine too.
 
 ## Actions (in priority order)
@@ -28,21 +41,18 @@ and `CLAUDE.md` against actual live state:
    note each commit SHA. Apply the current-state/archive split convention (CLAUDE.md §6) when a
    doc has accreted migration narrative.
 2. **Do NOT auto-change** IaC, ambiguous cases, or anything needing an apply/judgment — collect them.
-3. **Publish a summary** to the `doc-drift` GitHub issue. ⚠️ The dispatch PAT is Actions:write only
-   (it 403s on `/issues`), so do NOT POST `/issues` directly — instead **dispatch the
-   `post-doc-drift-issue.yml` workflow** (its `GITHUB_TOKEN` has issues:write):
-   `POST .../actions/workflows/post-doc-drift-issue.yml/dispatches` with
-   `{"ref":"main","inputs":{"clean":"<true|false>","summary_b64":"<base64 of the markdown body>"}}`
-   using the dispatch PAT (`github_dispatch_pat` in the SOPS ops bundle). The markdown body MUST contain:
-   - **Auto-fixed this run** — a bullet list of the KEY doc changes made, each with its commit SHA.
-   - **Needs manual review** — IaC drift + ambiguous doc cases (file + what's wrong + the live value).
-   If nothing drifted, dispatch with `clean:"true"` (no summary needed) — that closes any open `doc-drift`
-   issue. Always ALSO write the full summary to your run log (it's the report of record).
-4. **Write the email artifacts** (the runner emails these to the operator EVERY run, clean or drift):
+3. **Write the email/issue artifacts** (the runner emails these EVERY run, clean or drift):
    - Write your full markdown summary body to `~/.local/state/doc-drift-audit/last-summary.md`
-     (same content as the issue body; for a clean week a one-line "✅ clean — no doc/IaC drift" is fine).
+     (for a clean week a one-line "✅ clean — no doc/IaC drift" is fine). It MUST contain:
+     - **Auto-fixed this run** — a bullet list of the KEY doc changes made, each with its commit SHA.
+     - **Needs manual review** — IaC drift + ambiguous doc cases (file + what's wrong + the live value).
    - Write a single status word to `~/.local/state/doc-drift-audit/last-status`: `clean` if nothing
      drifted, otherwise `drift`. (If you skip this, the runner still emails a log-tail fallback.)
+4. **Publish to the `doc-drift` GitHub issue — via the helper** (the dispatch PAT can't post issues
+   directly; the helper dispatches `post-doc-drift-issue.yml`, whose `GITHUB_TOKEN` does the posting):
+   - drift: `infra/devbox/audit-helpers.sh dispatch-issue drift ~/.local/state/doc-drift-audit/last-summary.md`
+   - clean: `infra/devbox/audit-helpers.sh dispatch-issue clean` — closes any open `doc-drift` issue.
+   Always ALSO ensure the full summary is in your run log (it's the report of record).
 
 ## Safety (hard rules)
 - **NEVER** run `terraform apply`, `ansible-playbook` (non-check), or any mutating infra command.

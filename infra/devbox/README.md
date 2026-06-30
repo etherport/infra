@@ -147,8 +147,21 @@ a verified SES sender). The audit writes `last-summary.md` + `last-status` (`cle
 the mailer; if it doesn't, the runner emails a log-tail fallback so a run never goes silent. A
 send failure never fails the audit (the GitHub issue stays the system of record).
 
-⚠️ **This is an UNATTENDED agent that commits to `main`** via `claude -p
---dangerously-skip-permissions`, so it is **NOT auto-enabled** — enable it deliberately:
+**Permission scope (NOT `--dangerously-skip-permissions`).** The agent runs `claude -p
+--permission-mode default --settings doc-drift-audit-permissions.json --add-dir <logdir>`. That
+policy lets it **read anything, edit only `docs/**` + any `README.md` + `CLAUDE.md` (+ write its
+artifacts under the log dir), `git add/commit/push`, and dispatch ONE workflow** — while
+**hard-denying** `terraform`/`ansible` apply, `kubectl` mutations, `rm`/destructive-git, `sops`
+encrypt, and edits to any other `infra/`/`platform/`/`clusters/` file (the deny list beats any
+allow). Two matcher facts shaped the design: the bash gate **rejects `$(...)` substitution and
+`VAR=x cmd` env-prefixes**, so (a) the wrapper **exports `SOPS_AGE_KEY_FILE`** (plain `sops -d
+<file>` works) and (b) secret+curl ops go through **`audit-helpers.sh`** (`udm <endpoint>` /
+`gh-get <path>` / `dispatch-issue <clean|drift> [file]`) — one vetted command each, keeping
+decrypted secrets out of the log. Residual risk (intrinsic to the job): `sops -d` reads any
+encrypted file and `curl` can issue any method — both low blast-radius (the dispatch PAT is
+Actions:write-only). Empirically validated: allowed reads run; `kubectl delete`/`terraform` are blocked.
+
+⚠️ **This is an UNATTENDED agent that commits to `main`**, so it is **NOT auto-enabled** — enable it deliberately:
 ```bash
 ln -sf "$PWD/infra/devbox/doc-drift-audit.service" ~/.config/systemd/user/
 ln -sf "$PWD/infra/devbox/doc-drift-audit.timer"   ~/.config/systemd/user/
@@ -159,6 +172,6 @@ systemctl --user list-timers doc-drift-audit.timer   # confirm next run
 # Validate once before trusting the schedule:
 systemctl --user start doc-drift-audit.service && tail -f ~/.local/state/doc-drift-audit/*.log
 ```
-The safety rails are in the prompt (docs-only edits; no terraform/ansible apply; no secret/file
-deletion; "if unsure, report don't edit"). To tighten further, replace `--dangerously-skip-permissions`
-in `doc-drift-audit.sh` with a scoped `--permission-mode`/`--allowedTools` allowlist.
+The safety rails are BOTH the scoped permission policy above (`doc-drift-audit-permissions.json`,
+hard-enforced) AND the prompt's soft rules ("if unsure, report don't edit"). The policy is the
+durable guarantee; the prompt guides good behavior within it.

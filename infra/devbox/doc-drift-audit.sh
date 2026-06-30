@@ -27,9 +27,18 @@ if ! command -v claude >/dev/null 2>&1; then
 fi
 
 echo "[$(date -Is)] starting doc-drift audit" >>"$LOG"
-# --dangerously-skip-permissions: this is an unattended run; the prompt's hard rules constrain it
-# to docs-only edits + read-only live checks (no terraform/ansible apply, no secret/file deletion).
-claude -p "$(cat "$PROMPT_FILE")" --dangerously-skip-permissions >>"$LOG" 2>&1
+# Scoped permissions (NOT --dangerously-skip-permissions): the agent can read anything, write
+# only docs/READMEs/CLAUDE.md + the log dir, and mutate nothing but a GitHub workflow_dispatch.
+# The deny list (doc-drift-audit-permissions.json) hard-blocks terraform/ansible apply, kubectl
+# mutations, rm/destructive-git, and sops-encrypt. Exporting SOPS_AGE_KEY_FILE lets the agent run
+# plain `sops -d <file>` (the matcher rejects the `VAR=x sops -d` env-prefix form). --add-dir lets
+# the Write tool create last-summary.md/last-status under the (out-of-repo) log dir.
+export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"
+claude -p "$(cat "$PROMPT_FILE")" \
+  --permission-mode default \
+  --settings "$REPO/infra/devbox/doc-drift-audit-permissions.json" \
+  --add-dir "$LOG_DIR" \
+  >>"$LOG" 2>&1
 rc=$?
 echo "[$(date -Is)] doc-drift audit finished (rc=$rc) -> $LOG" | tee -a "$LOG"
 
