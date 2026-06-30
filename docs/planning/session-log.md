@@ -13,6 +13,32 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-30 (cont.) — full infra health check: 3 high resolved (incl. the daily-stall re-diagnosis)
+
+Operator reported a Technitium-down + an AWS-VPN-down alert; ran a full 8-agent parallel health
+check + resolved. Storage/networking/certs/backups all healthy. **0 critical, 3 high — all fixed
+(`46371c3`), live-verified.** Tracker: **M109**.
+- **Both AWS alerts = one cause:** dns-aws/vpn-aws (t4g.nano) flap node_exporter scrapes 600+x/24h
+  from brief per-instance **ENA-allowance packet blackouts** — proven NOT the WG tunnel/WAN (the two
+  hosts blackout *independently, never together*; tunnel pristine, no OOM; vpn-local `wg show` clean).
+  Services are FINE (dns-sync syncs to 10.10.100.5, dig answers). **Fix B:** scoped the per-host
+  critical alerts to `location="local"`, added `AWSReplicaHostDown` (for:15m) + `AWSReplicaHostFlapping`
+  (warning). Real fix = right-size the instance (needs AWS access) — OPEN.
+- **⚠️ Re-diagnosis of the daily ~10:00 UTC stall (M106):** the health check found the slow etcd keys
+  are **Kyverno `ephemeralreports`/policyreports in the backups ns**, with etcd fsync p99 3.5ms (fast)
+  → it's a **Kyverno admission-report write-storm** saturating raft (triggered by the 10:00 backup/
+  CronJob fan-out), not (primarily) the vzdump disk stall. Onset = Kyverno install ~6d ago. **Fix C:**
+  `features.admissionReports.enabled=false` in the kyverno HelmRelease — reporting-only, verified
+  `--admissionReports=false` on both controllers + **enforcement intact** (`:latest` still rejected,
+  mutate still injects 10m/32Mi); ephemeralreports 46→1. The M106 vzdump exclusion (operator did it
+  today) is complementary — **verify BOTH at the next 10:00 UTC window.**
+- **Fix A (my #41 bug):** the doc-drift textfile metric was written 0600 by mktemp → node_exporter
+  permission-denied → DocDriftAuditNoMetrics pending-critical + the drift signal dark. `chmod 0644`
+  the tmp before mv (+ live chmod); `node_textfile_scrape_error=0`.
+- ai-advisor controller healthy + sane (110 skipped_resolved / 67 skipped_noisy / 24h, $0.46/day, no
+  panics). 0 scrape targets down (133/133). All 24h alerts (etcd gRPC spike, Velero partial, iCloud/
+  Photos, KubePodCrashLooping, dns-aws) already resolved.
+
 ## 2026-06-30 (cont.) — doc-audit hardened (scope + email + approve + alert) + Google Places key IaC
 
 Continued the weekly doc/IaC drift audit work into a hardening pass, plus stood up the Cue
