@@ -121,7 +121,9 @@ def build_dashboard():
     pid = 1
 
     avail = or_chain_avail()
-    total = len(SERVICES)
+    # Exclude the email-only "Config drift" entries (drift_status) — they have no health
+    # metric, so they're not in the `avail` chain and must not inflate the down-count.
+    total = len([s for s in SERVICES if s[2] != "drift_status"])
 
     # Top row: 4 counters
     panels.append(stat_panel(pid, "Healthy", f"count(({avail}) > 0)",
