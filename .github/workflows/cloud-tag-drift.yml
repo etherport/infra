@@ -50,6 +50,18 @@ jobs:
           role-to-assume: arn:aws:iam::830881980142:role/gh-actions-terraform
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Recorder status (diagnostic — is recording healthy + has it discovered resources?)
+        run: |
+          set -uo pipefail
+          for r in us-west-2 us-east-1; do
+            echo "== $r =="
+            aws configservice describe-configuration-recorder-status --region "$r" \
+              --query 'ConfigurationRecordersStatus[].{name:name,recording:recording,lastStatus:lastStatus,lastStartTime:lastStartTime}' \
+              --output table || true
+            echo -n "discovered resources: "
+            aws configservice get-discovered-resource-counts --region "$r" --query 'totalDiscoveredResources' --output text || true
+          done
+
       - name: Query untagged resources (paginated + client-side absence filter)
         id: q
         run: |
