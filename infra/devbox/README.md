@@ -147,6 +147,14 @@ a verified SES sender). The audit writes `last-summary.md` + `last-status` (`cle
 the mailer; if it doesn't, the runner emails a log-tail fallback so a run never goes silent. A
 send failure never fails the audit (the GitHub issue stays the system of record).
 
+**Approve buttons (deep-link, #40).** The email is multipart (plain + HTML, rendered by
+`send-audit-email.py`'s small stdlib markdown→HTML). For each "Needs manual review" item whose
+fix is an **apply workflow**, the audit appends a `[Review & apply →](…/actions/workflows/<file>.yml)`
+link that the mailer renders as a green button → it opens that workflow's GitHub **Run workflow**
+page (your GitHub login gates the dispatch; you click "Run workflow" to confirm). Deliberately NOT
+a one-click HMAC receiver (no new public endpoint that could trigger infra applies) — proportionate
+for a weekly audit. Pure-doc/ambiguous items get no button.
+
 **Off-box failure/missed-run alert.** Email tells you a run *failed*; it can't tell you a run was
 *missed* (devbox down / timer disabled → no email at all). So the runner also writes a node_exporter
 textfile metric (`/var/lib/node_exporter/textfile_collector/doc_drift_audit.prom`:

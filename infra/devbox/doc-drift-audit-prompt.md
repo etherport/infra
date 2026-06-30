@@ -47,6 +47,13 @@ and `CLAUDE.md` against actual live state:
      a clean week a one-line "✅ clean — no doc/IaC drift" is fine. It MUST contain:
      - **Auto-fixed this run** — a bullet list of the KEY doc changes made, each with its commit SHA.
      - **Needs manual review** — IaC drift + ambiguous doc cases (file + what's wrong + the live value).
+       For any item whose fix is to run an **apply workflow**, append a markdown deep-link to that
+       workflow's GitHub "Run workflow" page so the operator can one-click review+dispatch it:
+       `[Review & apply →](https://github.com/sparked-diamond/infra/actions/workflows/<file>.yml)`
+       — find the right `<file>` in `.github/workflows/` (e.g. a Terraform stack drift → its
+       `terraform-<stack>.yml`; a UDM/switch change → `ansible-unifi.yml`; a base/VM change →
+       `ansible-vm-fleet.yml`). The mailer renders these as buttons. Omit the link if no apply
+       workflow fits (pure doc/manual items).
    - Write a single status word to `infra/devbox/.audit-state/last-status`: `clean` if nothing
      drifted, otherwise `drift`. (If you skip this, the runner still emails a log-tail fallback.)
 4. **Publish to the `doc-drift` GitHub issue — via the helper** (the dispatch PAT can't post issues
