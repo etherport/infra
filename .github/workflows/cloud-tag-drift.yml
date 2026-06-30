@@ -94,7 +94,8 @@ jobs:
             echo ""
             jq -r '.[] | "- `\(.resourceType)` \(.resourceId) (\(.awsRegion))"' untagged.json
           } > report.md
-          cat report.md >> "$GITHUB_STEP_SUMMARY"
+          # tee to stdout too (visible in the run log, not just the ephemeral step summary)
+          tee -a "$GITHUB_STEP_SUMMARY" < report.md
 
       - name: Open / refresh tag-drift issue
         if: steps.q.outputs.count != '0'
