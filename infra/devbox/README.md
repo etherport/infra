@@ -138,6 +138,15 @@ issue. **IaC drift is reported, never auto-applied.** Files: `doc-drift-audit-pr
 (prompt + hard safety rules), `doc-drift-audit.sh` (runner → `~/.local/state/doc-drift-audit/`
 logs), `doc-drift-audit.{service,timer}`.
 
+**Email every run (clean or drift).** Besides the GitHub issue, the runner emails the summary
+to the operator (`EMAIL_TO` in `service-status-report/email.env`) on every run. The devbox has
+no in-cluster IRSA, so it sends over **SES SMTP** — `doc-drift-audit.sh` decrypts the SES SMTP
+creds from `platform/kubernetes/monitoring/alertmanager-secret.sops.yaml` (it holds the age
+key) and calls `send-audit-email.py` (pure-stdlib `smtplib`, From `service-status@wind.etherport.net`,
+a verified SES sender). The audit writes `last-summary.md` + `last-status` (`clean`/`drift`) for
+the mailer; if it doesn't, the runner emails a log-tail fallback so a run never goes silent. A
+send failure never fails the audit (the GitHub issue stays the system of record).
+
 ⚠️ **This is an UNATTENDED agent that commits to `main`** via `claude -p
 --dangerously-skip-permissions`, so it is **NOT auto-enabled** — enable it deliberately:
 ```bash

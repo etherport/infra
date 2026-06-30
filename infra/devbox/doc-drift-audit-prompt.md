@@ -38,6 +38,11 @@ and `CLAUDE.md` against actual live state:
    - **Needs manual review** — IaC drift + ambiguous doc cases (file + what's wrong + the live value).
    If nothing drifted, dispatch with `clean:"true"` (no summary needed) — that closes any open `doc-drift`
    issue. Always ALSO write the full summary to your run log (it's the report of record).
+4. **Write the email artifacts** (the runner emails these to the operator EVERY run, clean or drift):
+   - Write your full markdown summary body to `~/.local/state/doc-drift-audit/last-summary.md`
+     (same content as the issue body; for a clean week a one-line "✅ clean — no doc/IaC drift" is fine).
+   - Write a single status word to `~/.local/state/doc-drift-audit/last-status`: `clean` if nothing
+     drifted, otherwise `drift`. (If you skip this, the runner still emails a log-tail fallback.)
 
 ## Safety (hard rules)
 - **NEVER** run `terraform apply`, `ansible-playbook` (non-check), or any mutating infra command.
