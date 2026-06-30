@@ -20,6 +20,14 @@ terraform {
 provider "aws" {
   region  = var.aws_region
   profile = var.aws_profile != "" ? var.aws_profile : null
+
+  default_tags {
+    tags = {
+      Environment = "homelab"
+      ManagedBy   = "terraform"
+      Module      = "ddns-lambda"
+    }
+  }
 }
 
 # -----------------------------------------------------------------------------
