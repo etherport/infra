@@ -59,6 +59,7 @@ jobs:
           - { name: github-oidc,         dir: infra/terraform/aws/github-oidc,          region: us-west-2 }
           - { name: cluster-irsa,        dir: infra/terraform/aws/cluster-irsa,         region: us-west-2 }
           - { name: roles-anywhere,      dir: infra/terraform/aws/roles-anywhere,       region: us-west-2 }
+          - { name: config,              dir: infra/terraform/aws/config,               region: us-west-2 }
           # aws-regional-vpn is deploy-on-demand (travel VPN); requires
           # `-var=region=X -var=region_short=Y -var=wg0_tunnel_ip=Z` and has no
           # persistent state to drift-check. Exclude.

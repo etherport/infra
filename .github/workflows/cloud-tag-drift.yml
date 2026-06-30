@@ -1,0 +1,156 @@
+name: Cloud Tag Drift (AWS Config)
+
+# Drift detector #4: finds AWS resources NOT tagged ManagedBy=terraform — i.e.
+# resources that exist in the account but aren't managed by our Terraform (the gap
+# `terraform plan` can't see). Backed by the AWS Config recorders + aggregator in
+# infra/terraform/aws/config (apply that stack FIRST; until it records a snapshot
+# this query returns nothing / errors on a missing aggregator).
+#
+# ⚠️ WHY CLIENT-SIDE FILTERING: AWS Config advanced-query SQL CANNOT express tag
+# ABSENCE — it has no IS NULL / NOT EXISTS / subqueries and can't unpack/negate the
+# nested `tags` array (`WHERE NOT (tags.key='ManagedBy'...)` matches almost every
+# tagged resource, not the untagged ones). So we SELECT every resource WITH its tags
+# (positive), paginate, and filter "lacks ManagedBy=terraform" in jq. See the stack
+# README. Cost: select-aggregate-resource-config + the aggregator are FREE.
+#
+# INFORMATIONAL (no red run yet): opens/refreshes a `cloud-tag-drift` issue listing
+# untagged resources for review; closes it when clean. It does NOT fail the run while
+# (a) the 5 newly-ManagedBy-tagged stacks haven't re-applied and (b) the ALLOWLIST of
+# legitimately-untagged AWS-managed resources is still being tuned. Promote to a hard
+# alert (uncomment core.setFailed) once the list is steady.
+
+on:
+  schedule:
+    # 15:00 UTC (08:00 PT), 1h after the 14:00 terraform-drift-detection cron so the
+    # DAILY Config snapshot for the day exists.
+    - cron: '0 15 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  id-token: write # OIDC
+
+env:
+  AWS_REGION: us-west-2
+  AGGREGATOR: wind-account-aggregator
+  MARKER_KEY: ManagedBy
+  MARKER_VAL: terraform
+
+jobs:
+  query:
+    name: Find resources missing ManagedBy=terraform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6
+        with:
+          role-to-assume: arn:aws:iam::830881980142:role/gh-actions-terraform
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Query untagged resources (paginated + client-side absence filter)
+        id: q
+        run: |
+          set -euo pipefail
+          # Positive SELECT of ALL resources + their tags, excluding Config's own
+          # meta resource types (they can't carry our tag and would be pure noise).
+          EXPR="SELECT resourceId, resourceType, awsRegion, accountId, tags WHERE resourceType NOT IN ('AWS::Config::ResourceCompliance', 'AWS::Config::ConformancePackCompliance', 'AWS::Config::ConfigurationRecorder')"
+          NEXT=""; : > all.ndjson
+          while : ; do
+            if [ -z "$NEXT" ]; then
+              PAGE=$(aws configservice select-aggregate-resource-config \
+                --configuration-aggregator-name "$AGGREGATOR" \
+                --expression "$EXPR" --max-results 100 --output json)
+            else
+              PAGE=$(aws configservice select-aggregate-resource-config \
+                --configuration-aggregator-name "$AGGREGATOR" \
+                --expression "$EXPR" --max-results 100 --next-token "$NEXT" --output json)
+            fi
+            # .Results is an ARRAY OF JSON STRINGS -> emit each stringified CI as a line.
+            echo "$PAGE" | jq -r '.Results[]' >> all.ndjson
+            NEXT=$(echo "$PAGE" | jq -r '.NextToken // empty')
+            [ -z "$NEXT" ] && break
+          done
+
+          # ALLOWLIST: resource types that are AWS-managed / legitimately can't carry
+          # the marker (extend after the first live run — default VPC sec-groups, etc.).
+          ALLOW='["AWS::EC2::NatGateway"]'
+
+          # Absence filter: keep rows whose tags array has NO {ManagedBy: terraform}
+          # AND whose type isn't allowlisted.
+          jq -s --argjson allow "$ALLOW" --arg k "$MARKER_KEY" --arg v "$MARKER_VAL" '
+            [ .[]
+              | select( (.resourceType as $t | $allow | index($t)) | not )
+              | select( ([ .tags[]? | select(.key==$k and .value==$v) ] | length) == 0 )
+            ]' all.ndjson > untagged.json
+
+          COUNT=$(jq 'length' untagged.json)
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          {
+            echo "Scanned $(wc -l < all.ndjson) resources across us-west-2 + us-east-1."
+            echo "Untagged (missing ${MARKER_KEY}=${MARKER_VAL}): ${COUNT}"
+            echo ""
+            jq -r '.[] | "- `\(.resourceType)` \(.resourceId) (\(.awsRegion))"' untagged.json
+          } > report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open / refresh tag-drift issue
+        if: steps.q.outputs.count != '0'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('report.md', 'utf8');
+            const title = `Cloud tag-drift: ${{ steps.q.outputs.count }} resource(s) missing ManagedBy=terraform`;
+            const body = [
+              '## Cloud tag-drift (AWS Config)',
+              '',
+              'Resources that exist in AWS but are **not** tagged `ManagedBy=terraform` — candidate **unmanaged** resources (or a managed one whose tag drifted). Either import/codify them, or add legitimately-untagged AWS-managed types to the `ALLOWLIST` in `.github/workflows/cloud-tag-drift.yml`.',
+              '',
+              '> NB: resources in the 5 stacks newly given `default_tags` (ddns-lambda, dns-restrict-ip, email-forward, homeassistant-alexa, twilio-webhook) will appear here until those stacks re-apply.',
+              '',
+              report,
+            ].join('\n');
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'cloud-tag-drift', per_page: 1,
+            });
+            if (existing.length) {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing[0].number, title, body,
+              });
+              core.info(`Updated #${existing[0].number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['cloud-tag-drift'],
+              });
+              core.info(`Opened #${created.data.number}`);
+            }
+            // Informational for now — flip to a hard alert once the allowlist is tuned
+            // + the 5 stacks have re-applied:
+            // core.setFailed(`${{ steps.q.outputs.count }} untagged resources`);
+
+      - name: Close tag-drift issue (clean run)
+        if: steps.q.outputs.count == '0'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'cloud-tag-drift', per_page: 20,
+            });
+            for (const issue of open) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number,
+                body: '✅ Resolved — every recorded resource carries ManagedBy=terraform (or is allowlisted); auto-closing.',
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number, state: 'closed',
+              });
+            }
