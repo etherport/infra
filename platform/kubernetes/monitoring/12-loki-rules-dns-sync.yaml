@@ -1,0 +1,47 @@
+---
+# LogQL alert: dns-sync-watcher failing to reconcile a Technitium replica.
+#
+# Drift detector #2 (DNS records). The DNS records are GitOps-reconciled by dns-sync-watcher
+# (zone.yaml -> all Technitium replicas: in-cluster technitium-0/-1, the VM fallback 10.10.201.6,
+# the AWS replica 10.10.100.5), so a manual record change self-heals on the next sync. The GAP
+# was that a FAILED sync was silent: the dns-tier netpol denied egress to the two off-cluster
+# replicas on tcp/5380 for ~8 days (2026-06-22 -> 06-30) and nothing alerted — DNS records drifted
+# on those replicas unnoticed. (A `technitium.yml --check` detector is unsuitable: it's a
+# provisioning playbook, not idempotent — ok=7/changed=1/failed=1 in check mode.)
+#
+# This watches the watcher's own stdout (Alloy tails the dns ns -> Loki) for sync failures.
+# Picked up by the loki-ruler via the k8s-sidecar (label loki_rule: "1"), same as the other
+# loki rules in this dir.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-rules-dns-sync
+  namespace: monitoring
+  labels:
+    loki_rule: "1"
+data:
+  dns-sync.yaml: |
+    groups:
+      - name: dns-sync-watcher
+        interval: 60s
+        rules:
+          # dns-sync-watcher logs "✗ Failed to authenticate to http://<ip>:5380 ... <urlopen error
+          # timed out>" when it can't reach a replica. The watcher full-resyncs hourly (+ on change),
+          # so a persistently-unreachable replica produces these at least hourly. A 65m window
+          # reliably contains the last hourly attempt; `for: 5m` smooths a single transient blip.
+          - alert: DnsSyncWatcherSyncFailing
+            expr: |
+              sum(count_over_time({namespace="dns"} |~ `Failed to authenticate to|urlopen error` [65m])) > 0
+            for: 5m
+            labels:
+              severity: warning
+              component: dns
+              source: dns-sync-watcher
+            annotations:
+              summary: "dns-sync-watcher cannot reconcile a Technitium replica (DNS records drifting)"
+              description: >
+                dns-sync-watcher has logged DNS-record sync failures in the last hour — at least one
+                Technitium replica (in-cluster, VM fallback 10.10.201.6, or AWS 10.10.100.5) is not
+                receiving record updates, so its records are drifting. Common causes: a netpol egress
+                gap (see the dns-tier CNP / networkpolicy-tiers.md), a replica down, or admin creds.
+                Check `kubectl logs -n dns deploy/dns-sync-watcher`.
