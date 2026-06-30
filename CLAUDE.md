@@ -312,8 +312,17 @@ This applies to **everything** — not just the handoff files:
 - **Runbooks** (`docs/runbooks/`) and **architecture docs** (`docs/architecture/`, e.g.
   `firewall-zones.md`) when the system or an operational procedure changes.
 - The **`docs/README.md` index** when you add/move/retire a doc.
-- Add **staleness banners** or **archive** (`docs/planning/archive/`, `docs/runbooks/archive/`)
-  superseded docs instead of leaving contradictory ones (a stale doc is worse than none).
+- Add **staleness banners** or **archive** (`docs/planning/archive/`, `docs/runbooks/archive/`,
+  `docs/architecture/archive/`) superseded docs instead of leaving contradictory ones (a stale doc
+  is worse than none).
+- **Current-state vs migration-history split (the standard for service docs).** A live reference doc
+  describes the system **as it is now** — not the chronology of how it got there. When a doc accretes
+  migration narrative ("since the BGP migration", "Phase 4 superseded by…", dated "added 2026-…"
+  asides), move that narrative to a sibling `archive/<topic>-migration-history.md` (newest-first,
+  with the "why/when" + superseded designs), leave the live doc current-state-only with a one-line
+  "Migration history → see archive" pointer, and index both in `docs/README.md`. Exemplar:
+  `docs/architecture/firewall-zones.md` + its `archive/firewall-zones-migration-history.md` (2026-06-30).
+  Apply this incrementally to other service docs as you touch them.
 
 **Specifically, at the end of any substantive working session, before you stop:**
 1. **Update `docs/planning/outstanding-work.md`** — flip status glyphs, add new items

@@ -95,7 +95,8 @@ docs/
 |----------|-------------|
 | [overview.md](architecture/overview.md) | High-level infrastructure design |
 | [network.md](architecture/network.md) | Network topology and VLANs |
-| [firewall-zones.md](architecture/firewall-zones.md) | Zone-based firewall configuration |
+| [firewall-zones.md](architecture/firewall-zones.md) | Zone-based firewall + dual-router routing — **current state** (UDM zones, switch ACLs, VLAN inventory) |
+| [archive/firewall-zones-migration-history.md](architecture/archive/firewall-zones-migration-history.md) | 📦 Historical: how that design was built (M30 zones, M52 switch ACLs, BGP/201 move, M56 Trusted/Management, Twilio→asterisk) |
 | [vpn-wireguard.md](architecture/vpn-wireguard.md) | Site-to-site VPN (production traffic) |
 | [vpn-tailscale.md](architecture/vpn-tailscale.md) | Tailscale mesh VPN (remote access) |
 | [aws-infrastructure.md](architecture/aws-infrastructure.md) | AWS hybrid cloud components |
