@@ -13,6 +13,64 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-06-30 (cont.) — doc-audit hardened (scope + email + approve + alert) + Google Places key IaC
+
+Continued the weekly doc/IaC drift audit work into a hardening pass, plus stood up the Cue
+Find-food Places key as IaC. Five-area parallel research workflow first (ai-advisor approve
+mechanism, Claude Code permission matcher, failure-alert infra, google TF stack, cue-api secret),
+then implemented. **M107** (audit, DONE) + **M108** (Places, blocked on 1 grant) in
+[`outstanding-work.md`](outstanding-work.md). Commits `2c73fe3`→`b0e7af7` (+ `51c634d` Places).
+
+**Doc-audit hardening (M107):**
+- **Issue posting** (`post-doc-drift-issue.yml`): the dispatch PAT is Actions:write-only (403s on
+  /issues), so the audit dispatches this tiny workflow whose `GITHUB_TOKEN` posts/closes the
+  `doc-drift` issue. Open-on-drift/close-on-clean. Tested open+close green.
+- **Scoped permissions** (dropped `--dangerously-skip-permissions`): `--permission-mode default
+  --settings doc-drift-audit-permissions.json`. **Key empirical matcher facts** (probed on this
+  Claude build): headless `default` mode HARD-DENIES any Bash command matching neither the safe-read
+  list nor an allow rule; **`$(...)` substitution and `VAR=x cmd` env-prefixes are rejected**;
+  pipes/chains are parsed segment-by-segment; `Edit/Write` default-deny when an allowlist is present
+  so `**/README.md` allows component READMEs while everything else under infra/platform/clusters is
+  blocked; **the Write tool is DENIED for out-of-repo paths even with `--add-dir`**. Consequences:
+  the wrapper **exports `SOPS_AGE_KEY_FILE`** (so plain `sops -d <file>` works), secret+curl ops go
+  through a vetted **`audit-helpers.sh`** (`udm`/`gh-get`/`dispatch-issue` — keeps secrets out of
+  logs + avoids substitution), artifacts moved to an **in-repo gitignored `infra/devbox/.audit-state/`**
+  (Write works in-repo), and **`awk` was removed** from the allowlist (it was a `print>file`
+  write-hole the agent had exploited as a fallback). Validated: a full clean end-to-end run + targeted
+  probes (`kubectl delete`/`terraform` blocked; in-repo Write ok; awk blocked).
+- **Email every run** (user opted in, clean or drift) via SES **SMTP** — the devbox has no in-cluster
+  IRSA, so `send-audit-email.py` (pure stdlib) sends over SMTP with creds decrypted from the
+  alertmanager SOPS secret, From the verified `service-status@wind.etherport.net`. Multipart HTML.
+- **Approve buttons (#40)** — chose **deep-link** over a one-click HMAC receiver (no new public
+  endpoint that could dispatch infra applies). Per actionable item the audit appends a
+  `[Review & apply →](…/actions/workflows/<file>.yml)` link; the mailer renders apply-workflow links
+  as green buttons → opens GitHub's Run-workflow page (login-gated; 1 confirm). Preview email sent.
+- **Off-box failure/missed-run alert:** the email signals a *failure* but can't signal a *missed*
+  run. Added node_exporter `--collector.textfile` to `base.yml` (applied to the devbox — the
+  download/extract tasks correctly skip in apply mode; the `--check` run false-fails because get_url
+  doesn't fetch in check mode, a known artifact) + a devbox-writable textfile dir; the runner writes
+  `doc_drift_audit_last_{rc,success_timestamp_seconds}` (success-ts only on rc=0); rules
+  `DocDriftAuditStale`/`NoMetrics` (critical→email) + `Failed` (warning) in `02-external-alerts.yaml`.
+  Verified live: metric scraped (`instance="devbox"`), 3 rules loaded in Prometheus.
+
+**Google Places key (M108):** added to `infra/terraform/google/` — enables `apikeys` +
+`places.googleapis.com` and a restricted `google_apikeys_key.cue_places` (API-only restriction; the
+app calls server-side). **⚠️ used `places.googleapis.com`, not the `places-backend.googleapis.com`
+in the brief — that's the LEGACY Places API; Places API (New) endpoints + the key restriction must
+match `places.googleapis.com`.** `validate` clean; CI plan = **3 add / 0 destroy**. **Blocked on a
+one-time manual `roles/serviceusage.apiKeysAdmin` grant** to the WIF SA (devbox has no GCP creds) —
+then apply + `sops set` the key into the cue-app secret. Feature stays OFF (no `CUE_FIND_FOOD`).
+Runbook C in the google README.
+
+**Also:** answered the operator's design Q — the audit runs on the devbox not merely because Claude
+is installed there but because it needs privileged LIVE LAN reads (kubectl/UDM/`ip route` from a
+VLAN-201 vantage) + the age key + genuine unattended auto-resume; CI/in-cluster/mini are each worse.
+
+**Next:** (1) user runs the apiKeysAdmin grant → I finish M108 (apply + SOPS). (2) M106 PVE vzdump
+(user). The audit is self-maintaining; first scheduled run Mon 2026-07-06 14:37.
+
+---
+
 ## 2026-06-30 (cont.) — 4 new drift detectors (cluster-config, dns-sync, step-ca PKI, AWS Config)
 
 Built all 4 proposed drift detectors. With the existing TF/ansible/topology/inventory ones, the
