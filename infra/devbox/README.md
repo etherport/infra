@@ -147,6 +147,17 @@ a verified SES sender). The audit writes `last-summary.md` + `last-status` (`cle
 the mailer; if it doesn't, the runner emails a log-tail fallback so a run never goes silent. A
 send failure never fails the audit (the GitHub issue stays the system of record).
 
+**Off-box failure/missed-run alert.** Email tells you a run *failed*; it can't tell you a run was
+*missed* (devbox down / timer disabled → no email at all). So the runner also writes a node_exporter
+textfile metric (`/var/lib/node_exporter/textfile_collector/doc_drift_audit.prom`:
+`doc_drift_audit_last_rc` + `..._last_success_timestamp_seconds`, the success ts stamped only on
+rc=0). `base.yml` enables `--collector.textfile` + creates that dir (devbox: `ubuntu`-owned so the
+audit can write). Prometheus alerts (`doc-drift-audit.rules` in `02-external-alerts.yaml`):
+`DocDriftAuditStale` (no success in >8d, **critical** → email), `DocDriftAuditNoMetrics`
+(metric absent >9d, **critical**), `DocDriftAuditFailed` (last rc≠0, warning — the per-run error
+email already covers it). ⚠️ The audit is a systemd **user** unit, so node_exporter's *systemd*
+collector (system bus) can't see it — the textfile metric is the off-box signal, not unit-state.
+
 **Permission scope (NOT `--dangerously-skip-permissions`).** The agent runs `claude -p
 --permission-mode default --settings doc-drift-audit-permissions.json --add-dir <logdir>`. That
 policy lets it **read anything, edit only `docs/**` + any `README.md` + `CLAUDE.md` (+ write its

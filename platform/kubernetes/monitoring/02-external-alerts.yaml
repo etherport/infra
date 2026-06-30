@@ -141,3 +141,47 @@ spec:
           annotations:
             summary: "VPN gateway {{ $labels.instance }} is down"
             description: "VPN gateway {{ $labels.instance }} has been unreachable for more than 2 minutes. Site-to-site connectivity may be affected."
+
+    # Weekly doc/IaC drift audit (devbox doc-drift-audit.timer, Mon 14:37). The audit also emails
+    # every run (incl. a per-run "❗ audit error" on failure), so these add the off-box signal the
+    # email can't give — a MISSED run (devbox down / timer disabled). The success-timestamp metric
+    # comes via node_exporter --collector.textfile (base.yml) from doc-drift-audit.sh.
+    - name: doc-drift-audit.rules
+      rules:
+        # No successful run in >8d (one weekly window + a day of slack) => failed, errored, or
+        # missed. Critical so it routes to email (only critical does — 03-alertmanager-config).
+        - alert: DocDriftAuditStale
+          expr: time() - doc_drift_audit_last_success_timestamp_seconds{instance="devbox"} > 691200
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "Weekly doc/IaC drift audit hasn't succeeded in >8 days"
+            description: >-
+              No successful doc/IaC drift audit on the devbox in >8d (failed, errored, or didn't
+              run). Check `systemctl --user status doc-drift-audit.service` and
+              `list-timers doc-drift-audit.timer`, and ~/.local/state/doc-drift-audit/*.log on the
+              devbox (10.10.201.45).
+        # Metric absent entirely => textfile never produced: devbox down long-term, linger/timer
+        # off, or the textfile collector/dir not set up. 9d so a single weekly miss alone doesn't trip it.
+        - alert: DocDriftAuditNoMetrics
+          expr: absent(doc_drift_audit_last_success_timestamp_seconds{instance="devbox"})
+          for: 9d
+          labels:
+            severity: critical
+          annotations:
+            summary: "No doc/IaC drift audit metric on the devbox (>9d)"
+            description: >-
+              doc_drift_audit_last_success_timestamp_seconds is absent — the metric isn't being
+              produced (devbox down, linger/timer disabled, or node_exporter --collector.textfile /
+              /var/lib/node_exporter/textfile_collector not set up). Verify base.yml was applied to the devbox.
+        # Most recent run exited non-zero. Warning (not critical): the audit already emails a
+        # per-run error directly; this is dashboard visibility + a backstop if that email fails.
+        - alert: DocDriftAuditFailed
+          expr: doc_drift_audit_last_rc{instance="devbox"} != 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Last doc/IaC drift audit run exited non-zero (rc={{ $value }})"
+            description: "doc_drift_audit_last_rc={{ $value }} on the devbox — see ~/.local/state/doc-drift-audit/*.log."

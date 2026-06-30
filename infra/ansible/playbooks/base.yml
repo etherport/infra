@@ -280,6 +280,18 @@
         shell: /usr/sbin/nologin
         create_home: no
 
+    # Textfile collector dir: scheduled jobs drop *.prom here for node_exporter to expose
+    # (e.g. the devbox weekly doc-drift audit's success-timestamp metric). On the devbox the
+    # audit runs as `ubuntu`, so it owns the dir there; elsewhere node_exporter owns it. The
+    # dir is world-readable so node_exporter (a different user) can read what `ubuntu` writes.
+    - name: Create node_exporter textfile-collector directory
+      file:
+        path: /var/lib/node_exporter/textfile_collector
+        state: directory
+        owner: "{{ 'ubuntu' if 'devboxes' in group_names else 'node_exporter' }}"
+        group: node_exporter
+        mode: "0755"
+
     - name: Create node_exporter systemd service
       copy:
         dest: /etc/systemd/system/node_exporter.service
@@ -299,7 +311,9 @@
           ExecStart=/usr/local/bin/node_exporter \
             --web.listen-address=:{{ node_exporter_port }} \
             --collector.systemd \
-            --collector.processes
+            --collector.processes \
+            --collector.textfile \
+            --collector.textfile.directory=/var/lib/node_exporter/textfile_collector
           Restart=on-failure
           RestartSec=5
 

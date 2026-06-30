@@ -42,6 +42,32 @@ claude -p "$(cat "$PROMPT_FILE")" \
 rc=$?
 echo "[$(date -Is)] doc-drift audit finished (rc=$rc) -> $LOG" | tee -a "$LOG"
 
+# --- Prometheus textfile metric (scraped by node_exporter --collector.textfile). Lets the
+# monitoring stack alert on a FAILED *or MISSED* run from off-box (DocDriftAudit* in
+# 02-external-alerts.yaml). last_success_timestamp is stamped only on rc==0, and the prior
+# marker is preserved on a failed run, so a failure can't refresh the staleness clock. ---
+TEXTFILE_DIR="/var/lib/node_exporter/textfile_collector"
+prom="$TEXTFILE_DIR/doc_drift_audit.prom"
+if [ -d "$TEXTFILE_DIR" ] && [ -w "$TEXTFILE_DIR" ]; then
+  tmp="$(mktemp "$prom.XXXX")"
+  {
+    echo '# HELP doc_drift_audit_last_rc Exit code of the most recent doc-drift audit run.'
+    echo '# TYPE doc_drift_audit_last_rc gauge'
+    echo "doc_drift_audit_last_rc $rc"
+    echo '# HELP doc_drift_audit_last_success_timestamp_seconds Unix time of the last successful (rc=0) run.'
+    echo '# TYPE doc_drift_audit_last_success_timestamp_seconds gauge'
+    if [ "$rc" -eq 0 ]; then
+      echo "doc_drift_audit_last_success_timestamp_seconds $(date +%s)"
+    elif [ -f "$prom" ]; then
+      grep '^doc_drift_audit_last_success_timestamp_seconds ' "$prom" 2>/dev/null || true
+    fi
+  } > "$tmp"
+  mv -f "$tmp" "$prom"
+  echo "[metric] wrote $prom (rc=$rc)" >>"$LOG"
+else
+  echo "[metric] $TEXTFILE_DIR missing/unwritable — skipped textfile metric (run base.yml on devbox)" | tee -a "$LOG"
+fi
+
 # --- Email the summary EVERY run (clean or drift) via SES SMTP. The devbox has no in-cluster
 # IRSA, so it sends over SMTP with creds decrypted from the alertmanager SES secret (it holds
 # the age key). Best-effort: a send failure must never fail the audit. ---
