@@ -174,12 +174,16 @@ resource "aws_instance" "vpn" {
     encrypted             = true
 
     tags = merge(local.common_tags, {
-      Name = "private-infra_vpn_vol"
+      Name = "private-infra_edge_vol"
     })
   }
 
+  # Renamed vpn → edge (2026-07-01): no longer just the WireGuard hub — it's the
+  # AWS edge node running WireGuard (wg0 site-to-site + wg1 remote), Tailscale
+  # (subnet-router + exit node), and (post-fold) Technitium DNS. TF resource names
+  # (aws_instance.vpn etc.) kept to avoid state churn; only the Name tag changed.
   tags = merge(local.common_tags, {
-    Name = "private-infra_vpn"
+    Name = "private-infra_edge"
   })
 
   lifecycle {
@@ -257,7 +261,7 @@ resource "aws_eip" "vpn" {
   instance = aws_instance.vpn.id
 
   tags = merge(local.common_tags, {
-    Name = "private-infra_vpn_ip"
+    Name = "private-infra_edge_ip"
   })
 
   lifecycle {
