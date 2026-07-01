@@ -64,6 +64,29 @@ IP serving both roles, vpn DNS name on it") is met — the retained IP just happ
    actually running? is **DoH/CloudFront** (`F5`) actually served? Drop the rule if not.
 4. **Confirm no active us-east-1 / travel session** before destroy.
 
+## Phase 0 — Security hardening / management parity (the box is public-facing)
+Audit of what the box gets today vs the fleet baseline:
+- **Already in line (base.yml, it's in `[all]`):** OS **auto-updates** (`unattended-upgrades` +
+  `automatic_reboot=true` + staggered windows — **so yes, auto-updates are already on**), sshd hardened
+  (`PasswordAuthentication no`, `PermitRootLogin prohibit-password`), NTP (chrony), node_exporter,
+  CloudWatch agent + role, encrypted EBS, IMDSv2-required.
+- **Gaps to close (fold into consolidation):**
+  1. **Cert-only SSH (M76 parity)** — the AWS boxes are the ONLY fleet hosts not on cert-only SSH: they
+     reject the step-ca cert and still carry the static `automation@homelab` bootstrap key. → run
+     `step-ca-trust.yml` + `step-ca-hostcerts.yml` against `inventory/aws` (user-CA trust needs no runtime
+     step-ca dependency — just the CA pubkey in `TrustedUserCAKeys`), verify the devbox/CI cert authenticates,
+     then `step-ca-remove-static-key.yml` to strip the static key.
+  2. **SSH off the public IP → Tailscale-only** — we're installing tailscaled anyway; drop the public SSH
+     SG rule (Phase 1) and reach SSH over the TS IP. Eliminates public SSH exposure entirely.
+  3. **SSM Session Manager break-glass** — an EC2 has no PVE-console/IPMI equivalent; add SSM to the instance
+     role (`AmazonSSMManagedInstanceCore`) so "cert + Tailscale both down" is still recoverable.
+  4. **Technitium recursion ACL** — confirm recursion is restricted to the tunnel/homelab networks (never an
+     open resolver), as defense-in-depth behind the SG-scoped `:53`.
+  5. **Staggered `reboot_times` entry** for the consolidated box (base.yml) — an auto-reboot now blips BOTH
+     DNS + the VPN gateway; pin it off-peak (the `.5`/`.6` resolvers + WG auto-re-handshake cover the window).
+- **Optional (not fleet parity today):** fail2ban (SSH already SG-restricted + key-only → low value once
+  SSH is Tailscale-only), auditd.
+
 ## Phase 1 — Security-group audit + least-priv redesign (`aws/networking`)
 Findings (fix during consolidation):
 - **F1 (delete):** `internal_aws_spokes` = `-1` from `10.10.96.0/19` — covers *only* the decommissioned
