@@ -1,0 +1,59 @@
+---
+# metrics-server (M117, 2026-07-01). The cluster had NO Metrics API — `kubectl top
+# pods/nodes` failed cluster-wide, which blocks HPA, utilization-aware tooling, and
+# (critically) incident triage when the monitoring namespace itself is down
+# (Prometheus is the only other resource view). Helm/Flux-managed rather than the
+# kubespray addon — same reasoning as MetalLB (L24): kubespray runs are rare +
+# landmine-prone; Flux owns day-2.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: metrics-server
+  namespace: flux-system
+spec:
+  releaseName: metrics-server
+  interval: 1h
+  chart:
+    spec:
+      chart: metrics-server
+      # Pin exactly (repo convention — no floating ranges on infra-critical
+      # charts; Renovate proposes bumps).
+      version: "3.13.0"
+      sourceRef:
+        kind: HelmRepository
+        name: metrics-server
+  targetNamespace: kube-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    # Kubespray kubelets serve self-signed certs (no serving-cert approval
+    # chain), so metrics-server must skip kubelet TLS verification — the
+    # standard kubespray/homelab setting. Scrape path is node-local HTTPS.
+    args:
+      - --kubelet-insecure-tls
+    # Two replicas would need APIService HA plumbing for little gain — the
+    # Metrics API is best-effort by design (HPA tolerates gaps). Keep 1.
+    replicas: 1
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+    # kube-prometheus-stack does NOT need this (it scrapes kubelet/cAdvisor
+    # directly) — no ServiceMonitor to avoid double-scraping.
+    metrics:
+      enabled: false
+    serviceMonitor:
+      enabled: false
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: metrics-server
+  namespace: flux-system
+spec:
+  interval: 12h
+  url: https://kubernetes-sigs.github.io/metrics-server/

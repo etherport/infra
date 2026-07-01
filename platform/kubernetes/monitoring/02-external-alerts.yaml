@@ -94,6 +94,7 @@ spec:
             # operator investigation.
             ai_remediation: "auto"
           annotations:
+            runbook_url: "https://github.com/sparked-diamond/infra/blob/main/docs/runbooks/alerts/ExternalHostLowDisk.md"
             summary: "Low disk space on {{ $labels.instance }}"
             description: "Disk {{ $labels.mountpoint }} on {{ $labels.instance }} is {{ $value | printf \"%.1f\" }}% full."
 
@@ -153,6 +154,7 @@ spec:
           labels:
             severity: critical
           annotations:
+            runbook_url: "https://github.com/sparked-diamond/infra/blob/main/docs/runbooks/alerts/TechnitiumExternalHostDown.md"
             summary: "External Technitium DNS host {{ $labels.instance }} is down"
             description: "External DNS server {{ $labels.instance }} has been unreachable for more than 1 minute. (In-cluster DNS is unaffected; this does NOT auto-restart the in-cluster pods.)"
 

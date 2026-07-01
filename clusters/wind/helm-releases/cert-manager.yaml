@@ -35,8 +35,13 @@ spec:
       - --dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53
     prometheus:
       enabled: true
+      # M113 (2026-07-01): was false — cert-manager metrics were never scraped, so
+      # no cert-expiry alerting existed (only the UniFi-wildcard special case).
+      # kube-prometheus-stack selects ServiceMonitors labeled release=monitoring.
       servicemonitor:
-        enabled: false
+        enabled: true
+        labels:
+          release: monitoring
     # HA: 2 replicas across hosts. cert-manager controller uses leader
     # election — only one replica is active at a time, but a second
     # standby means cert renewals don't pause when a node reboots.

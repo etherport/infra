@@ -4,6 +4,9 @@ metadata:
   name: s3-sync-template
   namespace: backups
 spec:
+  # M119 (2026-07-01): staggered — all 7 shares inherited the base's 01:00 and
+  # fired simultaneously (UNAS + WAN + shared-lock thundering herd).
+  schedule: "30 1 * * *"
   jobTemplate:
     spec:
       template:

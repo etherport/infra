@@ -47,6 +47,7 @@ spec:
             severity: warning
             component: hardware
           annotations:
+            runbook_url: "https://github.com/sparked-diamond/infra/blob/main/docs/runbooks/alerts/PveCpuTempHigh.md"
             summary: "PVE CPU sustained >80°C ({{ $value }}°C)"
             description: "TEMP_CPU on {{ $labels.instance }} has been above 80°C for 5 minutes. Check fan curve in BMC UI (Settings → Fan Control). The 2026-05-02 incident pattern was brief spikes to 98°C with fans not ramping in time."
 

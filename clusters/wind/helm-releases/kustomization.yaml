@@ -15,6 +15,7 @@ resources:
   - github-actions-runner.yaml
   - kyverno.yaml          # M73 admission-policy engine (audit-first, no policies yet)
   - tetragon.yaml         # M74 eBPF runtime detection (observe-only; export off in v1)
+  - metrics-server.yaml   # M117 Metrics API (kubectl top / HPA) — was absent cluster-wide
   # Logging (Loki single-binary + Alloy DaemonSet for k8s + syslog)
   - loki.yaml
   - alloy.yaml

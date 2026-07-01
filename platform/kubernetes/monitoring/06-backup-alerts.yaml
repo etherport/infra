@@ -32,6 +32,7 @@ spec:
             component: backup
             namespace: backups
           annotations:
+            runbook_url: "https://github.com/sparked-diamond/infra/blob/main/docs/runbooks/alerts/S3SyncFailed.md"
             summary: "s3-sync failed for {{ $labels.share }}"
             description: |
               The last sync for share `{{ $labels.share }}` to S3
@@ -67,6 +68,7 @@ spec:
             component: backup
             namespace: backups
           annotations:
+            runbook_url: "https://github.com/sparked-diamond/infra/blob/main/docs/runbooks/alerts/UnifiBackupFailed.md"
             summary: "UniFi backup failed for {{ $labels.device }}"
             description: |
               The UDM/Protect backup for device `{{ $labels.device }}`
@@ -111,6 +113,7 @@ spec:
             ai_advisor_mode: "deep"
             namespace: postgres
           annotations:
+            runbook_url: "https://github.com/sparked-diamond/infra/blob/main/docs/runbooks/alerts/CNPGBackupFailed.md"
             summary: "CNPG cluster {{ $labels.cluster }} has a backup failure"
             description: |
               The most recent backup attempt for CNPG cluster
@@ -134,6 +137,7 @@ spec:
             # trigger_cnpg_backup_now (uses cluster from $labels.cluster).
             ai_remediation: "auto"
           annotations:
+            runbook_url: "https://github.com/sparked-diamond/infra/blob/main/docs/runbooks/alerts/CNPGBackupStale.md"
             summary: "CNPG cluster {{ $labels.cluster }} backup stale (>36h)"
             description: |
               Last successful CNPG backup for `{{ $labels.cluster }}`
@@ -158,6 +162,7 @@ spec:
             component: backup
             namespace: velero
           annotations:
+            runbook_url: "https://github.com/sparked-diamond/infra/blob/main/docs/runbooks/alerts/VeleroBackupFailed.md"
             summary: "Velero backup failure recorded for {{ $labels.schedule }} in last 25h"
             description: |
               At least one backup invocation for schedule
@@ -175,6 +180,7 @@ spec:
             component: backup
             namespace: velero
           annotations:
+            runbook_url: "https://github.com/sparked-diamond/infra/blob/main/docs/runbooks/alerts/VeleroBackupPartial.md"
             summary: "Velero partial backup recorded for {{ $labels.schedule }} in last 25h"
             description: |
               A backup in the last 25h completed with partial failures.
@@ -201,6 +207,7 @@ spec:
             # trigger_velero_backup_now to kick a fresh backup.
             ai_remediation: "auto"
           annotations:
+            runbook_url: "https://github.com/sparked-diamond/infra/blob/main/docs/runbooks/alerts/VeleroLastBackupAgeHigh.md"
             summary: "Velero hasn't completed a backup in >36h"
             description: |
               {{ $value | humanizeDuration }} since any Velero schedule

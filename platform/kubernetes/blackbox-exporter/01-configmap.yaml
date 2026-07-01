@@ -21,6 +21,17 @@ data:
             insecure_skip_verify: true
           preferred_ip_protocol: ip4
 
+      # Plain-HTTP 2xx (in-cluster service health endpoints — e.g. the
+      # authentik AuthentikDown probe; http_2xx_insecure can't be used there
+      # because it sets fail_if_not_ssl). M113, 2026-07-01.
+      http_2xx:
+        prober: http
+        timeout: 5s
+        http:
+          valid_status_codes: [200]
+          method: GET
+          preferred_ip_protocol: ip4
+
       # ICMP ping fallback (needs NET_RAW cap)
       icmp:
         prober: icmp

@@ -4,7 +4,7 @@ metadata:
   name: monitoring-daily
   namespace: velero
 spec:
-  schedule: "0 4 * * *"
+  schedule: "40 4 * * *"   # M119: staggered (was 4:00 sharp with others)
   template:
     includedNamespaces:
       - monitoring

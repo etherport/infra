@@ -159,6 +159,7 @@ spec:
         severity: critical
         auto_remediate: "true"
       annotations:
+        runbook_url: "https://github.com/sparked-diamond/infra/blob/main/docs/runbooks/alerts/TechnitiumDNSDown.md"
         summary: "Technitium DNS is degraded or down"
         description: "Technitium DNS has {{ $value }} ready replicas (expected 2)"
 
@@ -270,6 +271,7 @@ spec:
       labels:
         severity: info
       annotations:
+        runbook_url: "https://github.com/sparked-diamond/infra/blob/main/docs/runbooks/alerts/PodCrashLooping.md"
         summary: "Pod {{ $labels.pod }} is crash looping"
         description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted >2 times in 15 min, sustained 30 min"
 
@@ -282,6 +284,7 @@ spec:
       labels:
         severity: info
       annotations:
+        runbook_url: "https://github.com/sparked-diamond/infra/blob/main/docs/runbooks/alerts/PodOOMKilled.md"
         summary: "Pod {{ $labels.pod }} was OOM killed"
         description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} was terminated due to out of memory"
 

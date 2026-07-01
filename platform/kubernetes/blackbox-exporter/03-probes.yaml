@@ -125,3 +125,30 @@ spec:
         - https://10.10.201.46:8443/health
       labels:
         appliance: step-ca
+---
+# authentik (SSO IdP) — gates every OIDC app + all forward-auth admin UIs (H38).
+# M113 (2026-07-01): authentik had zero alert coverage. Probes the in-cluster
+# Service /-/health/live/ (plain http_2xx module — see 01-configmap). Pairs with
+# the AuthentikDown rule (monitoring/13-service-alerts.yaml). NB the pod-level
+# liveness probes restart a sick pod; this catches the SERVICE being dark (both
+# replicas down / Service broken / namespace-level failure).
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: authentik
+  namespace: blackbox-exporter
+  labels:
+    appliance: authentik
+    release: monitoring
+spec:
+  jobName: blackbox-appliance
+  interval: 30s
+  module: http_2xx
+  prober:
+    url: blackbox-exporter.blackbox-exporter.svc.cluster.local:9115
+  targets:
+    staticConfig:
+      static:
+        - http://authentik-server.authentik.svc.cluster.local/-/health/live/
+      labels:
+        appliance: authentik

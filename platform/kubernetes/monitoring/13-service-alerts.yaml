@@ -1,0 +1,91 @@
+---
+# M113 (2026-07-01): alert-coverage gaps found by the Fable-5 infra review —
+# a dead postgres cluster, an expiring cert, a dark authentik, or a dead
+# cloudflared tunnel previously paged NOTHING (CNPG had only backup alerts;
+# cert-manager metrics weren't even scraped until the same change).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: service-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+    app: kube-prometheus-stack
+spec:
+  groups:
+    - name: cnpg-availability.rules
+      rules:
+        # absent()-based: when a CNPG cluster dies entirely its series VANISH,
+        # so a `== 0` expr would never fire. One rule per cluster (absent()
+        # can't be aggregated across label values).
+        - alert: CNPGClusterDown
+          expr: absent(cnpg_collector_up{cluster="postgres-cluster"}) == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CNPG postgres-cluster is not reporting (shared HA postgres)"
+            description: "No cnpg_collector_up series from postgres-cluster for 5m — the shared DB behind authentik/grafana/wiki/etc is likely down or unscrapeable. Check: kubectl -n postgres get cluster,pods."
+        - alert: CNPGClusterDown
+          expr: absent(cnpg_collector_up{cluster="cue-db"}) == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CNPG cue-db is not reporting"
+            description: "No cnpg_collector_up series from cue-db for 5m — Cue's database is likely down or unscrapeable. Check: kubectl -n cue get cluster,pods."
+
+    - name: certificates.rules
+      rules:
+        # cert-manager renews at 2/3 lifetime, so anything inside 14d of expiry
+        # means RENEWAL IS FAILING (ACME/DNS01/quota) — act before it lapses.
+        # (The UniFi wildcard has its own dedicated alert; this is the general net.)
+        - alert: CertManagerCertExpiringSoon
+          expr: min by (name, namespace) (certmanager_certificate_expiration_timestamp_seconds - time()) < 14 * 24 * 3600
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in <14d — renewal is failing"
+            description: "cert-manager should have renewed at 2/3 lifetime. Check: kubectl -n {{ $labels.namespace }} describe certificate {{ $labels.name }} (ACME order/challenge events)."
+        - alert: CertManagerCertExpiryCritical
+          expr: min by (name, namespace) (certmanager_certificate_expiration_timestamp_seconds - time()) < 5 * 24 * 3600
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in <5d"
+            description: "Imminent expiry — renewal has been failing for weeks. Fix the ACME/DNS01 path or replace the cert now."
+
+    - name: authentik.rules
+      rules:
+        - alert: AuthentikDown
+          expr: probe_success{appliance="authentik"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "authentik SSO is not answering /-/health/live/"
+            description: "The in-cluster health probe has failed for 5m — all OIDC logins (Grafana/wiki/Open WebUI) + every forward-auth admin UI are blocked. HA/Plex keep working (own auth). Check: kubectl -n authentik get pods; shared postgres + redis health."
+
+    - name: cloudflared.rules
+      rules:
+        # Each replica holds 4 HA connections to the CF edge. Degraded = a
+        # replica lost redundancy; Down = NO tunnel connections cluster-wide
+        # (all external ingress dark). max_over_time guards scrape blips.
+        - alert: CloudflaredTunnelDegraded
+          expr: cloudflared_tunnel_ha_connections < 2
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "cloudflared {{ $labels.pod }} has {{ $value }} HA connections (<2)"
+            description: "The tunnel replica lost edge redundancy (normal = 4). External ingress still works via the other replica/connections; investigate before it cascades."
+        - alert: CloudflaredTunnelDown
+          expr: sum(cloudflared_tunnel_ha_connections) == 0 or absent(cloudflared_tunnel_ha_connections) == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "cloudflared has ZERO edge connections — all external ingress is down"
+            description: "No tunnel connections from any replica for 5m. Every externally-published service (incl. CF Access apps + cue) is unreachable from outside. Check: kubectl -n cloudflared get pods + logs; Cloudflare status page."

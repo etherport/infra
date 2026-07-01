@@ -4,7 +4,7 @@ metadata:
   name: postgres-daily
   namespace: velero
 spec:
-  schedule: "0 2 * * *"
+  schedule: "40 2 * * *"   # M119: staggered (was 2:00 sharp with others)
   template:
     includedNamespaces:
     - postgres

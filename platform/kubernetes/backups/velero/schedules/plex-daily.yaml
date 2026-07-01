@@ -4,7 +4,7 @@ metadata:
   name: plex-daily
   namespace: velero
 spec:
-  schedule: "0 3 * * *"
+  schedule: "24 3 * * *"   # M119: staggered (was 3:00 sharp with others)
   template:
     includedNamespaces:
       - plex
