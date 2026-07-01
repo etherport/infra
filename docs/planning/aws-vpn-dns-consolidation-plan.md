@@ -23,8 +23,25 @@ new box — keeping the vpn instance preserves the WG endpoint EIP + all keys = 
 - Both roles keep their existing identities: wg0 pubkey `kHjcUM…`, shared wg1 keypair `Aav0cNl4…`,
   Technitium on `.5`. **Nothing on any WG client or `dns-sync` changes.**
 
-## ⚠️ Decision: which EIP to keep — RECOMMEND the VPN EIP (differs from your proposal)
-You proposed keeping the **dns** EIP. The mapping shows that's the higher-churn path:
+## Decision: keep the VPN EIP `44.240.60.80` — ✅ CONFIRMED (2026-07-01)
+Operator confirmed: keep `44.240.60.80` (also easier to remember), release the dns EIP `52.40.219.113`.
+DNS now answers on `44.240.60.80`. The released dns-EIP's consumers (below) get re-pointed.
+
+### Where the dns public IP `52.40.219.113` is referenced (audited — only 1 live-config place)
+- **`infra/terraform/unifi/networks.tf`** — `dhcp_dns = ["10.10.201.5","10.10.201.6","52.40.219.113"]`
+  on **7 VLANs** (management L74, servers L112, clients L150, iot L188, vsan L311, unifi L349, ceph L400).
+  Matches the live UDM (polled). **Post-cutover: change `52.40.219.113` → `44.240.60.80` on all 7**, apply
+  via the unifi TF (CI), then **verify by polling `udm networkconf`** (the `paultyng/unifi` provider is
+  write-only for `dhcp_dns` — it writes but doesn't read-back for drift, so a config change still applies;
+  fall back to a UDM API POST if the write is a no-op). Guest VLAN (public DNS by design) is untouched.
+- **`dns-restrict-ip` Lambda** (`aws/dns-restrict-ip/variables.tf` `rule_specs`) manages port-53 ingress on
+  `sg-08d12e417159c18d2` (the dns SG) from the homelab WAN IPs → **re-point `rule_specs` to the consolidated
+  SG** so failover DNS queries to `44.240.60.80:53` are still WAN-allowed.
+- Docs only: `docs/architecture/aws-infrastructure.md` (instance table), `outstanding-work.md` (M104 note) — update.
+- **Not elsewhere** — no device/service in the repo hardcodes it beyond the above (grep-confirmed).
+
+### (original recommendation, retained for context)
+The mapping showed keeping the dns EIP would be the higher-churn path:
 - **Keep VPN EIP `44.240.60.80` (recommended):** it's baked into every WG client (k8s pod, vpn-local,
   device `.conf` profiles, `vpn-usw2.etherport.net`) → **zero client change**. The DNS role's public
   side has **no published record** (the dns EIP isn't in any CF/Route53 record — only a private A
