@@ -84,6 +84,25 @@ jobs:
         with:
           jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}
 
+      # M110 bootstrap: the AWS host (vpn-aws) does NOT yet trust the step-ca user
+      # CA, so it rejects the minted cert above — it still authenticates only with
+      # the static automation@homelab key (its cloud-init seed). Decrypt that key
+      # from the SOPS ops bundle for inventory=aws runs so CI can reach it (incl.
+      # to run step-ca-trust, which then enables cert-SSH there). Once vpn-aws is
+      # cert-only + the static key removed (M76 cutover), this step + the aws
+      # branch of ANSIBLE_PRIVATE_KEY_FILE below can be deleted.
+      - name: Decrypt AWS bootstrap SSH key (aws inventory only)
+        id: awskey
+        if: github.event.inputs.inventory == 'aws'
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          KEYFILE="$RUNNER_TEMP/aws_static_key"
+          sops -d --extract '["automation_ssh_private_key"]' \
+            infra/ansible/playbooks/secrets/homelab-ops.sops.yaml > "$KEYFILE"
+          chmod 600 "$KEYFILE"
+          echo "key-file=$KEYFILE" >> "$GITHUB_OUTPUT"
+
       - name: Build inventory args + limit
         id: invargs
         run: |
@@ -107,7 +126,7 @@ jobs:
       - name: Run ansible (check)
         if: github.event.inputs.action == 'check'
         env:
-          ANSIBLE_PRIVATE_KEY_FILE: ${{ steps.sshcert.outputs.key-file }}
+          ANSIBLE_PRIVATE_KEY_FILE: ${{ github.event.inputs.inventory == 'aws' && steps.awskey.outputs.key-file || steps.sshcert.outputs.key-file }}
           # age key for community.sops.load_vars (decrypt *.sops.yaml on the
           # runner). Empty for playbooks that don't use SOPS — harmless.
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
@@ -121,7 +140,7 @@ jobs:
       - name: Run ansible (apply)
         if: github.event.inputs.action == 'apply'
         env:
-          ANSIBLE_PRIVATE_KEY_FILE: ${{ steps.sshcert.outputs.key-file }}
+          ANSIBLE_PRIVATE_KEY_FILE: ${{ github.event.inputs.inventory == 'aws' && steps.awskey.outputs.key-file || steps.sshcert.outputs.key-file }}
           # age key for community.sops.load_vars (decrypt *.sops.yaml on the
           # runner). Empty for playbooks that don't use SOPS — harmless.
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
