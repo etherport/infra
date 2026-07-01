@@ -292,6 +292,19 @@ resource "aws_s3_bucket_lifecycle_configuration" "email_fwd" {
       days = 30
     }
   }
+
+  # L31 (2026-07-01): parity with every other bucket — drop failed multipart
+  # uploads instead of paying for invisible orphaned parts forever.
+  rule {
+    id     = "abort-incomplete-uploads"
+    status = "Enabled"
+
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "email_fwd" {

@@ -19,6 +19,9 @@ name: Bootstrap runner SSH key (one-shot)
 on:
   workflow_dispatch: {}
 
+# L25 (2026-07-01): explicit empty permissions — this workflow needs no token scopes.
+permissions: {}
+
 jobs:
   install:
     runs-on: [self-hosted, lifecycle]

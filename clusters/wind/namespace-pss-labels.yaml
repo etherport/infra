@@ -18,7 +18,8 @@
 #   - home-automation: Home Assistant runs privileged (USB/hardware access)
 #   - monitoring:      node-exporter (hostNetwork/PID), alloy (hostPath), grafana
 #   - tailscale:       operator/proxy pods need NET_ADMIN
-# tier=system (plex, wireguard) stays unrestricted by design.
+# tier=system wireguard stays unrestricted by design (hostNetwork+NET_ADMIN);
+# plex graduated to enforce=baseline 2026-07-01 (L27 — device-plugin GPU, not privileged).
 ---
 apiVersion: v1
 kind: Namespace
@@ -213,13 +214,31 @@ metadata:
     pod-security.kubernetes.io/warn: baseline
     pod-security.kubernetes.io/enforce: baseline
 ---
+# kyverno: the admission-policy engine itself (L27, 2026-07-01 — verified clean
+# via server dry-run; webhooks/controllers run unprivileged).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kyverno
+  labels:
+    tier: system
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
+---
 # Privileged-by-design namespaces — tier=system, no PSS enforcement.
 apiVersion: v1
 kind: Namespace
 metadata:
   name: plex
   labels:
-    tier: system  # GPU passthrough needs privileged
+    tier: system
+    # L27 (2026-07-01): the old "GPU passthrough needs privileged" note was STALE —
+    # plex consumes nvidia.com/gpu.shared via the gpu-operator device plugin, no
+    # privileged container. Verified clean via server dry-run → baseline enforced.
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
 kind: Namespace

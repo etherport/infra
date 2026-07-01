@@ -133,6 +133,18 @@ jobs:
             2) echo "drifted=true"  >> "$GITHUB_OUTPUT" ;;
           esac
 
+      # M121 (2026-07-01): REDACT before upload. The raw plan renders non-sensitive
+      # attribute VALUES (incl. TF_VAR-injected config) and this artifact also
+      # feeds the drift ISSUE body — keep only structure lines (Plan: summary +
+      # "# <addr> will be ..." headers). Full detail on demand via the stack's
+      # own dispatch plan. The step-summary tail above already showed this run's
+      # detail to repo admins.
+      - name: Redact plan for artifact/issue
+        if: steps.plan.outputs.drifted == 'true'
+        run: |
+          grep -E '^(Plan:|Terraform will perform|  # )' plan.txt > plan-redacted.txt || true
+          mv plan-redacted.txt plan.txt
+
       - name: Upload plan artifact
         if: steps.plan.outputs.drifted == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -237,6 +249,18 @@ jobs:
             1) echo "drifted=error" >> "$GITHUB_OUTPUT"; exit 1 ;;
             2) echo "drifted=true"  >> "$GITHUB_OUTPUT" ;;
           esac
+
+      # M121 (2026-07-01): REDACT before upload. The raw plan renders non-sensitive
+      # attribute VALUES (incl. TF_VAR-injected config) and this artifact also
+      # feeds the drift ISSUE body — keep only structure lines (Plan: summary +
+      # "# <addr> will be ..." headers). Full detail on demand via the stack's
+      # own dispatch plan. The step-summary tail above already showed this run's
+      # detail to repo admins.
+      - name: Redact plan for artifact/issue
+        if: steps.plan.outputs.drifted == 'true'
+        run: |
+          grep -E '^(Plan:|Terraform will perform|  # )' plan.txt > plan-redacted.txt || true
+          mv plan-redacted.txt plan.txt
 
       - name: Upload plan artifact
         if: steps.plan.outputs.drifted == 'true'

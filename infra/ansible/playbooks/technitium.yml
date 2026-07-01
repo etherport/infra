@@ -390,7 +390,9 @@
     - name: Create primary zone {{ technitium_primary_zone }} if missing
       uri:
         url: "http://localhost:5380/api/zones/create?token={{ technitium_token }}&zone={{ technitium_primary_zone }}&type=Primary"
+        # L28: token travels in the URL — keep it out of ansible output on failure/-v
         method: POST
+      no_log: true
       when:
         - restore_backup | length == 0
         - technitium_primary_zone not in (technitium_zones.json.response.zones | default([]) | map(attribute='name') | list)
@@ -398,7 +400,9 @@
     - name: Create conditional forwarder zones
       uri:
         url: "http://localhost:5380/api/zones/create?token={{ technitium_token }}&zone={{ item.zone }}&type=Forwarder&initializeForwarder=true&protocol=Udp&forwarder={{ item.forwarder }}"
+        # L28: token travels in the URL — keep it out of ansible output on failure/-v
         method: POST
+      no_log: true
       loop: "{{ technitium_conditional_forwarders }}"
       loop_control:
         label: "{{ item.zone }} → {{ item.forwarder }}"
@@ -409,7 +413,9 @@
     - name: Configure upstream forwarders + server defaults
       uri:
         url: "http://localhost:5380/api/settings/set?token={{ technitium_token }}&forwarders={{ technitium_upstream_forwarders | join(',') }}&forwarderProtocol=Udp&dnssecValidation=true&logUsingLocalTime=true"
+        # L28: token travels in the URL — keep it out of ansible output on failure/-v
         method: POST
+      no_log: true
       when: restore_backup | length == 0
 
     # Filesystem-level log retention. Technitium's built-in maxLogFileDays
