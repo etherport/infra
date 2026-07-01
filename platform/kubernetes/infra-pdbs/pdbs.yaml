@@ -1,0 +1,40 @@
+---
+# L30 (2026-07-01): PDBs for multi-replica CLUSTER-INFRA workloads that had none —
+# a drain (k8s-node-patch, kured) could momentarily evict BOTH replicas of cluster
+# DNS / the cilium operator / the RBD provisioner at once. These are plain CRs on
+# top of kubespray/raw-manifest-managed workloads (PDBs are separate objects, so
+# no ownership conflict; a kubespray run won't remove them).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: coredns
+  namespace: kube-system
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      k8s-app: kube-dns
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cilium-operator
+  namespace: kube-system
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      io.cilium/app: operator
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: csi-rbdplugin-provisioner
+  # NB still the `default` namespace — the M120 ceph-csi move relocates this
+  # PDB together with the workload.
+  namespace: default
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: csi-rbdplugin-provisioner

@@ -312,9 +312,11 @@ spec:
         runAsUser: 0  # log files are root:root on the host
         runAsNonRoot: false
 
+      # M118 (2026-07-01): P95 working set ~315Mi — the 128Mi request
+      # under-reserved ~190Mi per node (8 nodes). Request = P95 + headroom.
       resources:
         requests:
-          memory: "128Mi"
+          memory: "384Mi"
           cpu: "50m"
         limits:
           memory: "512Mi"

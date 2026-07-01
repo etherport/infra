@@ -143,10 +143,14 @@ spec:
           mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
           readOnly: true
       # Requests-only (no limits) — see the `resources:` note above (M5).
+      # M118 (2026-07-01): right-sized from 200m/256Mi — 7d MAX (incl. backup
+      # windows) was 138Mi / P95 CPU ~1m across all 8 pods, so the old requests
+      # idled ~1.4 CPU + ~0.8Gi of schedulable capacity fleet-wide. No limits →
+      # bursts are unaffected.
       resources:
         requests:
-          cpu: 200m
-          memory: 256Mi
+          cpu: 25m
+          memory: 160Mi
       tolerations:
         - key: node-role.kubernetes.io/control-plane
           operator: Exists

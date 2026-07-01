@@ -116,12 +116,16 @@ spec:
           enabled: true
           name: prometheus-additional-scrape-configs
           key: additional-scrape-configs.yaml
+        # M118 (2026-07-01): P95 working set = ~1.83Gi per replica — the old
+        # 512Mi request under-reserved by ~1.3Gi (evict-first under pressure)
+        # and the 2Gi limit left <10% headroom to OOM. Request = observed P95;
+        # limit raised to 3Gi.
         resources:
           requests:
-            memory: "512Mi"
-            cpu: "100m"
-          limits:
             memory: "2Gi"
+            cpu: "200m"
+          limits:
+            memory: "3Gi"
             cpu: "1000m"
         # Retention settings
         retention: 15d

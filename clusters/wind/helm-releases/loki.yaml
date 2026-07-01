@@ -75,6 +75,22 @@ spec:
         # into past index periods.
         reject_old_samples: true
         reject_old_samples_max_age: 12h
+        # L29 (2026-07-01): per-STREAM caps under the 10MB/s tenant budget —
+        # without these a single runaway stream (hubble-audit during an audit
+        # window, a tetragon detection storm) can starve every other stream
+        # while still passing the tenant-level cap.
+        per_stream_rate_limit: 3MB
+        per_stream_rate_limit_burst: 10MB
+        # Shorter retention for the two high-volume security-telemetry streams
+        # (they're alert feedstock, not forensic archive — the ALERTS persist).
+        # Everything else keeps the 30d default above.
+        retention_stream:
+          - selector: '{job="hubble-audit"}'
+            priority: 1
+            period: 168h
+          - selector: '{namespace="tetragon", container="export-stdout"}'
+            priority: 1
+            period: 168h
       compactor:
         retention_enabled: true
         delete_request_store: filesystem

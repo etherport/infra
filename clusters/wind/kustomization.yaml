@@ -49,6 +49,8 @@ resources:
   # Surfaces them in service-status email + Grafana dashboard via
   # `kind="probe"` entries in services.py.
   - ../../platform/kubernetes/blackbox-exporter
+  # L30: PDBs for kubespray/raw-managed infra (coredns, cilium-operator, csi provisioner)
+  - ../../platform/kubernetes/infra-pdbs
   # Policy baseline (Pod Security Standards audit+warn, LimitRanges).
   # Phase 1 of the NetworkPolicies+Quotas+PDBs plan — observation-only,
   # no enforcement. See platform/kubernetes/policy-baseline/README.md.

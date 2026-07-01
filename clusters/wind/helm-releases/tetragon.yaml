@@ -64,10 +64,15 @@ spec:
       exportDenyList: |-
         {"health_check":true}
         {"namespace":["", "cilium", "kube-system"]}
+      # M118 (2026-07-01): P95 ~219Mi → request 256Mi. NB the live DS carried
+      # the LIMIT from these values but Kyverno-default requests (10m/32Mi) —
+      # i.e. the requests key wasn't landing in the rendered chart. Verify after
+      # this reconcile; if requests still show 10m/32Mi the chart drops
+      # tetragon.resources.requests and this needs a postRenderer instead.
       resources:
         requests:
           cpu: 50m
-          memory: 128Mi
+          memory: 256Mi
         limits:
           memory: 512Mi
     tetragonOperator:
