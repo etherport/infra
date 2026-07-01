@@ -17,23 +17,26 @@ spec:
     - name: photos-export
       rules:
         - alert: PhotosExportStale
-          # No SUCCESSFUL run in >26h (nightly is 22:00 PT). max() so any of the
-          # success-ts series (local/photokit/resume) keeps it fresh; catches
-          # both failed and skipped runs.
-          expr: time() - max(cairn_backup_last_success_timestamp_seconds{job="photos_lastsuccess",instance="mini"}) > 93600
+          # Staleness-only, best-effort (2026-07-01). Photos rides a network-sparsebundle
+          # (APFS-disk-image-over-SMB) that intermittently faults reads on an aged mount, so a
+          # single failed/skipped night is EXPECTED and self-corrects (the export is incremental,
+          # nothing is lost). Only alert when it's GENUINELY stuck — no successful run in >3 days
+          # (~3 consecutive missed nights). Downgraded critical→warning to match best-effort status.
+          expr: time() - max(cairn_backup_last_success_timestamp_seconds{job="photos_lastsuccess",instance="mini"}) > 259200
           for: 15m
           labels:
-            severity: critical
+            severity: warning
             component: backup
             namespace: backups
           annotations:
-            summary: "Mac mini photos export hasn't succeeded in >26h"
+            summary: "Mac mini photos export hasn't succeeded in >3 days"
             description: |
-              No successful cairn photos run on the mini (10.10.202.101) in >26h
-              (nightly schedule is 22:00 PT) — a failed or skipped run.
-              Check: launchctl print gui/$(id -u)/net.wind.cairn on the
-              mini; Loki {host="mini"}; the "Mac mini — Photos
-              backup" Grafana dashboard.
+              No successful cairn photos run on the mini (10.10.202.101) in >3 days
+              (nightly 22:00 PT; single bad nights are tolerated — network-sparsebundle
+              fragility). >3 days means it's genuinely stuck. Check: launchctl print
+              gui/$(id -u)/net.wind.cairn on the mini; Loki {host="mini"}; the
+              "Mac mini — Photos backup" Grafana dashboard. If the disk-image
+              subsystem is wedged (hdiutil "No child processes"/EAGAIN), reboot the mini.
 
         - alert: PhotosExportNoMetrics
           # The success-ts series is entirely absent for >48h — the mini stopped
@@ -53,21 +56,12 @@ spec:
               firewall/DNS), or the Pushgateway lost its store. Check the mini and
               the pushgateway pod (kubectl -n monitoring get pod -l app.kubernetes.io/name=prometheus-pushgateway).
 
-        - alert: PhotosExportFailed
-          # Last run returned non-zero (rc persists in Pushgateway until the next
-          # push).
-          expr: max(cairn_backup_last_rc{job="photos",instance="mini"}) != 0
-          for: 30m
-          labels:
-            severity: warning
-            component: backup
-            namespace: backups
-          annotations:
-            summary: "Mac mini photos export last run returned non-zero (rc={{ $value }})"
-            description: |
-              cairn_backup_last_rc{job="photos"}={{ $value }} (!=0) for >30m — the last export
-              run failed. Logs: Loki {host="mini"} (look for
-              "✗ export exited").
+        # PhotosExportFailed (per-run cairn_backup_last_rc != 0) was REMOVED 2026-07-01: photos is
+        # best-effort on the network-sparsebundle, so a single failed/skipped night is expected and
+        # too noisy to alert on. Genuine stuck-ness is covered by PhotosExportStale (>3 days) above;
+        # per-run rc is still visible on the "Mac mini — Photos backup" Grafana dashboard.
+        # (The OTHER cairn iCloud jobs — contacts/messages/etc. — keep their per-run rc alerts in
+        # 10-icloud-backups-alerts.yaml; only PHOTOS is exempted, as its substrate is the fragile one.)
 
         - alert: PhotosExportNotParsed
           # cairn_photos_summary_parsed=0 means a run FINISHED but its summary/report
@@ -76,7 +70,10 @@ spec:
           # stamped. Distinct from Failed (rc!=0) — catches the silent "completed but counts
           # are garbage" case that would otherwise read as 0-missing. >1h so a mid-run
           # snapshot doesn't flap it.
-          expr: max(cairn_photos_summary_parsed{instance="mini"}) == 0
+          # Gated on rc==0 (2026-07-01): only meaningful for a run that otherwise SUCCEEDED but
+          # produced an untrustworthy summary. A failed/killed run (rc!=0) is already covered by the
+          # staleness alert — don't double-fire on a bad night (best-effort photos).
+          expr: max(cairn_photos_summary_parsed{instance="mini"}) == 0 and max(cairn_backup_last_rc{job="photos",instance="mini"}) == 0
           for: 1h
           labels:
             severity: warning
@@ -99,7 +96,9 @@ spec:
           # resolvable > 0: i.e. coverage of fetchable files dropped below 100%
           # and DOWNLOAD_MISSING=1 hasn't yet closed the gap. >1h so a single
           # mid-run snapshot or a download in progress doesn't flap it.
-          expr: max(cairn_photos_missing_resolvable{instance="mini"}) > 0
+          # Gated on rc==0 (2026-07-01): coverage is only meaningful for a run that succeeded; on a
+          # failed/killed night the counts carry -1 sentinels, and the staleness alert covers it.
+          expr: max(cairn_photos_missing_resolvable{instance="mini"}) > 0 and max(cairn_backup_last_rc{job="photos",instance="mini"}) == 0
           for: 1h
           labels:
             severity: warning
