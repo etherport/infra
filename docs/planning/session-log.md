@@ -13,6 +13,46 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-07-01 — M110 executed (partial): us-east-1 decom + vpn-aws resize + rename; fold BLOCKED on CI→box connectivity
+
+**Done (committed + applied):**
+- **us-east-1 spoke DECOMMISSIONED** (`7b257df`, `a6c31ee`): destroyed the whole stack via a new
+  `destroy` action on `terraform-aws-us-east-1.yml` (VPC + peering + hub route + t4g.nano + EIP
+  `35.169.37.16`; verified empty). Removed the wg0 peer, CF `vpn-use1` record, the stack dir + its
+  workflow + `vpn-use1.sops.yaml` + the drift-matrix entry + docs. **⚠️ Fixed a stale tfstate lock**
+  (S3 `.tflock` from a killed 2026-06-17 plan) that blocked the destroy AND had been silently failing
+  this stack's push-plans (masked by `| head`). Clear it: `aws s3 rm s3://terraform.wind.etherport.net/<stack>/terraform.tfstate.tflock`. **~$9/mo saved.**
+- **vpn-aws RESIZED t4g.nano → t4g.small** (`506e526`): fixes the ENA pps-allowance flap. In-place
+  stop/start; verified live = t4g.small / 1836MB / tailscaled active / tunnels re-handshook. Plan was
+  `0 destroy` (the 2 alarm changes = their `InstanceType` dimension following the resize — benign).
+- **RENAMED `private-infra_vpn` → `private-infra_edge`** (`ca77133`) — instance/volume/EIP Name tags
+  (multi-service: WG + Tailscale + DNS). TF resource names kept (no state churn).
+
+**BLOCKER — the fold + cutover are stuck on CI→box connectivity, NOT auth:**
+- Cert-SSH bootstrap chosen path = "route CI ansible via the SOPS static key" (operator picked this over
+  an in-place sshd edit, which the auto-classifier denied). Plumbed it into `ansible-vm-fleet.yml`:
+  decrypt `automation_ssh_private_key` for `inventory=aws` + `IdentitiesOnly=yes` (else the minted cert
+  is offered first → vpn-aws rejects → MaxAuthTries reset) + `ControlMaster`/`ControlPersist` multiplex.
+- **But CI can't reliably REACH vpn-aws.** The homelab→AWS WireGuard site-to-site tunnel (`10.10.100.10`)
+  is intermittently reachable from the CI runner (measured 1/3); the public EIP `44.240.60.80:22` is 3/3
+  **from the devbox** but still times out intermittently **from the CI runner** — even though both homelab
+  WAN IPs (`47.159.189.5`, `66.215.210.75`) ARE in vpn-aws's SSH SG. So the runner egresses via a path/IP
+  that's dropped, or the path is lossy. Inventory currently points `vpn-aws ansible_host=44.240.60.80`
+  (`180b030`) as the more-reliable path; revert to private/TS once sorted.
+- **Net: step-ca-trust never completed on vpn-aws** → CI cert-SSH still off → the Technitium fold /
+  DNS cutover / dns-box destroy / SG redesign are all pending.
+
+**Next steps (resume here):**
+1. **Resolve CI→vpn-aws reachability.** Options: (a) find the CI runner's egress IP (a one-off CI job that
+   curls an echo-IP service) + add it to the SSH SG via the `dns-restrict-ip` Lambda `rule_specs`; (b) check
+   for packet loss / MTU on the runner's path; (c) run the consolidation ansible **from the devbox** instead
+   (reliable Tailscale path) — needs ansible installed on the devbox, or operator OK to run step-ca-trust
+   locally; (d) re-verify the WG tunnel stabilises post-reboot (it worked pre-resize).
+2. Then: `step-ca-trust` apply → `technitium` fold (bind `.5`) → verify `dig @10.10.100.5` → move the `.5`
+   secondary IP + explicit ENI to edge (compute TF) → destroy `aws_instance.dns` + release EIP
+   `52.40.219.113` → re-point UniFi `dhcp_dns` (7 VLANs) + `dns-restrict-ip` Lambda `.113`→`.80` → SG
+   redesign (Phase 1) → monitoring cleanup (Phase 5). Plan: `aws-vpn-dns-consolidation-plan.md`.
+
 ## 2026-07-01 — AWS cost spike root-caused + fixed: velero Kopia hourly maintenance → S3 request storm
 
 **Trigger:** AWS cost alert, ~$160 forecast (June actual ~$138 vs April ~$107 baseline). User
