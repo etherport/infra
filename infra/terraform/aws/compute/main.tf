@@ -129,8 +129,12 @@ resource "aws_key_pair" "gs_ec2" {
 #------------------------------------------------------------------------------
 
 resource "aws_instance" "vpn" {
-  ami                  = "ami-0acefc55c3a331fa8"
-  instance_type        = "t4g.nano"
+  ami = "ami-0acefc55c3a331fa8"
+  # M110 (2026-07-01): resized nano→small to fix the ENA pps-allowance flap (a
+  # bigger instance gets a bigger allowance; the flap was NOT CPU). In-place
+  # stop/start, ~1-2 min. Now the sole standing AWS VPN box after the us-east-1
+  # decom; the DNS fold-in (+ dns-box destroy + EIP release) is a follow-on step.
+  instance_type        = "t4g.small"
   key_name             = aws_key_pair.gs_ec2.key_name
   iam_instance_profile = aws_iam_instance_profile.ec2_cloudwatch_agent.name
   subnet_id            = data.aws_subnet.public1.id
