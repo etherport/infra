@@ -483,6 +483,30 @@
       when: inventory_hostname in ['dns-aws', 'dns-fallback', 'vpn-local', 'vpn-aws']
 
     # =========================================================================
+    # =========================================================================
+    # SSM Session Manager agent — break-glass console on the AWS EC2 hosts (no PVE/IPMI equivalent).
+    # Ubuntu Server AMIs preinstall the snap; this ensures it's present + running so the box registers
+    # with SSM once the instance role has AmazonSSMManagedInstanceCore (aws/compute). AWS hosts only.
+    # =========================================================================
+    - name: Ensure amazon-ssm-agent (SSM break-glass) is installed + running (AWS hosts)
+      when: "'vpn_servers' in group_names or 'dns_servers' in group_names"
+      block:
+        - name: Check for the ssm-agent snap
+          ansible.builtin.command: snap list amazon-ssm-agent
+          register: _ssm_list
+          changed_when: false
+          failed_when: false
+        - name: Install the amazon-ssm-agent snap if absent
+          ansible.builtin.command: snap install amazon-ssm-agent --classic
+          when: _ssm_list.rc != 0
+        - name: Enable + start the ssm-agent service
+          ansible.builtin.systemd:
+            name: snap.amazon-ssm-agent.amazon-ssm-agent.service
+            enabled: true
+            state: started
+          failed_when: false
+
+    # =========================================================================
     # Clean up
     # =========================================================================
     - name: Remove unnecessary packages

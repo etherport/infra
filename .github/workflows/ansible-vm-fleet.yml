@@ -33,6 +33,9 @@ on:
           - etcd-backup        # K8s control-plane only — pass `-f limit=kube_control_plane`
           - asterisk-sbc       # Twilio⇄Talk SBC (task #80) — inventory=wind (targets [sbc_servers])
           - devbox             # persistent Claude Code workstation — inventory=wind (targets [devboxes])
+          - step-ca-trust      # M76 cert-only SSH: trust the user CA (run vs inventory=aws to enroll the AWS box)
+          - step-ca-hostcerts  # M76: mint host certs (kills known_hosts TOFU)
+          - step-ca-remove-static-key  # M76: strip the static automation key — run ONLY after cert auth verified
       inventory:
         description: 'Which inventory file(s)'
         required: true
