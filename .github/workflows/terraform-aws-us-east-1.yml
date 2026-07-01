@@ -20,6 +20,7 @@ on:
         options:
           - plan
           - apply
+          - destroy
 
 permissions:
   contents: read
@@ -129,6 +130,16 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
         run: |
           terraform apply -auto-approve -input=false -var="aws_profile="
+
+      # M110 Phase 6 — full decommission of the us-east-1 spoke (VPC + peering +
+      # hub route + t4g.nano vpn + EIP 35.169.37.16). No prevent_destroy in this
+      # stack. Prints the destroy plan, then tears it down. After a green run the
+      # state is empty and this whole stack dir + workflow are deleted from git.
+      - name: Terraform Destroy
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+        run: |
+          terraform plan -destroy -var="aws_profile=" -input=false -no-color
+          terraform destroy -auto-approve -input=false -var="aws_profile="
 
       - name: Summary
         if: always()

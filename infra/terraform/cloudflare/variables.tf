@@ -171,13 +171,10 @@ variable "dns_records_a" {
     }
 
     // ---- AWS VPN endpoints (static EIPs) ----
-    "vpn-use1" = {
-      value   = "35.169.37.16"
-      comment = "AWS us-east-1 regional VPN EIP"
-    }
+    // vpn-use1 removed 2026-07-01 (M110 Phase 6: us-east-1 spoke decommissioned).
     "vpn-usw2" = {
       value   = "44.240.60.80"
-      comment = "AWS us-west-2 regional VPN EIP"
+      comment = "AWS us-west-2 regional VPN EIP (also the DNS failover IP post-M110)"
     }
 
     // ---- SIP trunk inbound (Twilio → Asterisk SBC) ----

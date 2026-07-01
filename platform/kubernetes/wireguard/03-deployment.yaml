@@ -110,17 +110,9 @@ spec:
               PersistentKeepalive = 25
 
               # vpn-mumbai (ap-south-1) peer block removed 2026-05-23.
-              # AWS instance destroyed (no travel planned for the next
-              # few weeks). To resurrect: see the comment in
-              # infra/ansible/playbooks/wireguard.yml `wg0_regional_peers`.
-
-              [Peer]
-              # vpn-use1 (us-east-1) - permanent east coast endpoint
-              # Homelab initiates connection (static Elastic IP)
-              PublicKey = vwQ0C92BHfBBhuUkZsukGxt76Nu6R2gwpwlPz396PgM=
-              Endpoint = 35.169.37.16:51820
-              AllowedIPs = 10.10.104.0/22, 10.255.255.4/32
-              PersistentKeepalive = 25
+              # vpn-use1 (us-east-1) peer block removed 2026-07-01 (M110 Phase 6):
+              # us-east-1 spoke decommissioned (Tailscale covers remote reach; the
+              # standing t4g.nano + EIP were dead weight). AWS stack destroyed.
               EOF
 
               # Create wg1 config (remote access - direct connection)
