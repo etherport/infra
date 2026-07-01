@@ -13,6 +13,26 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-07-01 — cue-api HA (fixes intermittent access) + Kyverno admission HA + AWS decision
+
+- **Cue "server stopped responding" (intermittent) root cause = deploy-time blip from `cue-api`
+  replicas:1.** Every Flux `:latest` roll (~8x/day) swapped the single pod; the CF tunnel keep-alive
+  to the terminating pod dropped before re-establishing → in-flight requests failed. NOT a device/
+  Private-Relay/DNS/CF-Access issue (all verified healthy end-to-end: `/health` 200 via edge→tunnel→
+  origin, Google OAuth client fine, DNS identical internal/external). **Fix (`493868b`): cue-api →
+  2 replicas + PDB (minAvailable 1) + topologySpread (hostname).** Verified 2/2 on w2+gpu1, reachable
+  through the roll. Rolls are now zero-gap (maxUnavailable=0). Safe at 2: at-most-once push via the
+  proactive_pings UNIQUE reservation, stateless auth, sequential migrate initContainers under maxSurge=1.
+- **Kyverno admission HA (`bef7636`):** replicas 1→2 + PDB + antiAffinity — removes the single-pod
+  fail-closed-webhook blackout that amplified the 2026-06-30 leader-election cascade (pairs with the
+  admissionReports=false root fix). Verified 2 pods on w1+w3, enforcement intact.
+- **AWS decision:** decommission the **us-east-1** remote-access VPN (`infra/terraform/aws-us-east-1/`,
+  a standalone t4g + EIP) — replaced by Tailscale, dead weight, cost saving. **KEEP the us-west-2 hub
+  (`vpn-aws` .10) + `dns-aws` .5** (DNS failover). NB the *flapping* alerts are the us-west-2 pair, not
+  us-east (already de-flapped M109-B). Caveat noted: dns-aws is reached over the WG tunnel via the local
+  vpn-local, so it only survives failures that spare that path — true off-site DNS resilience would need
+  dns-aws as a direct Tailscale node. Reminder set for 2026-07-02 to scope the decommission + savings.
+
 ## 2026-06-30 (cont.) — full infra health check: 3 high resolved (incl. the daily-stall re-diagnosis)
 
 Operator reported a Technitium-down + an AWS-VPN-down alert; ran a full 8-agent parallel health
