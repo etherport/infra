@@ -156,6 +156,29 @@ resource "proxmox_virtual_environment_cluster_firewall_security_group" "pve_ipmi
   }
 }
 
+# --- Security group: allow the node_exporter scrape from the K8s subnet -------
+# H42 (2026-07-01). The pve HOST's OS metrics were a monitoring blind spot —
+# base.yml never ran here (its unattended-upgrades Automatic-Reboot would be a
+# hypervisor-wide hazard), so node_exporter is deployed by the standalone
+# infra/ansible/playbooks/node-exporter.yml instead. Same scrape path as
+# pve-ipmi: Prometheus pod traffic is Cilium-masqueraded to the node IPs, so
+# scope to the Servers/K8s VLAN + the single port. The PVE host firewall now
+# has FOUR required allows — mgmt, Ceph, IPMI (:9290), node_exporter (:9100).
+resource "proxmox_virtual_environment_cluster_firewall_security_group" "pve_nodeexp" {
+  name    = "pve-nodeexp"
+  comment = "H42: node_exporter scrape (:9100) from the K8s/Servers VLAN"
+
+  rule {
+    type    = "in"
+    action  = "ACCEPT"
+    source  = var.ipmi_scrape_cidr
+    proto   = "tcp"
+    dport   = "9100"
+    log     = "nolog"
+    comment = "Prometheus node_exporter scrape (:9100) from K8s nodes"
+  }
+}
+
 # --- Attach the security groups to the node (host) ---------------------------
 resource "proxmox_virtual_environment_firewall_rules" "pve_node" {
   node_name = var.node_name
@@ -173,6 +196,11 @@ resource "proxmox_virtual_environment_firewall_rules" "pve_node" {
   rule {
     security_group = proxmox_virtual_environment_cluster_firewall_security_group.pve_ipmi.name
     comment        = "H37 fix: IPMI exporter scrape (see pve-ipmi security group)"
+  }
+
+  rule {
+    security_group = proxmox_virtual_environment_cluster_firewall_security_group.pve_nodeexp.name
+    comment        = "H42: node_exporter scrape (see pve-nodeexp security group)"
   }
 
   depends_on = [proxmox_node_firewall.pve]

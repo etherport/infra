@@ -18,6 +18,9 @@ stringData:
             - '10.10.201.15:9100'  # vpn-local
             - '10.10.201.30:9100'  # gh-runner (self-hosted CI runner)
             - '10.10.201.45:9100'  # devbox (Claude Code dev-session host; node_exporter via base.yml)
+            - '10.10.201.46:9100'  # step-ca (SSH CA — H42; the fleet's cert-SSH depends on it)
+            - '10.10.201.40:9100'  # asterisk-sbc (Twilio⇄Talk SBC, telephony/911 — H42)
+            - '10.10.200.41:9100'  # pve hypervisor OS (H42; via node-exporter.yml, NOT base.yml — see its header)
           labels:
             location: 'local'
             environment: 'production'
@@ -44,6 +47,18 @@ stringData:
           regex: '10\.10\.201\.45:.*'
           target_label: instance
           replacement: 'devbox'
+        - source_labels: [__address__]
+          regex: '10\.10\.201\.46:.*'
+          target_label: instance
+          replacement: 'step-ca'
+        - source_labels: [__address__]
+          regex: '10\.10\.201\.40:.*'
+          target_label: instance
+          replacement: 'asterisk-sbc'
+        - source_labels: [__address__]
+          regex: '10\.10\.200\.41:.*'
+          target_label: instance
+          replacement: 'pve'
         - source_labels: [__address__]
           regex: '10\.10\.100\.5:.*'
           target_label: instance

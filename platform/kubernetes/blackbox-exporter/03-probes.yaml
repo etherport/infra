@@ -98,3 +98,30 @@ spec:
         - https://cue.etherport.net/health
       labels:
         appliance: cue-api
+---
+# step-ca (VM 1006) — the SSH user/host CA the ENTIRE fleet's cert-only SSH
+# depends on (M76). H42 (2026-07-01): this was a triple blind spot (no scrape,
+# no probe, no alert) — a wedged CA silently breaks cert renewal and the
+# devbox/CI lose fleet access at the next ≤13h cert expiry. /health returns
+# 200 over the CA's self-signed TLS → http_2xx_insecure. Alert: StepCADown
+# (monitoring/02-external-alerts.yaml).
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: step-ca
+  namespace: blackbox-exporter
+  labels:
+    appliance: step-ca
+    release: monitoring
+spec:
+  jobName: blackbox-appliance
+  interval: 30s
+  module: http_2xx_insecure
+  prober:
+    url: blackbox-exporter.blackbox-exporter.svc.cluster.local:9115
+  targets:
+    staticConfig:
+      static:
+        - https://10.10.201.46:8443/health
+      labels:
+        appliance: step-ca

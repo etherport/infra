@@ -162,7 +162,7 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   route/service breaks, or when you add/move one, check ALL of them — a drop at any single
   layer looks identical from the client: (1) **UDM zone firewall** (custom zones default
   intra-zone BLOCK; Trusted=201, Management=200); (2) **PVE host firewall** (H37 default-deny
-  — keep its THREE allows: mgmt, Ceph storage-VLAN, IPMI); (3) **Cilium NetworkPolicy tiers**
+  — keep its FOUR allows: mgmt, Ceph storage-VLAN, IPMI, node_exporter); (3) **Cilium NetworkPolicy tiers**
   (5 enforced; allow CONTAINER not service ports); (4) **CF Access (edge) + Authentik
   forward-auth (internal apps)**. Each is detailed below. Tell **timeout** (firewall SYN
   drop) from **refused** (dead process) to localize fast.
@@ -267,9 +267,11 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   **The same gotcha bit the IPMI exporter** (M89, 2026-06-20): the H37 default-deny had no
   allow for the in-band `ipmi_exporter` `:9290`, so Prometheus's scrape was dropped →
   `TargetDown pve-ipmi`. Fixed by the **`pve-ipmi`** security group (`10.10.201.0/24` →
-  `9290`). **The PVE host firewall now has THREE required allows — mgmt (`22,3128,8006`),
-  Ceph (storage VLAN → mon/OSD), IPMI (`:9290` from the Servers/K8s VLAN); keep all three
-  on any change.** Tell: a dropped allow gives connect **timeout** (SYN dropped), a dead
+  `9290`). **The PVE host firewall now has FOUR required allows — mgmt (`22,3128,8006`),
+  Ceph (storage VLAN → mon/OSD), IPMI (`:9290` from the Servers/K8s VLAN), node_exporter
+  (`:9100` from the Servers/K8s VLAN — H42, 2026-07-01; deployed by the standalone
+  `node-exporter.yml`, NOT base.yml — base.yml's Automatic-Reboot is a hypervisor hazard);
+  keep all four on any change.** Tell: a dropped allow gives connect **timeout** (SYN dropped), a dead
   service gives **refused** — use that to tell firewall-vs-process.
 - **The bpg/proxmox provider (0.106) silently NO-OPs the VM `watchdog {}` block** (M91, 2026-06-20):
   `terraform apply` "succeeds" + may reboot the VM, but the i6300esb device never lands in the config —

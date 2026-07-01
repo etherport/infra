@@ -37,6 +37,7 @@ on:
           - step-ca-hostcerts  # M76: mint host certs (kills known_hosts TOFU)
           - step-ca-remove-static-key  # M76: strip the static automation key — run ONLY after cert auth verified
           - runner-egress      # diagnostic: print the CI runner's public egress IP (localhost; M110 conn debug)
+          - node-exporter      # standalone node_exporter only (H42) — for hosts where full base.yml is unsafe (pve!)
       inventory:
         description: 'Which inventory file(s)'
         required: true
