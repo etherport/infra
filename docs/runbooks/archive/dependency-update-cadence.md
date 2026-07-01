@@ -1,4 +1,10 @@
-# Dependency update cadence
+# Dependency update cadence — MERGED (archived 2026-07-01)
+
+> **⟶ Merged into [`../UPDATE-PROCEDURES.md`](../UPDATE-PROCEDURES.md).** That doc is
+> the single source of truth for update procedures + cadence; the unique content here
+> (monthly Packer rebuild + ImagePolicy staleness check, quarterly shell-binary sweep /
+> Ubuntu LTS / Renovate majors, annual Renovate preset refresh) was folded into its
+> §3.4–3.6 and §2. This copy is retained for history only.
 
 How updates flow into this repo, and where you need to step in by hand.
 

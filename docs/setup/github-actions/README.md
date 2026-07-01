@@ -42,6 +42,11 @@ Deploy AWS infrastructure via Terraform with plan/apply/destroy capabilities.
 
 ## Regional VPN Terraform Workflow
 
+> **⚠️ Unused — marked for retirement (M110 follow-up).** No travel VPN has been
+> deployed since 2026-05-23 and the us-east-1 spoke was decommissioned 2026-07-01.
+> Full procedure now lives in the
+> [archived Regional VPN Deployment Runbook](../../runbooks/archive/regional-vpn-deployment.md).
+
 The `terraform-regional-vpn.yml` workflow automates temporary travel VPN deployment to any AWS region.
 
 ### How It Works
@@ -267,6 +272,6 @@ gh run watch <run-id>
 
 ## See Also
 
-- [Regional VPN Deployment Runbook](../../runbooks/regional-vpn-deployment.md)
+- [Regional VPN Deployment Runbook (archived)](../../runbooks/archive/regional-vpn-deployment.md)
 - [SOPS Setup Guide](../secrets/SOPS-SETUP.md)
 - [AWS Infrastructure Architecture](../../architecture/aws-infrastructure.md)

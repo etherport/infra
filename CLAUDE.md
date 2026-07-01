@@ -180,7 +180,7 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   (`BGPPeer.spec.passwordSecret: bgp-md5` ↔ UDM peer-group `metallb` `neighbor … password`; FRR-mode
   only). A mismatch on either end drops ALL sessions → VIP/ingress/DNS withdrawal (no L2 fallback) —
   the `MetallbBGPAllSessionsDown` alert (`metallb_bgp_session_up`) now catches that. Migration detail:
-  `docs/planning/l24-metallb-frr-migration-plan.md`.
+  `docs/planning/archive/l24-metallb-frr-migration-plan.md`.
 - **DNS = Technitium split-horizon** at `10.10.201.5` (k8s VIP) + `10.10.201.6` (VM
   fallback). It returns internal A + NODATA AAAA for `*.wind.etherport.net`. The UDM's
   own dnsmasq forwards to external upstreams (so it resolves internal names to the CF

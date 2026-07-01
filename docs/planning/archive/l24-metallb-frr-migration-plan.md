@@ -1,5 +1,10 @@
 # L24 — MetalLB native→FRR migration + BGP TCP-MD5 auth (plan)
 
+> **Archived 2026-07-01** — migration fully executed 2026-06-28. Current state lives in
+> `platform/kubernetes/metallb/README.md` + `CLAUDE.md` §5 (MetalLB Helm/Flux FRR invariant);
+> completed-item record: [`outstanding-work-completed-2026-07.md`](outstanding-work-completed-2026-07.md) L24.
+> Kept as the design / blast-radius record.
+
 **Status:** ✅ **DONE 2026-06-28** — executed in one window (operator at the UDM). All 4 phases
 landed: native→FRR migration (seamless flap — L2 net + pre-pulled frr image), TCP-MD5 (proven via
 the drop-while-one-sided→re-establish-when-matched behavior), L2 net removed, `metallb_bgp_session_up`

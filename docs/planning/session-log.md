@@ -8,10 +8,44 @@ history is lost or you're picking up on a different machine.
 **Maintenance:** add an entry at the end of every substantive session (see
 [`../../CLAUDE.md`](../../CLAUDE.md) §6). For the structured, ID'd to-do status, see
 [`outstanding-work.md`](outstanding-work.md). Pre-2026-06-14 session history lives in
-that tracker's "Recently completed" blocks and the dated planning docs
-(`gcp-oidc-wif-l21.md`, `cloudflare-provider-v5-migration.md`, etc.).
+the tracker's archived "Recently completed" blocks — now in
+[`archive/outstanding-work-completed-2026-07.md`](archive/outstanding-work-completed-2026-07.md)
+("Retired top-matter") — and the dated planning docs (`archive/gcp-oidc-wif-l21.md`,
+`archive/cloudflare-provider-v5-migration.md`, etc.).
 
 ---
+
+## 2026-07-01 — Fable-5 full repo review: doc consolidation + archive pass + infra findings (H42-H43, M112-M121, L25-L31)
+
+**What:** operator-requested full review, run as 3 parallel Claude **Fable 5** agents (2 doc-consolidation on
+disjoint dirs + 1 read-only infra review), parent-merged.
+
+**Doc consolidation (planning):** `outstanding-work.md` pruned **615 → ~362 lines with zero content loss** —
+all 68 ✅ items moved verbatim (IDs intact) to `archive/outstanding-work-completed-2026-07.md` (incl. the
+retired top-matter); live tracker keeps all open items + one-line "Recently completed since ~06-20" entries
+with open residuals carried forward. Archived (git mv + DONE banners): `l24-metallb-frr-migration-plan.md`,
+`m71-roles-anywhere-plan.md`. Status banners refreshed on the M110 plan (in-progress + flap-correction) and
+both 2026-06-11 roadmap docs (kept live — only forward-looking backlog; A2/3-2-1 newly active via M111).
+
+**Doc consolidation (runbooks/architecture/etc):** archived `regional-vpn-deployment.md` (travel tooling
+unused; us-east-1 decommissioned) + `dependency-update-cadence.md` (**merged into `UPDATE-PROCEDURES.md`** —
+all cadences in one doc now). ~18 staleness fixes in kept docs, notably: aws-infrastructure.md (edge/t4g.small
++ M110 flags), vpn-wireguard/tailscale/overview (ALB banners removed, no-HA-API-VIP corrected, travel-VPN
+current-state), operations-guide (its `udm-firewall.yml` description was BACKWARDS — it IS the zone-firewall
+source of truth), proxmox-ha-expansion (watchdog "auto-recovers" claim removed — M91 never armed),
+secrets-rotation (M76 cert-only containment), image-pinning (Kyverno enforces). Post-M110 doc-sweep checklist
+recorded in the tracker M110 entry. All inbound links fixed repo-wide (incl. 3 code-comment refs + re-based
+links in moved docs); gitleaks allowlist unaffected; link-integrity = 0 broken in-repo links.
+
+**Infra review (read-only; 51 workflows, 18 TF stacks, ansible, k8s + live cluster/PromQL):** 20 new findings
+→ tracker items — **H42** step-ca/asterisk/pve monitoring blind spot (fleet SSH depends on an unwatched CA),
+**H43** 9 TF workflows run PR-authored `terraform plan` on the in-network self-hosted runner, **M112-M121**
+(TF `concurrency:`; postgres/cert/authentik/cloudflared alert gaps + runbook_url; authentik SPOF; authentik
+netpol tier; k8s-node auto security-patching; metrics-server; request right-sizing; backup thundering-herd
+stagger; ceph-csi in unlabeled `default`; drift-detection plan.txt artifacts), **L25-L31**. Clean areas:
+supply-chain (100% SHA-pinned), AWS cost hygiene, stale-ref greps, ansible secrets, RBAC minimality.
+
+**Next:** H42 (S effort, biggest risk-per-effort) + M112 (S) first; M110 resume unchanged.
 
 ## 2026-07-01 — M110 executed (partial): us-east-1 decom + vpn-aws resize + rename; fold BLOCKED on CI→box connectivity
 
@@ -716,7 +750,8 @@ M77 telephony intact, M71 trust-policy tight, M74 policies monitor-only). Fixed 
   remaining work** (owner-only — the agent can't reach the mini).
 - **3 apply gotchas hit + fixed (all in this stack's history):** (a) IAM `CreateRole` **rejects an
   em-dash** in `description` (regex `[	
- -~¡-ÿ]` — U+2014 is out
+
+ -~¡-ÿ]` — U+2014 is out
   of range) → ASCII hyphen; (b) the **public root PEM was gitignored** by `**/*.pem` → CI checkout was
   missing it (`file()` "Invalid function argument") → added a `.gitignore` negation + `git add -f`
   (gitleaks confirmed: it's a public CA cert, not a key); (c) a **`workflow_dispatch` apply contends
@@ -1173,7 +1208,7 @@ M76 🟡 (Phase 1 IaC built, deploy pending).
 **What:** ran 3 background scoping workflows (ultracode) and turned the results into two decided,
 phased plan docs. **No infra changed** — this was research + design + handoff artifacts.
 
-**L24 (BGP auth) → [`l24-metallb-frr-migration-plan.md`](l24-metallb-frr-migration-plan.md), path A.**
+**L24 (BGP auth) → [`l24-metallb-frr-migration-plan.md`](archive/l24-metallb-frr-migration-plan.md), path A.**
 Key finding that corrects the tracker: **L24 is NOT "Effort S, add a password."** MetalLB runs in
 **native BGP mode** (v0.14.8) which **cannot do TCP-MD5** (FRR-mode-only; MetalLB #1125, Go 1.24
 MPTCP lacks `TCP_MD5SIG`), and it's the **kubespray addon** (no FRR toggle) → FRR mode requires
@@ -3383,7 +3418,9 @@ off. UDM DNS reverted. `protect-tf` temp key wiped from `/tmp`.
 
 ## Before 2026-06-14
 
-See [`outstanding-work.md`](outstanding-work.md) "Recently completed" blocks and the
+See the archived tracker "Recently completed" blocks in
+[`archive/outstanding-work-completed-2026-07.md`](archive/outstanding-work-completed-2026-07.md)
+("Retired top-matter"; extracted from `outstanding-work.md` 2026-07-01) and the
 dated planning docs. Headline recent landings: H29 (CI→AWS OIDC), L21 (CI→GCP WIF),
 M69 (Cloudflare provider v4→v5), M53 (zone-scoped CF token), the localtuya migration
 (all 8 Tuya devices cloud→local, entity_ids preserved), and the headless Mac-mini ops

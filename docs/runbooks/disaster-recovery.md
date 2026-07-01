@@ -293,7 +293,9 @@ ceph-rbd PVC that you can't afford to lose):**
 **Cluster nodes:** `technitium-0` (10.10.201.71) and `technitium-1` (10.10.201.72)
 running as the K8s StatefulSet, plus `dns-fallback` (10.10.201.6) and
 `dns-aws` (10.10.100.5) standalone VMs. Clients reach the in-cluster pair
-via MetalLB VIP 10.10.201.5.
+via MetalLB VIP 10.10.201.5. (🟡 M110: `dns-aws` is being folded onto the
+`private-infra_edge` box and destroyed — update the `10.10.100.5` references
+here when that lands.)
 
 ```bash
 # Check cluster status

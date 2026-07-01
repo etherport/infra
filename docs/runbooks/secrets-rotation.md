@@ -96,7 +96,7 @@ the access-gating key first, then everything it could have decrypted.
 
 **0. Contain.**
 - Power off / isolate the mini.
-- Remove `10.10.202.101` from the `trusted-admin-clients` group in `udm-firewall.yml` and re-apply **from the laptop**; revoke the mini's Tailscale node; pull its `id_ed25519_homelab` pubkey from `authorized_keys` on PVE/k8s/VMs.
+- Remove `10.10.202.101` from the `trusted-admin-clients` group in `udm-firewall.yml` and re-apply **from the laptop**; revoke the mini's Tailscale node. NB fleet SSH is **cert-only** (M76) — a leaked static homelab key no longer opens any running host, but the mini's SOPS bundle copy exposes the **bootstrap** `automation_ssh_private_key` (cloud-init seed for NEW hosts): rotate it in the bundle + the cloud-init TF vars, and pull any residual break-glass pubkeys from `root@pve`'s `authorized_keys`.
 
 **1. Rotate the age key** (routine procedure above) — generate a fresh primary, `updatekeys`, redistribute to GitHub + Flux. **Do NOT** put it back on the compromised mini.
 

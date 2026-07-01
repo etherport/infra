@@ -96,7 +96,7 @@ ansible dns_servers -i inventory/wind/inventory.ini -i inventory/aws/inventory.i
 | gh-runner.yml | Bootstrap + maintain the self-hosted GH Actions runner VM | gh_runner |
 | ipmi-monitoring.yml | ipmi_exporter + ipmievd setup on PVE (M40) | proxmox_hosts |
 | tailscale.yml | Tailscale install + auth on standalone VMs | all standalone VMs |
-| udm-firewall.yml | UDM-side firewall rules (limited; most config in TF) | udm |
+| udm-firewall.yml | UDM zone-based firewall + DNS policy (v2 API — this is the source of truth for zone policies; the unifi TF provider only covers networks/reservations/port-forwards). Always `--check --diff` first | udm |
 | k8s-node-fixes.yml | OS-level fixes for K8s nodes (NIC tunables, sysctl) | k8s_all |
 | ceph/ | Ceph operator manifests + helpers (legacy, mostly superseded by external ceph on PVE) | n/a |
 
@@ -468,7 +468,7 @@ kubectl annotate --overwrite -n flux-system helmrelease/gpu-operator reconcile.f
 
 | Feature | Where | Notes |
 |---------|-------|-------|
-| Hardware watchdog (i6300esb) | Per-VM, see `docs/runbooks/vm-watchdog.md` | Imported VMs need stop+start to reattach the watchdog device |
+| Hardware watchdog (i6300esb) | Per-VM, see `docs/runbooks/vm-watchdog.md` | ⚠️ **NOT WORKING — blocked (M91):** node kernel lacks the `i6300esb` module; has never armed. Don't rely on it |
 | CNPG HA | `platform/kubernetes/cnpg/` | `instances: 3` is the standard; primary + 2 sync replicas |
 | Velero schedules | `platform/kubernetes/backups/velero/schedules/` | Per-namespace schedules, git-managed via kustomization |
 | Post-bootstrap script | `infra/kubespray/post-bootstrap.sh` | Run once after a fresh cluster bring-up; restores Multus NADs, applies cluster-only kustomizations |

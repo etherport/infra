@@ -42,7 +42,7 @@ git clone https://github.com/sparked-diamond/infra.git
 
 | Item | Usage |
 |------|-------|
-| SSH Keys | Automatically provided via 1Password SSH agent |
+| SSH Keys | Automatically provided via 1Password SSH agent. NB fleet SSH is **cert-only** (M76) — static keys no longer open the Ubuntu fleet; mint a step-ca user cert (CLAUDE.md §4) or use PVE-console/IPMI break-glass |
 | AWS Credentials | Export to `~/.aws/credentials` (or use SSO) |
 | Kubernetes Kubeconfig | Store as secure note, restore to `~/.kube/config` |
 

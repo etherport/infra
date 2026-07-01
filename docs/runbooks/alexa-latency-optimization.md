@@ -1,22 +1,10 @@
 # Alexa → Home Assistant latency optimization
 
 Knobs to pull if voice-to-action delay feels slow. Listed in order of
-impact-per-effort. Captured 2026-05-27 during the ALB → CF Tunnel
-migration; the latency math compares the two paths.
+impact-per-effort.
 
-## Path comparison
+## Current path
 
-### Old (ALB)
-```
-Alexa cloud → Lambda (us-east-1)
-  → DNS → ALB (us-west-2)              ~65-80 ms cross-region inside AWS
-  → ALB → home cluster (AWS VPN)        variable
-  → Traefik → HA pod
-```
-Biggest cost was the **cross-region trip**: Lambda must be in
-`us-east-1` for Alexa Smart Home, but the ALB lived in `us-west-2`.
-
-### New (CF Tunnel)
 ```
 Alexa cloud → Lambda (us-east-1)
   → DNS → CF anycast (Lambda lands at IAD POP)    ~2-5 ms
@@ -24,7 +12,8 @@ Alexa cloud → Lambda (us-east-1)
   → cloudflared pod → HA service                    ~1-2 ms
 ```
 CF Access service-token verification adds ~5-10 ms on the hot path.
-Net: expected **30-100 ms faster** than the ALB path.
+(This CF Tunnel path replaced the retired ALB path 2026-05-27, ~30-100 ms
+faster — history: [`archive/alb-decom.md`](archive/alb-decom.md).)
 
 ## Measuring
 

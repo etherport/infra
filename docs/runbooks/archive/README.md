@@ -49,6 +49,13 @@ approve-via-email). Archived because enablement is done, not because it's retire
 | [alb-decom.md](alb-decom.md) | Decommission the AWS ALB |
 | [postgres-barman-activation.md](postgres-barman-activation.md) | CNPG Barman backup activation (✅ live; restore → disaster-recovery §9) |
 
+## Retired / merged operational docs
+
+| Doc | Why archived |
+|-----|--------------|
+| [regional-vpn-deployment.md](regional-vpn-deployment.md) | Travel-VPN tooling unused (no deploy since 2026-05-23; us-east-1 spoke decommissioned 2026-07-01) and marked for retirement — kept as the resurrection procedure |
+| [dependency-update-cadence.md](dependency-update-cadence.md) | Merged into [`../UPDATE-PROCEDURES.md`](../UPDATE-PROCEDURES.md) (2026-07-01) |
+
 ## Superseded by cairn (M103 — iCloud backup agent, 2026-06-25)
 
 | Doc | Purpose |

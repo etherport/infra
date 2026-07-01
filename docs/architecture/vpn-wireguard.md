@@ -4,7 +4,7 @@
 
 Site-to-site VPN connecting local homelab to AWS.
 
-> **⚠️ ALB decommissioned 2026-05-27.** This tunnel previously fronted the AWS ALB public-ingress path; the public edge is now the CF Tunnel + Access (no ALB). The site-to-site tunnel remains in use for AWS↔homelab connectivity (e.g. dns-aws, regional travel VPNs).
+> The public edge is the **Cloudflare Tunnel + Access** — this site-to-site tunnel carries only AWS↔homelab traffic (dns-aws replica sync, monitoring, ansible management). It once fronted the AWS ALB ingress path; that history is in [`../runbooks/archive/alb-decom.md`](../runbooks/archive/alb-decom.md).
 
 **Note:** For remote client access, [Tailscale](vpn-tailscale.md) is the primary solution.
 
@@ -69,48 +69,19 @@ A cleanup daemon runs on all worker nodes to remove orphaned wg0 interfaces when
 | 10.10.192.0/19 | Local homelab | All local VLANs (10.10.192.0 - 10.10.223.255) |
 | 10.10.100.0/22 | AWS networks | AWS VPC and related (10.10.100.0 - 10.10.103.255) |
 
-## Regional Travel VPNs
+## Regional Travel VPNs (none deployed; tooling retired-in-place)
 
-**TEMPORARY INFRASTRUCTURE** - Regional VPNs are deployed for travel and destroyed when not needed.
+**There are no regional/travel VPN peers.** The sole standing AWS WireGuard peer is
+`vpn-aws` (us-west-2, EIP `44.240.60.80`, `vpn-usw2.etherport.net`) — the site-to-site
+hub described above. The former permanent east-coast (us-east-1) endpoint was
+decommissioned 2026-07-01 (M110); Tailscale covers east-coast/remote reach. The
+ephemeral travel-VPN tooling (`infra/terraform/aws-regional-vpn/`,
+`terraform-regional-vpn.yml`) has been unused since the Mumbai teardown 2026-05-23 and
+is marked for retirement. The `.3-.6` tunnel IPs in the /29 above are the (unused)
+reservations for such peers.
 
-### Current Deployment
-
-| Region | IP Assignment | VPC CIDR | Status | Notes |
-|--------|---------------|----------|--------|-------|
-| ap-south-1 (Mumbai) | 10.255.255.3 | 10.10.112.0/24 | Destroyed | Travel VPN; torn down 2026-05-23 (regional-peers.yaml `status: destroyed`). |
-
-The ephemeral travel-VPN tooling (transient AWS regions, on-demand teardown) is unused day-to-day; there are no standing regional peers. The sole standing AWS WireGuard peer is `vpn-aws` (us-west-2, EIP `44.240.60.80`, `vpn-usw2.etherport.net`) — the site-to-site hub described above. The former permanent east-coast endpoint was decommissioned 2026-07-01; Tailscale now covers east-coast/remote reach.
-
-### Architecture
-
-Regional VPNs use **direct wg0 tunnels** to homelab (not VPC peering transit) because AWS VPC peering doesn't support transit routing.
-
-```
-homelab K8s pod (10.255.255.2)
-     │
-     │ WireGuard wg0 (homelab dials the regional peer's static EIP :51820)
-     ▼
-regional peer (e.g. ap-south-1, tunnel IP 10.255.255.3-.6)
-     │
-     ├── AWS VPC (regional CIDR) → local egress
-     │
-     └── Homelab (10.10.192.0/19) → wg0 tunnel
-```
-
-### Deployment
-
-See [Regional VPN Deployment Runbook](../runbooks/regional-vpn-deployment.md) for:
-- Terraform deployment commands
-- Client configuration
-- Cost estimates (~$0.22/day)
-- Teardown instructions
-
-### When to Update This Section
-
-Update this section whenever:
-- A new regional VPN is deployed
-- An existing regional VPN is destroyed
-- IP assignments change
+Resurrection procedure, architecture, and costs — should a travel VPN ever be needed
+again: [archived Regional VPN Deployment Runbook](../runbooks/archive/regional-vpn-deployment.md).
 
 ## VPN Endpoints
 

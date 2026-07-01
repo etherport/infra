@@ -2,7 +2,7 @@
 
 How the **mini** mints short-lived AWS creds from a step-ca X.509 cert — no standing key.
 **Prereq:** ✅ the `roles-anywhere` TF stack is **applied** (2026-06-28, the 3 ARNs are filled in
-below) and the AWS-side owner-gated steps in [`../planning/m71-roles-anywhere-plan.md`](../planning/m71-roles-anywhere-plan.md)
+below) and the AWS-side owner-gated steps in [`../planning/archive/m71-roles-anywhere-plan.md`](../planning/archive/m71-roles-anywhere-plan.md)
 are resolved (CI has `rolesanywhere:*` via PowerUserAccess; scope = plan/debug-only). **This file is
 the only remaining work** — the **mini-local** half (the agent can't reach the mini).
 

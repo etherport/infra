@@ -1,8 +1,13 @@
 # M71 — mini → IAM Roles Anywhere (kill the standing static AWS keys)
 
+> **Archived 2026-07-01** — the AWS side is fully applied (2026-06-28) and the only remaining
+> work (mini-side cert + signing-helper, owner-only) is step-by-stepped in the live runbook
+> [`../../runbooks/aws-roles-anywhere-mini.md`](../../runbooks/aws-roles-anywhere-mini.md).
+> This doc is the design record; live tracking = `outstanding-work.md` M71.
+
 > **Status: ✅ AWS-SIDE APPLIED 2026-06-28** (CI run `28330240921`, sha `fc32bf2`). The trust
 > anchor + IAM role + RA profile are live; the 3 ARNs are in
-> [`../runbooks/aws-roles-anywhere-mini.md`](../runbooks/aws-roles-anywhere-mini.md). Of the three
+> [`../../runbooks/aws-roles-anywhere-mini.md`](../../runbooks/aws-roles-anywhere-mini.md). Of the three
 > owner-gated steps below, **#1 (CI perms) and #2 (scope) are resolved**; **only #3 — the mini-side
 > cert + signing-helper — remains** (owner-only; the agent can't reach the mini). This doc is now the
 > design record + the mini-side runway.

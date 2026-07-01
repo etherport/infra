@@ -69,8 +69,14 @@ AWS holds no public HTTPS entry point for `*.wind.etherport.net`. See
 
 | Name | Instance ID | Private IP | Public IP | Type | Purpose |
 |------|-------------|------------|-----------|------|---------|
-| private-infra_vpn | `i-011086cefc7ab3cc1` | 10.10.100.10 | 44.240.60.80 | t4g.nano | WireGuard VPN gateway |
-| private-infra_dns | `i-050de21bdad2603bb` | 10.10.100.5 | 52.40.219.113 | t4g.nano | Technitium DNS (failover) |
+| private-infra_edge | `i-011086cefc7ab3cc1` | 10.10.100.10 | 44.240.60.80 | t4g.small | Multi-service edge box (hostname `vpn-aws`): WireGuard VPN gateway; renamed from `private-infra_vpn` + resized from t4g.nano 2026-07-01 (M110) |
+| private-infra_dns | `i-050de21bdad2603bb` | 10.10.100.5 | 52.40.219.113 | t4g.nano | Technitium DNS (failover, hostname `dns-aws`) |
+
+> **🟡 M110 consolidation in progress (2026-07):** Technitium DNS is being folded onto
+> the `private-infra_edge` box; `private-infra_dns` will then be **destroyed** and its
+> EIP `52.40.219.113` released. Update this table (and every `10.10.100.5` /
+> `52.40.219.113` reference) when that lands — see M110 in
+> `docs/planning/outstanding-work.md`.
 
 ## Security Groups
 
@@ -306,9 +312,9 @@ infra/ansible/inventory/aws/
 ## Cost Optimization
 
 - Using Graviton (ARM64) instances for ~20% cost savings
-- t4g.nano for VPN and DNS (minimal CPU)
+- t4g.small for the edge box (resized from t4g.nano 2026-07-01, M110), t4g.nano for DNS (until consolidated)
 - No NAT Gateway (using Internet Gateway + public IP for VPN)
-- DynamoDB on-demand billing for Terraform locks
+- S3-native Terraform state locking (`use_lockfile=true` — no DynamoDB table)
 - Lambda on ARM64 architecture
 
 ## Backup Strategy

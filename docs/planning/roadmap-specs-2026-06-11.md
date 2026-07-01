@@ -1,4 +1,10 @@
-> **Dated snapshot (2026-06-11).** Several of these specs have since shipped. Kept for the design detail; `outstanding-work.md` is the live status.
+> **Dated snapshot (2026-06-11; banner refreshed 2026-07-01).** Status of the three specs:
+> **B1 (audit-log→Loki) ✅ shipped**; **C2/I7 (advisor right-sizing/cost) not built** (still valid);
+> **A2 (3-2-1 offsite) NOT built and newly relevant** — it is now M111's architectural follow-up
+> (velero primary BSL → local MinIO/Ceph RGW + batched Deep Archive), though this spec's
+> us-east-1-replica design needs revisiting (the us-east-1 spoke was decommissioned 2026-07-01,
+> M110; the request-cost findings of M111 favor local-first over cross-region replication).
+> `outstanding-work.md` is the live status.
 
 # Roadmap implementation specs — 2026-06-11
 

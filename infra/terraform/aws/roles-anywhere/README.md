@@ -3,7 +3,7 @@
 IAM Roles Anywhere foundation so the **headless mini** mints short-lived AWS creds from a
 step-ca X.509 client cert instead of the standing static `~/.aws/credentials [homelab]` key.
 
-**Design + the full rationale:** [`docs/planning/m71-roles-anywhere-plan.md`](../../../../docs/planning/m71-roles-anywhere-plan.md).
+**Design + the full rationale:** [`docs/planning/archive/m71-roles-anywhere-plan.md`](../../../../docs/planning/archive/m71-roles-anywhere-plan.md).
 **Mini-side setup:** [`docs/runbooks/aws-roles-anywhere-mini.md`](../../../../docs/runbooks/aws-roles-anywhere-mini.md).
 
 ## What this creates

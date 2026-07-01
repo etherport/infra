@@ -22,5 +22,5 @@ resources:
   # L24 Phase 2 DONE 2026-06-28: MetalLB migrated off the kubespray addon onto the
   # Helm chart in FRR mode (enables BGP TCP-MD5 + graceful-restart/BFD). The native
   # workloads were deleted by hand + this release installed in a maintenance window.
-  # Mechanics in metallb.yaml + docs/planning/l24-metallb-frr-migration-plan.md.
+  # Mechanics in metallb.yaml + docs/planning/archive/l24-metallb-frr-migration-plan.md.
   - metallb.yaml

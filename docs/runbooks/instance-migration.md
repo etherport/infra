@@ -9,6 +9,11 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 - AWS EC2: vpn-aws, dns-aws
 - Proxmox: vpn-local, dns-fallback
 
+> 🟡 **M110 (2026-07, in progress):** `vpn-aws` was resized to **t4g.small** (AWS tag
+> renamed `private-infra_vpn` → `private-infra_edge`, 2026-07-01); `dns-aws` is being
+> consolidated onto that box and will be **destroyed** — its section below becomes
+> historical once M110 lands.
+
 ## Prerequisites
 
 - Terraform applies run **in CI, not locally** (M82, 2026-06-24): the devbox/mini

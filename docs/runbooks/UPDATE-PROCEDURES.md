@@ -1,6 +1,8 @@
 # System Update Procedures
 
-Single source of truth for all infrastructure update procedures.
+Single source of truth for all infrastructure update procedures — what updates
+automatically, what needs a human, and on what cadence. (The former
+`dependency-update-cadence.md` was merged into this doc 2026-07-01.)
 
 ---
 
@@ -60,11 +62,20 @@ MONTHLY (Manual)
 ──────────────────────────────────────────────────────────────────
   1st Weekend   Proxmox host updates
                 └── Run: ansible-playbook playbooks/proxmox.yml
+                Packer template rebuild (VM 9001) + Flux ImagePolicy check
+                └── See §3.4 below
 
 QUARTERLY (Manual - requires maintenance window)
 ──────────────────────────────────────────────────────────────────
   Scheduled     Kubernetes version upgrade (Kubespray)
   Weekend       └── See kubernetes-upgrade.md for full procedure
+                Major-version Renovate PRs + shell-installed-binary sweep
+                └── See §3.5 below
+
+ANNUALLY
+──────────────────────────────────────────────────────────────────
+  Any time      Refresh renovate.json against latest preset coverage
+                └── See §3.6 below
 ```
 
 ---
@@ -186,6 +197,20 @@ gh pr list --label renovate
 # Or: https://github.com/sparked-diamond/infra/pulls
 ```
 
+> The `gh` CLI is **not** installed on the devbox — triage from a host that has it
+> (the mini or a laptop), or use the GitHub web UI. The devbox dispatches GitHub
+> Actions via the M92 Actions PAT/API, not `gh`.
+
+**Weekly triage rules (~15 min):**
+- **Patch/minor on infra** (TF providers, GH Actions, Helm minors, container minors)
+  → review the changelog link in the PR body, merge if no breaking notes. Flux/CI
+  takes it from there.
+- **Major on anything stateful** (Cilium, CNPG, cert-manager, Traefik, Flux,
+  kubespray itself) → close with a comment, schedule for the next quarterly window.
+  Don't auto-merge majors.
+- **A PR open >2 weeks** → merge or close. Stale Renovate PRs accumulate merge
+  conflicts and stop being useful.
+
 **Current Helm releases tracked** (HelmRelease CRs in `clusters/wind/helm-releases/`;
 list live with `kubectl get helmrelease -A`): alloy, arc-controller,
 arc-runner-homelab, cert-manager, cnpg, gpu-operator, kured, kyverno, loki,
@@ -257,6 +282,97 @@ helm upgrade gpu-operator nvidia/gpu-operator \
 
 ---
 
+### 3.4 Monthly — Packer template rebuild + Flux ImagePolicy check
+
+**1. Rebuild VM 9001 to refresh the Ubuntu kernel + baked tools:**
+
+```bash
+cd infra/packer/ubuntu-cloud-init
+packer build .
+# Packer destroys + recreates VM 9001 on PVE. Subsequent standalone-vms
+# applies will pick up the new template on next clone.
+```
+
+If a service VM is rebuilt this month anyway (e.g. you destroyed dns-fallback for
+a fix), it picks up the new base. Otherwise the old VMs keep their old kernel
+until you trigger a rebuild.
+
+**2. Verify Flux image automation is actually firing for the Renovate-deny-listed
+images** (`ollama`, `open-webui`, `technitium/dns-server`, `requarks/wiki`,
+`plexinc/pms-docker`, `rclone/rclone`, `home-assistant`, `python`, `busybox`,
+`sparked-diamond/*` — Flux owns these via `ImagePolicy` CRDs):
+
+```bash
+kubectl get imagepolicy -n flux-system
+# Each policy should show a recent LATEST IMAGE. If LAST UPDATED is
+# weeks/months old, the policy isn't matching new tags — check
+# the regex against the registry tags page.
+
+kubectl get imageupdateautomation -n flux-system
+# Must be Ready=True. If not, Flux is finding new images but failing
+# to commit the bumps to git.
+```
+
+If any policy is stale, treat that image as **manually maintained** for now:
+check the registry, bump the tag in the Flux resource by hand, fix the
+ImagePolicy regex in a follow-up.
+
+---
+
+### 3.5 Quarterly — the rest of the manual list
+
+Beyond the K8s upgrade (§3.2) and Proxmox host (§3.1), the quarterly window covers:
+
+**1. Ubuntu LTS check.** Currently 24.04. A new LTS lands every 2 years. When
+ready, bump the cloud-image URL in `infra/packer/ubuntu-cloud-init/` and rebuild
+VM 9001.
+
+**2. Major-version PRs from Renovate.** Re-open the ones closed during weekly
+triage. Plan + apply in this window with downtime budget.
+
+**3. Shell-installed binaries** — the blind spot Renovate can't touch:
+- `.NET runtime` in `infra/ansible/playbooks/technitium.yml` (channel `X.Y` —
+  check [dotnet.microsoft.com/download](https://dotnet.microsoft.com/download))
+- Any `curl ... | sh` install in Packer / Ansible
+- Kubespray git ref (if pinned vs floating)
+
+```bash
+grep -rEn "dotnet-install\.sh|curl.*\|\s*(sh|bash)|wget.*\.tar\.gz" \
+  infra/ansible infra/packer | grep -v "^Binary"
+```
+
+For each hit, check upstream for a newer version, bump in the playbook, document
+the change in a comment.
+
+---
+
+### 3.6 Annually — refresh the Renovate preset
+
+```bash
+# 1. Skim Renovate's changelog: https://github.com/renovatebot/renovate/releases
+#    Look for new managers ("ansible-galaxy", "dotnet-version", "github-runner", etc.)
+
+# 2. If a new manager applies to this repo, add it to renovate.json:
+#    "enabledManagers": [..., "new-manager"]
+#    OR confirm config:recommended already includes it.
+
+# 3. Test by triggering a dependency dashboard rebuild:
+#    Comment "@renovate-bot recreate dashboard" on the open dashboard issue.
+```
+
+---
+
+### What the cadence does NOT cover
+
+- **Security patches between cadences.** If a CVE drops on Cilium/Traefik/CNPG and
+  the fix is in a minor release, skip the cadence and bump immediately.
+- **Reactive incident fixes.** A broken upstream that's blocking work jumps to the
+  front of the queue.
+- **One-time migrations** (e.g. switching a Helm chart's source). Those get their
+  own runbooks/plan docs.
+
+---
+
 ## 4. Troubleshooting
 
 ### Flux Image Update Stuck
@@ -291,5 +407,6 @@ helm rollback <release> <revision> -n <namespace>
 ## Related Documentation
 
 - [kubernetes-upgrade.md](kubernetes-upgrade.md) - Detailed K8s upgrade procedures
+- [image-pinning-policy.md](image-pinning-policy.md) - Which images are pinned how (Flux vs Renovate vs manual)
 - [disaster-recovery.md](disaster-recovery.md) - Recovery procedures
 - [operations-guide.md](operations-guide.md) - Command quick reference

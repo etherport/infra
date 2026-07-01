@@ -8,7 +8,7 @@
 > bgp-md5` ↔ UDM peer-group password — `02-bgp-md5-secret.sops.yaml`). BGP **graceful-restart is active**
 > (FRR default, negotiated with the UDM — a speaker restart no longer blackholes VIPs); BFD optional/TODO. BGP health alert: `metallb_bgp_session_up` (frr-metrics `:7473`) →
 > `MetallbBGPAllSessionsDown` (`../monitoring/12-metallb-bgp-monitor.yaml`). Plan/runbook:
-> `docs/planning/l24-metallb-frr-migration-plan.md`.
+> `docs/planning/archive/l24-metallb-frr-migration-plan.md`.
 >
 > ⚠️ **MODE = BGP, not Layer 2 (since 2026-05-31; M18/M36).** MetalLB peers with the UDM
 > via **eBGP** (`BGPPeer` UDM `10.10.201.1`, ASN 64512) and advertises the VIP /32s via

@@ -2,13 +2,15 @@
 
 ## Current state (1 PVE node)
 
-The homelab runs a single PVE host (`pve`). The hardware watchdog on
-each VM (see `vm-watchdog.md`) auto-recovers from in-VM hangs by
-hard-resetting on the same host. That's the right tool for VM-level
-failures.
+The homelab runs a single PVE host (`pve`). The per-VM hardware watchdog
+(see `vm-watchdog.md`) is the *intended* tool for in-VM hangs — but it is
+currently **non-functional/BLOCKED** (M91: the node kernel lacks the
+`i6300esb` module, so it has never armed); VM-hang recovery today is
+manual (`qm reset`).
 
 **HA Manager adds no value on a single node** — it can only restart
-VMs on the host they're already on, which the watchdog already does.
+VMs on the host they're already on, which the (working) watchdog design
+would already cover.
 
 ## When to expand
 

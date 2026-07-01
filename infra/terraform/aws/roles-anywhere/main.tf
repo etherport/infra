@@ -5,7 +5,7 @@
 # for short-lived STS creds against the role below — NO standing AWS key on the mini.
 #
 # ⚠️ This stack does NOT apply until the three owner-gated steps in
-#    docs/planning/m71-roles-anywhere-plan.md are done (CI gets rolesanywhere:* perms;
+#    docs/planning/archive/m71-roles-anywhere-plan.md are done (CI gets rolesanywhere:* perms;
 #    the policy-scope/quota decision; mini-side cert setup). See that doc + ./README.md.
 
 # ---- Trust anchor: trust certs chaining to the step-ca root -----------------------------

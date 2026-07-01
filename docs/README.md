@@ -58,13 +58,13 @@ docs/
 | [archive/irsa-workload-identity-migration-history.md](runbooks/archive/irsa-workload-identity-migration-history.md) | 📦 Historical: the M75 rollout (Phase 1-4, the disruptive apiserver issuer flip, the Multus incident, rollback) |
 | [aws-roles-anywhere-mini.md](runbooks/aws-roles-anywhere-mini.md) | M71 mini-side: mint short-lived AWS creds from a step-ca X.509 cert via IAM Roles Anywhere (no standing key) |
 | [ceph-vlan-migration.md](runbooks/archive/ceph-vlan-migration.md) | Ceph mon/OSD migration to VLAN 210 (2026-05-18, done) |
-| [regional-vpn-deployment.md](runbooks/regional-vpn-deployment.md) | Multi-region AWS spoke VPN deployment |
+| [regional-vpn-deployment.md](runbooks/archive/regional-vpn-deployment.md) | Multi-region AWS spoke VPN deployment (archived — travel tooling unused, marked for retirement; Tailscale covers travel access) |
 | [grafana-admin-password.md](runbooks/grafana-admin-password.md) | Rotate/recover Grafana admin password |
 | [syslog-onboard-device.md](runbooks/syslog-onboard-device.md) | Add a new syslog-emitting device to Alloy |
 | [postgres-barman-activation.md](runbooks/archive/postgres-barman-activation.md) | CNPG Barman backup config + tuning (activation done; archived) |
 | [etcd-backup-restore.md](runbooks/etcd-backup-restore.md) | etcd snapshot + restore (cluster-rebuild path) |
 | [image-pinning-policy.md](runbooks/image-pinning-policy.md) | Container image pinning + Renovate cadence |
-| [dependency-update-cadence.md](runbooks/dependency-update-cadence.md) | Renovate/Helm-release update cadence |
+| [dependency-update-cadence.md](runbooks/archive/dependency-update-cadence.md) | Renovate/Helm-release update cadence (archived — merged into [UPDATE-PROCEDURES.md](runbooks/UPDATE-PROCEDURES.md)) |
 | [loki-log-aggregation.md](runbooks/loki-log-aggregation.md) | Loki + Alloy log-pipeline topology |
 | [alertmanager-ses-quota.md](runbooks/alertmanager-ses-quota.md) | Alertmanager SES send-quota incident + mitigation |
 | [alexa-latency-optimization.md](runbooks/alexa-latency-optimization.md) | Alexa → Home Assistant latency tuning |
@@ -171,6 +171,7 @@ captured yet.
 | Document | Description |
 |----------|-------------|
 | [outstanding-work.md](planning/outstanding-work.md) | **Source of truth** for prioritized open work (C/H/M/L tiers) + completed index |
+| [outstanding-work-completed-2026-07.md](planning/archive/outstanding-work-completed-2026-07.md) | Completed-items archive — 2026-07-01 extraction (full text of ✅ items + retired tracker top-matter) |
 | [zero-trust-assessment-2026-06-17.md](planning/archive/zero-trust-assessment-2026-06-17.md) | Zero-trust posture: what's done vs gaps (H37/H38, M72–M76, L24) |
 | [ai-alert-remediation-2026-05-23.md](planning/archive/ai-alert-remediation-2026-05-23.md) | AI advisor system design spec (M41) |
 | [ai-advisor-phases-2-3-scope.md](planning/archive/ai-advisor-phases-2-3-scope.md) | M41 Phase 2/3 implementation scope |

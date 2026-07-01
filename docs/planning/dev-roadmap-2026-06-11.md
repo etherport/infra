@@ -1,4 +1,12 @@
-> **Dated snapshot (2026-06-11).** Several items have since landed (e.g. H29 CI→AWS OIDC ✅, audit-log→Loki, advisor right-sizing). Kept for the track-by-track rationale; `outstanding-work.md` is the live status.
+> **Dated snapshot (2026-06-11; banner refreshed 2026-07-01).** Kept LIVE as the forward-looking
+> backlog — the track-by-track rationale still stands and most Wave-3/4 items remain open.
+> `outstanding-work.md` is the live status. Landed since authoring (don't re-plan): H29 (OIDC),
+> B1 (audit-log→Loki), D1/D3 (Flux-validate CI, Taskfile), D4 (CI gitleaks — M60), **B2 Kyverno ✅
+> M73 (enforcing)**, **B4 Tetragon ✅ M74 (detection live)**, **B5+C3-SSO ✅ H38 (Authentik IdP)**,
+> **B8 ✅ M66 (Cilium WireGuard)**, C7/M55 unifi-poller, M15 Twilio 911, parts of D7 (M107 weekly
+> doc-drift audit). **A2 (3-2-1 offsite) is newly ACTIVE** as M111's architectural follow-up
+> (local-first primary BSL + batched Deep Archive) — see `roadmap-specs-2026-06-11.md` §A2 for the
+> spec (its us-east-1-replica shape needs revisiting: the us-east-1 spoke was decommissioned 2026-07-01).
 
 # Dev Roadmap — 2026-06-11
 

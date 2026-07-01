@@ -1,4 +1,14 @@
-# Regional VPN Deployment Runbook
+# Regional VPN Deployment Runbook — ARCHIVED (tooling unused, 2026-07-01)
+
+> **⚠️ ARCHIVED 2026-07-01.** No regional/travel VPN has been deployed since the Mumbai
+> teardown (2026-05-23); the permanent us-east-1 spoke was **decommissioned 2026-07-01**
+> (M110 — standing cost $0), and the travel-VPN tooling
+> (`infra/terraform/aws-regional-vpn/`, `terraform-regional-vpn.yml`) is **unused and
+> marked for retirement** (M110 follow-up "travel-tooling cleanup"). Tailscale (exit
+> nodes on `vpn-aws` / homelab) covers remote/travel access — see
+> [`../../architecture/vpn-tailscale.md`](../../architecture/vpn-tailscale.md). This doc
+> is kept as the resurrection procedure should a travel VPN ever be needed again, and is
+> valid only while the tooling still exists in the repo.
 
 Deploy temporary WireGuard VPN endpoints in AWS regions closest to your travel location.
 
@@ -362,7 +372,7 @@ ip route
 
 ## See Also
 
-- [GitHub Actions Documentation](../setup/github-actions/README.md)
-- [AWS Cost Analysis](../planning/archive/aws-cost-analysis.md)
-- [VPN Split Tunnel Guide](../guides/vpn-split-tunnel.md)
-- [WireGuard Architecture](../architecture/vpn-wireguard.md)
+- [GitHub Actions Documentation](../../setup/github-actions/README.md)
+- [AWS Cost Analysis](../../planning/archive/aws-cost-analysis.md)
+- [VPN Split Tunnel Guide](../../guides/vpn-split-tunnel.md)
+- [WireGuard Architecture](../../architecture/vpn-wireguard.md)

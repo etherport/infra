@@ -141,8 +141,12 @@ new image → decide bucket → wire it
 
 ## Anti-patterns to flag in review
 
-- `image: foo` (no tag → defaults to `:latest`)
-- `image: foo:latest` or `image: foo:stable` or `image: foo:edge`
+> Since 2026-06-28 the first two are not just review nits — **Kyverno ENFORCES them at
+> admission** (M73, `platform/kubernetes/kyverno/`): a workload with a `:latest` or
+> untagged image is **denied** by `disallow-latest-tag` / `require-image-tag`.
+
+- `image: foo` (no tag → defaults to `:latest`) — **rejected by Kyverno**
+- `image: foo:latest` — **rejected by Kyverno**; `foo:stable` / `foo:edge` pass admission but are still policy violations here
 - `image: foo:main` for an image **not in Bucket C** (we don't trust
   upstream's main)
 - A Bucket A image without the `# {"$imagepolicy": ...}` marker —

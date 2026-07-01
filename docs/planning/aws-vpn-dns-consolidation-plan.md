@@ -1,6 +1,14 @@
 # AWS VPN + DNS consolidation → one t4g.small (plan)
 
-**Status:** DRAFT / awaiting approval (tracker M110 / task #43). **Date:** 2026-07-01.
+**Status:** 🟡 **IN PROGRESS — partially executed 2026-07-01** (tracker M110 / task #43; plan dated 2026-07-01).
+**Current state = the session-log 2026-07-01 entries** ("M110 executed (partial)" + its UPDATE):
+us-east-1 spoke decommissioned (Phase 6 ✅), `vpn-aws` resized t4g.small + renamed
+`private-infra_edge` ✅, cert-SSH bootstrap applied on the edge box ✅. **Still pending:** Technitium
+fold, DNS cutover, dns-box destroy + EIP `52.40.219.113` release, SG redesign (Phase 1 F1–F7),
+monitoring cleanup (Phase 5) + travel-tooling cleanup.
+⚠️ **Correction to "Why (1)" below:** the flap turned out to be intermittent homelab↔AWS **path**
+packet loss (WAN/ISP, in waves), **NOT the t4g.nano ENA allowance** — the resize is still justified
+(RAM for the multi-service box) but is not the flap fix. See session-log 2026-07-01 UPDATE.
 
 ## Goal
 Collapse the two us-west-2 t4g.nano instances — `vpn-aws` (WireGuard hub, `.10`, EIP `44.240.60.80`)

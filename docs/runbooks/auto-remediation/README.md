@@ -9,7 +9,7 @@ live with the code:
   the gaps are):
   [`platform/kubernetes/auto-remediation/COVERAGE.md`](../../../platform/kubernetes/auto-remediation/COVERAGE.md)
 
-Phase-enablement runbooks live one level up in `docs/runbooks/`:
+Phase-enablement runbooks (one-time, completed — system is live) are archived in `docs/runbooks/archive/`:
 
 - [`ai-advisor-phase1-enable.md`](../archive/ai-advisor-phase1-enable.md) —
   advisory-only diagnosis email path

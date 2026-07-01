@@ -13,7 +13,7 @@ High-level overview of the homelab infrastructure with links to detailed runbook
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                    Kubernetes Cluster (K8s)                          │   │
-│  │  Control Plane (HA):  k8s-cp1 (.50)  k8s-cp2 (.51)  k8s-cp3 (.52)   │   │
+│  │  Control Plane (x3):  k8s-cp1 (.50)  k8s-cp2 (.51)  k8s-cp3 (.52)   │   │
 │  │  Workers:             k8s-w1 (.53)   k8s-w2 (.54)                   │   │
 │  │                       k8s-w3 (.55)   k8s-w4 (.56)                   │   │
 │  │  GPU:                 k8s-gpu1 (.60) — NVIDIA Tesla P40             │   │
@@ -43,6 +43,14 @@ High-level overview of the homelab infrastructure with links to detailed runbook
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+> NB: there is **no HA API VIP** — `controlPlaneEndpoint` pins **cp1** (`10.10.201.50`);
+> workers use their local `nginx-proxy`. See CLAUDE.md §3 before patching CP nodes.
+>
+> **🟡 M110 (2026-07, in progress):** the two AWS VMs are being consolidated — `vpn-aws`
+> was resized to t4g.small (AWS tag now `private-infra_edge`); `dns-aws` (10.10.100.5)
+> will be folded onto it and **destroyed**. Update the diagram + health-check IPs when
+> that lands.
 
 ---
 

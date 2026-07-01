@@ -149,7 +149,7 @@ cert_manager_enabled: false
 # platform/kubernetes/metallb/. Don't define `metallb_config.address_pools`
 # here — that creates duplicate pools and fights with the Flux-managed ones.
 #
-# ✅ L24 CUTOVER 2026-06-28 (docs/planning/l24-metallb-frr-migration-plan.md): MetalLB
+# ✅ L24 CUTOVER 2026-06-28 (docs/planning/archive/l24-metallb-frr-migration-plan.md): MetalLB
 # migrated OFF this native kubespray addon ONTO the Helm chart in FRR mode
 # (clusters/wind/helm-releases/metallb.yaml) — required for TCP-MD5 (Phase 3) and it
 # unlocks graceful-restart + BFD. `metallb_enabled: false` so a future kubespray run
