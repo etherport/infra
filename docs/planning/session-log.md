@@ -13,6 +13,34 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-07-01 — cairn photos SAGA RESOLVED: best-effort + non-destructive heal (v0.1.6) + staleness alerts
+
+**What:** closed out the multi-day photos-failure saga. Two final findings + a design decision.
+**Root cause (final):** the raw SMB link to sequoia is FAST (~500 MB/s, measured); the fragility is the
+**disk-image (sparsebundle/APFS-over-SMB) layer** — on an AGED mount, *data* reads (incl. osxphotos' hot
+`Photos.sqlite` copy) EIO/crawl while *metadata* reads pass (fooling the liveness probe). A fresh
+login-context attach (`net.wind.mount-nas`) reads fine; cairn's launchd reattach is the flaky one (Apple
+doesn't support disk-images on network shares). **And cairn's own 5×-rapid reattach retry (v0.1.5) is what
+WEDGED the mini's disk-image subsystem** (diskarbitrationd/diskimagescontroller → every attach EAGAINs until
+a REBOOT; the reboot this morning cleared it). **NOT the 9 "unavailable" photos** (infra-agent hypothesis) —
+those are in SUCCESSFUL runs too (rc=0, missing=9); local mode skips them, never rc=1.
+
+**Fixes (deployed):**
+- **cairn v0.1.6** — `ensureImage` makes **ONE** careful reattach attempt then skips the run gracefully
+  (no retry loop) → cairn can never wedge the box again. Commit cairn `6eeab84`.
+- **Alerts → staleness-only** (`platform/kubernetes/monitoring/09-photos-export-alerts.yaml`, `a556ded`):
+  PhotosExportStale 26h→**3 days** + critical→**warning**; PhotosExportFailed **removed**; NotParsed +
+  CoverageRegressed **gated on rc==0** (so a bad night can't fire "4 alerts" at once). Other iCloud jobs
+  keep their per-run alerts; only photos is exempted.
+- **Decision: photos is BEST-EFFORT** — succeeds most nights (incremental: ~600MB DB read + delta, NOT
+  420GB), skips quietly + recoverably on bad ones; data never at risk (iCloud + the 418GB backup).
+
+**Validated:** launchd sim (the tonight-path, v0.1.6) on a 9h-aged mount → **rc=0 (87min), NO wedge, 8/8,
+alert cleared.** ⚠️ **A wedged disk-image subsystem = REBOOT the mini** (root daemons; settle-retry doesn't
+reliably clear it). Docs: cairn README §6 (`befe2fb`) + memory. **Lesson: don't thrash the sparsebundle
+(repeated detach/attach) — that's the wedge trigger; reproduce mount/launchd bugs via a one-shot launchd
+agent, not the interactive shell.**
+
 ## 2026-07-01 — cue-api HA (fixes intermittent access) + Kyverno admission HA + AWS decision
 
 - **Cue "server stopped responding" (intermittent) root cause = deploy-time blip from `cue-api`
