@@ -142,11 +142,13 @@ This file foregrounds open/in-progress/gated work._
   17/23 restarts over ~4d; each dies on leader-election lease `context deadline exceeded` (5s `Put` to
   `coordination.k8s.io`). apiservers stable. Self-recovering, no outage. Full triage in session-log 2026-06-28.
 
-### ⏳ H42. step-ca (+ asterisk-sbc, pve OS) monitoring blind spot — the fleet's SSH depends on an unwatched host
+### ✅ H42. step-ca (+ asterisk-sbc, pve OS) monitoring blind spot — DONE 2026-07-01
+- **✅ Fixed (`6c458f6`), e2e-verified:** node_exporter deployed to step-ca + asterisk-sbc (base.yml CI apply — never ran there) and to the pve HOST via the NEW standalone `node-exporter.yml` (full base.yml is a hypervisor hazard: its unattended-upgrades Automatic-Reboot would reboot every VM). NEW `pve-nodeexp` firewall group (:9100 from Servers VLAN) — **the PVE host firewall now has FOUR required allows** (CLAUDE.md updated). 3 new scrape targets + relabels; blackbox Probe on step-ca `:8443/health`; `StepCADown` critical alert (blast-radius + break-glass in the annotation). Verified: all 3 targets `up=1`, `probe_success{step-ca}=1`.
 - **Source:** 2026-07-01 Fable-5 infra review (#1). `base.yml` installs node_exporter on step-ca/asterisk-sbc/pve, but `01-external-scrape-config.yaml` scrapes neither; **0 of 82 alert rules mention step-ca**; no blackbox probe on `https://10.10.201.46:8443`. Since M76 the whole fleet is cert-only SSH — a wedged step-ca silently breaks cert renewal and the devbox/CI lose fleet access at the next ≤13h expiry, unpaged (break-glass = PVE console/IPMI, but you'd find out the hard way).
 - **Fix:** add the 3 targets to `external-nodes`, a blackbox probe on the step-ca endpoint, and a `StepCADown` (+ cert-renew-staleness) alert. **Effort: S.**
 
-### ⏳ H43. 9 TF workflows run PR-authored `terraform plan` on the in-network self-hosted runner
+### ✅ H43. 9 TF workflows ran PR-authored `terraform plan` on the in-network self-hosted runner — DONE 2026-07-01
+- **✅ Fixed (`72cb120`):** removed the `pull_request` trigger from all 9 self-hosted-runner workflows (cloudflare, google, twilio, twilio-webhook, unifi, proxmox ×4). Plans still run on push-to-main (the 5 stacks that had it), workflow_dispatch, and the daily drift-detection sweep (all 9). Renovate PRs no longer execute code on the lifecycle runner.
 - **Source:** 2026-07-01 Fable-5 infra review (#2). `terraform-{google,twilio,twilio-webhook,cloudflare,proxmox-firewall,proxmox-sdn,proxmox-standalone-vms,proxmox-k8s-vms,unifi}.yml` trigger on `pull_request` and run on `[self-hosted, lifecycle]`. `plan` executes PR-authored code (`data "external"`, module/provider fetch) = code-exec on a persistent in-homelab runner whose env scope holds PVE/CF/UDM secrets — PR-reachable, worse than the accepted dispatch-only L20 posture. Renovate PRs traverse this path constantly.
 - **Fix:** move PR plans to `ubuntu-latest` where the stack allows (regional-vpn/dns-restrict-ip already do), or drop the `pull_request` trigger on self-hosted stacks (keep push+dispatch). **Effort: M.**
 
@@ -178,13 +180,13 @@ This file foregrounds open/in-progress/gated work._
 > M112–M121 + L25–L31 below are from the **2026-07-01 Fable-5 infra review** (3 parallel read-only agents:
 > K8s efficiency/hardening, AWS, CI/CD, ansible, observability, cost). Deduped against everything above.
 
-### ⏳ M112. Add `concurrency:` groups to all 25 terraform workflows (tfstate lock collisions)
+### ✅ M112. `concurrency:` groups on all terraform workflows — DONE 2026-07-01 (`72cb120`): `tf-<stack>` group, `cancel-in-progress: false`, added to all 24 TF workflows (incl. drift-detection).
 - 0 of 25 TF workflows have one — a dispatch apply + push-plan on the same stack race the S3 lock (bit twice on 2026-07-01: us-east-1 destroy vs push-plan; plus a stale `.tflock` from a killed 06-17 run silently failed that stack's plans for 2 weeks). **Fix:** `concurrency: {group: tf-<stack>, cancel-in-progress: false}` per workflow. **Effort: S.**
 
 ### ⏳ M113. Alert-coverage gaps (postgres-down / cert-expiry / authentik / cloudflared) + `runbook_url` pass
 - CNPG has only backup alerts — a dead `postgres-cluster`/`cue-db` never pages; no general `certmanager_certificate_expiration_timestamp` alert; authentik (gates all admin UIs) and cloudflared (all external ingress) have zero rules. Also **0 of 82 rules carry `runbook_url`** even though `docs/runbooks/alerts/` has per-alert docs named after the alerts — the advisor emails lose that context. **Fix:** ~4 new rules (metrics already scraped) + a mechanical annotation pass + a lint for new rules. **Effort: S.**
 
-### ⏳ M114. authentik-server: 1-replica SPOF, no PDB, worker has no probes
+### ✅ M114. authentik-server HA — DONE 2026-07-01 (`72cb120`), verified: replicas 2 on distinct nodes (w1+w4), zero-gap RollingUpdate, hostname topologySpread, PDB minAvailable 1, worker `ak healthcheck` probes. **Unblocked by dropping the RWO media PVC** (it held only the initContainer-regenerated login-bg.png → emptyDir now; future real media = RWX/S3 decision, don't re-add RWO). In-cluster `/-/health/ready/` = 200.
 - Same failure class as the just-fixed cue-api: every drain of its node takes down SSO (Grafana/wiki/Open WebUI + all forward-auth admin UIs). Server is stateless (shared HA postgres + redis) → safe at 2. **Fix:** replicas 2 + PDB minAvailable 1 + topologySpread (mirror `493868b`) + liveness/readiness on the worker. **Effort: S.**
 
 ### ⏳ M115. authentik as the 6th NetworkPolicy-enforced tier

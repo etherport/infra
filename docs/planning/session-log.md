@@ -15,6 +15,34 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-01 — Review remediation batch 1: travel-VPN DELETED + H42/H43/M112/M114 all fixed + verified
+
+**Operator directives:** (1) delete the travel-VPN tooling; (2) knock out H42 → M112 → M114, plus H43.
+All five landed + verified this session (`77c66f9`…`72cb120`).
+
+- **Travel/regional-VPN tooling DELETED** — `aws-regional-vpn/` + `modules/regional-vpn/` + its workflow +
+  `regional-peers.yaml` removed (both TF workspaces held 0 resources — verified before deletion); empty S3
+  tfstates + a stale bahrain `.tflock` purged; the disabled `Wireguard Travel 9820` UDM forward destroyed via
+  the unifi stack (plan = exactly `1 to destroy`, applied green). Docs/tracker updated (L2 closed as moot;
+  resurrection = git history, procedure preserved in the archived runbook).
+- **H42 (step-ca/asterisk/pve monitoring) FIXED + e2e-verified** — node_exporter on step-ca + asterisk-sbc via
+  base.yml CI apply (it had NEVER run there — found inactive; the M77 vm-baseline already allowed :9100).
+  pve got the NEW standalone `node-exporter.yml` (⚠️ full base.yml on the hypervisor would enable
+  Automatic-Reboot — whole-homelab hazard; playbook header documents this) + a NEW `pve-nodeexp` firewall
+  group → **the PVE host firewall now has FOUR required allows** (CLAUDE.md invariants updated). Blackbox
+  probe on step-ca `:8443/health` + `StepCADown` critical. Verified: 3× `up=1`, `probe_success=1`.
+- **M112 (TF workflow concurrency) DONE** — `tf-<stack>` groups, `cancel-in-progress: false`, all 24 workflows.
+- **H43 (PR-plan code-exec on the self-hosted runner) DONE** — `pull_request` trigger removed from the 9
+  lifecycle-runner workflows; coverage preserved via push-to-main/dispatch/daily drift sweep.
+- **M114 (authentik HA) DONE + verified** — server replicas 2 (distinct nodes), zero-gap RollingUpdate,
+  topologySpread, PDB, worker `ak healthcheck` probes. **Key unblock: dropped the RWO media PVC** — it held
+  ONLY the initContainer-regenerated `login-bg.png` (verified live), so media is emptyDir per replica now.
+  In-cluster `/-/health/ready/` = 200. (The review's naive "just add replicas" would have deadlocked on the
+  RWO attach — the PVC removal was the real fix.)
+
+**Next from the review backlog:** M113 (alert gaps + runbook_url), M115 (authentik netpol tier), M116 (k8s
+node auto-patching), M117 (metrics-server), M119 (backup stagger) — all still ⏳.
+
 ## 2026-07-01 — Fable-5 full repo review: doc consolidation + archive pass + infra findings (H42-H43, M112-M121, L25-L31)
 
 **What:** operator-requested full review, run as 3 parallel Claude **Fable 5** agents (2 doc-consolidation on
