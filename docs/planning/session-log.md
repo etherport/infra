@@ -13,6 +13,55 @@ that tracker's "Recently completed" blocks and the dated planning docs
 
 ---
 
+## 2026-07-01 — AWS cost spike root-caused + fixed: velero Kopia hourly maintenance → S3 request storm
+
+**Trigger:** AWS cost alert, ~$160 forecast (June actual ~$138 vs April ~$107 baseline). User
+suspected S3 storage-class transitions failing / iCloud archive bloat.
+
+**Investigation** (Cost Explorer + CloudWatch DENIED to the scoped `terraform-homelab` key, so
+sized everything via `aws s3 ls`/`list-objects-v2` with throwaway creds from
+`render-aws-credentials.sh`, shredded after):
+- **Storage is fine — hypothesis disproven.** `archive.wind.etherport.net` = 10.1 TB total (6
+  s3-sync shares; `media/` alone = 7 TB, a legit movie/TV library), correctly in **Deep Archive
+  (~$10/mo)**; only 2.3 GB tiny <128 KB files in Standard (by design). `backups/` = 540 GB.
+  **0 noncurrent versions.** Storage across ALL 15 buckets ≈ $17/mo.
+- **The spike is S3 REQUEST cost.** CE chart (user-supplied): S3 ~$10→~$85/mo in **May**, held
+  in June. `velero` bucket created **2026-05-14** (== spike month); object count ~250/mo Jan–Apr
+  → 4,736 May → 22,724 June.
+- **Root cause: velero Kopia repo-maintenance ran HOURLY** (velero default; the 11 live
+  `BackupRepository` CRs all showed `maintenanceFrequency: 1h0m0s`). Each run LISTs/GETs/rewrites
+  the whole repo index in S3; ×11 repos ≈ 7,200 runs/mo ≈ **~$70/mo**. (Maintenance had stalled
+  since 06-24 → **July MTD already down 87%** — but `1h` was a live re-storm landmine.)
+
+**Fix (`e9f11d3`):**
+- `clusters/wind/helm-releases/velero.yaml`: `configuration.defaultRepoMaintainFrequency: 24h`.
+  HR upgrade verified → server arg `--default-repo-maintain-frequency=24h`. Flag only affects
+  **newly-created** repos.
+- **Patched the 11 existing `BackupRepository` CRs live** to `24h0m0s` (velero owns them, not
+  Flux) — immediate; each fired one catch-up job then settles to daily.
+- `infra/terraform/aws/s3/main.tf`: added the missing `logs.grahamsmith.net` lifecycle (had
+  NONE) — expire `alb/` after 30d (auto-clears ~116k dead ALB access-log objects; ALB gone
+  2026-05-27) + abort-incomplete-MPU. Applied via `terraform-s3` (plan `1 add / 0 destroy`,
+  reviewed, applied — green).
+
+**Target ≈ $35/mo** (`aws-cost-teardown` workflow, 7 agents): 1× t4g.small (~$12) + 1 EIP
+(~$3.65) + 10 TB Deep Archive (~$10) + throttled velero (~$15) + Route53/Config/misc (~$5). vs
+June $138.
+
+**Remaining levers:**
+- **M110 consolidation** (task #43, me): resize vpn-aws→t4g.small, fold Technitium on, destroy
+  `aws_instance.dns` + release EIP `52.40.219.113`, re-point UniFi dhcp_dns (7 VLANs) +
+  `dns-restrict-ip` Lambda → `44.240.60.80`. Drops 1 EIP + fixes t4g.nano ENA-pps flap.
+- **us-east-1 decom** (me): destroy the `aws-us-east-1` stack (nano vpn + EIP 35.169.37.16 + EBS
+  + peering + region Config recorder) ≈ **$9/mo**. ⚠️ its CI workflow has no destroy action.
+- **USER-only** (denied to me): (a) Cost Explorer → Group-by **Usage Type**, filter S3 → confirm
+  the delta is `Requests-Tier1/2`; optionally grant `ce:GetCostAndUsage` + a Budget alert. (b)
+  console-check for a stray REGIONAL WAFv2 WebACL (`wafv2:List` denied; none in repo IaC → should
+  be $0, an orphan bills $5+/mo).
+- **Architectural follow-up (3-2-1):** move velero's PRIMARY BSL to LOCAL object storage (MinIO
+  or Ceph RGW — Ceph already runs) for frequent/fast/zero-request backups; keep AWS as DR via a
+  weekly BATCHED rclone → Deep Archive. Same for postgres/barman WAL. Not yet ticketed.
+
 ## 2026-07-01 — cairn photos SAGA RESOLVED: best-effort + non-destructive heal (v0.1.6) + staleness alerts
 
 **What:** closed out the multi-day photos-failure saga. Two final findings + a design decision.
