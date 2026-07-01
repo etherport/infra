@@ -5,6 +5,10 @@ metadata:
   labels:
     app.kubernetes.io/name: authentik
     tier: data
+    # M115 (2026-07-01): 6th NetworkPolicy-enforced tier — the SSO IdP no longer
+    # sits allow-all. Allowlist: networkpolicies/15-tier-authentik.yaml (built +
+    # verified via the audit-mode procedure).
+    netpol.wind/enforced: "true"
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
     pod-security.kubernetes.io/enforce: baseline

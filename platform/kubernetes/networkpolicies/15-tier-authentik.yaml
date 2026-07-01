@@ -1,0 +1,73 @@
+# Tier 6 — authentik (the SSO IdP; crown-jewel credential system). M115, 2026-07-01.
+#
+# Validated via the audit toggle (README "adding a new tier"): applied under
+# policy-audit-mode ON, flows exercised (blackbox probe, traefik-routed logins/
+# forward-auth, postgres/redis steady-state), Loki {job="hubble-audit"} watched
+# until 0 would-be drops, then audit OFF.
+#
+# Flow map (from live config, not guesswork):
+#   Ingress → server :9000 (container port; svc :80 DNATs to it — CONTAINER port
+#     rule, see README):
+#     - traefik  (auth.wind ingressroute + the forward-auth middleware — ALL
+#       OIDC token exchanges also arrive via traefik since apps use the public
+#       auth.wind URL)
+#     - blackbox-exporter (AuthentikDown probe, M113)
+#     - intra-namespace (worker↔server outpost websocket, redis :6379)
+#   Egress:
+#     - postgres :5432 (shared HA cluster; the postgres tier already allowlists
+#       authentik as a client — 10-tier-postgres.yaml)
+#     - SES SMTP world :587 (recovery/invite mail; AUTHENTIK_EMAIL__*)
+#     - intra-namespace (redis)
+#     - DNS via the cluster-wide allow-dns CCNP; kubelet probes via
+#       allow-cluster-essentials
+#   Deliberately ABSENT: world :443 — update check, analytics, error reporting
+#   all disabled and avatars=initials (no gravatar), verified in authentik-env.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: authentik-tier
+  namespace: authentik
+spec:
+  description: "authentik: ingress :9000 from traefik + blackbox-exporter + intra-ns; egress postgres :5432 + SES :587 + intra-ns. ENFORCED."
+  endpointSelector: {}
+  ingress:
+    # The proxy path — every browser login, OIDC token exchange, and
+    # forward-auth subrequest arrives from traefik.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: traefik
+      toPorts:
+        - ports:
+            - { port: "9000", protocol: TCP }
+    # M113 AuthentikDown blackbox probe (svc :80 → container :9000).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: blackbox-exporter
+      toPorts:
+        - ports:
+            - { port: "9000", protocol: TCP }
+    # Intra-namespace (server↔worker outpost websocket, redis :6379).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: authentik
+  egress:
+    # Shared HA postgres (authentik DB) — server, worker, and the create-db
+    # initContainers.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: postgres
+      toPorts:
+        - ports:
+            - { port: "5432", protocol: TCP }
+    # SES SMTP submission (STARTTLS) for recovery/invite mail.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - { port: "587", protocol: TCP }
+    # Intra-namespace (redis).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: authentik
+  # DNS + kubelet/host comms via the cluster-wide allow-dns +
+  # allow-cluster-essentials CCNPs (this ns carries the enforced label).

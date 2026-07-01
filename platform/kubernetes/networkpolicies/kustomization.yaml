@@ -21,3 +21,4 @@ resources:
   - 12-tier-dns.yaml
   - 13-tier-traefik.yaml
   - 14-tier-monitoring.yaml  # OBSERVATION DRAFT — audit on; enforce after Loki audit confirms
+  - 15-tier-authentik.yaml   # M115 tier 6 — SSO IdP (validated via the audit toggle 2026-07-01)
