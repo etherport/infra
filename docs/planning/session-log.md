@@ -42,7 +42,28 @@ that tracker's "Recently completed" blocks and the dated planning docs
 - **Net: step-ca-trust never completed on vpn-aws** → CI cert-SSH still off → the Technitium fold /
   DNS cutover / dns-box destroy / SG redesign are all pending.
 
+**UPDATE (later 2026-07-01) — cert-SSH DONE + connectivity root-caused (box is FINE):**
+- **✅ `step-ca-trust` APPLIED on edge** — the cert-SSH bootstrap succeeded via a **retry loop** over
+  the static-key CI path (`ANSIBLE_SSH_ARGS` now uses `ControlMaster=auto`+`ControlPersist` so one good
+  connect carries the whole play; `IdentitiesOnly=yes`; `ansible_host=44.240.60.80`). So CI ansible can
+  now reach + configure the box (with a retry loop to punch through the intermittent windows). The main
+  M110 blocker is cleared.
+- **⚠️ CORRECTION — the "flap" is NOT the box's ENA, and NOT fixed by the resize.** On the resized
+  t4g.small: **all ENA allowance counters = 0**, zero iface drops, load 0.00, **fail2ban inactive**,
+  **0 sshd auth failures**, SG correct (both homelab WANs allow :22), devbox egress stable+allowed
+  (`47.159.189.5`). Yet reachability to the box **waxes and wanes over minutes** (measured devbox→:22 =
+  13/15, then 0/20, then 10/10; WG-tunnel 11/15 then 20/20). Same source IP, SSH dropped while WG-UDP
+  fine in one window then flipped. ⇒ **intermittent packet loss on the homelab↔AWS PATH (WAN/ISP), in
+  waves** — not the instance, SG, or auth. The M109 "t4g right-size fixes the flap" premise was WRONG
+  (ENA was never the cause). **The resize is still justified** (2GB RAM for the multi-service box) but is
+  NOT the flap fix. Real fix = homelab-side (mtr during a loss window; check the WAN/ISP, dual-WAN).
+- Diagnostics added: `runner-egress` playbook (reveals the CI runner egress IP — it's `47.159.189.5`,
+  same as the devbox + SG-allowed, ruling out an egress-IP/SG cause). Tool `ansible-vm-fleet.yml`.
+
 **Next steps (resume here):**
+0. **Reachability is intermittent but workable** — run the remaining consolidation ansible via CI with a
+   RETRY LOOP (dispatch step-ca-trust-style until `success`). Separately investigate the path loss
+   (mtr edge↔homelab during a bad window; ISP/dual-WAN) — it's the real "flap".
 1. **Resolve CI→vpn-aws reachability.** Options: (a) find the CI runner's egress IP (a one-off CI job that
    curls an echo-IP service) + add it to the SSH SG via the `dns-restrict-ip` Lambda `rule_specs`; (b) check
    for packet loss / MTU on the runner's path; (c) run the consolidation ansible **from the devbox** instead
