@@ -1,0 +1,13 @@
+# Keeps >=1 cue-api pod serving through voluntary disruptions (node drain / kubespray upgrade /
+# kured reboot) — so a drain never takes both replicas down at once. Pairs with replicas:2 +
+# RollingUpdate maxUnavailable=0 (rollouts already keep >=2 Ready) + the topologySpread across nodes.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cue-api
+  namespace: cue
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: cue-api # matches the Deployment's pod selector exactly
