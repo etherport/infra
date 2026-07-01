@@ -1,0 +1,87 @@
+---
+# M116 (2026-07-01): automated SECURITY patching for the 8 k8s nodes.
+#
+# The nodes were the only fleet hosts with NO automated patching — base.yml is
+# `hosts: all:!k8s_cluster` (deliberate: its full baseline + Automatic-Reboot
+# doesn't fit nodes), and the only patch path was the manual k8s-node-patch.yml
+# maintenance-window playbook.
+#
+# Design — split responsibilities:
+#   - unattended-upgrades installs SECURITY updates only (Ubuntu -security
+#     pocket; ESM if present). It never reboots (Automatic-Reboot=false) —
+#     it just writes /var/run/reboot-required when a package wants one.
+#   - kured (already deployed; clusters/wind/helm-releases/kured.yaml) watches
+#     that sentinel and performs the reboot SAFELY: cluster-wide lock
+#     (concurrency=1), cordon+drain, nightly 02:00-06:00 PT window.
+#
+# Safe w.r.t. kubernetes components: kubespray deploys kubelet/containerd/etcd
+# as versioned BINARIES, not Ubuntu-archive apt packages — the -security origin
+# cannot upgrade them. Third-party apt repos (docker, etc.) are NOT in the
+# allowed origins either.
+#
+#   dispatch: ansible-vm-fleet.yml → playbook=k8s-unattended-upgrades,
+#             inventory=wind, action=check|apply, limit=k8s_cluster
+- name: Security-only unattended-upgrades for k8s nodes (reboots owned by kured)
+  hosts: "{{ target_hosts | default('k8s_cluster') }}"
+  become: true
+  serial: 4   # config-only change, but stay polite
+
+  tasks:
+    - name: Install unattended-upgrades
+      ansible.builtin.apt:
+        name: unattended-upgrades
+        state: present
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Configure unattended-upgrades (security-only, NO reboot)
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/50unattended-upgrades
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          // Managed by ansible (k8s-unattended-upgrades.yml, M116).
+          // SECURITY updates only; reboots are kured's job (sentinel file).
+          Unattended-Upgrade::Allowed-Origins {
+              "${distro_id}:${distro_codename}-security";
+              "${distro_id}ESMApps:${distro_codename}-apps-security";
+              "${distro_id}ESM:${distro_codename}-infra-security";
+          };
+          // NEVER auto-reboot a k8s node — kured watches
+          // /var/run/reboot-required and reboots inside its window with
+          // cordon/drain + a cluster-wide lock.
+          Unattended-Upgrade::Automatic-Reboot "false";
+          Unattended-Upgrade::Remove-Unused-Dependencies "true";
+          Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+          // Don't let a wedged dpkg block forever; log instead.
+          Unattended-Upgrade::MinimalSteps "true";
+          Unattended-Upgrade::SyslogEnable "true";
+
+    - name: Enable periodic apt update + unattended run
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          // Managed by ansible (k8s-unattended-upgrades.yml, M116).
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          APT::Periodic::AutocleanInterval "7";
+
+    - name: Ensure the unattended-upgrades service is enabled
+      ansible.builtin.systemd:
+        name: unattended-upgrades
+        enabled: yes
+        state: started
+
+    - name: Sanity — dry-run the unattended-upgrade resolver
+      ansible.builtin.command: unattended-upgrade --dry-run --debug
+      register: uu_dry
+      changed_when: false
+      failed_when: uu_dry.rc != 0
+
+    - name: Report pending security updates (informational)
+      ansible.builtin.debug:
+        msg: "{{ uu_dry.stdout_lines | select('search', 'Packages that will be upgraded|Checking|Allowed origins') | list | first | default('resolver ran clean') }}"
