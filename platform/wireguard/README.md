@@ -11,7 +11,6 @@ WireGuard VPN infrastructure providing:
 |----------|----------|----------|----------|
 | Homelab (K8s/vpn-local) | wind.etherport.net | 9821 | Direct, fastest |
 | AWS US-West-2 | vpn-usw2.etherport.net | 51821 | West coast relay (ephemeral) |
-| AWS US-East-1 | vpn-use1.etherport.net | 51821 | East coast relay — **ACTIVE** standing peer |
 
 For full architecture documentation, see [docs/architecture/vpn-wireguard.md](../../docs/architecture/vpn-wireguard.md).
 
@@ -40,8 +39,6 @@ sops -d platform/wireguard/clients/graham.sops.yaml | \
 | homelab-full | wind.etherport.net:9821 | All traffic | Homelab DNS |
 | usw2-split | vpn-usw2.etherport.net:51821 | Homelab only | AWS DNS |
 | usw2-full | vpn-usw2.etherport.net:51821 | All traffic | AWS DNS |
-| use1-split | vpn-use1.etherport.net:51821 | Homelab only | AWS DNS |
-| use1-full | vpn-use1.etherport.net:51821 | All traffic | AWS DNS |
 
 ### Security Best Practices
 
@@ -79,12 +76,11 @@ sops -d platform/wireguard/clients/graham.sops.yaml | \
 
 ```
 platform/
-├── wireguard/                    # Ansible-managed (vpn-local, vpn-aws, vpn-use1)
+├── wireguard/                    # Ansible-managed (vpn-local, vpn-aws)
 │   ├── regional-peers.yaml       # Auto-generated peer list (GitHub Actions — do not edit)
 │   ├── servers/                  # Server private/public keys
 │   │   ├── vpn-aws.sops.yaml     # AWS VPN hub (wg0 + wg1)
-│   │   ├── vpn-local.sops.yaml   # Local backup gateway (wg0 + wg1)
-│   │   └── vpn-use1.sops.yaml    # AWS us-east-1 keys (permanent regional peer)
+│   │   └── vpn-local.sops.yaml   # Local backup gateway (wg0 + wg1)
 │   └── clients/                  # Client configurations
 │       ├── graham.sops.yaml      # Remote access client configs
 │       ├── graham-tcp.conf.template  # WireGuard-over-TCP (wstunnel) profile

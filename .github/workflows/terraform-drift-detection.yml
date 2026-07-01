@@ -53,7 +53,6 @@ jobs:
           - { name: email-forward,       dir: infra/terraform/aws/email-forward,        region: us-west-2 }
           - { name: external-monitoring, dir: infra/terraform/aws/external-monitoring,  region: us-west-2 }
           - { name: homeassistant-alexa, dir: infra/terraform/aws/homeassistant-alexa,  region: us-east-1, needs_sops: false }
-          - { name: aws-us-east-1,       dir: infra/terraform/aws-us-east-1,            region: us-east-1, needs_sops: true  }
           - { name: ai-advisor-iam,      dir: infra/terraform/aws/ai-advisor-iam,       region: us-west-2 }
           - { name: twilio-webhook,      dir: infra/terraform/aws/twilio-webhook,       region: us-west-2 }
           - { name: github-oidc,         dir: infra/terraform/aws/github-oidc,          region: us-west-2 }

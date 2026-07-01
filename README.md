@@ -301,7 +301,6 @@ Project → workflow map:
 | `infra/terraform/aws/cluster-irsa` | `terraform-cluster-irsa.yml` |
 | `infra/terraform/aws/roles-anywhere` | `terraform-roles-anywhere.yml` |
 | `infra/terraform/aws/twilio-webhook` | `terraform-twilio-webhook.yml` |
-| `infra/terraform/aws-us-east-1` | `terraform-aws-us-east-1.yml` |
 | `infra/terraform/aws-regional-vpn` | `terraform-regional-vpn.yml` |
 | `infra/terraform/aws/github-oidc` | *(bootstrap once with admin; then CI uses OIDC — H29)* |
 

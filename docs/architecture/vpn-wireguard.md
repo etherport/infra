@@ -68,7 +68,6 @@ A cleanup daemon runs on all worker nodes to remove orphaned wg0 interfaces when
 | 10.254.0.0/24 | Remote access | Mobile/roaming client VPN |
 | 10.10.192.0/19 | Local homelab | All local VLANs (10.10.192.0 - 10.10.223.255) |
 | 10.10.100.0/22 | AWS networks | AWS VPC and related (10.10.100.0 - 10.10.103.255) |
-| 10.10.104.0/22 | us-east-1 VPC | vpn-use1 permanent east-coast endpoint (tunnel .4) |
 
 ## Regional Travel VPNs
 
@@ -78,10 +77,9 @@ A cleanup daemon runs on all worker nodes to remove orphaned wg0 interfaces when
 
 | Region | IP Assignment | VPC CIDR | Status | Notes |
 |--------|---------------|----------|--------|-------|
-| us-east-1 (vpn-use1) | 10.255.255.4 | 10.10.104.0/22 | **ACTIVE** | Permanent east-coast endpoint; homelab dials its static EIP `35.169.37.16`. Direct wg0 tunnel. |
 | ap-south-1 (Mumbai) | 10.255.255.3 | 10.10.112.0/24 | Destroyed | Travel VPN; torn down 2026-05-23 (regional-peers.yaml `status: destroyed`). |
 
-The ephemeral travel-VPN tooling (transient AWS regions, on-demand teardown) is unused day-to-day; `vpn-use1` is the one standing regional peer.
+The ephemeral travel-VPN tooling (transient AWS regions, on-demand teardown) is unused day-to-day; there are no standing regional peers. The sole standing AWS WireGuard peer is `vpn-aws` (us-west-2, EIP `44.240.60.80`, `vpn-usw2.etherport.net`) — the site-to-site hub described above. The former permanent east-coast endpoint was decommissioned 2026-07-01; Tailscale now covers east-coast/remote reach.
 
 ### Architecture
 
@@ -90,11 +88,11 @@ Regional VPNs use **direct wg0 tunnels** to homelab (not VPC peering transit) be
 ```
 homelab K8s pod (10.255.255.2)
      │
-     │ WireGuard wg0 (homelab dials static EIP 35.169.37.16:51820)
+     │ WireGuard wg0 (homelab dials the regional peer's static EIP :51820)
      ▼
-vpn-use1 (us-east-1)
+regional peer (e.g. ap-south-1, tunnel IP 10.255.255.3-.6)
      │
-     ├── AWS VPC (10.10.104.0/22) → local egress
+     ├── AWS VPC (regional CIDR) → local egress
      │
      └── Homelab (10.10.192.0/19) → wg0 tunnel
 ```
@@ -218,13 +216,6 @@ PostUp = iptables -I FORWARD 1 -i eth0 -o wg0 -j ACCEPT
 PublicKey = kHjcUM33FcpYWHgsE4Nwchaqky+iuJ7JfLTzC7lgOmU=
 Endpoint = 44.240.60.80:51820
 AllowedIPs = 10.10.100.0/22, 10.255.255.1/32
-PersistentKeepalive = 25
-
-[Peer]
-# vpn-use1 (us-east-1) - permanent east-coast endpoint (homelab dials its static EIP)
-PublicKey = vwQ0C92BHfBBhuUkZsukGxt76Nu6R2gwpwlPz396PgM=
-Endpoint = 35.169.37.16:51820
-AllowedIPs = 10.10.104.0/22, 10.255.255.4/32
 PersistentKeepalive = 25
 ```
 
@@ -426,7 +417,6 @@ Keys are stored encrypted with SOPS:
 ```
 platform/wireguard/servers/
 ├── vpn-aws.sops.yaml      # AWS us-west-2 keys (wg0 + wg1)
-├── vpn-use1.sops.yaml     # AWS us-east-1 keys (permanent regional peer)
 └── vpn-local.sops.yaml    # Local keys (wg0)
 
 platform/kubernetes/wireguard/
@@ -443,7 +433,7 @@ All WireGuard endpoints are in sync as of 2026-05-03:
 
 | Component | Git/Ansible | Running | Status |
 |-----------|-------------|---------|--------|
-| K8s pod wg0 | /29 + vpn-use1 | /29 + vpn-use1 | ✓ Synced |
+| K8s pod wg0 | /29 | /29 | ✓ Synced |
 | vpn-local wg0 | /29 | /29 | ✓ Synced |
 | vpn-aws wg0 | /29 | /29 | ✓ Synced |
 
