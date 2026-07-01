@@ -6,11 +6,10 @@ on:
     paths:
       - 'infra/terraform/proxmox/standalone-vms/**'
       - '.github/workflows/terraform-proxmox-standalone-vms.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'infra/terraform/proxmox/standalone-vms/**'
-      - '.github/workflows/terraform-proxmox-standalone-vms.yml'
+  # pull_request trigger REMOVED 2026-07-01 (H43): this workflow runs on the
+  # in-network self-hosted runner; `terraform plan` executes PR-authored code
+  # (module/provider fetch, data "external"), so PR-triggered runs were a
+  # code-exec path onto the runner. Plans still run on push-to-main + dispatch.
   workflow_dispatch:
     inputs:
       action:
@@ -20,6 +19,14 @@ on:
         options:
           - plan
           - apply
+
+# M112 (2026-07-01): one run per stack at a time. A dispatch apply racing a
+# push-triggered plan on the same stack contends the S3 state lock (bit twice
+# on 2026-07-01 — a killed run also left a stale .tflock for 2 weeks).
+# cancel-in-progress stays false: never kill a mid-flight apply.
+concurrency:
+  group: tf-proxmox-standalone-vms
+  cancel-in-progress: false
 
 permissions:
   contents: read

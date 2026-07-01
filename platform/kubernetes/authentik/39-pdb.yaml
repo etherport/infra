@@ -1,0 +1,14 @@
+---
+# M114 (2026-07-01): keep at least one authentik-server through voluntary
+# disruptions (drains, k8s-node-patch) — paired with replicas=2 + topology
+# spread in 33-server-deployment.yaml. Without this, a drain could evict both
+# replicas at once and blip SSO for every OIDC app + forward-auth admin UI.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: authentik-server
+  namespace: authentik
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: authentik, app.kubernetes.io/component: server }

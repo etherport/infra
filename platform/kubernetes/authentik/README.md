@@ -59,7 +59,7 @@ secret via `!Env`, commit, reconcile.
 | `20-redis.yaml` | In-namespace Redis (cache / task queue) |
 | `30-authentik-secret.sops.yaml` | SOPS-encrypted secrets (secret key, client secrets) |
 | `31-env-configmap.yaml` | Non-secret env (Postgres host, etc.) |
-| `32-media-pvc.yaml` | Media/branding PVC |
+| `39-pdb.yaml` | Server PDB (minAvailable 1 — M114 HA; media PVC removed same change, emptyDir now) |
 | `33-server-deployment.yaml` | Authentik server |
 | `34-worker-deployment.yaml` | Authentik worker (applies blueprints) |
 | `35-server-service.yaml` | ClusterIP service |

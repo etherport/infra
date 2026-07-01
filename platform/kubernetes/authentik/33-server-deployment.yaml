@@ -5,14 +5,33 @@ metadata:
   namespace: authentik
   labels: { app.kubernetes.io/name: authentik, app.kubernetes.io/component: server }
 spec:
-  replicas: 1
-  strategy: { type: Recreate }   # media on RWO PVC
+  # M114 (2026-07-01): 2 replicas + zero-gap rollout + node spread + PDB (39-pdb.yaml).
+  # The server was a 1-replica SPOF — every drain of its node took down SSO (all
+  # OIDC apps + every forward-auth admin UI). Server state lives in the shared HA
+  # postgres + redis, so 2 stateless replicas are safe. This required dropping the
+  # RWO media PVC (Recreate-strategy blocker): the volume held ONLY login-bg.png,
+  # which the seed-login-bg initContainer regenerates on every pod start — so media
+  # is now an emptyDir per replica (same as the worker). If real uploaded media is
+  # ever needed, that's an RWX/CephFS or S3 design decision — don't just re-add RWO.
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }   # zero-gap rollouts
   selector: { matchLabels: { app.kubernetes.io/name: authentik, app.kubernetes.io/component: server } }
   template:
     metadata:
       labels: { app.kubernetes.io/name: authentik, app.kubernetes.io/component: server }
     spec:
       enableServiceLinks: false
+      # Spread across nodes so one node loss can't take both replicas.
+      # ScheduleAnyway (not DoNotSchedule): on this 8-node cluster a hard
+      # constraint could block rollouts during drains — same choice as cue-api.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app.kubernetes.io/name: authentik, app.kubernetes.io/component: server }
       securityContext: { runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: { type: RuntimeDefault } }
       initContainers:
         # Seed the login-page background into the media volume: a 1x1 solid
@@ -56,6 +75,6 @@ spec:
             - { name: blueprints, mountPath: /blueprints/custom, readOnly: true }
             - { name: custom-css, mountPath: /web/dist/custom.css, subPath: custom.css, readOnly: true }
       volumes:
-        - { name: media, persistentVolumeClaim: { claimName: authentik-media } }
+        - { name: media, emptyDir: {} }   # seed-login-bg regenerates the only file each start (see M114 note above)
         - { name: blueprints, configMap: { name: authentik-blueprints } }
         - { name: custom-css, configMap: { name: authentik-custom-css } }

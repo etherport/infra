@@ -5,11 +5,13 @@ resources:
   - 20-redis.yaml
   - 30-authentik-secret.sops.yaml
   - 31-env-configmap.yaml
-  - 32-media-pvc.yaml
+  # 32-media-pvc.yaml REMOVED (M114, 2026-07-01): the RWO PVC blocked HA and held
+  # only the initContainer-regenerated login-bg.png — media is emptyDir now.
   - 33-server-deployment.yaml
   - 34-worker-deployment.yaml
   - 35-server-service.yaml
   - 36-ingressroute.yaml
   - 37-custom-css-configmap.yaml
   - 38-forward-auth-middleware.yaml
+  - 39-pdb.yaml
   - 40-blueprints.yaml

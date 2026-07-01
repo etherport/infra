@@ -1,10 +1,11 @@
 name: Twilio Terraform
 
 on:
-  pull_request:
-    paths:
-      - 'infra/terraform/twilio/**'
-      - '.github/workflows/terraform-twilio.yml'
+  # pull_request trigger REMOVED 2026-07-01 (H43): this workflow runs on the
+  # in-network self-hosted runner; `terraform plan` executes PR-authored code
+  # (module/provider fetch, data "external"), so PR-triggered runs were a
+  # code-exec path onto the runner. This stack had no push trigger; plans run
+  # via workflow_dispatch + the daily terraform-drift-detection sweep.
   workflow_dispatch:
     inputs:
       action:
@@ -15,6 +16,14 @@ on:
         options:
           - plan
           - apply
+
+# M112 (2026-07-01): one run per stack at a time. A dispatch apply racing a
+# push-triggered plan on the same stack contends the S3 state lock (bit twice
+# on 2026-07-01 — a killed run also left a stale .tflock for 2 weeks).
+# cancel-in-progress stays false: never kill a mid-flight apply.
+concurrency:
+  group: tf-twilio
+  cancel-in-progress: false
 
 permissions:
   contents: read

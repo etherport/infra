@@ -21,6 +21,14 @@ on:
           - plan
           - apply
 
+# M112 (2026-07-01): one run per stack at a time. A dispatch apply racing a
+# push-triggered plan on the same stack contends the S3 state lock (bit twice
+# on 2026-07-01 — a killed run also left a stale .tflock for 2 weeks).
+# cancel-in-progress stays false: never kill a mid-flight apply.
+concurrency:
+  group: tf-external-monitoring
+  cancel-in-progress: false
+
 permissions:
   contents: read
   id-token: write   # H29 OIDC

@@ -31,6 +31,19 @@ spec:
             - configMapRef: { name: authentik-env }
             - secretRef: { name: authentik-secret }
           securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } }
+          # M114: the worker had NO probes — a wedged worker (blueprint apply,
+          # outpost sync, scheduled tasks all silently stop) was invisible.
+          # `ak healthcheck` is authentik's documented worker health command.
+          livenessProbe:
+            exec: { command: ["ak", "healthcheck"] }
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            exec: { command: ["ak", "healthcheck"] }
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
           resources: { requests: { cpu: 100m, memory: 384Mi }, limits: { cpu: "1", memory: 768Mi } }
           volumeMounts:
             - { name: media, mountPath: /media }
