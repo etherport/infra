@@ -50,7 +50,14 @@ spec:
     # Single-owner homelab footprint. failurePolicy is set PER-POLICY (Ignore) so a
     # restarting/absent admission pod fails OPEN rather than blocking admission.
     admissionController:
-      replicas: 1
+      # 2 replicas + a PDB (minAvailable 1) so a single admission-pod restart/eviction does NOT
+      # blackhole the fail-closed mutate webhook — that amplified the 2026-06-30 leader-election
+      # cascade (M109). Anti-affinity spreads them across nodes.
+      replicas: 2
+      podDisruptionBudget:
+        minAvailable: 1
+      antiAffinity:
+        enabled: true
       resources:
         requests:
           cpu: 100m
