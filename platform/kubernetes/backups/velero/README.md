@@ -9,6 +9,13 @@ Velero is our Kubernetes backup solution for disaster recovery and data protecti
 - **Method**: File-system backup using Kopia
 - **Backup Frequency**: Daily at 2 AM
 - **Retention**: 30 days (`monitoring-daily`: 7 days)
+- **Kopia repo-maintenance**: `defaultRepoMaintainFrequency: 24h` (daily). ⚠️ Velero's
+  built-in default is **hourly** — each maintenance run LISTs/GETs/rewrites the whole repo
+  index in S3, so hourly × 11 repos drove ~$70/mo of S3 **request** cost (the May–Jun 2026
+  bill spike; storage is only ~$7/mo). Set in `clusters/wind/helm-releases/velero.yaml`;
+  the flag only applies to newly-created `BackupRepository` CRs, so existing CRs were
+  patched live (`kubectl patch backuprepository -n velero … maintenanceFrequency=24h0m0s`)
+  on 2026-07-01. See `docs/planning/session-log.md` 2026-07-01 (AWS cost investigation).
 - **Credentials**: IRSA — assumes IAM role `wind-irsa-velero` via `AssumeRoleWithWebIdentity` + a projected SA token (no static-key secret). See [docs/runbooks/irsa-workload-identity.md](../../../../docs/runbooks/irsa-workload-identity.md).
 
 ## Architecture

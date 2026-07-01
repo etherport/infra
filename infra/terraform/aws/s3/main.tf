@@ -354,6 +354,39 @@ resource "aws_s3_bucket_public_access_block" "logs" {
   restrict_public_buckets = true
 }
 
+# This bucket had NO lifecycle rule and accumulated ~116k dead ALB access-log
+# objects under alb/ (ALB decommissioned 2026-05-27 — nothing writes here now).
+# Expire them (all already >30d old, so they clear on the next lifecycle pass —
+# no manual `aws s3 rm` needed) and add a bucket-wide abort-incomplete-MPU guard.
+# Scoped to alb/ for expiry so any FUTURE log sink in this bucket is unaffected.
+resource "aws_s3_bucket_lifecycle_configuration" "logs" {
+  bucket = aws_s3_bucket.logs.id
+
+  rule {
+    id     = "expire-legacy-alb-access-logs"
+    status = "Enabled"
+
+    filter {
+      prefix = "alb/"
+    }
+
+    expiration {
+      days = 30
+    }
+  }
+
+  rule {
+    id     = "abort-incomplete-uploads"
+    status = "Enabled"
+
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+}
+
 #------------------------------------------------------------------------------
 # Postgres Barman Backups
 #

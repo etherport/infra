@@ -57,6 +57,16 @@ spec:
       # --default-volumes-to-fs-backup and produced a metadata-only backup
       # that was unrecoverable when PVs vanished with the old cluster.
       defaultVolumesToFsBackup: true
+      # Kopia repo-maintenance cadence. Velero's default is HOURLY — the live
+      # BackupRepository CRs showed maintenanceFrequency=1h0m0s, and each run
+      # LISTs/GETs/rewrites the ENTIRE repo index in S3. Across 11 repos that was
+      # ~$70/mo of S3 REQUEST cost (the May–June bill spike; storage is only
+      # ~$7/mo). 24h (daily, matching the backup cadence) keeps the repo index
+      # compact — which also makes each BACKUP cheaper — while cutting maintenance
+      # request volume ~24x (~7200→~300 runs/mo). NB the flag only sets the default
+      # for NEWLY created repos; the existing 11 CRs were patched live to 24h0m0s
+      # (2026-07-01). See docs/planning/session-log.md 2026-07-01 (AWS cost).
+      defaultRepoMaintainFrequency: 24h
       backupStorageLocation:
         - provider: aws
           bucket: velero.wind.etherport.net
