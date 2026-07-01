@@ -37,25 +37,29 @@ spec:
 
     - name: certificates.rules
       rules:
-        # cert-manager renews at 2/3 lifetime, so anything inside 14d of expiry
-        # means RENEWAL IS FAILING (ACME/DNS01/quota) — act before it lapses.
-        # (The UniFi wildcard has its own dedicated alert; this is the general net.)
-        - alert: CertManagerCertExpiringSoon
-          expr: min by (name, namespace) (certmanager_certificate_expiration_timestamp_seconds - time()) < 14 * 24 * 3600
+        # DURATION-AGNOSTIC by design: the primary wildcard is a Let's Encrypt
+        # SHORT-LIVED cert (~6.7d lifetime, renews every ~4.5d), so absolute
+        # days-to-expiry thresholds would either page constantly or never.
+        # cert-manager publishes its own planned renewal time - the correct
+        # "renewal is failing" signal is that time being OVERDUE.
+        - alert: CertManagerRenewalOverdue
+          expr: (time() - certmanager_certificate_renewal_timestamp_seconds) > 12 * 3600
           for: 1h
           labels:
             severity: warning
           annotations:
-            summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in <14d — renewal is failing"
-            description: "cert-manager should have renewed at 2/3 lifetime. Check: kubectl -n {{ $labels.namespace }} describe certificate {{ $labels.name }} (ACME order/challenge events)."
+            summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} renewal is >12h overdue"
+            description: "cert-manager's own renewalTime passed >12h ago and the cert hasn't been reissued - the ACME/DNS01 path is failing. Check: kubectl describe certificate + certificaterequests/orders/challenges. A short-lived (6-7d) cert still has ~2d of slack after its renewal point."
+        # Whatever the duration, <24h of validity left = renewal has failed
+        # repeatedly and expiry is imminent.
         - alert: CertManagerCertExpiryCritical
-          expr: min by (name, namespace) (certmanager_certificate_expiration_timestamp_seconds - time()) < 5 * 24 * 3600
+          expr: min by (name, namespace) (certmanager_certificate_expiration_timestamp_seconds - time()) < 24 * 3600
           for: 15m
           labels:
             severity: critical
           annotations:
-            summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in <5d"
-            description: "Imminent expiry — renewal has been failing for weeks. Fix the ACME/DNS01 path or replace the cert now."
+            summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} expires in <24h"
+            description: "Renewal has been failing past its scheduled point and expiry is imminent - every HTTPS consumer of this cert breaks when it lapses. Fix the ACME/DNS01 path or issue manually NOW."
 
     - name: authentik.rules
       rules:
