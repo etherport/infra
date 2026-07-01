@@ -1,0 +1,28 @@
+---
+# Diagnostic (M110, 2026-07-01): print the CI runner's PUBLIC egress IP(s) so we can
+# compare against vpn-aws's SSH security-group allowlist. Runs on the runner itself
+# (localhost) — no target-host SSH — so it's immune to the very reachability problem
+# we're debugging. Reusable for any "which WAN/NAT does CI leave from?" question.
+#
+#   ansible-vm-fleet.yml → playbook=runner-egress, inventory=wind, action=check
+- name: CI runner egress IP
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Query echo-IP services (a few times to catch dual-WAN round-robin)
+      ansible.builtin.uri:
+        url: "{{ item }}"
+        return_content: true
+      check_mode: false        # run even under --check (read-only GET)
+      loop:
+        - https://checkip.amazonaws.com
+        - https://api.ipify.org
+        - https://checkip.amazonaws.com
+        - https://api.ipify.org
+      register: egress
+      failed_when: false
+
+    - name: Show egress IPs
+      ansible.builtin.debug:
+        msg: "RUNNER_EGRESS_IP: {{ egress.results | map(attribute='content', default='?') | map('trim') | list }}"
