@@ -107,7 +107,12 @@ jobs:
           # trusted) and MaxAuthTries trips → "Connection reset". Scoped to aws via
           # $GITHUB_ENV (this step only runs for inventory=aws); includes the
           # ansible.cfg ssh_args defaults since ANSIBLE_SSH_ARGS replaces them.
-          echo "ANSIBLE_SSH_ARGS=-o ControlMaster=no -o StrictHostKeyChecking=no -o IdentitiesOnly=yes" >> "$GITHUB_ENV"
+          # ControlMaster=auto + ControlPersist: multiplex the whole playbook over a
+          # SINGLE SSH connection. The homelab→AWS path is intermittently lossy, and
+          # ControlMaster=no (ansible.cfg default) reopens a connection per task → a
+          # multi-task play rarely completes. Reuse means only the first connect must
+          # land. IdentitiesOnly so only the static key is offered (cert is rejected).
+          echo "ANSIBLE_SSH_ARGS=-o ControlMaster=auto -o ControlPersist=120s -o StrictHostKeyChecking=no -o IdentitiesOnly=yes" >> "$GITHUB_ENV"
 
       - name: Build inventory args + limit
         id: invargs
