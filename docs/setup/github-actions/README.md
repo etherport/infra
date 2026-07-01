@@ -9,8 +9,7 @@ Key workflows (not exhaustive — there are ~45 in `.github/workflows/`; run `ls
 ```
 .github/workflows/
 ├── aws-s3-sync-image.yml       # Container image build for S3 backup
-├── cloudflare-ddns-image.yml   # Container image build for DDNS updater
-└── terraform-regional-vpn.yml  # Terraform deployment for travel VPN
+└── cloudflare-ddns-image.yml   # Container image build for DDNS updater
 ```
 
 ## Workflow Types
@@ -40,112 +39,15 @@ Deploy AWS infrastructure via Terraform with plan/apply/destroy capabilities.
 - Pull request: Validation plan only
 - Manual dispatch: Full plan/apply/destroy with parameters
 
-## Regional VPN Terraform Workflow
+## Regional VPN Terraform Workflow (DELETED 2026-07-01)
 
-> **⚠️ Unused — marked for retirement (M110 follow-up).** No travel VPN has been
-> deployed since 2026-05-23 and the us-east-1 spoke was decommissioned 2026-07-01.
-> Full procedure now lives in the
-> [archived Regional VPN Deployment Runbook](../../runbooks/archive/regional-vpn-deployment.md).
-
-The `terraform-regional-vpn.yml` workflow automates temporary travel VPN deployment to any AWS region.
-
-### How It Works
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        GitHub Actions Workflow                               │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  1. TRIGGER                                                                  │
-│     ├── Push/PR: Validate terraform (plan only)                            │
-│     └── Manual Dispatch: Choose action (plan/apply/destroy)                │
-│                                                                              │
-│  2. ENVIRONMENT SETUP                                                        │
-│     ├── Checkout repository                                                  │
-│     ├── Install Terraform 1.14.3                                            │
-│     ├── Configure AWS credentials (GitHub→AWS OIDC, no static keys)         │
-│     ├── Install SOPS binary                                                  │
-│     └── Configure SOPS age key (for secret decryption)                      │
-│                                                                              │
-│  3. TERRAFORM INIT                                                           │
-│     └── Initialize with S3 backend (profile override for CI)               │
-│                                                                              │
-│  4. WORKSPACE SELECTION (manual dispatch only)                              │
-│     └── Select or create terraform workspace for the region                 │
-│                                                                              │
-│  5. ACTION EXECUTION                                                         │
-│     ├── Plan: Show what would change                                        │
-│     ├── Apply: Create/update infrastructure                                 │
-│     │   ├── Generate WireGuard keys (if new deployment)                    │
-│     │   ├── Deploy VPC, EC2, VPN config                                     │
-│     │   ├── Update vpn-travel.etherport.net DNS                            │
-│     │   ├── Update regional-peers.yaml config                               │
-│     │   └── Commit and push config changes                                  │
-│     └── Destroy: Tear down infrastructure                                   │
-│         ├── Destroy all AWS resources                                        │
-│         ├── Clear regional-peers.yaml                                        │
-│         └── Commit and push config changes                                  │
-│                                                                              │
-│  6. SUMMARY                                                                  │
-│     └── Write job summary with region, IP, DNS info                        │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### AWS auth + Secrets Required
-
-**AWS auth is via GitHub→AWS OIDC (H29), not static keys.** The workflow assumes an
-IAM role via the GitHub OIDC provider — there are no `AWS_ACCESS_KEY_ID` /
-`AWS_SECRET_ACCESS_KEY` secrets in the repo. See `infra/terraform/aws/github-oidc/`.
-
-| Secret | Description |
-|--------|-------------|
-| `SOPS_AGE_KEY` | Age private key for decrypting SOPS secrets |
-
-### Manual Dispatch Parameters
-
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `action` | Operation to perform | `plan`, `apply`, `destroy` |
-| `workspace` | Terraform workspace name | `mumbai`, `bahrain` |
-| `region` | AWS region code | `ap-south-1`, `me-south-1` |
-| `region_short` | Short name for resources | `mumbai`, `bahrain` |
-| `vpc_cidr` | VPC CIDR block | `10.10.112.0/24` |
-| `tunnel_ip` | WireGuard tunnel IP | `10.255.255.3` |
-
-### Automatic Actions After Apply
-
-1. **DNS Update**: Updates `vpn-travel.etherport.net` A record to new VPN IP
-2. **Config Update**: Writes `platform/wireguard/regional-peers.yaml` with:
-   - Region name and status
-   - Public IP and WireGuard keys
-   - VPC CIDR and allowed IPs
-3. **Git Commit**: Commits and pushes config changes back to repo
-
-### Local vs CI Differences
-
-| Aspect | Local | CI (GitHub Actions) |
-|--------|-------|---------------------|
-| AWS Auth | `~/.aws/credentials` profile | GitHub→AWS OIDC role assumption (H29) |
-| SOPS Key | `~/.config/sops/age/keys.txt` | `SOPS_AGE_KEY` secret |
-| Backend Profile | `homelab` | Overridden to empty |
-| Provider Profile | `homelab` | `-var="aws_profile="` |
-
-### Usage Examples
-
-**Deploy Mumbai VPN:**
-1. Go to Actions > Regional VPN Terraform > Run workflow
-2. Select:
-   - Action: `apply`
-   - Workspace: `mumbai`
-   - Region: `ap-south-1`
-   - Region short: `mumbai`
-   - VPC CIDR: `10.10.112.0/24`
-   - Tunnel IP: `10.255.255.3`
-
-**Destroy when done traveling:**
-1. Same workflow, Action: `destroy`
-2. Use same parameters as apply
+> The travel-VPN tooling — `terraform-regional-vpn.yml`, `infra/terraform/aws-regional-vpn/`,
+> `infra/terraform/modules/regional-vpn/`, and `platform/wireguard/regional-peers.yaml` — was
+> **deleted 2026-07-01** (M110): no travel VPN had been deployed since 2026-05-23, both TF
+> workspaces held 0 resources, and Tailscale covers travel access. The full historical
+> deployment procedure is preserved in the
+> [archived Regional VPN Deployment Runbook](../../runbooks/archive/regional-vpn-deployment.md);
+> resurrecting the capability means restoring those paths from git history (this commit's parent).
 
 ## Container Image Workflows
 

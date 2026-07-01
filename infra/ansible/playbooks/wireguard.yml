@@ -86,14 +86,12 @@
     # Both K8s WireGuard pod and vpn-local need these peers for failover to work
     # Homelab initiates connection to regional VPNs (avoids UDM port forward issues)
     wg0_regional_peers: []
-      # vpn-mumbai (ap-south-1) was here until 2026-05-23. Destroyed at
-      # user request — no travel planned for the next few weeks.
-      # To resurrect: dispatch terraform-regional-vpn workflow with
-      # action=apply, region=ap-south-1, region_short=mumbai,
-      # vpc_cidr=10.10.112.0/24, tunnel_ip=10.255.255.3. Then re-add
-      # the peer block here AND in platform/kubernetes/wireguard/
-      # 03-deployment.yaml with the NEW endpoint IP (the EC2 instance
-      # is non-EIP so its public IP rotates per restart).
+      # Travel/regional-VPN tooling DELETED 2026-07-01 (M110) — the
+      # aws-regional-vpn stack, its module + workflow are gone (states were
+      # empty). Tailscale covers travel access. The empty list + template
+      # loop below are kept as the generic mechanism for any future
+      # regional peer. Historical procedure:
+      # docs/runbooks/archive/regional-vpn-deployment.md.
       # Per-peer block was:
       #   - name: "vpn-mumbai (ap-south-1)"
       #     public_key: "efcqDc4sRsq1yerx9gfTxDdnS3qj3+TH6XsWlmOxGT4="

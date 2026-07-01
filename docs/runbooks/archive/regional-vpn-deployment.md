@@ -1,14 +1,16 @@
-# Regional VPN Deployment Runbook — ARCHIVED (tooling unused, 2026-07-01)
+# Regional VPN Deployment Runbook — ARCHIVED (tooling DELETED 2026-07-01)
 
-> **⚠️ ARCHIVED 2026-07-01.** No regional/travel VPN has been deployed since the Mumbai
-> teardown (2026-05-23); the permanent us-east-1 spoke was **decommissioned 2026-07-01**
-> (M110 — standing cost $0), and the travel-VPN tooling
-> (`infra/terraform/aws-regional-vpn/`, `terraform-regional-vpn.yml`) is **unused and
-> marked for retirement** (M110 follow-up "travel-tooling cleanup"). Tailscale (exit
-> nodes on `vpn-aws` / homelab) covers remote/travel access — see
+> **⚠️ ARCHIVED — tooling DELETED 2026-07-01 (M110 "travel-tooling cleanup").** No
+> regional/travel VPN had been deployed since the Mumbai teardown (2026-05-23); the
+> permanent us-east-1 spoke was **decommissioned 2026-07-01**, and the tooling
+> (`infra/terraform/aws-regional-vpn/`, `infra/terraform/modules/regional-vpn/`,
+> `terraform-regional-vpn.yml`, `platform/wireguard/regional-peers.yaml`) was **removed
+> from the repo** the same day (both TF workspaces held 0 resources; S3 states deleted).
+> Tailscale (exit nodes on the edge box / homelab) covers remote/travel access — see
 > [`../../architecture/vpn-tailscale.md`](../../architecture/vpn-tailscale.md). This doc
-> is kept as the resurrection procedure should a travel VPN ever be needed again, and is
-> valid only while the tooling still exists in the repo.
+> is kept as the historical procedure; resurrecting the capability means **restoring the
+> deleted paths from git history** (the commit referenced in session-log 2026-07-01) and
+> re-creating the tfstate keys.
 
 Deploy temporary WireGuard VPN endpoints in AWS regions closest to your travel location.
 

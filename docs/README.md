@@ -58,7 +58,7 @@ docs/
 | [archive/irsa-workload-identity-migration-history.md](runbooks/archive/irsa-workload-identity-migration-history.md) | 📦 Historical: the M75 rollout (Phase 1-4, the disruptive apiserver issuer flip, the Multus incident, rollback) |
 | [aws-roles-anywhere-mini.md](runbooks/aws-roles-anywhere-mini.md) | M71 mini-side: mint short-lived AWS creds from a step-ca X.509 cert via IAM Roles Anywhere (no standing key) |
 | [ceph-vlan-migration.md](runbooks/archive/ceph-vlan-migration.md) | Ceph mon/OSD migration to VLAN 210 (2026-05-18, done) |
-| [regional-vpn-deployment.md](runbooks/archive/regional-vpn-deployment.md) | Multi-region AWS spoke VPN deployment (archived — travel tooling unused, marked for retirement; Tailscale covers travel access) |
+| [regional-vpn-deployment.md](runbooks/archive/regional-vpn-deployment.md) | Multi-region AWS spoke VPN deployment (archived — tooling DELETED 2026-07-01; Tailscale covers travel access) |
 | [grafana-admin-password.md](runbooks/grafana-admin-password.md) | Rotate/recover Grafana admin password |
 | [syslog-onboard-device.md](runbooks/syslog-onboard-device.md) | Add a new syslog-emitting device to Alloy |
 | [postgres-barman-activation.md](runbooks/archive/postgres-barman-activation.md) | CNPG Barman backup config + tuning (activation done; archived) |

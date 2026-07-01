@@ -1,10 +1,9 @@
 # UniFi port forwards.
 #
-# Four entries imported from live UDM state:
+# Three entries imported from live UDM state:
 #   - Twilio-Media-Signal: UDP 10000-20000 → 10.10.201.40 (Asterisk SBC RTP)
 #   - Twilio-SIP:          TCP 5061        → 10.10.201.40 (Asterisk SBC TLS SIP)
 #   - Wireguard Local:     tcp+udp 9821    → 10.10.201.20 (K8s WG VIP, primary site VPN)
-#   - Wireguard Travel:    UDP 9820        → 10.10.201.20 (DISABLED — regional VPN now outbound)
 #
 # Twilio cutover (task #80, 2026-06-06): the two Twilio forwards were repointed
 # from UniFi Talk (10.10.199.1, UDP 6767 + RTP 10000-60000) to the Asterisk SBC
@@ -73,25 +72,6 @@ import {
   id = "69eadd2dd1dc5893673d8362"
 }
 
-# Currently disabled — regional VPN flow is now homelab→AWS (outbound),
-# so this inbound rule isn't needed. Leaving in code as disabled so the
-# port reservation is documented; flip enabled=true if we re-architect
-# back to inbound regional VPN.
-resource "unifi_port_forward" "wireguard_travel" {
-  name     = "Wireguard Travel"
-  enabled  = false
-  fwd_ip   = "10.10.201.20"
-  fwd_port = "9820"
-  dst_port = "9820"
-  protocol = "udp"
-  # src_ip omitted — live has null
-
-  lifecycle {
-    ignore_changes = [port_forward_interface, src_ip]
-  }
-}
-
-import {
-  to = unifi_port_forward.wireguard_travel
-  id = "69f898115433d627dfc677c0"
-}
+# "Wireguard Travel" (UDP 9820, disabled) was removed 2026-07-01 with the travel-VPN
+# tooling deletion (M110). The rule had been disabled since the 2026-05 outbound
+# re-architecture; the forward was destroyed via this stack (plan = 1 to destroy).

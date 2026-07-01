@@ -14,7 +14,7 @@ need, and what rotation must cover:
 |---|---|---|
 | Mac mini (ops host) | `~/.config/sops/age/keys.txt` (un-passphrased) | headless `sops -d`, ansible, render scripts |
 | devbox (dev-session host) | `~/.config/sops/age/keys.txt` (deployed by `devbox.yml`) | headless `sops -d` in Claude Code dev sessions |
-| GitHub Actions | repo secret `SOPS_AGE_KEY` | CI workflows that decrypt (terraform-drift, post-bootstrap, regional-vpn, ansible-vm-fleet) |
+| GitHub Actions | repo secret `SOPS_AGE_KEY` | CI workflows that decrypt (terraform-drift, post-bootstrap, ansible-vm-fleet) |
 | Flux (in-cluster) | secret `sops-age` in `flux-system` | decrypts `platform/kubernetes/**/*.sops.yaml` at reconcile |
 | **offline backup** ✅ (2026-06-15) | `age1phcm…3466` — 1Password "Homelab SOPS Age Key (BACKUP)" + paper in a safe — NEVER on the mini/CI/Flux | break-glass recovery + lockout-free re-key (added via H33a, below) |
 

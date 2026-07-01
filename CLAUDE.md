@@ -32,7 +32,7 @@ and the rules for keeping the project's durable memory current.
 ```
 clusters/wind/        Flux entrypoint — GitRepository/Kustomization, helm-releases/, image-automation/
 platform/kubernetes/  Per-namespace manifests + helm values (Flux-managed)
-infra/terraform/      TF stacks: proxmox/ aws/ unifi/ cloudflare/ aws-regional-vpn/ google/ aws/github-oidc/
+infra/terraform/      TF stacks: proxmox/ aws/ unifi/ cloudflare/ google/ aws/github-oidc/
 infra/ansible/        Playbooks: Proxmox host, standalone VMs, UDM (udm-firewall.yml, technitium.yml, …)
 infra/kubespray/      Kubespray submodule + wind inventory
 docs/                 architecture/ runbooks/ operations/ reference/ setup/ guides/ planning/

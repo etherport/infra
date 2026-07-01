@@ -16,8 +16,8 @@ name: Terraform Drift Detection
 # the repo owner. Clean runs stay green/silent.
 #
 # Corrections are applied via each stack's own workflow_dispatch `apply` (OIDC),
-# never from a workstation. Excluded: aws-regional-vpn (deploy-on-demand, no
-# persistent state); aws/iam-policies (JSON policy docs, not a TF stack).
+# never from a workstation. Excluded: aws/iam-policies (JSON policy docs, not a
+# TF stack). (aws-regional-vpn was excluded until its 2026-07-01 deletion.)
 
 on:
   schedule:
@@ -59,9 +59,8 @@ jobs:
           - { name: cluster-irsa,        dir: infra/terraform/aws/cluster-irsa,         region: us-west-2 }
           - { name: roles-anywhere,      dir: infra/terraform/aws/roles-anywhere,       region: us-west-2 }
           - { name: config,              dir: infra/terraform/aws/config,               region: us-west-2 }
-          # aws-regional-vpn is deploy-on-demand (travel VPN); requires
-          # `-var=region=X -var=region_short=Y -var=wg0_tunnel_ip=Z` and has no
-          # persistent state to drift-check. Exclude.
+          # (aws-regional-vpn — the deploy-on-demand travel VPN — was excluded
+          # here until the tooling was deleted 2026-07-01, M110.)
     defaults:
       run:
         working-directory: ${{ matrix.module.dir }}

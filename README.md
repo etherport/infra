@@ -9,7 +9,7 @@ survive a rebuild.
 ## What's here
 
 ```
-infra/terraform/     TF projects (proxmox/, aws/, unifi/, cloudflare/, aws-regional-vpn/, google/, aws/github-oidc/)
+infra/terraform/     TF projects (proxmox/, aws/, unifi/, cloudflare/, google/, aws/github-oidc/)
 infra/ansible/       Playbooks for Proxmox host + standalone VMs + UDM
 infra/kubespray/     Kubespray submodule + wind inventory
 infra/packer/        Ubuntu 24.04 cloud-init template build (VM 9001)
@@ -301,7 +301,6 @@ Project → workflow map:
 | `infra/terraform/aws/cluster-irsa` | `terraform-cluster-irsa.yml` |
 | `infra/terraform/aws/roles-anywhere` | `terraform-roles-anywhere.yml` |
 | `infra/terraform/aws/twilio-webhook` | `terraform-twilio-webhook.yml` |
-| `infra/terraform/aws-regional-vpn` | `terraform-regional-vpn.yml` |
 | `infra/terraform/aws/github-oidc` | *(bootstrap once with admin; then CI uses OIDC — H29)* |
 
 Daily drift detection runs across these via `terraform-drift-detection.yml`
@@ -361,7 +360,7 @@ kustomize-build + gitleaks), `task tf:plan MODULE=<x>`, `task flux:reconcile`,
 
 - **Index**: [`docs/README.md`](docs/README.md) — full link tree
 - **Architecture**: [`docs/architecture/`](docs/architecture/) — overview, network, firewall-zones, VPN (WG + TS), AWS
-- **Runbooks**: [`docs/runbooks/`](docs/runbooks/) — day-to-day ops, AI advisor, cloudflare/cw2loki enable, DR, ceph migration, regional VPN
+- **Runbooks**: [`docs/runbooks/`](docs/runbooks/) — day-to-day ops, AI advisor, cloudflare/cw2loki enable, DR, ceph migration
 - **Setup**: [`docs/setup/`](docs/setup/) — first-time guides (kubespray, gitops, secrets)
 - **Reference**: [`docs/reference/`](docs/reference/) — kubectl/kustomize cheatsheets, VLAN node setup
 - **Planning**: [`docs/planning/outstanding-work.md`](docs/planning/outstanding-work.md) — source of truth for open H/M/L items; older snapshots in `archive/`
