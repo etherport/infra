@@ -102,6 +102,12 @@ jobs:
             infra/ansible/playbooks/secrets/homelab-ops.sops.yaml > "$KEYFILE"
           chmod 600 "$KEYFILE"
           echo "key-file=$KEYFILE" >> "$GITHUB_OUTPUT"
+          # Offer ONLY the static key. Without IdentitiesOnly=yes, ssh also offers
+          # the runner's minted step-ca cert first; vpn-aws rejects it (CA not yet
+          # trusted) and MaxAuthTries trips → "Connection reset". Scoped to aws via
+          # $GITHUB_ENV (this step only runs for inventory=aws); includes the
+          # ansible.cfg ssh_args defaults since ANSIBLE_SSH_ARGS replaces them.
+          echo "ANSIBLE_SSH_ARGS=-o ControlMaster=no -o StrictHostKeyChecking=no -o IdentitiesOnly=yes" >> "$GITHUB_ENV"
 
       - name: Build inventory args + limit
         id: invargs
