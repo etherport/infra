@@ -183,7 +183,7 @@ This file foregrounds open/in-progress/gated work._
 ### ✅ M112. `concurrency:` groups on all terraform workflows — DONE 2026-07-01 (`72cb120`): `tf-<stack>` group, `cancel-in-progress: false`, added to all 24 TF workflows (incl. drift-detection).
 - 0 of 25 TF workflows have one — a dispatch apply + push-plan on the same stack race the S3 lock (bit twice on 2026-07-01: us-east-1 destroy vs push-plan; plus a stale `.tflock` from a killed 06-17 run silently failed that stack's plans for 2 weeks). **Fix:** `concurrency: {group: tf-<stack>, cancel-in-progress: false}` per workflow. **Effort: S.**
 
-### ⏳ M113. Alert-coverage gaps (postgres-down / cert-expiry / authentik / cloudflared) + `runbook_url` pass
+### ✅ M113. Alert-coverage gaps — DONE 2026-07-01 (`727a40d`,`47e29b7`), verified: cert-manager ServiceMonitor enabled (metrics were never scraped!); NEW 13-service-alerts.yaml — CNPGClusterDown ×2 (absent()-based), CertManagerRenewalOverdue + CertExpiryCritical (**duration-agnostic — the wildcard is a ~6.7d short-lived LE cert, absolute-day thresholds false-fired within minutes and were rewritten to renewal-overdue semantics**), AuthentikDown (new in-cluster blackbox Probe + plain http_2xx module), CloudflaredTunnelDegraded/Down; runbook_url pass (14 rules linked to their docs/runbooks/alerts docs). All 7 rules loaded + inactive on the healthy cluster.
 - CNPG has only backup alerts — a dead `postgres-cluster`/`cue-db` never pages; no general `certmanager_certificate_expiration_timestamp` alert; authentik (gates all admin UIs) and cloudflared (all external ingress) have zero rules. Also **0 of 82 rules carry `runbook_url`** even though `docs/runbooks/alerts/` has per-alert docs named after the alerts — the advisor emails lose that context. **Fix:** ~4 new rules (metrics already scraped) + a mechanical annotation pass + a lint for new rules. **Effort: S.**
 
 ### ✅ M114. authentik-server HA — DONE 2026-07-01 (`72cb120`), verified: replicas 2 on distinct nodes (w1+w4), zero-gap RollingUpdate, hostname topologySpread, PDB minAvailable 1, worker `ak healthcheck` probes. **Unblocked by dropping the RWO media PVC** (it held only the initContainer-regenerated login-bg.png → emptyDir now; future real media = RWX/S3 decision, don't re-add RWO). In-cluster `/-/health/ready/` = 200.
@@ -195,19 +195,19 @@ This file foregrounds open/in-progress/gated work._
 ### ⏳ M116. k8s nodes (8 of 15 fleet hosts) have NO automated security patching
 - `base.yml` is `hosts: all:!k8s_cluster` — nodes get no unattended-upgrades and none of the sshd baseline; the only patch path is the manual `k8s-node-patch.yml`. **Fix:** either a scheduled (monthly) dispatch of the rolling patch playbook, or a security-only unattended-upgrades profile on `k8s_cluster` with reboots left to kured. **Effort: M.**
 
-### ⏳ M117. No Metrics API — `kubectl top` fails cluster-wide (no metrics-server)
+### ✅ M117. metrics-server — DONE 2026-07-01 (`727a40d`), verified: HelmRelease (chart 3.13.0, kube-system, kubelet-insecure-tls) — `kubectl top nodes/pods` now works cluster-wide.
 - Blocks HPA, incident triage when the monitoring ns itself is down, and utilization-aware tooling. **Fix:** metrics-server via kubespray flag or a small HelmRelease. **Effort: S.**
 
 ### ⏳ M118. Data-driven resource-request right-sizing (velero node-agent over; prometheus/alloy/tetragon under)
 - PromQL vs requests: 8× velero node-agent ~200m/200Mi each over-requested (~1.6 CPU + 1.6Gi reserved idle fleet-wide); prometheus runs ~1Gi ABOVE its 512Mi request, alloy ~175-217Mi over 128Mi/node, tetragon 50-155Mi over — under-requested pods burst into headroom the scheduler thinks is free and are first-evicted under pressure. **Fix:** lower node-agent, raise the three under-requesters to observed P95. **Effort: S.**
 
-### ⏳ M119. Stagger the backup thundering herd (6 s3-sync jobs at 01:00; 5 velero Schedules at 03:00)
+### ✅ M119. Backup thundering-herd stagger — DONE 2026-07-01 (`727a40d`,`6fa4f2d`), verified live: 7 s3-sync shares 01:00→01:50 at 10-min steps (scans suspended but slotted at 02:00); velero de-stacked to :00/:20/:40 (02:00,04:00 groups) + :00/:12/:24/:36/:48 (03:00 group).
 - All six s3-sync CronJobs fire at `0 1 * * *` (simultaneous UNAS+WAN hammer + shared-lock contention); 5 velero Schedules at exactly `0 3 * * *` drive the fs-backup/CNPG spike — same fan-out pattern that fed the 10:00 UTC etcd cascade. **Fix:** stagger minutes (01:00/01:15/… and 03:00/03:20/…). **Effort: S.**
 
 ### ⏳ M120. ceph-csi lives in the unlabeled `default` namespace (+ empty `ceph-csi` ns, 50-day-old test PVC)
 - The privileged CSI DS + provisioner run in `default`, which has no PSA label (anything landing there gets zero admission guardrails); the intended `ceph-csi` ns exists but is empty; `default/rbd-test-pvc` (1Gi) has lingered 50d. **Fix:** migrate CSI into `ceph-csi` (careful — storage path), or at minimum PSA-label `default`, delete the test PVC + decide the empty ns. **Effort: M (move) / S (label+PVC).**
 
-### ⏳ M121. `terraform-drift-detection` uploads raw `plan.txt` artifacts (with `TF_VAR_ha_access_token` in env)
+### ✅ M121. Drift plan redaction — DONE 2026-07-01 (`35dce3a`): plan.txt redacted to structure-only lines (Plan: summary + resource headers) before artifact upload AND the drift-issue embed; attribute values no longer leave the run.
 - Non-`sensitive` attributes render into plan text; artifacts are downloadable with repo read. **Fix:** stop uploading raw plans (step-summary tail suffices) or scrub. **Effort: S.**
 
 ### ⏳ M6. Packer + ansible netplan dedup (F1.3)
@@ -346,16 +346,16 @@ orphaned. Not service-affecting on its own.
 
 ## LOW
 
-### ⏳ L25. Delete `test-ssh-cert.yml` (self-described throwaway) + add `permissions: {}` to `bootstrap-runner-key.yml`
+### ✅ L25. DONE 2026-07-01 (`35dce3a`) — test-ssh-cert.yml deleted; permissions:{} on bootstrap-runner-key.yml.
 - The former still consumes `STEP_JWK_PASSWORD` on the self-hosted runner post-cutover; the two are the only workflows with no `permissions:` block. (2026-07-01 review #14.) **Effort: S.**
 
 ### ⏳ L26. `automountServiceAccountToken: false` sweep on no-API workloads
 - 243/255 pods automount a SA token; plex/wikijs/ollama/technitium/home-assistant etc. never call the API — a pod compromise hands each a valid cluster credential. (#15.) **Effort: M.**
 
-### ⏳ L27. PSA-label `kyverno` + `plex` (verified zero violations via server dry-run); delete empty `pg-recovery` ns
+### ✅ L27. DONE 2026-07-01 (`35dce3a`), verified live: enforce=baseline on kyverno + plex (the plex "GPU needs privileged" note was STALE — device-plugin GPU, dry-run clean); pg-recovery ns deleted (held a stray csi-rbd-secret COPY — bonus credential cleanup).
 - Free hardening; velero/tetragon/home-automation legitimately can't (hostPath/privileged). (#16.) **Effort: S.**
 
-### ⏳ L28. `technitium.yml`: add `no_log` to zone-management URI tasks
+### ✅ L28. DONE 2026-07-01 (`35dce3a`) — no_log on the 3 token-in-URL tasks; structurally verified every technitium_token task now carries it.
 - They pass `?token={{ technitium_token }}` in the URL — the admin DNS token lands in ansible output on failure/`-v` (the user/password tasks nearby DO have `no_log`). (#18.) **Effort: S.**
 
 ### ⏳ L29. Loki per-stream rate limits + shorter retention for audit streams
@@ -364,7 +364,7 @@ orphaned. Not service-affecting on its own.
 ### ⏳ L30. PDBs for `coredns`/`cilium-operator`/`csi-rbdplugin-provisioner`; scope velero RBAC below `cluster-admin`
 - Drains can momentarily evict both replicas of cluster DNS; velero needs broad-but-not-cluster-admin. (#20.) **Effort: S.**
 
-### ⏳ L31. Minor hygiene batch (from the review's below-cap mentions)
+### 🟡 L31. Minor hygiene batch — email_fwd abort-MPU DONE 2026-07-01 (applied via terraform-s3); WG-key item moot (workflow deleted); ⏳ remaining: codify SSE blocks on the 7 buckets relying on AWS-default SSE-S3 (parity only).
 - `email_fwd` S3 bucket lacks the abort-incomplete-MPU rule every other bucket has; ~~WG private key passed as CLI `-var` in `terraform-regional-vpn.yml`~~ (moot — workflow deleted 2026-07-01); codify SSE blocks on the 7 buckets relying on AWS-default SSE-S3 (parity only). **Effort: S.**
 
 ### ⏳ L1. Proxmox HA cluster expansion

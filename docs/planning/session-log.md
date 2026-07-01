@@ -15,6 +15,35 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-01 — Review remediation batch 2: M113/M117/M119/M121 + L25/L27/L28/L31 — all verified
+
+**Continuing down the review backlog (operator: "keep working down the list"). All landed + verified**
+(`727a40d`…`35dce3a`):
+- **M113 alerts:** cert-manager ServiceMonitor was DISABLED (its metrics had never been scraped) — enabled;
+  new `13-service-alerts.yaml` (CNPG-down ×2 absent()-based, cert alerts, AuthentikDown via a new in-cluster
+  blackbox Probe + plain `http_2xx` module, cloudflared degraded/down); `runbook_url` pass (14 rules linked).
+  ⚠️ **Lesson: the first cert thresholds (14d/5d absolute) false-fired within MINUTES** — the primary
+  wildcard is a **Let's Encrypt short-lived (~6.7d) cert** renewing every ~4.5d, so its whole life is
+  "<14d to expiry". Rewritten duration-agnostic: `CertManagerRenewalOverdue` (cert-manager's own
+  renewalTime >12h past without reissue) + `CertExpiryCritical` (<24h left). All 7 rules loaded + inactive.
+- **M117:** metrics-server HelmRelease (3.13.0, kubelet-insecure-tls) — **`kubectl top` works for the first
+  time on this cluster.**
+- **M119:** backup stagger — 7 s3-sync shares 01:00→01:50 (10-min steps; `scans` is `suspend: true` but
+  slotted anyway), velero de-stacked across :00-:48. Verified live in the CronJob/Schedule CRs.
+- **M121:** drift-detection plans REDACTED (structure-only) before artifact upload + issue embed.
+- **L25/L27/L28/L31:** throwaway `test-ssh-cert.yml` deleted + `permissions:{}` on bootstrap-runner-key;
+  PSA `enforce=baseline` on kyverno + **plex** (its "GPU needs privileged" comment was STALE — device-plugin
+  GPU; server dry-run clean) + `pg-recovery` ns deleted (held a stray `csi-rbd-secret` copy); `no_log` on the
+  3 token-in-URL technitium tasks; email_fwd abort-incomplete-MPU rule (terraform-s3 plan `1 change`, applied).
+- **Ops note:** mid-batch, Flux's git fetch to `github.com:22` timed out for ~10 min (HTTPS fine, devbox SSH
+  fine, pod-egress test then fine) — consistent with the **WAN path-loss waves** identified earlier today,
+  self-resolved. Another datapoint for the path-loss investigation.
+
+**Still open from the review:** M115 (authentik netpol tier — needs the global audit-mode toggle dance),
+M116 (k8s node auto security-patching — design decision), M118 (request right-sizing), M120 (ceph-csi ns
+move), L26 (automount-SA-token sweep), L29 (Loki per-stream limits), L30 (infra PDBs + velero RBAC),
+L31-residual (SSE codification).
+
 ## 2026-07-01 — Review remediation batch 1: travel-VPN DELETED + H42/H43/M112/M114 all fixed + verified
 
 **Operator directives:** (1) delete the travel-VPN tooling; (2) knock out H42 → M112 → M114, plus H43.
