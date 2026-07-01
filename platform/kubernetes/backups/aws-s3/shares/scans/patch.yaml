@@ -5,6 +5,9 @@ metadata:
   namespace: backups
 spec:
   suspend: true
+  # M119 (2026-07-01): staggered slot reserved even while suspended, so a future
+  # un-suspend doesn't rejoin the 01:00-sharp thundering herd.
+  schedule: "0 2 * * *"
   jobTemplate:
     spec:
       template:
