@@ -167,6 +167,12 @@ spec:
               value: 'true'
             - name: CUE_MEAL_BRIEF
               value: 'true'
+            # 2026-07-02 (ledger phase 3 start, owner-approved): dual-write ON — meal_entries
+            # written alongside the legacy path (which stays authoritative), shadow-compare
+            # logs any divergence. History backfilled same day (27 created / 20 pre-stamping
+            # rows unresolvable, all ≤06-24). Read flip only after N clean dogfooding days.
+            - name: CUE_MEAL_LEDGER
+              value: 'true'
             # 2026-06-02 (coach quality): surface the digestion/quiet-gut avoid-list ONLY when
             # the turn is about food/gut, and collapse durable GI-trigger facts to a conditional
             # reference — kills the "no orzo every time" boilerplate. A/B-validated (avoid-
