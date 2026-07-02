@@ -164,6 +164,13 @@ resource "unifi_network" "clients" {
 
   lifecycle {
     ignore_changes = [
+      # M110 (2026-07-02): dhcp_dns ignored — the archived paultyng provider 400s on
+      # PUT for THIS network (api.err.Invalid; 4 of 7 networks applied fine). The
+      # dhcpd_dns_3=44.240.60.80 cutover was applied via a direct UDM API round-trip
+      # PUT (verified live). Live UDM = source of truth for dhcp_dns here until the
+      # ubiquiti-community/unifi fork migration (tracked in the 2026-07-01 currency
+      # review) makes the provider writable again.
+      dhcp_dns,
       dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
       dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
       ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
@@ -325,6 +332,13 @@ resource "unifi_network" "vsan" {
 
   lifecycle {
     ignore_changes = [
+      # M110 (2026-07-02): dhcp_dns ignored — the archived paultyng provider 400s on
+      # PUT for THIS network (api.err.Invalid; 4 of 7 networks applied fine). The
+      # dhcpd_dns_3=44.240.60.80 cutover was applied via a direct UDM API round-trip
+      # PUT (verified live). Live UDM = source of truth for dhcp_dns here until the
+      # ubiquiti-community/unifi fork migration (tracked in the 2026-07-01 currency
+      # review) makes the provider writable again.
+      dhcp_dns,
       dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
       dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
       ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
@@ -413,6 +427,13 @@ resource "unifi_network" "ceph" {
 
   lifecycle {
     ignore_changes = [
+      # M110 (2026-07-02): dhcp_dns ignored — the archived paultyng provider 400s on
+      # PUT for THIS network (api.err.Invalid; 4 of 7 networks applied fine). The
+      # dhcpd_dns_3=44.240.60.80 cutover was applied via a direct UDM API round-trip
+      # PUT (verified live). Live UDM = source of truth for dhcp_dns here until the
+      # ubiquiti-community/unifi fork migration (tracked in the 2026-07-01 currency
+      # review) makes the provider writable again.
+      dhcp_dns,
       dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
       dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
       ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
