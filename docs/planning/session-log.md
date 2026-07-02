@@ -15,6 +15,38 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-02 — Review remediation batch 3 (the heavy trio + right-sizing): M115/M116/M118/M120 + L29/L30 — all verified
+
+**Operator: "keep going... go ahead with M115/116/120... okay to have some downtime but resolve issues".**
+All landed + e2e-verified (`727a40d`…`e43e775`):
+
+- **M118 right-sizing** (7d PromQL): node-agent →25m/160Mi (7d max 138Mi; freed ~1.4 CPU/0.8Gi fleet-wide);
+  prometheus →2Gi req/3Gi lim (**P95 1.83Gi vs the old 2Gi limit — <10% from OOM**); alloy →384Mi;
+  tetragon →256Mi (its HR requests hadn't been landing — live pods carried the Kyverno 10m/32Mi default;
+  the fresh upgrade fixed it). All rolled clean.
+- **L29** Loki per-stream 3MB/10MB-burst + 7d retention for hubble-audit/tetragon streams (selectors
+  verified against the real ruler rules). **L30** PDBs for coredns/cilium-operator/csi-provisioner;
+  **velero cluster-admin deliberately kept** (restore creates arbitrary resources incl. RBAC).
+- **M116 node patching**: new `k8s-unattended-upgrades.yml` — security-pocket-only, `Automatic-Reboot=false`,
+  **kured owns reboots** (nightly window, cluster lock). Applied to all 8 nodes; kubespray binaries untouchable
+  by the apt origin. Fleet patching coverage now 15/15 hosts.
+- **M115 authentik tier (6th)**: full audit-toggle dance — audit ON (ConfigMap+rollout as separate commands),
+  tier applied (`15-tier-authentik.yaml`: :9000 from traefik+blackbox+intra-ns; egress postgres+SES:587;
+  world:443 deliberately absent — update-check/analytics/gravatar verified disabled), flows exercised,
+  **605 real flows / 0 would-be drops**, audit OFF → enforced-path verified (traefik→authentik OK,
+  probe_success=1, 0 DROPPED).
+- **M120 ceph-csi** — messier than the review knew: the workloads ran 50d as an **out-of-band kubectl apply**
+  (not in git), and the ceph-csi-ns configmap copy pointed at the **pre-VLAN-migration monitor 10.10.201.41**
+  (a naive ns move would have broken all new volume ops — landmine defused by making git's 10.10.210.41
+  config overwrite it on adoption). Codified the full stack (cleaned live dump, cephcsi v3.11.0) into
+  `storage/ceph-csi/`, ns ceph-csi. Cutover gotcha: **the old DS pods' termination deleted the new
+  registrar's socket post-registration** (plugins_registry emptied; CSINode showed no driver) → one DS
+  restart re-registered 5/5. **Acid test green**: PVC provision→attach→mount→write→delete through the moved
+  stack; 22 existing Bound PVCs unaffected. default ns now EMPTY + enforce=baseline (adopted as a git
+  resource — can't be a kustomize patch target); 50d rbd-test-pvc deleted.
+
+**Review backlog now: 20/20 findings actioned** (18 done, L26 automount-sweep + L31-SSE-parity residuals ⏳).
+
 ## 2026-07-01 — Review remediation batch 2: M113/M117/M119/M121 + L25/L27/L28/L31 — all verified
 
 **Continuing down the review backlog (operator: "keep working down the list"). All landed + verified**
