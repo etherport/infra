@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: ceph-csi-encryption-kms-config
-  namespace: default
+  namespace: ceph-csi
 data:
   config.json: |-
     {}

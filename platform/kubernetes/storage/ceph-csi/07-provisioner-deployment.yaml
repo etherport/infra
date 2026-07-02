@@ -1,0 +1,278 @@
+# M120 (2026-07-01): ceph-csi workloads CODIFIED into git (they ran 50d as an
+# out-of-band kubectl apply in the  namespace — invisible drift) and
+# MOVED to the ceph-csi namespace (where the SC-referenced csi-rbd-secret
+# already lived). Source: cleaned live dump (cephcsi v3.11.0).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    velero.io/backup-name: pre-migration-20260512-1915
+    velero.io/restore-name: post-migration-20260512-2102
+  name: csi-rbdplugin-provisioner
+  namespace: ceph-csi
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 2
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: csi-rbdplugin-provisioner
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/restartedAt: '2026-06-18T23:46:58Z'
+      labels:
+        app: csi-rbdplugin-provisioner
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - csi-rbdplugin-provisioner
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - args:
+        - --nodeid=$(NODE_ID)
+        - --type=rbd
+        - --controllerserver=true
+        - --endpoint=$(CSI_ENDPOINT)
+        - --csi-addons-endpoint=$(CSI_ADDONS_ENDPOINT)
+        - --v=5
+        - --drivername=rbd.csi.ceph.com
+        - --pidlimit=-1
+        - --rbdhardmaxclonedepth=8
+        - --rbdsoftmaxclonedepth=4
+        - --enableprofiling=false
+        - --setmetadata=true
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        - name: NODE_ID
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: CSI_ENDPOINT
+          value: unix:///csi/csi-provisioner.sock
+        - name: CSI_ADDONS_ENDPOINT
+          value: unix:///csi/csi-addons.sock
+        image: quay.io/cephcsi/cephcsi:v3.11.0
+        imagePullPolicy: IfNotPresent
+        name: csi-rbdplugin
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+        - mountPath: /dev
+          name: host-dev
+        - mountPath: /sys
+          name: host-sys
+        - mountPath: /lib/modules
+          name: lib-modules
+          readOnly: true
+        - mountPath: /etc/ceph-csi-config/
+          name: ceph-csi-config
+        - mountPath: /etc/ceph-csi-encryption-kms-config/
+          name: ceph-csi-encryption-kms-config
+        - mountPath: /tmp/csi/keys
+          name: keys-tmp-dir
+        - mountPath: /etc/ceph/
+          name: ceph-config
+        - mountPath: /run/secrets/tokens
+          name: oidc-token
+          readOnly: true
+      - args:
+        - --csi-address=$(ADDRESS)
+        - --v=1
+        - --timeout=150s
+        - --retry-interval-start=500ms
+        - --leader-election=true
+        - --feature-gates=Topology=false
+        - --feature-gates=HonorPVReclaimPolicy=true
+        - --prevent-volume-mode-conversion=true
+        - --default-fstype=ext4
+        - --extra-create-metadata=true
+        env:
+        - name: ADDRESS
+          value: unix:///csi/csi-provisioner.sock
+        image: registry.k8s.io/sig-storage/csi-provisioner:v4.0.0
+        imagePullPolicy: IfNotPresent
+        name: csi-provisioner
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+      - args:
+        - --csi-address=$(ADDRESS)
+        - --v=1
+        - --timeout=150s
+        - --leader-election=true
+        - --extra-create-metadata=true
+        - --enable-volume-group-snapshots=true
+        env:
+        - name: ADDRESS
+          value: unix:///csi/csi-provisioner.sock
+        image: registry.k8s.io/sig-storage/csi-snapshotter:v7.0.0
+        imagePullPolicy: IfNotPresent
+        name: csi-snapshotter
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+      - args:
+        - --v=1
+        - --csi-address=$(ADDRESS)
+        - --leader-election=true
+        - --retry-interval-start=500ms
+        - --default-fstype=ext4
+        env:
+        - name: ADDRESS
+          value: /csi/csi-provisioner.sock
+        image: registry.k8s.io/sig-storage/csi-attacher:v4.5.0
+        imagePullPolicy: IfNotPresent
+        name: csi-attacher
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+      - args:
+        - --csi-address=$(ADDRESS)
+        - --v=1
+        - --timeout=150s
+        - --leader-election
+        - --retry-interval-start=500ms
+        - --handle-volume-inuse-error=false
+        - --feature-gates=RecoverVolumeExpansionFailure=true
+        env:
+        - name: ADDRESS
+          value: unix:///csi/csi-provisioner.sock
+        image: registry.k8s.io/sig-storage/csi-resizer:v1.10.0
+        imagePullPolicy: IfNotPresent
+        name: csi-resizer
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+      - args:
+        - --type=controller
+        - --v=5
+        - --drivername=rbd.csi.ceph.com
+        - --drivernamespace=$(DRIVER_NAMESPACE)
+        - --setmetadata=true
+        env:
+        - name: DRIVER_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        image: quay.io/cephcsi/cephcsi:v3.11.0
+        imagePullPolicy: IfNotPresent
+        name: csi-rbdplugin-controller
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/ceph-csi-config/
+          name: ceph-csi-config
+        - mountPath: /tmp/csi/keys
+          name: keys-tmp-dir
+        - mountPath: /etc/ceph/
+          name: ceph-config
+      - args:
+        - --type=liveness
+        - --endpoint=$(CSI_ENDPOINT)
+        - --metricsport=8680
+        - --metricspath=/metrics
+        - --polltime=60s
+        - --timeout=3s
+        env:
+        - name: CSI_ENDPOINT
+          value: unix:///csi/csi-provisioner.sock
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        image: quay.io/cephcsi/cephcsi:v3.11.0
+        imagePullPolicy: IfNotPresent
+        name: liveness-prometheus
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+      dnsPolicy: ClusterFirst
+      priorityClassName: system-cluster-critical
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: rbd-csi-provisioner
+      serviceAccountName: rbd-csi-provisioner
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - hostPath:
+          path: /dev
+          type: ''
+        name: host-dev
+      - hostPath:
+          path: /sys
+          type: ''
+        name: host-sys
+      - hostPath:
+          path: /lib/modules
+          type: ''
+        name: lib-modules
+      - emptyDir:
+          medium: Memory
+        name: socket-dir
+      - configMap:
+          defaultMode: 420
+          name: ceph-config
+        name: ceph-config
+      - configMap:
+          defaultMode: 420
+          name: ceph-csi-config
+        name: ceph-csi-config
+      - configMap:
+          defaultMode: 420
+          name: ceph-csi-encryption-kms-config
+        name: ceph-csi-encryption-kms-config
+      - emptyDir:
+          medium: Memory
+        name: keys-tmp-dir
+      - name: oidc-token
+        projected:
+          defaultMode: 420
+          sources:
+          - serviceAccountToken:
+              audience: ceph-csi-kms
+              expirationSeconds: 3600
+              path: oidc-token

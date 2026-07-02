@@ -1,0 +1,9 @@
+# M120: adopt the ceph-csi namespace into git (existed live since 2026-05-12 but
+# was unowned). Privileged storage driver — no PSS enforce (hostPath/privileged
+# by necessity), same class as velero/tetragon.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ceph-csi
+  labels:
+    tier: system

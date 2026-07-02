@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: ceph-config
-  namespace: default
+  namespace: ceph-csi
 data:
   ceph.conf: |
     [global]

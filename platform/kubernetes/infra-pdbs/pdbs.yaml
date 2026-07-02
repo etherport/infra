@@ -30,9 +30,8 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: csi-rbdplugin-provisioner
-  # NB still the `default` namespace — the M120 ceph-csi move relocates this
-  # PDB together with the workload.
-  namespace: default
+  # M120 (2026-07-01): moved with the workload to the ceph-csi namespace.
+  namespace: ceph-csi
 spec:
   minAvailable: 1
   selector:

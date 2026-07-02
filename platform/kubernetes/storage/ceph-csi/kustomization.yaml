@@ -1,7 +1,18 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+
+# M120 (2026-07-01): full ceph-csi stack now IN GIT and in the ceph-csi namespace.
+# Previously only the configmaps + CSIDriver were codified (in `default`) while the
+# deploy/DS/SA/RBAC ran as a 50-day out-of-band kubectl apply. NB the out-of-band
+# ceph-csi-ns configmap copy pointed at the PRE-VLAN-MIGRATION monitor 10.10.201.41 —
+# these git configmaps (10.10.210.41) overwrite it on adoption.
 resources:
-  - csi-driver.yaml
-  - csi-config-map.yaml
+  - 00-namespace.yaml
   - ceph-config-map.yaml
+  - csi-config-map.yaml
   - csi-kms-config-map.yaml
+  - csi-driver.yaml
+  - 05-serviceaccounts.yaml
+  - 06-rbac.yaml
+  - 07-provisioner-deployment.yaml
+  - 08-nodeplugin-daemonset.yaml
