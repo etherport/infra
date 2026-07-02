@@ -37,6 +37,12 @@ the tracker's archived "Recently completed" blocks — now in
   (verified against the live DB: 43,990 ledger rows readable). Tonight's 22:00 run emits orphans for
   the first time. cairn README §6 corrected to the proven lock mechanism (`7976511`).
 
+## 2026-07-02 (cont. 4) — M76 parity COMPLETE on the edge box; F1+F7 applied; the sudo-stall root cause
+
+**F1+F7 applied** (owner-approved): dead spokes rule + orphaned ALB SG deleted cleanly.
+
+**M76 cert-SSH parity for vpn-aws — DONE end-to-end:** step-ca-trust check kept failing "Timeout (12s) waiting for privilege escalation prompt" even with the WAN calm → **root cause was NOT path loss: the box's own hostname `ip-10-10-100-10` was missing from /etc/hosts (post-M110 artifact), so EVERY sudo stalled on a failing DNS lookup.** Added ANSIBLE_TIMEOUT=60 to the workflow (diagnostic + belt) → play ran → apply succeeded → cert-SSH verified from the devbox → **fixed /etc/hosts on-box (sudo 12s+ → 0.008s)** → flipped ansible-vm-fleet aws branch to cert auth (awskey SOPS step deleted) → cert-auth CI run verified → `step-ca-remove-static-key` applied → **verified: cert works post-removal, static key GONE from authorized_keys.** The LAST standing static-key SSH auth in the estate is eliminated (cloud-init rebuild seed + SSM break-glass remain by design). NB this re-attributes part of the historic "CI can rarely complete a play against vpn-aws" pain: it was sudo-stall compounding the real (but intermittent) WAN loss.
+
 ## 2026-07-02 (cont. 3) — backlog: authentik logo fix, M125 parked (2nd attempt), F1+F7 staged, step-ca-trust wave-blocked
 
 **Authentik login logo:** the 2024.12 "transparent-1x1-pixel = no logo" trick renders as an empty placeholder frame under 2026.x → hid the brand img via custom.css (subPath mount → server rollout applied it). Owner to eyeball.
