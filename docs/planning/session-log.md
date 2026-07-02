@@ -15,6 +15,40 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-02 — M110 COMPLETE + residuals done + charter shipped + full state review (H44 Authentik CVE!)
+
+**Residuals:** L31 SSE blocks (7 buckets, plan-gated, applied) + L26 automount sweep (6 workloads) — both ✅.
+
+**M110 CONSOLIDATION COMPLETE.** End state verified live: **one AWS box** (`private-infra_edge`, t4g.small)
++ **one EIP** (44.240.60.80) running WG + Tailscale + Technitium. Sequence: dns SG attached to the edge
+(in-place; carries the Lambda-managed :53 WAN allows) → technitium.yml folded the resolver → dns-sync
+targeted `.10` (**first sync POLICY_DENIED — the dns-tier netpol pins :5380 egress to /32s**; the exact
+CLAUDE.md "enforced-tier tax", fixed same change) → 47 records synced, internal names answering on the EIP →
+UniFi dhcp_dns ×7 re-pointed (**4 via TF; 3 via direct UDM API PUT — the archived paultyng provider
+deterministically 400s clients/vsan/ceph**; ignore_changes added per the guest precedent, stack verified back
+to `No changes`) → standalone dns instance + EIP 52.40.219.113 + 3 CW alarms destroyed (plan-gated exactly
+`5 to destroy`) → post-destroy acid check: DNS still answering on 44.240.60.80. All `.5` refs cleaned.
+Residuals in tracker (CI cert-auth cutover for aws, SG redesign F1-F7, doc sweep).
+
+**Path-loss investigation (M124):** 90-min dual-ended mtr windows when calm = 0% loss every hop incl.
+control; **274 scrape flaps in 12h post-resize anyway** → waves are real, ISP/WAN-side, hours-scale; box
+(ENA=0), MTU (20/20 large-payload), SG, fail2ban, egress-IP all ruled out. Detector = AWSReplicaHostFlapping;
+next = capture-on-alert + wave-timestamp correlation.
+
+**Charter shipped** (`docs/guides/agent-operating-principles.md`, wired into CLAUDE.md §1 as binding
+read-first #2): 24 model-agnostic principles (change/verification/diagnosis/docs/safety/operator-interaction
++ the model-agnostic contract), each with a real repo example. README's unfollowable `gh workflow run`
+examples annotated (no gh on the devbox); stale "mini auto-pushes" fixed; memory pointers fixed.
+
+**Full state review (2 Fable agents):** maturity high; **currency bimodal** — automation-covered components
+are same-day current, everything else rotted. **⚠️ HEADLINE: Authentik 2024.12.3 carries an UNPATCHED
+CRITICAL RCE (CVE-2026-25227, no 2024.12 fix exists) + a Traefik forward-auth-bypass advisory matching the
+exact H38 architecture → H44 (8-hop upgrade program).** Also H45 (containerd 3 Criticals → 2.2.5; Cilium
+Critical → 1.18.11; CNPG 1.24 EOL+Critical → operator+PG16.14), M122 (fix the update-automation blind spots —
+renovate flux manager, range-caps, the MOVED Grafana chart repo), M123 (K8s 1.34 EOL Oct-27 upgrade train),
+M125 (unifi provider fork), M126 (kube-vip, Flux kustomization split, PVE RAM ceiling ~85/93Gi, etc.).
+Deadlines: K8s 1.34 (Oct), Ceph Squid (~Sep), Redis 7.4 (Nov).
+
 ## 2026-07-02 — Review remediation batch 3 (the heavy trio + right-sizing): M115/M116/M118/M120 + L29/L30 — all verified
 
 **Operator: "keep going... go ahead with M115/116/120... okay to have some downtime but resolve issues".**

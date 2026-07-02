@@ -177,6 +177,31 @@ This file foregrounds open/in-progress/gated work._
 
 ## MEDIUM — quality / hygiene
 
+> M122+ from the 2026-07-02 currency/state review + path-loss investigation.
+
+### ⏳ H44. Authentik 2024.12.3 — UNPATCHED CRITICAL RCE + forward-auth bypass; 8-hop upgrade program
+- **2026-07-02 currency review:** running 2024.12.3 (~18 months, 7 majors behind; out of support). **CVE-2026-25227 (Critical, authenticated RCE via the policy-test endpoint) explicitly covers 2024.12.x with NO fixed build**, + GHSA-fj56-5763-j8pp (**Traefik forward-auth bypass via malformed session cookie — the exact H38 pattern gating every admin UI**) + ~13 more High/Critical since. Version-skipping unsupported → **8 sequential hops** (→2025.2→2025.4→…→2026.5.3), each with a velero restore point + blueprint/outpost/OIDC re-validation + the M115 netpol tier check. Fold the Redis 7.4→8 bump in (7.4 security-support ends 2026-11-30). **Biggest single risk in the estate. Effort: L. Owner: agent + operator windows.**
+
+### ⏳ H45. CVE patch batch: containerd 2.2.1→2.2.5, Cilium 1.18.6→1.18.11, CNPG operator 1.24.1→current + PG 16.4→16.14
+- containerd: exposed to the 2026-06-18 coordinated release (**3 Criticals** incl. image-LABEL→host-root exec; digest-pinning mitigates, not eliminates) — override `containerd_version` + rolling upgrade. Cilium: **CVE-2026-49445 Critical** (fixed 1.18.8) — patch-level `helm upgrade --reuse-values` + rollout restart + kubespray inventory var (⚠️ cni-dir-owner landmine: never via kubespray). CNPG 1.24 is **EOL** with a Critical (9.4) fixed only ≥1.28.3 — operator chart bump first, then PG image to 16.14. Do each in a fresh window with verification (encrypt status/BGP/netpol for cilium; a backup+restore probe for CNPG). **Effort: M. Tier: H.**
+
+### ⏳ M122. Close the update-automation blind spots (the systemic fix)
+- The estate's currency is bimodal: renovate/image-automation-covered things are CURRENT (HA same-day); everything outside rots silently (Authentik is the proof). Fix: enable renovate's `flux` manager on `clusters/wind/helm-releases/`, widen the range-caps (kps `80.x`→majors-as-PRs, cnpg, traefik `38.x`, kured, metallb `0.14.x`, velero exact-pin→ranged-PRs), **fix the Grafana chart repo URL** (moved to `grafana-community` 2026-03 — why Alloy sat 10 minors behind on a floating range), add coverage for Flux gotk-components + raw-manifest images (authentik/redis/ceph-csi sidecars). **Effort: S-M — highest leverage-per-effort in the review.**
+
+### ⏳ M123. K8s platform upgrade train (1.34 EOL 2026-10-27)
+- Patch to 1.34.3 (kubespray v2.30 ceiling), then submodule→v2.31 + upgrade-cluster to 1.35.x before October; etcd/CoreDNS/containerd ride along. Pre/post checklist = the M75 issuer/api-audiences check, multus DS restart, cni-dir owner, per-kernel modules. Quarterly cadence thereafter. **Effort: M.**
+
+### ⏳ M124. WAN path-loss waves — instrumented, not yet root-caused
+- **State 2026-07-02:** NOT the box (ENA counters 0 post-resize; 274 scrape flaps in 12h anyway), NOT MTU (20/20 large-payload when calm; wg 1420 both ends), NOT SG/fail2ban/egress-IP. Waves hit BOTH the wg-tunnel and public paths; 90-min mtr windows when calm show 0% loss on every hop incl. control ⇒ **ISP/WAN-side, intermittent, hours-scale**. Continuous detector = `AWSReplicaHostFlapping` (fires during waves). **Next:** when it fires, capture mtr from BOTH ends immediately (runbook-able; consider auto-capture triggered by the alert), correlate wave timestamps against ISP/UDM WAN events (dual-WAN failover logs?). **Effort: M (mostly waiting for a wave).**
+
+### ⏳ M125. Migrate unifi TF provider to the ubiquiti-community fork
+- paultyng/unifi archived 2026-04-30; it now deterministically 400s PUT networkconf for 3 of 7 networks (bit the M110 dhcp_dns cutover — worked around via direct UDM API + ignore_changes). Fork is drop-in. Swap `source`, re-init, verify plan `0/0/0`, then try removing the M110 ignore_changes. **Effort: S.**
+
+### ⏳ M126. Structural improvements from the 2026-07-02 state review (operator to prioritize)
+- (a) **kube-vip HA API endpoint** (ARP mode on VLAN 201 — NOT BGP per the VIP gotcha); do with the 1.35 upgrade window. (b) **Split the Flux mono-Kustomization** into layered Kustomizations with dependsOn/healthChecks (one bad manifest currently freezes ALL reconciliation). (c) **PVE memory ceiling decision** — ~85/93 GiB committed; growth is now RAM-gated (cheaper than the L1 second node). (d) Cilium lifecycle ownership in git (values snapshot + upgrade runbook). (e) Spegel pull-through cache (L). (f) PG 16→18 plan piggybacked on the M12 restore drill (L). (g) file the bpg watchdog bug upstream (verified unreported; L). (h) IPv6 stance doc (L). Full detail: session-log 2026-07-02.
+
+
+
 > M112–M121 + L25–L31 below are from the **2026-07-01 Fable-5 infra review** (3 parallel read-only agents:
 > K8s efficiency/hardening, AWS, CI/CD, ansible, observability, cost). Deduped against everything above.
 
@@ -264,13 +289,9 @@ orphaned. Not service-affecting on its own.
 - **✅ Fixed (`e9f11d3`):** `defaultRepoMaintainFrequency: 24h` in the velero HelmRelease (verified server arg) + **live-patched the 11 CRs to `24h0m0s`** (velero owns them, not Flux) → ~24x fewer maintenance runs, effective immediately. Also added the missing `logs.grahamsmith.net` lifecycle (auto-expires ~116k dead ALB access-log objects; applied via `terraform-s3`, plan `1 add/0 destroy`).
 - **Target ≈ $35/mo** (`aws-cost-teardown` workflow). **⏳ Remaining levers:** M110 consolidation (below) + us-east-1 decom (≈$9/mo). **⏳ USER-only** (CE/wafv2 denied to the scoped key): confirm the S3 `Requests-Tier1/2` line in Cost Explorer (Group-by Usage Type) + optionally grant `ce:GetCostAndUsage` + a Budget alert; console-check for a stray REGIONAL WAFv2 WebACL ($5/mo if orphaned). **⏳ Architectural follow-up (3-2-1):** move velero's PRIMARY BSL to LOCAL MinIO/Ceph RGW (zero-request frequent backups) + weekly BATCHED rclone → Deep Archive for DR. See session-log 2026-07-01.
 
-### 🟡 M110. AWS vpn+dns consolidation → one t4g.small (fix ENA flap + save ~$88/yr) — IN PROGRESS
-- **Plan:** [`aws-vpn-dns-consolidation-plan.md`](aws-vpn-dns-consolidation-plan.md) (task #43). Full detail in session-log 2026-07-01 ("M110 executed (partial)").
-- **✅ DONE 2026-07-01:** us-east-1 spoke decommissioned (`7b257df`,`a6c31ee` — ~$9/mo, incl. a stale-tfstate-lock fix); **vpn-aws resized t4g.nano→t4g.small** (`506e526` — the ENA flap fix, verified live); renamed instance/vol/EIP tags `private-infra_vpn`→**`private-infra_edge`** (`ca77133`, multi-service). Cert-SSH bootstrap plumbing added to `ansible-vm-fleet.yml` (static key for `inventory=aws` + IdentitiesOnly + ControlMaster).
-- **✅ cert-SSH bootstrap DONE** — `step-ca-trust` applied on edge via a retry loop over the static-key CI path (`ControlMaster`+`IdentitiesOnly`, `ansible_host`=public EIP). CI ansible can now configure the box (retry loop punches through the intermittent windows). **Technitium fold / DNS cutover / dns-box destroy + EIP `52.40.219.113` release / SG redesign (F1-F7) / monitoring cleanup + travel-tooling cleanup still PENDING** (run via retry-looped CI).
-- **⚠️ CORRECTION: the "flap" is a homelab↔AWS PATH packet-loss issue (in waves), NOT the box's ENA** — on t4g.small all ENA allowance counters = 0, no drops, no fail2ban, 0 sshd failures, SG correct; yet reachability to the box waxes/wanes over minutes (:22 = 13/15 → 0/20 → 10/10). So M109's "resize fixes the flap" was wrong (resize still justified for RAM). **Real flap fix = homelab-side (mtr during a loss window; WAN/ISP/dual-WAN).** See session-log 2026-07-01 "M110 executed (partial)" UPDATE.
-- **⏳ Resume:** (1) fix CI→edge reachability [find runner egress IP → add to SG via `dns-restrict-ip`; or check MTU/loss; or run ansible from the devbox via Tailscale] — NB the 2026-07-01 review found the runner egress IS `47.159.189.5` (SG-allowed), so the intermittency is the path-loss waves, and the working answer is **retry-looped dispatch** (proven: step-ca-trust landed that way); (2) then fold → cutover → destroy dns → re-point UniFi dhcp_dns (7 VLANs) + Lambda `.113`→`.80`. **✅ travel-VPN tooling cleanup DONE 2026-07-01** — deleted `aws-regional-vpn/` + `modules/regional-vpn/` + `terraform-regional-vpn.yml` + `regional-peers.yaml`, removed the disabled `Wireguard Travel 9820` UDM forward from the unifi TF (pending 1-destroy apply), purged the empty S3 tfstates (+ a stale bahrain tflock), and updated all docs (setup/github-actions README section, archived runbook banner, secrets-rotation, repo maps).
-- **⏳ Post-cutover DOC sweep** (flags planted 2026-07-01 by the doc-consolidation pass): `architecture/aws-infrastructure.md`, `runbooks/PLATFORM-MANAGEMENT.md`, `runbooks/disaster-recovery.md`, `runbooks/instance-migration.md` carry 🟡 M110 banners; also update the alert runbooks (`TechnitiumExternalHostDown`, `ExternalHostLowDisk`, `TechnitiumDNSDown`), `operations-guide.md` DNS/VPN sections, and UPDATE-PROCEDURES' staggered-reboot table — every `10.10.100.5`/`52.40.219.113` reference — once dns-aws is destroyed.
+### ✅ M110. AWS vpn+dns consolidation — COMPLETE 2026-07-02
+- **End state (verified live):** ONE AWS box — `private-infra_edge` (t4g.small) + ONE EIP `44.240.60.80` serving WireGuard (wg0+wg1) + Tailscale + **Technitium DNS** (folded via `technitium.yml`; 47 records synced; answers internal names on the EIP + `.10`). The standalone dns instance + EIP `52.40.219.113` + its 3 CW alarms **destroyed** (plan-gated `5 to destroy`); us-east-1 + travel tooling already gone. UniFi `dhcp_dns` re-pointed on all 7 VLANs (4 via TF; **3 via direct UDM API PUT — the archived paultyng provider deterministically 400s on clients/vsan/ceph**, now `ignore_changes` + comment; stack back to `No changes`). dns SG (with the Lambda-managed :53 WAN allows) attached to the edge instance. All `.5`/dns-aws references cleaned (scrape, dns-sync, dns-tier netpol /32, inventory). Cert-SSH trust installed on the box (CI static-key branch remains until the M76-parity cutover — ⚠️ residual below).
+- **⚠️ Residuals:** (1) flip the ansible-vm-fleet aws branch to cert auth + run `step-ca-remove-static-key` on the edge box (M76 parity); (2) SG redesign F1-F7 (delete `internal_aws_spokes` /19, port-scope the `-1` rules) still pending; (3) post-M110 doc sweep (the 🟡 flags planted in aws-infrastructure.md / PLATFORM-MANAGEMENT.md / disaster-recovery.md / instance-migration.md / operations-guide / UPDATE-PROCEDURES).
 
 ### 🟡 M109. Full infra health check 2026-06-30 — 3 high fixed; AWS t4g right-size open
 - **Source:** operator-requested full health check (8-agent parallel sweep). Storage / networking (Cilium+BGP+DNS) / certs-PKI / backups all **healthy**. Found **0 critical, 3 high** — all resolved this session (`46371c3`):
@@ -349,7 +370,7 @@ orphaned. Not service-affecting on its own.
 ### ✅ L25. DONE 2026-07-01 (`35dce3a`) — test-ssh-cert.yml deleted; permissions:{} on bootstrap-runner-key.yml.
 - The former still consumes `STEP_JWK_PASSWORD` on the self-hosted runner post-cutover; the two are the only workflows with no `permissions:` block. (2026-07-01 review #14.) **Effort: S.**
 
-### ⏳ L26. `automountServiceAccountToken: false` sweep on no-API workloads
+### ✅ L26. automountServiceAccountToken sweep — DONE 2026-07-02: false on plex, wikijs, ollama, open-webui, technitium, home-assistant (rolled via Flux).
 - 243/255 pods automount a SA token; plex/wikijs/ollama/technitium/home-assistant etc. never call the API — a pod compromise hands each a valid cluster credential. (#15.) **Effort: M.**
 
 ### ✅ L27. DONE 2026-07-01 (`35dce3a`), verified live: enforce=baseline on kyverno + plex (the plex "GPU needs privileged" note was STALE — device-plugin GPU, dry-run clean); pg-recovery ns deleted (held a stray csi-rbd-secret COPY — bonus credential cleanup).
@@ -364,7 +385,7 @@ orphaned. Not service-affecting on its own.
 ### 🟡 L30. Infra PDBs DONE 2026-07-01 (coredns/cilium-operator/csi-provisioner, minAvailable 1, selectors verified, live). **velero cluster-admin deliberately KEPT** — restore must create arbitrary resources incl. RBAC; scoping it risks silently breaking DR. Documented decision; close unless posture changes.
 - Drains can momentarily evict both replicas of cluster DNS; velero needs broad-but-not-cluster-admin. (#20.) **Effort: S.**
 
-### 🟡 L31. Minor hygiene batch — email_fwd abort-MPU DONE 2026-07-01 (applied via terraform-s3); WG-key item moot (workflow deleted); ⏳ remaining: codify SSE blocks on the 7 buckets relying on AWS-default SSE-S3 (parity only).
+### ✅ L31. Minor hygiene batch — COMPLETE 2026-07-02: email_fwd abort-MPU + SSE-S3 blocks codified on all 7 default-reliant buckets (plan-gated `7 to add`, applied); WG-key item moot.
 - `email_fwd` S3 bucket lacks the abort-incomplete-MPU rule every other bucket has; ~~WG private key passed as CLI `-var` in `terraform-regional-vpn.yml`~~ (moot — workflow deleted 2026-07-01); codify SSE blocks on the 7 buckets relying on AWS-default SSE-S3 (parity only). **Effort: S.**
 
 ### ⏳ L1. Proxmox HA cluster expansion
