@@ -37,6 +37,16 @@ the tracker's archived "Recently completed" blocks — now in
   (verified against the live DB: 43,990 ledger rows readable). Tonight's 22:00 run emits orphans for
   the first time. cairn README §6 corrected to the proven lock mechanism (`7976511`).
 
+## 2026-07-02 (cont. 3) — backlog: authentik logo fix, M125 parked (2nd attempt), F1+F7 staged, step-ca-trust wave-blocked
+
+**Authentik login logo:** the 2024.12 "transparent-1x1-pixel = no logo" trick renders as an empty placeholder frame under 2026.x → hid the brand img via custom.css (subPath mount → server rollout applied it). Owner to eyeball.
+
+**M125 attempt 2 — parked with a DEFINITIVE finding:** the ubiquiti-community fork is NOT drop-in at ANY version — 0.54 renamed the resource types (attempt 1); even its 0.41.25 changed the `unifi_network` arguments ("Unsupported argument" ×20, attempt 2). Both attempts cleanly reverted via reverse replace-provider (state on paultyng, plans green, zero infra impact). M125 re-scoped: a deliberate schema-diff migration (adapt networks.tf args, maybe state mv), parked — the archived provider still serves + works.
+
+**M110 SG residuals F1+F7 staged (commit pushed, plan green, APPLY awaiting owner eyes):** deletes the dead `internal_aws_spokes` -1-from-10.10.96.0/19 rule (decommissioned spoke VPCs) + the orphaned `alb-public-443` SG (+3 rules, outputs ref). Expected diff = 5 destroys. F2/F3 (port-scoping the remaining -1 rules / the consolidated-SG redesign with Lambda rule_specs) remain the deliberate follow-up per the consolidation plan doc.
+
+**M76-parity cert-SSH cutover for the edge box — BLOCKED by an active M124 wave:** two step-ca-trust check dispatches failed with become-timeout (gather-facts OK → sudo prompt lost); flap detector showed 14 scrape flaps/1h = mid-wave. Retry when calm: dispatch `ansible-vm-fleet step-ca-trust inventory=aws action=check` → apply → verify cert-SSH from devbox → flip the workflow aws branch to cert → `step-ca-remove-static-key`.
+
 ## 2026-07-02 (cont. 2) — H45b+M123 rolling upgrade EXECUTED (K8s 1.34.3 + containerd 2.2.5), Authentik→2026.5.3, M128 rename, L32 TS rejoin
 
 Owner: "kick off m45b and m123" + "do the full rename to vpn-fallback" + TS auth key. All executed same-session.
