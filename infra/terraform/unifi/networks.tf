@@ -19,7 +19,7 @@
 # The list is repeated per-resource below; if it grows or shifts, search/replace.
 #
 # Standard internal DNS pushed by DHCP: K8s technitium VIP (10.10.201.5),
-# dns-fallback (10.10.201.6), AWS technitium (52.40.219.113).
+# dns-fallback (10.10.201.6), AWS technitium on the edge box (44.240.60.80 — M110).
 #
 # `network_isolation_enabled` is in the live UDM state but NOT in the
 # paultyng/unifi provider schema — UI-managed only. The Security VLAN
