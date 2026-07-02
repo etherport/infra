@@ -56,15 +56,29 @@ spec:
             summary: "High CPU usage on {{ $labels.instance }}"
             description: "CPU usage on {{ $labels.instance }} is above 80% for more than 10 minutes. Current: {{ $value | printf \"%.1f\" }}%"
 
-        # High memory usage
+        # High memory usage. pve EXCLUDED from the generic 85% rule — the hypervisor
+        # runs ~86% by design (~85 of 93 GiB committed to VMs + ZFS ARC; see the
+        # M126 capacity-ceiling item) and would perma-fire; it gets its own rule
+        # below at a pressure-signal threshold.
         - alert: ExternalHostHighMemory
-          expr: (1 - (node_memory_MemAvailable_bytes{job="external-nodes"} / node_memory_MemTotal_bytes{job="external-nodes"})) * 100 > 85
+          expr: (1 - (node_memory_MemAvailable_bytes{job="external-nodes",instance!="pve"} / node_memory_MemTotal_bytes{job="external-nodes",instance!="pve"})) * 100 > 85
           for: 5m
           labels:
             severity: warning
           annotations:
             summary: "High memory usage on {{ $labels.instance }}"
             description: "Memory usage on {{ $labels.instance }} is above 85%. Current: {{ $value | printf \"%.1f\" }}%"
+
+        # pve hypervisor: alert only on REAL pressure (its steady state is ~86%).
+        # 94% ≈ the VM commitment + ARC has been eaten into — investigate before OOM.
+        - alert: PveHostMemoryPressure
+          expr: (1 - (node_memory_MemAvailable_bytes{instance="pve"} / node_memory_MemTotal_bytes{instance="pve"})) * 100 > 94
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "pve hypervisor memory pressure ({{ $value | printf \"%.1f\" }}%)"
+            description: "pve normally sits ~86% (committed VMs + ZFS ARC). >94% for 10m means the headroom is gone — check for a ballooning VM or ARC growth before the host OOM-kills a guest. Capacity context: tracker M126(c)."
 
         # Elevated swap (early warning before the CW reboot alarm at 80%)
         # Filtered to hosts that actually have swap configured so the
