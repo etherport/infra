@@ -883,6 +883,21 @@ resource "aws_s3_bucket_public_access_block" "cue_media" {
   restrict_public_buckets = true
 }
 
+# Browser-direct presigned PUTs from the Cue web app (bug-report screenshots: the client fetches
+# /media/upload-url then PUTs straight to S3 — src/ui-client/report.ts). Without CORS the
+# preflight fails and every screenshot upload dies in the browser (cue bug b62782a1, 2026-06-30).
+# Reads never hit S3 from the browser (the app proxies serves), so PUT-only, tight origins.
+resource "aws_s3_bucket_cors_configuration" "cue_media" {
+  bucket = aws_s3_bucket.cue_media.id
+
+  cors_rule {
+    allowed_origins = ["https://cue.etherport.net"]
+    allowed_methods = ["PUT"]
+    allowed_headers = ["content-type"]
+    max_age_seconds = 3600
+  }
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "cue_media" {
   bucket = aws_s3_bucket.cue_media.id
   rule {
