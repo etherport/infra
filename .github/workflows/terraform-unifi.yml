@@ -80,6 +80,13 @@ jobs:
       - name: Terraform Init
         run: terraform init -backend-config="profile=" -reconfigure
 
+      # M125 attempt 2 (2026-07-02): one-time state migration paultyng → the
+      # community fork's 0.41.x line (drop-in resource names). Idempotent — once
+      # migrated there are no paultyng refs left and the command no-ops via || echo.
+      # Remove this step in a follow-up once the migration is confirmed.
+      - name: Migrate provider source (paultyng -> ubiquiti-community, idempotent)
+        run: terraform state replace-provider -auto-approve registry.terraform.io/paultyng/unifi registry.terraform.io/ubiquiti-community/unifi || echo "already migrated (no-op)"
+
       - name: Terraform Plan
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.action == 'plan'
         run: terraform plan -input=false -no-color

@@ -3,17 +3,15 @@ terraform {
 
   required_providers {
     unifi = {
-      source = "paultyng/unifi"
-      # Pin to a known-good version. UniFi Network 10.3.58 is newer than
-      # what most provider versions explicitly test against, but Phase 1
-      # resources (unifi_network, unifi_port_forward, unifi_user) have
-      # stable schemas going back to v0.30+.
-      # M125 ATTEMPT REVERTED 2026-07-02: ubiquiti-community/unifi 0.54.0 is NOT a
-      # drop-in — it renamed the resource types ("provider does not support resource
-      # type unifi_network/..."), so the plan errored. The state replace-provider had
-      # already rewritten S3 state → reverted here (see the reverse step in the
-      # workflow). Re-attempt M125 with a fork VERSION matching paultyng 0.41's schema.
-      version = "~> 0.41"
+      # M125 (2026-07-02, attempt 2): paultyng/unifi is ARCHIVED → migrated to the
+      # ubiquiti-community fork PINNED TO ITS 0.41.x LINE (0.41.25, the last one) —
+      # that line keeps paultyng's resource names, so it IS drop-in. The fork's
+      # 0.42+/0.5x re-versioning RENAMED the resource types (attempt 1 with 0.54.0
+      # errored "provider does not support resource type unifi_network" AFTER
+      # replace-provider had rewritten state — reverted). Moving past 0.41.x later
+      # = a deliberate `terraform state mv` migration, not a version bump.
+      source  = "ubiquiti-community/unifi"
+      version = "0.41.25"
     }
   }
 }
