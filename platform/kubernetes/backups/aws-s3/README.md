@@ -205,6 +205,9 @@ instead of hand-editing env. Flow:
    is normal operation, **not** a failure: it does not trip `S3SyncFailed` /
    `KubeJobFailed` / the AI advisor, and the daily report shows it as
    "subject to approval" rather than an error. The held deletions wait.
+   If the operator previously **rejected** (snooze active), the run behaves the
+   same but reports `status: REJECTED_HELD` / metric label `rejected_snoozed`
+   and the daily report says "rejected — N deletions held" (nothing is awaited).
 2. You click **Review & approve** → `backup-approve.wind.etherport.net` (behind
    **Cloudflare Access**, restricted to the operator email). The page shows the
    full manifest + a **Download CSV** link; clicking **Confirm** (a POST, so
@@ -245,9 +248,18 @@ instantly); `.sync-locks` is excluded from the sync.
   approvable).
 - A **Guard 2** trip (deletion volume awaiting approval) is **SUCCESS subject to
   approval**, NOT a failure: uploads still run, the run exits 0 with `success=1`
-  and report `status: APPROVAL_PENDING` (+ `deletionsPendingApproval` count). It
+  and report `status: APPROVAL_PENDING` (+ `deletionsPendingApproval` count) — or
+  `REJECTED_HELD` when the operator already rejected (snooze active). It
   doesn't alert (`S3SyncFailed`/`KubeJobFailed`/advisor); the approval email is
-  the signal. (Before 2026-06-26 it exited non-zero and read as a failed sync.)
+  the signal. A sync failure still wins: non-zero `aws s3 sync` rc reports
+  FAILED even while deletions are held. (Before 2026-06-26 every hold exited
+  non-zero and read as a failed sync.)
+- A checksum **mismatch on a file that was modified during the run** (mtime/size
+  drift vs the recorded transfer, or source mtime newer than S3's LastModified)
+  is downgraded to a **non-fatal warning** (`modifiedDuringRun` in the report;
+  degraded email lists the keys). ⚠️ Not auto-re-uploaded while the size is
+  unchanged (`--size-only`) — re-upload manually if the object must be refreshed.
+  A mismatch with NO drift signals stays **CRITICAL/FAILED** (real corruption).
 - Objects that exist (HEAD 200) but return **no checksum metadata** —
   typically files rewritten at the source mid-run — are **not** a failure.
   They get one re-HEAD after a short settle (`CHECKSUM_RETRY_DELAY_SECONDS`,

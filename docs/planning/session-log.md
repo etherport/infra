@@ -15,6 +15,26 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-02 — Fable-5 review of the aws-s3 backup app → fix set (status semantics, chat.db mid-run downgrade, settle-pass repair)
+
+Owner: "do a full review of this code using the fable 5 model", then "fix everything you can… give me a prompt for the infra agent" (who is separately investigating an overnight sync error — findings TBC; **hypothesis: the known chat.db false-corruption**, which this session's fix addresses).
+
+**Review verdict:** no new HIGH/data-safety findings; the June fix set + M75 IRSA + a700b3f compose correctly. Fixes shipped (verified by a 3-lens adversarial workflow over the diff BEFORE commit — that pass caught 4 real defects in the first cut, all fixed):
+
+- **Status semantics (was M1):** `rejected_snoozed` no longer masquerades as "approval pending" — metric label carries the real status; report emits distinct **`REJECTED_HELD`**; daily email renders "rejected — N deletions held". A **FAILED sync now outranks a held status everywhere** (verifier caught my no-uploads block clobbering FAILED → APPROVAL_PENDING).
+- **chat.db mid-run downgrade:** a checksum mismatch on a file *modified during the run* (recorded-vs-current mtime drift, recorded-size≠S3-size, or source-mtime > S3 LastModified **+120s skew margin**) downgrades to non-fatal `modifiedDuringRun` (WARN + degraded email + durable report fields `modifiedDuringRun`/`modifiedDuringRunFiles`, forensic hash details KEPT). A mismatch with NO drift signals stays CRITICAL/FAILED. **Honest caveat encoded in code+README: NOT self-healing — `--size-only` never re-uploads a same-size in-place rewrite; the degraded email is the operator cue to re-upload manually.** Exception-hardened after the verifier DEMONSTRATED an NFS-ESTALE record-drop that would have silently eaten a real corruption record (unit-tested: 7/7 cases incl. ESTALE + skew boundary).
+- **Settle-pass repair (pre-existing, found this review):** the checksum-unavailable **re-HEAD settle pass has been a silent NO-OP since a700b3f (06-24)** — it still called verify-one.sh with the old bucket/key-as-two-args interface, so KEY read empty and results were written to a bogus path; `STILL_MISSING` always equalled `RETRY_COUNT`. Both retry invocations now pass the single tab-delimited record like the main pass.
+- **Daily report:** held-status cards require `success==1` (a held report whose sync failed renders as an error card, consistent with the header count); header gains "N holding deletions" so "All N completed" can't mask a held share.
+- **TF (L1):** `logs.archive` lifecycle rule expiring `approvals/pending/` records at 30d (they were accumulating unbounded — approve/reject only write the per-share marker). fmt+validate clean; plan/apply via `terraform-s3.yml`.
+- **Docs:** README approval-flow + verification-semantics updated (REJECTED_HELD, mid-run downgrade + no-self-heal caveat, FAILED-outranks-held); stale S3SyncFailed rule comment fixed (metric is pushed by the sync job, NOT daily-report; holds deliberately don't fire it).
+- **NOT done (adjudicated/deferred):** `:main` pin — **accepted per H30** (do not "fix"); manifest-driven H3 delete + force-re-upload of `modifiedDuringRun` keys → infra-agent backlog.
+
+**Incident coordination:** the `aws-s3-sync:main` image REBUILDS on this push — runs after the build use the new code (distinct log signature: "modified during run … downgraded"). The overnight-failure artifacts (S3 report + pod logs) are immutable; if the infra agent re-runs a share, note the code boundary.
+
+---
+
+---
+
 ## 2026-07-01 (cont.) — Fable-5 full review of cairn (code+repo+docs+observability) → v0.1.7 + alert-hole fixes
 
 **What:** owner-requested full review of the cairn codebase/repo + docs/Grafana integration using

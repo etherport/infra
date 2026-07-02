@@ -269,11 +269,12 @@ def get_s3_summary_metrics(share, start_time_epoch):
         sync_data = summary.get('sync', {})
         summary_data = summary.get('summary', {})
 
-        # Check both top-level status field AND sync exitCode. APPROVAL_PENDING is
-        # a SUCCESS subject to approval (a deletion is held for operator review),
-        # NOT a failure — treat it as success so it isn't counted/rendered as error.
+        # Check both top-level status field AND sync exitCode. APPROVAL_PENDING
+        # (deletion held for operator review) and REJECTED_HELD (operator rejected,
+        # snooze active) are both SUCCESS-with-held-deletions — normal operation,
+        # NOT failures; don't count/render them as errors.
         is_success = (
-            report_status in ('SUCCESS', 'APPROVAL_PENDING') and
+            report_status in ('SUCCESS', 'APPROVAL_PENDING', 'REJECTED_HELD') and
             sync_data.get('exitCode', 1) == 0
         )
 
@@ -362,6 +363,13 @@ total_errors = sum(1 for e in executions if e.get('job_status') in ['failed', 'u
 total_files = sum(e.get('files', 0) for e in executions)
 total_bytes = sum(e.get('bytes', 0) for e in executions)
 
+# Shares whose run succeeded but is holding deletions (awaiting approval or
+# rejected-snoozed) — surfaced in the header so "All N completed" can't mask them.
+total_held = sum(1 for e in executions
+                 if e.get('status') in ('APPROVAL_PENDING', 'REJECTED_HELD')
+                 and e.get('job_status') == 'succeeded'
+                 and e.get('success', 0) == 1)
+
 # Determine overall status pill
 if total_errors > 0:
     overall_pill_class = 'err'
@@ -369,6 +377,9 @@ if total_errors > 0:
 elif total_in_progress > 0:
     overall_pill_class = 'warn'
     overall_pill_text = f"{total_in_progress} in progress"
+elif total_held > 0:
+    overall_pill_class = 'warn'
+    overall_pill_text = f"{total_held} holding deletions"
 elif total_executions == 0:
     overall_pill_class = 'warn'
     overall_pill_text = "No runs in window"
@@ -394,8 +405,15 @@ for execution in sorted_executions:
 
     if job_status == 'running':
         status_text, status_class = 'in progress', 'warn'
-    elif rep_status == 'APPROVAL_PENDING' and job_status == 'succeeded':
+    elif rep_status == 'APPROVAL_PENDING' and job_status == 'succeeded' and success == 1:
         status_text = f'subject to approval ({pend:,} to delete)' if pend else 'subject to approval'
+        status_class = 'warn'
+    elif rep_status == 'REJECTED_HELD' and job_status == 'succeeded' and success == 1:
+        # Operator already rejected this deletion; nothing is awaited — don't
+        # phrase it as pending approval. (Both held branches require success==1
+        # so a held report whose sync actually FAILED renders as an error card,
+        # keeping the card list consistent with the header's error count.)
+        status_text = f'rejected — {pend:,} deletions held' if pend else 'rejected — deletions held'
         status_class = 'warn'
     elif job_status == 'succeeded' and success == 1:
         status_text, status_class = 'completed', 'ok'

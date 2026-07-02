@@ -23,8 +23,11 @@ spec:
     - name: s3-sync.rules
       rules:
         - alert: S3SyncFailed
-          # `homelab_backup_last_run_success` is 1 = OK / 0 = fail.
-          # Published by the daily-report CronJob to the pushgateway.
+          # `homelab_backup_last_run_success` is 1 = OK / 0 = fail. Pushed by each
+          # per-share sync job itself (sync-and-verify.sh → pushgateway) at end of
+          # run. NB a delete-guard approval hold reports success=1 with
+          # batch_status="approval_pending"/"rejected_snoozed" — normal operation,
+          # deliberately does NOT fire this alert (2026-06-26 change).
           expr: homelab_backup_last_run_success == 0
           for: 5m
           labels:

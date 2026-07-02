@@ -804,8 +804,9 @@ request_approval() {
   echo "[delete-guard] approval requested — signed link emailed (token redacted): ${APPROVAL_BASE_URL}/approve?t=<redacted>"
   echo "[delete-guard] uploads will still run this pass; the ${would_delete} deletion(s) are HELD until approved"
   # Do NOT exit — let the real sync run uploads-only so new/changed files are still
-  # backed up while the deletion waits for approval. The end-of-run logic marks the
-  # run approval_pending (success=0, exit 1) so it stays visibly "needs action".
+  # backed up while the deletion waits for approval. The end-of-run logic reports
+  # APPROVAL_PENDING with success=1 / exit 0 (normal operation, not a failure —
+  # 2026-06-26); the approval email is the actionable signal.
   REAL_SYNC_DELETE="false"
   DELETIONS_PENDING="true"
   PENDING_DELETE_STATUS="approval_pending"
@@ -1036,7 +1037,17 @@ if [[ "${UPLOAD_COUNT}" -le 0 ]]; then
   CONSOLIDATED_REPORT_KEY="reports/${SHARE_NAME}/${TS}/report.json"
 
   if [[ ${SYNC_RC:-0} -eq 0 ]]; then NOUP_STATUS="SUCCESS"; else NOUP_STATUS="FAILED"; fi
-  if is_true "${DELETIONS_PENDING}"; then NOUP_STATUS="APPROVAL_PENDING"; fi
+  # Distinguish "awaiting the operator's decision" from "operator already said no":
+  # a rejected-and-snoozed deletion must not be reported as awaiting approval.
+  # A FAILED sync always wins — a held-deletions run whose uploads-only sync
+  # itself failed must report FAILED, not "success subject to approval".
+  if is_true "${DELETIONS_PENDING}" && [[ ${SYNC_RC:-0} -eq 0 ]]; then
+    if [[ "${PENDING_DELETE_STATUS}" == "rejected_snoozed" ]]; then
+      NOUP_STATUS="REJECTED_HELD"
+    else
+      NOUP_STATUS="APPROVAL_PENDING"
+    fi
+  fi
 
   cat > "${CONSOLIDATED_REPORT}" <<JSON
 {
@@ -1280,12 +1291,18 @@ VERIFY_SCRIPT
     if [[ "${RETRY_COUNT}" -gt 0 ]]; then
       echo "Re-verifying ${RETRY_COUNT} object(s) with missing checksum after ${CHECKSUM_RETRY_DELAY_SECONDS}s settle..."
       sleep "${CHECKSUM_RETRY_DELAY_SECONDS}"
+      # verify-one.sh's contract (since the 2026-06-24 special-char fix) is ONE
+      # tab-delimited "bucket<TAB>key" record in $1 — same as the main pass above.
+      # These retry invocations were missed by that fix and still passed bucket/key
+      # as separate args, which made the whole settle pass a silent no-op (KEY read
+      # empty, results written to a bogus dir, STILL_MISSING always == RETRY_COUNT).
       if command -v parallel >/dev/null 2>&1; then
-        cat "${RETRY_TSV}" | parallel --colsep '\t' -j "${PARALLEL_JOBS}" \
-          "${VERIFY_WORK_DIR}/verify-one.sh" {1} {2} "${VERIFY_WORK_DIR}/results" "${AWS_REGION}"
+        parallel -j "${PARALLEL_JOBS}" \
+          "${VERIFY_WORK_DIR}/verify-one.sh" {} "${VERIFY_WORK_DIR}/results" "${AWS_REGION}" \
+          < "${RETRY_TSV}"
       else
-        while IFS=$'\t' read -r RBUCKET RKEY; do
-          "${VERIFY_WORK_DIR}/verify-one.sh" "${RBUCKET}" "${RKEY}" "${VERIFY_WORK_DIR}/results" "${AWS_REGION}"
+        while IFS= read -r REC; do
+          "${VERIFY_WORK_DIR}/verify-one.sh" "${REC}" "${VERIFY_WORK_DIR}/results" "${AWS_REGION}"
         done < "${RETRY_TSV}"
       fi
       # Rebuild combined results with the refreshed per-object files
@@ -1323,6 +1340,7 @@ VERIFY_SCRIPT
 
   python3 - <<'PYAUDIT' || record_warning "Failed to create file audit log"
 import json, os, sys, base64, hashlib
+from datetime import datetime, timezone, timedelta
 
 DEFAULT_PART_SIZE_MB = int(os.environ.get('CHECKSUM_PART_SIZE_MB', '8'))
 
@@ -1402,6 +1420,7 @@ with open(output_path, 'w') as out:
                     checksum_match = None
                     checksum_mismatch_details = ''
                     is_composite = False
+                    modified_mid_run = False
 
                     # Check if S3 checksum is composite (ends with -N for N parts)
                     s3_sha256 = ''
@@ -1457,6 +1476,74 @@ with open(output_path, 'w') as out:
                     elif s3_sha256:
                         checksum_match = None  # Source checksum unavailable
 
+                    # A mismatch on a file that was being REWRITTEN during the run
+                    # (e.g. the iMessage chat.db while the mini's backup is mid-write)
+                    # is expected, NOT corruption: the source sha256 is computed
+                    # AFTER the upload, so if the file changed in between the two
+                    # legitimately differ. Downgrade to "unavailable" (WARN) when any
+                    # of three independent signals says the source moved mid-run:
+                    #   (a) source mtime changed between transfer-parse and now
+                    #   (b) source size at transfer-parse != size S3 stored
+                    #   (c) recorded source mtime is NEWER than S3's LastModified
+                    # A mismatch with NONE of these stays CRITICAL (real corruption
+                    # must stay loud). (2026-06-23 chat.db false-FAILED — session-log.)
+                    if checksum_match is False:
+                        # Every step here must be exception-safe: an unhandled error
+                        # would hit the outer per-record handler and silently DROP
+                        # the audit record for a mismatched (possibly corrupted)
+                        # file — the one record that must never vanish.
+                        reasons = []
+                        rec_mtime = None
+                        rec_mtime_s = transfer.get('mtime_utc', '')
+                        if rec_mtime_s:
+                            try:
+                                rec_mtime = datetime.strptime(
+                                    rec_mtime_s, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+                            except ValueError:
+                                rec_mtime = None
+                        if rec_mtime is not None and local_path:
+                            try:
+                                cur_mtime = datetime.fromtimestamp(
+                                    int(os.path.getmtime(local_path)), tz=timezone.utc)
+                                if cur_mtime != rec_mtime:
+                                    reasons.append("mtime %s -> %s" % (
+                                        rec_mtime_s, cur_mtime.strftime('%Y-%m-%dT%H:%M:%SZ')))
+                            except OSError:
+                                # File vanished / NFS ESTALE between stats — no signal;
+                                # the mismatch stays CRITICAL rather than dropping out.
+                                pass
+                        s3_size = verify.get('size')
+                        rec_bytes = transfer.get('bytes')
+                        if isinstance(s3_size, int) and isinstance(rec_bytes, int) \
+                                and s3_size > 0 and rec_bytes != s3_size:
+                            reasons.append("size source=%s s3=%s" % (rec_bytes, s3_size))
+                        s3_lm_s = str(verify.get('last_modified', '') or '')
+                        if rec_mtime is not None and s3_lm_s:
+                            try:
+                                s3_lm = datetime.fromisoformat(s3_lm_s.replace('Z', '+00:00'))
+                                # 120s margin absorbs NAS-vs-AWS clock skew so a file
+                                # merely written shortly before upload can't be
+                                # wrongly downgraded on skew alone.
+                                if rec_mtime > s3_lm + timedelta(seconds=120):
+                                    reasons.append("source mtime newer than S3 LastModified %s" % s3_lm_s)
+                            except (ValueError, TypeError):
+                                pass
+                        if reasons:
+                            # Keep checksum_mismatch_details — it's the durable
+                            # forensic trail (both hashes) in the S3 report.
+                            # NB: NOT guaranteed to self-heal — the sync diffs with
+                            # --size-only, so a SAME-SIZE in-place rewrite is never
+                            # re-uploaded; the report's modifiedDuringRun flag +
+                            # degraded-email warning are the operator's cue. Inherent
+                            # residual: a constantly-churning file's real at-rest
+                            # corruption also lands here, not in CRITICAL.
+                            modified_mid_run = True
+                            checksum_match = None
+                            print(f"WARN: {s3_key} modified during run ({'; '.join(reasons)}); "
+                                  "checksum mismatch downgraded to unavailable (not corruption). "
+                                  "NOT auto-re-uploaded if size unchanged (--size-only) — "
+                                  "see modifiedDuringRun in the report", file=sys.stderr)
+
                     # Create audit record in expected format
                     audit = {
                         'local_path': transfer.get('local_path', ''),
@@ -1471,6 +1558,7 @@ with open(output_path, 'w') as out:
                         'checksum': s3_sha256,
                         'checksum_algorithm': 'SHA256' if s3_sha256 else '',
                         'checksum_match': checksum_match,
+                        'modified_during_run': modified_mid_run,
                         'checksum_mismatch_details': checksum_mismatch_details
                     }
 
@@ -1486,6 +1574,17 @@ with open(output_path, 'w') as out:
 print(f"File audit log created: {output_path}", file=sys.stderr)
 PYAUDIT
 
+  # Surface mid-run-modified downgrades as run WARNINGS so the degraded-state
+  # email lists them: the run stays SUCCESS, but --size-only means a same-size
+  # in-place rewrite is NOT re-uploaded next run — the operator cue matters.
+  if [[ -s "${FILE_AUDIT_JSONL}" ]]; then
+    MODIFIED_MID_RUN_COUNT=$(jq -r 'select(.modified_during_run==true) | .s3_key' "${FILE_AUDIT_JSONL}" 2>/dev/null | wc -l | tr -d ' ')
+    MODIFIED_MID_RUN_COUNT="${MODIFIED_MID_RUN_COUNT:-0}"
+    if [[ "${MODIFIED_MID_RUN_COUNT}" -gt 0 ]]; then
+      record_warning "${MODIFIED_MID_RUN_COUNT} object(s) checksum-mismatched but were modified during the run (see modifiedDuringRunFiles in the report); downgraded to non-fatal. NB not auto-re-uploaded while size is unchanged (--size-only)"
+    fi
+  fi
+
 fi
 
 # Calculate duration
@@ -1497,7 +1596,9 @@ DURATION_SECONDS=$((END_EPOCH - START_EPOCH))
 verified_succeeded="${VERIFIED_SUCCEEDED:-0}"
 verified_failed="${VERIFIED_FAILED:-0}"
 
-# Determine overall success/failure (pushgateway expects 1=success, 0=failure)
+# Determine overall success/failure (pushgateway expects 1=success, 0=failure).
+# NB OVERALL_STATUS is informational/log-only — the S3 report computes its own
+# status in the PY heredoc below, and the metric label comes from metric_status.
 if [[ "${SYNC_RC:-0}" -ne 0 ]]; then
   success_flag=0
   OVERALL_STATUS="FAILED"
@@ -1513,7 +1614,11 @@ elif is_true "${DELETIONS_PENDING}"; then
   # The approval email is the actionable signal; the report status
   # (APPROVAL_PENDING) + deletionsPendingApproval count keep it distinguishable.
   success_flag=1
-  OVERALL_STATUS="APPROVAL_PENDING"
+  if [[ "${PENDING_DELETE_STATUS}" == "rejected_snoozed" ]]; then
+    OVERALL_STATUS="REJECTED_HELD"
+  else
+    OVERALL_STATUS="APPROVAL_PENDING"
+  fi
 else
   success_flag=1
   OVERALL_STATUS="SUCCESS"
@@ -1523,8 +1628,10 @@ fi
 if [[ -n "${PUSHGATEWAY_URL:-}" ]]; then
   # success=1 even when a deletion is pending; expose the pending state via the
   # status label (not via a failure metric) so Grafana can show it without alerting.
+  # Use the ACTUAL pending status — "rejected_snoozed" must not masquerade as
+  # "approval_pending" (the operator already answered; nothing is awaited).
   metric_status="${VERIFICATION_STATUS}"
-  if is_true "${DELETIONS_PENDING}"; then metric_status="approval_pending"; fi
+  if is_true "${DELETIONS_PENDING}"; then metric_status="${PENDING_DELETE_STATUS}"; fi
   pushgateway_emit "${success_flag}" "${DURATION_SECONDS}" "${TOTAL_BYTES:-0}" "${TOTAL_FILES:-0}" "${UPLOAD_COUNT}" 0 "${metric_status}" "${verified_succeeded}" "${verified_failed}"
 fi
 
@@ -1556,6 +1663,7 @@ if command -v python3 >/dev/null 2>&1; then
   CONSOLIDATED_REPORT_ENV="$CONSOLIDATED_REPORT" \
   DELETIONS_PENDING_ENV="${DELETIONS_PENDING}" \
   PENDING_DELETE_COUNT_ENV="${PENDING_DELETE_COUNT}" \
+  PENDING_DELETE_STATUS_ENV="${PENDING_DELETE_STATUS}" \
   python3 - <<'PY' || record_warning "Failed to generate consolidated report"
 import os, json, sys
 from datetime import datetime, timezone
@@ -1580,6 +1688,7 @@ batch_summary_path = os.environ.get('BATCH_REPORT_SUMMARY_FILE_ENV', '')
 output_path = os.environ.get('CONSOLIDATED_REPORT_ENV', '')
 deletions_pending = os.environ.get('DELETIONS_PENDING_ENV', 'false').lower() in ('1', 'true', 'yes', 'y')
 pending_delete_count = int(os.environ.get('PENDING_DELETE_COUNT_ENV', '0') or '0')
+pending_delete_status = os.environ.get('PENDING_DELETE_STATUS_ENV', '')
 
 # Note: Overall status determination moved after file-level analysis
 # to include verification failure count in the decision
@@ -1605,6 +1714,7 @@ if file_audit_path and os.path.exists(file_audit_path):
                     "checksumAlgorithm": rec.get('checksum_algorithm', ''),
                     "checksumMatch": rec.get('checksum_match'),
                     "checksumMismatchDetails": rec.get('checksum_mismatch_details', ''),
+                    "modifiedDuringRun": rec.get('modified_during_run', False),
                     "size": rec.get('bytes', 0),
                     "transferTimeMs": 0,  # Not tracked per-file currently
                     "errorCode": rec.get('verify_error_code', ''),
@@ -1659,6 +1769,7 @@ files_verified = sum(1 for f in files if f.get('destChecksum'))
 checksum_matches = sum(1 for f in files if f.get('checksumMatch') is True)
 checksum_mismatches = sum(1 for f in files if f.get('checksumMatch') is False)
 checksum_unavailable = sum(1 for f in files if f.get('checksumMatch') is None and (f.get('sourceChecksum') or f.get('destChecksum')))
+checksum_modified_mid_run = sum(1 for f in files if f.get('modifiedDuringRun'))
 
 # Determine overall status based on sync result, batch status, file failures, AND checksum mismatches
 if sync_rc != 0:
@@ -1682,9 +1793,10 @@ elif files_succeeded == 0 and total_files > 0:
     # source-side rewrite left some objects without checksum metadata.)
     status = "FAILED"
 elif deletions_pending:
-    # Uploads + verification are fine, but a deletion is HELD for approval — the
-    # full mirror isn't complete this pass (new files were still backed up).
-    status = "APPROVAL_PENDING"
+    # Uploads + verification are fine, but deletions are HELD — the full mirror
+    # isn't complete this pass (new files were still backed up). Distinguish
+    # "awaiting the operator" from "operator rejected, snooze active".
+    status = "REJECTED_HELD" if pending_delete_status == "rejected_snoozed" else "APPROVAL_PENDING"
 else:
     status = "SUCCESS"
 
@@ -1730,6 +1842,8 @@ report = {
         "matches": checksum_matches,
         "mismatches": checksum_mismatches,
         "unavailable": checksum_unavailable,
+        "modifiedDuringRun": checksum_modified_mid_run,
+        "modifiedDuringRunFiles": [f['s3_key'] for f in files if f.get('modifiedDuringRun')],
         "mismatchedFiles": [f['s3_key'] for f in files if f.get('checksumMatch') is False]
     },
     "files": files,

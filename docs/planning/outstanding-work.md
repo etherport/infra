@@ -75,9 +75,23 @@ narrative in [`session-log.md`](session-log.md). Still open:
 
 | ID | Finding | State |
 |---|---|---|
-| **AB-L4** | Mutable `:main` image tag for a delete-capable workload | ⏳ deferred (sha-pin; see also H30's accepted in-house-`:main` stance) |
+| **AB-L4** | Mutable `:main` image tag for a delete-capable workload | ✅ CLOSED as accepted risk per **H30** (2026-06-24 in-house-`:main` stance — do not "fix") |
 | **AB-H3b** | Fuller manifest-driven delete (drive deletes from the measured set) | ⏳ deferred follow-up to the conservative re-assert |
-| **AB-L6** | "Object Lock" claimed in README but no `object_lock_configuration` in TF | ⏳ operator verifying out-of-band (believed enabled) |
+| **AB-L6** | "Object Lock" claimed in README but no `object_lock_configuration` in TF | ✅ codified in TF 2026-06-23 (`aws_s3_bucket_object_lock_configuration.archive`, M101) |
+
+**2026-07-02 Fable-5 re-review** (narrative in session-log): shipped — REJECTED_HELD
+status semantics (rejected-snoozed no longer reads as "awaiting approval"; FAILED
+sync outranks held status), chat.db mid-run-modification downgrade
+(`modifiedDuringRun`, skew-margined, exception-hardened, forensics kept — NB not
+self-healing under `--size-only`), repaired the **settle-pass no-op** (re-HEAD
+retries called verify-one.sh with the pre-a700b3f arg interface since 06-24),
+daily-report held-pill consistency + "N holding deletions" header, `approvals/pending/`
+30d TF lifecycle. **New residuals:** ⏳ **AB-R1** force re-upload (`aws s3 cp`) of
+`modifiedDuringRun` keys once settled — until then a same-size mid-write rewrite
+persists in S3 with only the degraded-email cue; ⏳ **AB-R2** churn-file residual:
+real at-rest corruption of a constantly-churning file lands in the downgrade
+bucket, never CRITICAL (needs a quiescent re-verify, e.g. the monthly validation
+job on `modifiedDuringRunFiles`).
 
 ---
 

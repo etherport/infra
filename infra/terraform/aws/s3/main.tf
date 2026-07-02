@@ -249,6 +249,26 @@ resource "aws_s3_bucket_lifecycle_configuration" "logs_archive" {
       expired_object_delete_marker = true
     }
   }
+
+  # Pending-approval records (approvals/pending/<share>/<run_id>.{json,manifest.csv})
+  # are written UNIQUELY per delete-guard-tripped run and nothing else cleans them
+  # up — approve/reject only write the per-share marker under approvals/approved|
+  # rejected/, so pending records accumulated forever. 30 days comfortably outlives
+  # the 72h approve-token TTL and any incident investigation. The per-share markers
+  # are NOT matched by this prefix (they self-expire via their embedded epoch and
+  # get overwritten/consumed).
+  rule {
+    id     = "Expire pending-approval records"
+    status = "Enabled"
+
+    filter {
+      prefix = "approvals/pending/"
+    }
+
+    expiration {
+      days = 30
+    }
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "logs_archive" {
