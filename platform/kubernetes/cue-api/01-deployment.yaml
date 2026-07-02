@@ -126,8 +126,6 @@ spec:
             # via the proactive_pings ledger; tz-aware window; /quiet to opt out).
             - name: CUE_TODAY_STATE_EXTRACTION
               value: 'true'
-            - name: CUE_PHOTO_CLASSIFY
-              value: 'true'
             - name: CUE_PROACTIVE_CHECKINS
               value: 'true'
             # 2026-06-23: enable Web Push (browser push notifications). VAPID_PUBLIC_KEY /
@@ -142,10 +140,6 @@ spec:
             # always-on deep-link CTA is host-anchored. CUE_MEAL_COACH = text/photo
             # meal-log → coach take + ONE clarifying-answer loop (roll:false re-estimate,
             # no double-count). Migration 0009 adds the pending_flows table.
-            - name: CUE_MEAL_ROUTER
-              value: 'true'
-            - name: CUE_MEAL_COACH
-              value: 'true'
             # 2026-06-02 (later): enable meal-assist §3a published-macro tightening (a clean
             # named-chain meal-log pulls the chain's official macros to tighten the estimate;
             # found:false → estimate unchanged), and capturing a GI symptom mentioned in chat
@@ -161,12 +155,6 @@ spec:
             # flag-flip bugs FIXED in commit 117af56 before enabling). DEDUP+BRIEF enabled
             # together (the brief single total is only truthful once dedup prevents
             # double-counts). 250 tests green. User-authorized enable.
-            - name: CUE_MEAL_LOCATION
-              value: 'true'
-            - name: CUE_MEAL_DEDUP
-              value: 'true'
-            - name: CUE_MEAL_BRIEF
-              value: 'true'
             # 2026-07-02 (ledger phase 3 start, owner-approved): dual-write ON — meal_entries
             # written alongside the legacy path (which stays authoritative), shadow-compare
             # logs any divergence. History backfilled same day (27 created / 20 pre-stamping
@@ -178,8 +166,6 @@ spec:
             # reference — kills the "no orzo every time" boilerplate. A/B-validated (avoid-
             # relevance subscore up; no correctness regression). The honest-specifics /
             # no-state-recital / variation prompt changes ride the COACH_PROMPT_VERSION bump.
-            - name: CUE_AVOID_RELEVANCE
-              value: 'true'
             # 2026-06-03 (coach quality, prose overhaul): the user-facing reply is now rich
             # adaptive coaching PROSE (the `reply` field) instead of the structured
             # Decision/Why/Target template — closing the gap to the original GPT-thread voice.
@@ -188,8 +174,6 @@ spec:
             # correctness + specificity, with avoidRelevance +22 and voice +11. Rides the
             # COACH_PROMPT_VERSION bump (prose-meal-anchor-scoped): meal-log macro anchor,
             # time-neutral framing, training-day carbs, food-turn-only avoids. User-authorized.
-            - name: CUE_PROSE_REPLY
-              value: 'true'
             # 2026-06-03 (delivery deep-links): render up to 3 real nearby storefront links
             # (Uber Eats / DoorDash / Talabat / Deliveroo, from the live-lookup citations) as
             # one-tap inline URL buttons instead of a single pasted link. Host+path
@@ -203,15 +187,11 @@ spec:
             # and rolled ONCE (replaces the first via correctsRecommendationId), so the day total
             # never double-counts; reply says "got both angles". Pure fusion unit-tested; rides
             # cue@b058b4c+. User-authorized after dogfooding.
-            - name: CUE_MEAL_MULTIPHOTO
-              value: 'true'
             # 2026-06-04 (photo UX): when a meal PHOTO's vision confidence isn't HIGH, the coach
             # OPENS by hedging WHAT the food is ("that looks like a salad with chicken…") + invites a
             # one-line correction, instead of asserting a possibly-wrong dish (the "bulgogi bowl"
             # mis-ID). Photo-only (a text log is the user's own words). Needs CUE_MEAL_COACH (on).
             # Pure mealCoachMessage directive, unit-tested; rides cue@20b4c5b+. User-authorized.
-            - name: CUE_PHOTO_HEDGE
-              value: 'true'
             # 2026-06-04 (album fusion): multiple photos of the same meal sent close together
             # arrive as racing requests → without buffering they fuse-miss and reply N times. When ON,
             # album items are buffered (2.5s debounce) and fused into ONE estimate + ONE reply by
@@ -220,8 +200,6 @@ spec:
             # fuses too). Needs CUE_MEAL_MULTIPHOTO (on). Adversarially reviewed (all 4 majors fixed) +
             # tested (AlbumCollector + flushAlbum chain); rides cue@eba57db (image :latest, CI green).
             # User-authorized.
-            - name: CUE_PHOTO_ALBUM
-              value: 'true'
             # 2026-06-07 (food-search + coach quality, from owner dogfooding in NYC):
             # CUE_FOOD_FOLLOWUP — after live restaurant picks, a follow-up refinement ("something
             # egg-y", "anything closer", "find me a spot") re-enters the LIVE lookup instead of
@@ -234,12 +212,6 @@ spec:
             # CUE_ACTIVITY_LEADIN — weaves ONE activity question into a nutrition turn when today's
             # training is unknown, throttled to <=1x/day via proactive_pings (the integrative ask).
             # All flag-gated, unit-tested + live-validated; ride cue@020d21d. User-authorized.
-            - name: CUE_FOOD_FOLLOWUP
-              value: 'true'
-            - name: CUE_LOOKUP_PROXIMITY
-              value: 'true'
-            - name: CUE_ACTIVITY_LEADIN
-              value: 'true'
             # 2026-06-07 (daily_state write path): CUE_TODAY_FROM_MEALS — run the today-state
             # extractor on a meal LOG / photo caption too (not just /coach/chat), so "had eggs
             # after my run" or a "post-gym lunch" photo sets completedCardio/Strength in
@@ -249,10 +221,6 @@ spec:
             # view at GET /ui/today?userId=<uuid> (now also reachable via CF Access SSO on the
             # public tunnel). Both unit-tested; ride cue@e9488cc.
             # User-authorized. (parseCoords false-positive fix from the adversarial review: cue@e8977b0.)
-            - name: CUE_TODAY_FROM_MEALS
-              value: 'true'
-            - name: CUE_TODAY_WEB
-              value: 'true'
             # 2026-06-08: capture meals stated in CHAT into daily_state — a /coach/chat turn that
             # reports eaten food ("today I've had the omelette + a bar") estimates + rolls it (via
             # /meals/log skipCoach) BEFORE the reply, so Today + the coach's running totals agree.
@@ -262,8 +230,6 @@ spec:
             # mention + later explicit photo of the SAME meal not yet linked — mitigated by the meal
             # showing on the dashboard) and the pre-existing dedup concurrent-replace race (single-
             # device assumption). Needs CUE_MEAL_COACH (on). User-authorized after review.
-            - name: CUE_MEAL_FROM_CHAT
-              value: 'true'
             # 2026-06-08: record an EXPLICIT "no workout today" (rest day). The today-state extractor
             # sets daily_states.rest_day on a no-training statement ("no workout", "rest day",
             # "skipping the gym"); the coach then honors a declared rest day and never assumes a
@@ -281,8 +247,6 @@ spec:
             # items). Required: CUE_MEAL_DEDUP on (it is). Watch-items to monitor: intra-estimate
             # dedup on a restated cumulative, non-food leakage in mixed sentences, vague-item typical
             # estimates. Rides cue@80b0a6c. User-authorized after review.
-            - name: CUE_MEAL_MULTI
-              value: 'true'
             # ITEMIZE (needs CUE_MEAL_MULTI): a multi-item log estimates each item separately and the
             # day total becomes the SUM of the items (not the model's holistic best_guess, which low-
             # balled a big multi-meal day — dogfooding: sweetgreen 2x-chicken + bar + sushi + mochi
@@ -293,16 +257,12 @@ spec:
             # itemized (text path, itemizeTotals actually ran) explode — photos/fallbacks stay one
             # combined row, so rows always reconcile to Eaten. Rides cue@ffd418b. User-authorized
             # after review.
-            - name: CUE_MEAL_ITEMIZE
-              value: 'true'
             # MACRO CACHE (needs CUE_MEAL_MACRO_LOOKUP): cache a named-chain item's PUBLISHED macros
             # in published_macro_cache (migration 0011) so a repeat of the user's regular order is an
             # instant, free hit instead of another web search. HIT TTL 90d / MISS TTL 7d (self-heals).
             # Cache I/O is best-effort — any DB error falls back to a live lookup. Adversarially
             # reviewed: GO (correct TTL/upsert/zero-cost, chain-scoped key, dormant-gated). Rides
             # cue@44fb97a. User-authorized after review.
-            - name: CUE_MACRO_CACHE
-              value: 'true'
             # PER-ITEM macro tightening (needs MULTI + ITEMIZE + MACRO_LOOKUP + MACRO_CACHE +
             # DATABASE_URL; enforced fail-closed in env superRefine). In a multi-item log, tighten
             # ONLY the clean named-chain item(s) from published macros and re-sum (never rewrite the
@@ -310,8 +270,6 @@ spec:
             # → fixed (detect from full message, sole-chain attribution with other-source guard,
             # text-level customization suppression) → re-review GO, no must-fix. Rides cue@44fb97a.
             # User-authorized after review.
-            - name: CUE_MACRO_PERITEM
-              value: 'true'
             # Point the coach (reasoning capability) at Claude Fable 5. First attempt
             # (8f2f842) was reverted (5f25d28) because the gateway forced tool_choice and
             # Fable 5 400s on that. SAFE NOW: cue@baf383f added an auto/fallback tool-choice
@@ -331,8 +289,6 @@ spec:
             # DECISIONS 2026-06-08 IDOR hard gate for multi-user.
             # web client. CUE_WEB_TOKEN_SECRET rides the cue-app SOPS secret;
             # fail-closed superRefine (auth on without the secret refuses to boot).
-            - name: CUE_WEB_AUTH
-              value: 'true'
             # Conversational intake (cue PR #3): a bare-provisioned user (pnpm
             # provision-user) is interviewed by the coach for the required profile fields;
             # answers fill the profile (fill-only); afterwards optional gaps are asked at
