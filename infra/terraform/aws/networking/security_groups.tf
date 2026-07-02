@@ -36,11 +36,15 @@ resource "aws_security_group" "vpn_server" {
   })
 }
 
+# F2 (2026-07-02): was 51820-51821 from 0.0.0.0/0. Split — :51820 (wg0 site-to-
+# site, only ever dialed from the homelab WANs) is now LAMBDA-MANAGED per-WAN-/32
+# rules (dns-restrict-ip rule_specs; self-heals on WAN-IP change, verified before
+# this narrow). :51821 (wg1 roaming remote clients) legitimately needs world.
 resource "aws_vpc_security_group_ingress_rule" "vpn_wireguard" {
   security_group_id = aws_security_group.vpn_server.id
-  description       = "Public WireGuard VPN access"
+  description       = "WireGuard wg1 remote clients (roaming - world by design)"
   ip_protocol       = "udp"
-  from_port         = 51820
+  from_port         = 51821
   to_port           = 51821
   cidr_ipv4         = "0.0.0.0/0"
 }
@@ -80,31 +84,98 @@ resource "aws_security_group" "internal_comms" {
   })
 }
 
+# F3 (2026-07-02): the four blanket -1 rules below are port-scoped. NB: traffic
+# arriving INSIDE the WireGuard tunnels is decapsulated in-kernel and never
+# SG-filtered — these CIDR rules only ever match packets hitting the ENI
+# unencapsulated (VPC-local, or a future TGW/peering). Scoping them is
+# defense-in-depth, not a live-traffic change.
 resource "aws_vpc_security_group_ingress_rule" "internal_vpc" {
   security_group_id = aws_security_group.internal_comms.id
-  description       = "Allow all traffic from other vpc resources"
-  ip_protocol       = "-1"
+  description       = "VPC-local ICMP diagnostics (was -1; single-box VPC)"
+  ip_protocol       = "icmp"
+  from_port         = -1
+  to_port           = -1
   cidr_ipv4         = "10.10.100.0/22"
 }
 
-resource "aws_vpc_security_group_ingress_rule" "internal_homelab" {
+resource "aws_vpc_security_group_ingress_rule" "internal_homelab_dns_tcp" {
   security_group_id = aws_security_group.internal_comms.id
-  description       = "Allow all traffic from wind network"
-  ip_protocol       = "-1"
+  description       = "Homelab: DNS tcp (was -1)"
+  ip_protocol       = "tcp"
+  from_port         = 53
+  to_port           = 53
   cidr_ipv4         = "10.10.192.0/19"
 }
 
-resource "aws_vpc_security_group_ingress_rule" "internal_vpn_clients" {
+resource "aws_vpc_security_group_ingress_rule" "internal_homelab_dns_udp" {
   security_group_id = aws_security_group.internal_comms.id
-  description       = "Allow all traffic from remote VPN clients"
-  ip_protocol       = "-1"
+  description       = "Homelab: DNS udp (was -1)"
+  ip_protocol       = "udp"
+  from_port         = 53
+  to_port           = 53
+  cidr_ipv4         = "10.10.192.0/19"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "internal_homelab_technitium_admin" {
+  security_group_id = aws_security_group.internal_comms.id
+  description       = "Homelab ONLY: Technitium admin :5380 (was -1)"
+  ip_protocol       = "tcp"
+  from_port         = 5380
+  to_port           = 5380
+  cidr_ipv4         = "10.10.192.0/19"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "internal_homelab_node_exporter" {
+  security_group_id = aws_security_group.internal_comms.id
+  description       = "Homelab: node_exporter :9100 (was -1)"
+  ip_protocol       = "tcp"
+  from_port         = 9100
+  to_port           = 9100
+  cidr_ipv4         = "10.10.192.0/19"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "internal_homelab_icmp" {
+  security_group_id = aws_security_group.internal_comms.id
+  description       = "Homelab: ICMP diagnostics (was -1)"
+  ip_protocol       = "icmp"
+  from_port         = -1
+  to_port           = -1
+  cidr_ipv4         = "10.10.192.0/19"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "internal_vpn_clients_dns_tcp" {
+  security_group_id = aws_security_group.internal_comms.id
+  description       = "Remote clients: DNS tcp (was -1; NO :5380 admin by design)"
+  ip_protocol       = "tcp"
+  from_port         = 53
+  to_port           = 53
+  cidr_ipv4         = "10.254.0.0/24"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "internal_vpn_clients_dns_udp" {
+  security_group_id = aws_security_group.internal_comms.id
+  description       = "Remote clients: DNS udp (was -1)"
+  ip_protocol       = "udp"
+  from_port         = 53
+  to_port           = 53
+  cidr_ipv4         = "10.254.0.0/24"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "internal_vpn_clients_icmp" {
+  security_group_id = aws_security_group.internal_comms.id
+  description       = "Remote clients: ICMP diagnostics (was -1)"
+  ip_protocol       = "icmp"
+  from_port         = -1
+  to_port           = -1
   cidr_ipv4         = "10.254.0.0/24"
 }
 
 resource "aws_vpc_security_group_ingress_rule" "internal_s2s_vpn" {
   security_group_id = aws_security_group.internal_comms.id
-  description       = "Allow all traffic from S2S VPN tunnel IPs"
-  ip_protocol       = "-1"
+  description       = "S2S tunnel interface IPs: ICMP diagnostics (was -1)"
+  ip_protocol       = "icmp"
+  from_port         = -1
+  to_port           = -1
   cidr_ipv4         = "10.255.255.0/29"
 }
 
@@ -202,14 +273,6 @@ removed {
 }
 
 # HTTPS access from CloudFront (for DoH or management)
-resource "aws_vpc_security_group_ingress_rule" "dns_https_cloudfront" {
-  security_group_id = aws_security_group.dns_server.id
-  ip_protocol       = "tcp"
-  from_port         = 443
-  to_port           = 443
-  prefix_list_id    = local.cloudfront_prefix_list_id
-}
-
 resource "aws_vpc_security_group_egress_rule" "dns_all_ipv4" {
   security_group_id = aws_security_group.dns_server.id
   ip_protocol       = "-1"
