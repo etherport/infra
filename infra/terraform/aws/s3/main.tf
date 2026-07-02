@@ -928,3 +928,70 @@ resource "aws_s3_bucket_lifecycle_configuration" "cue_media" {
     }
   }
 }
+
+# L31 (2026-07-01): codify SSE for the buckets that relied on AWS's account-default
+# SSE-S3 — behavior parity only (objects were already encrypted at rest); this makes
+# the posture explicit + drift-detectable.
+resource "aws_s3_bucket_server_side_encryption_configuration" "velero" {
+  bucket = aws_s3_bucket.velero.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "archive" {
+  bucket = aws_s3_bucket.archive.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "logs_archive" {
+  bucket = aws_s3_bucket.logs_archive.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "email_fwd" {
+  bucket = aws_s3_bucket.email_fwd.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "logs" {
+  bucket = aws_s3_bucket.logs.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "etcd_snapshots" {
+  bucket = aws_s3_bucket.etcd_snapshots.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "infra" {
+  bucket = aws_s3_bucket.infra.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
