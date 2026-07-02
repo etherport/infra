@@ -15,6 +15,28 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-02 — v0.1.7/v0.1.8 deployed; EAGAIN root cause PROVEN (NAS-held sparsebundle locks); orphans fixed
+
+**What:** deployed the review release + closed two long-running mysteries.
+- **Last night (v0.1.6):** 7/8 ✓; photos rc=1 — graceful skip exactly as designed (90-min timeout on
+  the aged mount, ONE reattach attempt, no thrash, no page). Best-effort behaving as spec'd.
+- **`Resource temporarily unavailable` — PROVEN root cause:** direct flock probes showed the
+  sparsebundle's `lock`/`token` files are byte-range **locked NAS-side by a dead session's durable
+  handles**. It was never the disk-image daemons (diskarbitrationd is SIP-protected — the earlier
+  `killall` never even killed it; the 07-01 "fix" was the reboot). A quick unmount/remount does NOT
+  release the locks; a REBOOT does (long disconnect → NAS scavenges). **Recovery = reboot the mini.**
+  My headless forcing attempts also exposed a real weakness: `open smb://` degrades to a GUI
+  credential prompt on error paths (NetAuth), freezing all mounts headlessly — the owner had to click
+  stacked dialogs. Durable fix to explore: disable durable handles on the UNAS share.
+- **v0.1.7 deployed** (checksum + leaf verified) after the reboot restored the stack; photos ran
+  ✓ rc=0 (44,002 items, 469s), **8/8 pushed**. PUT-push fix VALIDATED live (latched
+  `cairn_photos_stack_unhealthy` gauge cleared; `messages_snapshot_failed` clears at tonight's run).
+- **`cairn_photos_orphans` mystery solved by the new v0.1.7 diagnostic on its FIRST run:** sqlite
+  `file:` URI broke on the SPACE in `~/Library/Application Support/…` — orphans never emitted since
+  cutover; OrphansGrowing alert was inert. Fixed (percent-encode), shipped + deployed as **v0.1.8**
+  (verified against the live DB: 43,990 ledger rows readable). Tonight's 22:00 run emits orphans for
+  the first time. cairn README §6 corrected to the proven lock mechanism (`7976511`).
+
 ## 2026-07-02 (cont.) — Hit-list execution: H45a Cilium CVE, M122 update-automation, H45c CNPG operator ladder 1.24→1.30
 
 Owner: "check this morning's ai-advisor alerts and failed s3 sync task… then proceed automatically with your hit list… keep going autonomously… ask me questions along the way." Maximizing pre-5pm-reset token budget.
