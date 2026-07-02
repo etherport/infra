@@ -1,0 +1,99 @@
+# Agent-liveness alerts for cairn + the mini host heartbeat (2026-07-01, from the cairn
+# observability review). Closes the "agent dead" hole: Pushgateway PERSISTS pushed series, so a
+# dead mini/cairn leaves every cairn_backup_* series present with rc=0 — absent() never fires and
+# nothing noticed until per-category staleness a day later (which, at warning, emails nobody).
+# NB `cairn_up` is constant 1 by construction (only pushed while alive) — TIMESTAMP staleness is
+# the only valid liveness signal for a push-based agent.
+#
+# Detects, fast:
+# - cairn's launchd health agent dead (crashed, unloaded, binary broken) → CairnAgentDead
+# - "the mini rebooted and the launchd agents didn't come back" (FileVault gate, login session
+#   not restored) → CairnAgentDead + MiniHealthStale together
+# - cairn alive but jobs failing repeatedly → CairnJobsFailing (warning; the per-category and
+#   photos alerts carry the detail)
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cairn-agent-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: cairn-agent
+      rules:
+        - alert: CairnAgentDead
+          # net.wind.cairn.health pushes every 900s; >2h of silence = the agent is not running.
+          # critical: this is the backup system's own dead-man's-switch — if it's silent, NO
+          # cairn alert below it can be trusted to fire with fresh data.
+          expr: time() - max(cairn_heartbeat_timestamp_seconds{instance="mini"}) > 7200
+          for: 15m
+          labels:
+            severity: critical
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "cairn heartbeat silent >2h — the backup agent is not running on the mini"
+            description: |
+              cairn_heartbeat_timestamp_seconds{instance="mini"} hasn't advanced in >2h
+              (cadence 900s). The launchd agent net.wind.cairn.health is dead: mini down /
+              rebooted without the login session restoring (FileVault unlock pending?), agent
+              unloaded, or the binary broken. On the mini:
+              launchctl print gui/$(id -u)/net.wind.cairn.health ; tail ~/Library/Logs/cairn/health.log
+              If the whole mini rebooted: unlock FileVault at the console; agents load at login.
+
+        - alert: MiniHealthStale
+          # mini-health.sh pushes every 15m — independent of cairn (separate LaunchAgent), so
+          # the pair (CairnAgentDead + MiniHealthStale) distinguishes "cairn broken" (only the
+          # former) from "mini/login session down" (both).
+          expr: time() - max(mini_health_last_check_timestamp_seconds) > 3600
+          for: 15m
+          labels:
+            severity: critical
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "mini host heartbeat silent >1h — host down or login session not restored"
+            description: |
+              mini_health_last_check_timestamp_seconds hasn't advanced in >1h (cadence 15m).
+              The mini is down, off the network, or rebooted to the FileVault unlock screen
+              (nothing auto-starts until unlock). If cairn's heartbeat is ALSO stale, it's the
+              host/session; if only this one, net.wind.mini-health specifically is broken.
+
+        - alert: MiniHealthDegraded
+          # mini-health.sh's own rollup: expected agents not loaded, NAS unreadable, nsmb.conf
+          # drift, or low disk. Warning: the specific failing check is in the mini_health_*
+          # gauges; usually precedes (or explains) a backup failure.
+          expr: min(mini_health_up) == 0
+          for: 30m
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "mini-health reports a failing host check (agents/NAS/nsmb/disk)"
+            description: |
+              mini_health_up=0 for >30m — one of the mini's host checks is failing (a
+              net.wind.* agent not loaded, NAS share unreadable, nsmb.conf drift, or low
+              disk). Inspect the mini_health_* gauges in Prometheus / the dashboard, or run
+              infra/macos/mini/mini-health.sh manually on the mini.
+
+        - alert: CairnJobsFailing
+          # The agent's own rollup says ≥1 job's LAST run failed, sustained >6h (i.e. not just
+          # one bad photos night mid-recovery — 6h outlasts any single run window). Warning:
+          # the per-category (10-) and photos (09-) alerts carry the specifics; this is the
+          # catch-all so a failing job class can't hide (e.g. a future job added without
+          # per-category coverage).
+          expr: max(cairn_jobs_failing{instance="mini"}) > 0
+          for: 6h
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "cairn reports {{ $value }} job(s) failing for >6h"
+            description: |
+              cairn_jobs_failing > 0 sustained >6h — at least one job's last run failed and it
+              hasn't recovered. `cairn status` on the mini names it; Loki {host="mini"} has the
+              run log. (Photos alone failing overnight is expected best-effort behavior — it
+              clears on the next good run; this catches it only if nothing recovers all day.)

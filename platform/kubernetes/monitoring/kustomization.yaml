@@ -19,6 +19,7 @@ resources:
   # items=2049, calendars items=446) — verified pushed to Prometheus before
   # un-holding. (Was held while those syncs were mid-development.)
   - 10-icloud-backups-alerts.yaml
+  - 11-cairn-agent-alerts.yaml
   # M74 v2: Tetragon runtime-detection alerts (cred-file access / setuid-root) off
   # the selective Tetragon export. See platform/kubernetes/tetragon/README.md.
   - 11-loki-rules-tetragon.yaml

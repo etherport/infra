@@ -10,11 +10,14 @@
 # _lastsuccess pseudo-jobs), so EVERY current and future category is covered
 # automatically — no per-category rules. The richer photos pipeline
 # (cairn_photos_* schema, job="photos") has its own alerts in
-# 09-photos-export-alerts.yaml and is intentionally not matched here.
+# 09-photos-export-alerts.yaml and is EXCLUDED here by explicit job!= matchers
+# (2026-07-01: the header used to CLAIM exclusion but no matcher implemented it —
+# photos was still per-run/26h-alerted by these rules, re-introducing exactly the
+# noise the 09 retune removed; photos is best-effort with a 3-day staleness alert).
 #
-# Severity note: these secondary metadata backups use `warning` (incl. Stale),
-# unlike photos where Stale is `critical` — the photo LIBRARY is the higher-stakes
-# dataset. Adjust if a category later warrants paging.
+# Severity note: these secondary metadata backups use `warning`; photos' own
+# PhotosExportStale (3-day) is `critical` — it's the only cairn alert that pages,
+# and only when photos is genuinely stuck for days.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -34,7 +37,7 @@ spec:
           expr: |
             time() - max by (job) (
               label_replace(
-                cairn_backup_last_success_timestamp_seconds{instance="mini"},
+                cairn_backup_last_success_timestamp_seconds{instance="mini",job!="photos_lastsuccess"},
                 "job", "$1", "job", "(.+)_lastsuccess"
               )
             ) > 93600
@@ -54,7 +57,7 @@ spec:
         - alert: ICloudBackupFailed
           # Last run returned non-zero (rc persists in Pushgateway until the next
           # push). One alert per category via by (job).
-          expr: max by (job) (cairn_backup_last_rc{instance="mini", job!~".+_lastsuccess"}) != 0
+          expr: max by (job) (cairn_backup_last_rc{instance="mini", job!~".+_lastsuccess", job!="photos"}) != 0
           for: 30m
           labels:
             severity: warning
@@ -73,7 +76,7 @@ spec:
           # snapshot doesn't flap it. rc-gated (and on(job) last_rc == 0) so a
           # not_ready/failed run (items=0, rc!=0) pages Failed only, not Empty too.
           expr: |
-            cairn_backup_items{instance="mini", job!~".+_lastsuccess"} == 0
+            cairn_backup_items{instance="mini", job!~".+_lastsuccess", job!="photos"} == 0
               and on(job) cairn_backup_last_rc{instance="mini"} == 0
           for: 1h
           labels:

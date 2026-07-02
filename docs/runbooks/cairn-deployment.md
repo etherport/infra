@@ -36,7 +36,7 @@ the infra-specific deployment + the cutover record + rollback.
   fails rc=1. cairn exports whatever's local; Photos.app's own "Download Originals" populates the rest.
 - **osxphotos filename collisions** (two photos sharing a name → `IMG_x` / `IMG_x (1)`) throw a benign
   `File exists` on `--update`; cairn tolerates a run whose only errors are those (photo already backed
-  up) so it doesn't false-`PhotosExportFailed`. Cleared one-off by deleting the affected dest files.
+  up) so a healthy backup isn't reported failed. Cleared one-off by deleting the affected dest files.
 - **Silent SMB scans** — the supervised runner uses the overall timeout (not a tight stall-watchdog)
   for osxphotos/rsync, which go silent for many minutes scanning the NAS. A tight stall false-killed
   working photos + messages runs before this was tuned.
@@ -125,12 +125,25 @@ Generates + loads two LaunchAgents in `~/Library/LaunchAgents/`:
 
 ## 6. Monitor
 
-`cairn` pushes drop-in-compatible metrics to Pushgateway. Per job: `<job>_last_run_timestamp_seconds`,
-`_last_rc`, `_last_success_timestamp_seconds`, `_items`, `_bytes`, plus source-specific gauges
-(`photos_missing`, `photos_exported`, `photos_stalled`, …). Agent liveness rollup (job
-`cairn_health`): `cairn_up`, `cairn_heartbeat_timestamp_seconds`, `cairn_jobs_total/ok/failing/
-missing`, `cairn_healthy`, `cairn_oldest_success_age_seconds`. Alert on a stale heartbeat or
-`cairn_jobs_failing > 0` (Alertmanager → existing routes). `cairn status` prints a local table.
+`cairn` pushes a **label-based schema** to Pushgateway (the job is the `job` LABEL, not a name
+prefix): `cairn_backup_{last_run_timestamp_seconds,last_rc,duration_seconds,items,bytes}`
+`{job="<job>",instance="mini"}`, the success-gated `cairn_backup_last_success_timestamp_seconds`
+in its own `job="<job>_lastsuccess"` group, photos detail as `cairn_photos_*`, and messages'
+attachments tree as a second full group under `job="messages_attachments"`. Agent rollup (job
+`cairn_health`): `cairn_heartbeat_timestamp_seconds`, `cairn_jobs_total/ok/failing/missing`,
+`cairn_healthy`, `cairn_oldest_{run,success}_age_seconds` (NB `cairn_up` is constant 1 — alert on
+heartbeat STALENESS, never on up==0). Full schema: cairn README §5.
+
+**Alert coverage (all live in `platform/kubernetes/monitoring/`):**
+- `09-photos-export-alerts.yaml` — photos is **best-effort**: `PhotosExportStale` (>3 days,
+  **critical** — the one cairn alert that emails) is the only pager; per-run photos alerts were
+  removed 2026-07-01; data-quality alerts are rc==0-gated.
+- `10-icloud-backups-alerts.yaml` — per-category Failed/Stale/Empty (warning) for every job
+  EXCEPT photos (explicit `job!="photos"` matchers).
+- `11-cairn-agent-alerts.yaml` — agent liveness: `CairnAgentDead` (heartbeat silent >2h,
+  critical), `MiniHealthStale` (host heartbeat silent >1h, critical — together these distinguish
+  "cairn broken" from "mini/login session down after a reboot"), `MiniHealthDegraded`,
+  `CairnJobsFailing` (>6h catch-all). `cairn status` prints the local table.
 
 ## 7. Cutover from the bash suite (incremental, reversible)
 

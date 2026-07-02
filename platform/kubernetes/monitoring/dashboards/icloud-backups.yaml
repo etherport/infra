@@ -1,115 +1,23 @@
-# Grafana dashboard — Mac mini off-cluster iCloud backups (Contacts, Calendars,
-# and future categories). Metrics: cairn_backup_*{job="<category>"} pushed to
-# Pushgateway by cairn on the mini after each run (instance="mini");
-# cairn_backup_last_success_timestamp_seconds is pushed under its own job group
-# (job="<category>_lastsuccess").
-#
-# Templated: the `cat` variable = label_values(cairn_backup_last_rc{instance="mini",
-# job!~".+_lastsuccess"}, job), and the per-category row REPEATS over it — so new
-# categories appear automatically once cairn starts pushing them. The richer photos
-# pipeline keeps its own "Mac mini — Photos backup" board (cairn_photos_* schema),
-# so it is intentionally excluded here (the _lastsuccess pseudo-jobs are filtered
-# out of the template var so only real categories repeat).
+# Grafana dashboard — Mac mini iCloud category backups (contacts/calendars/…/messages).
+# One row per category via the `cat` template var over cairn_backup_*{job=…} (Pushgateway).
+# PHOTOS is excluded from the repeat (job!~…|photos): it has its own "Mac mini — Photos backup"
+# board (cairn_photos_* schema) and a BEST-EFFORT policy (single failed nights tolerated) that
+# this board's strict 26h/rc thresholds would misrepresent. messages_attachments is excluded as
+# a duplicate of the messages row (no schedule of its own).
+# Picked up by the Grafana sidecar via the grafana_dashboard="1" label.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: icloud-backups-dashboard
   namespace: monitoring
   labels:
-    grafana_dashboard: "1"
+    grafana_dashboard: '1'
 data:
-  icloud-backups.json: |
-    {
-      "annotations": { "list": [] },
-      "editable": true,
-      "graphTooltip": 1,
-      "title": "Mac mini — iCloud backups (Contacts / Calendars / …)",
-      "uid": "icloud-backups",
-      "tags": ["backup", "mini", "icloud"],
-      "time": { "from": "now-7d", "to": "now" },
-      "schemaVersion": 39,
-      "templating": { "list": [
-        {
-          "name": "cat",
-          "label": "Category",
-          "type": "query",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "query": "label_values(cairn_backup_last_rc{instance=\"mini\",job!~\".+_lastsuccess\"}, job)",
-          "refresh": 2,
-          "includeAll": true,
-          "multi": true,
-          "current": { "text": "All", "value": "$__all", "selected": false },
-          "sort": 1
-        }
-      ] },
-      "panels": [
-        {
-          "type": "row",
-          "title": "${cat}",
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
-          "id": 1,
-          "collapsed": false,
-          "repeat": "cat",
-          "repeatDirection": "v",
-          "panels": []
-        },
-        {
-          "type": "stat",
-          "title": "Last success (age)",
-          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "description": "How long ago this category last completed a SUCCESSFUL run (nightly ~21:00 PT). Yellow past 22h, red past 26h.",
-          "fieldConfig": { "defaults": {
-            "unit": "s",
-            "thresholds": { "mode": "absolute", "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 79200 },
-              { "color": "red", "value": 93600 }
-            ] } }, "overrides": [] },
-          "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
-          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "time() - max(cairn_backup_last_success_timestamp_seconds{job=\"${cat}_lastsuccess\"})" } ]
-        },
-        {
-          "type": "stat",
-          "title": "Last run rc",
-          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "description": "Return code of the most recent run. 0 = success (green), non-zero = failure (red).",
-          "fieldConfig": { "defaults": {
-            "thresholds": { "mode": "absolute", "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1 }
-            ] } }, "overrides": [] },
-          "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
-          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "max(cairn_backup_last_rc{job=\"$cat\"})" } ]
-        },
-        {
-          "type": "stat",
-          "title": "Items (last run)",
-          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "description": "Count of items backed up on the last run (vCards for contacts, events for calendars). 0 (red) usually means a broken sync — see ICloudBackupEmpty.",
-          "fieldConfig": { "defaults": {
-            "unit": "short",
-            "thresholds": { "mode": "absolute", "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
-            ] } }, "overrides": [] },
-          "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
-          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "max(cairn_backup_items{job=\"$cat\"})" } ]
-        },
-        {
-          "type": "stat",
-          "title": "Duration (last run)",
-          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
-          "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
-          "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "max(cairn_backup_duration_seconds{job=\"$cat\"})" } ]
-        }
-      ]
-    }
+  icloud-backups.json: "{\n \"annotations\": {\n  \"list\": []\n },\n \"editable\": true,\n \"graphTooltip\": 1,\n \"title\": \"Mac mini \\u2014 iCloud backups (Contacts / Calendars / \\u2026)\",\n \"uid\": \"icloud-backups\",\n \"tags\": [\n  \"backup\",\n  \"mini\",\n  \"icloud\"\n ],\n \"time\": {\n  \"from\": \"now-7d\",\n  \"to\": \"now\"\n },\n \"schemaVersion\": 39,\n \"templating\": {\n  \"list\": [\n   {\n    \"name\": \"cat\",\n    \"label\": \"Category\",\n    \"type\": \"query\",\n    \"datasource\": {\n     \"type\": \"prometheus\",\n     \"uid\": \"prometheus\"\n    },\n    \"query\": \"label_values(cairn_backup_last_rc{instance=\\\"mini\\\",job!~\\\".+_lastsuccess|photos|messages_attachments\\\"}, job)\",\n    \"refresh\": 2,\n    \"includeAll\": true,\n    \"multi\": true,\n    \"current\": {\n     \"text\": \"All\",\n     \"value\": \"$__all\",\n     \"selected\": false\n    },\n    \"sort\": 1\n   }\n  ]\n },\n \"panels\": [\n  {\n   \"type\": \"row\",\n   \"title\": \"\
+    ${cat}\",\n   \"gridPos\": {\n    \"h\": 1,\n    \"w\": 24,\n    \"x\": 0,\n    \"y\": 0\n   },\n   \"id\": 1,\n   \"collapsed\": false,\n   \"repeat\": \"cat\",\n   \"repeatDirection\": \"v\",\n   \"panels\": []\n  },\n  {\n   \"type\": \"stat\",\n   \"title\": \"Last success (age)\",\n   \"gridPos\": {\n    \"h\": 4,\n    \"w\": 6,\n    \"x\": 0,\n    \"y\": 1\n   },\n   \"datasource\": {\n    \"type\": \"prometheus\",\n    \"uid\": \"prometheus\"\n   },\n   \"description\": \"How long ago this category last completed a SUCCESSFUL run (nightly ~21:00 PT). Yellow past 22h, red past 26h.\",\n   \"fieldConfig\": {\n    \"defaults\": {\n     \"unit\": \"s\",\n     \"thresholds\": {\n      \"mode\": \"absolute\",\n      \"steps\": [\n       {\n        \"color\": \"green\",\n        \"value\": null\n       },\n       {\n        \"color\": \"yellow\",\n        \"value\": 79200\n       },\n       {\n        \"color\": \"red\",\n        \"value\": 93600\n       }\n      ]\n     }\n    },\n\
+    \    \"overrides\": []\n   },\n   \"options\": {\n    \"colorMode\": \"background\",\n    \"graphMode\": \"none\",\n    \"reduceOptions\": {\n     \"calcs\": [\n      \"lastNotNull\"\n     ]\n    }\n   },\n   \"targets\": [\n    {\n     \"refId\": \"A\",\n     \"datasource\": {\n      \"type\": \"prometheus\",\n      \"uid\": \"prometheus\"\n     },\n     \"expr\": \"time() - max(cairn_backup_last_success_timestamp_seconds{job=\\\"${cat}_lastsuccess\\\"})\"\n    }\n   ]\n  },\n  {\n   \"type\": \"stat\",\n   \"title\": \"Last run rc\",\n   \"gridPos\": {\n    \"h\": 4,\n    \"w\": 6,\n    \"x\": 6,\n    \"y\": 1\n   },\n   \"datasource\": {\n    \"type\": \"prometheus\",\n    \"uid\": \"prometheus\"\n   },\n   \"description\": \"Return code of the most recent run. 0 = success (green), non-zero = failure (red).\",\n   \"fieldConfig\": {\n    \"defaults\": {\n     \"thresholds\": {\n      \"mode\": \"absolute\",\n      \"steps\": [\n       {\n        \"color\": \"green\",\n        \"value\"\
+    : null\n       },\n       {\n        \"color\": \"red\",\n        \"value\": 1\n       }\n      ]\n     }\n    },\n    \"overrides\": []\n   },\n   \"options\": {\n    \"colorMode\": \"background\",\n    \"graphMode\": \"none\",\n    \"reduceOptions\": {\n     \"calcs\": [\n      \"lastNotNull\"\n     ]\n    }\n   },\n   \"targets\": [\n    {\n     \"refId\": \"A\",\n     \"datasource\": {\n      \"type\": \"prometheus\",\n      \"uid\": \"prometheus\"\n     },\n     \"expr\": \"max(cairn_backup_last_rc{job=\\\"$cat\\\"})\"\n    }\n   ]\n  },\n  {\n   \"type\": \"stat\",\n   \"title\": \"Items (last run)\",\n   \"gridPos\": {\n    \"h\": 4,\n    \"w\": 6,\n    \"x\": 12,\n    \"y\": 1\n   },\n   \"datasource\": {\n    \"type\": \"prometheus\",\n    \"uid\": \"prometheus\"\n   },\n   \"description\": \"Count of items backed up on the last run (vCards for contacts, events for calendars). 0 (red) usually means a broken sync \\u2014 see ICloudBackupEmpty.\",\n   \"fieldConfig\": {\n    \"\
+    defaults\": {\n     \"unit\": \"short\",\n     \"thresholds\": {\n      \"mode\": \"absolute\",\n      \"steps\": [\n       {\n        \"color\": \"red\",\n        \"value\": null\n       },\n       {\n        \"color\": \"green\",\n        \"value\": 1\n       }\n      ]\n     }\n    },\n    \"overrides\": []\n   },\n   \"options\": {\n    \"colorMode\": \"value\",\n    \"graphMode\": \"area\",\n    \"reduceOptions\": {\n     \"calcs\": [\n      \"lastNotNull\"\n     ]\n    }\n   },\n   \"targets\": [\n    {\n     \"refId\": \"A\",\n     \"datasource\": {\n      \"type\": \"prometheus\",\n      \"uid\": \"prometheus\"\n     },\n     \"expr\": \"max(cairn_backup_items{job=\\\"$cat\\\"})\"\n    }\n   ]\n  },\n  {\n   \"type\": \"stat\",\n   \"title\": \"Duration (last run)\",\n   \"gridPos\": {\n    \"h\": 4,\n    \"w\": 6,\n    \"x\": 18,\n    \"y\": 1\n   },\n   \"datasource\": {\n    \"type\": \"prometheus\",\n    \"uid\": \"prometheus\"\n   },\n   \"fieldConfig\": {\n    \"defaults\"\
+    : {\n     \"unit\": \"s\",\n     \"color\": {\n      \"mode\": \"fixed\",\n      \"fixedColor\": \"text\"\n     }\n    },\n    \"overrides\": []\n   },\n   \"options\": {\n    \"colorMode\": \"value\",\n    \"graphMode\": \"area\",\n    \"reduceOptions\": {\n     \"calcs\": [\n      \"lastNotNull\"\n     ]\n    }\n   },\n   \"targets\": [\n    {\n     \"refId\": \"A\",\n     \"datasource\": {\n      \"type\": \"prometheus\",\n      \"uid\": \"prometheus\"\n     },\n     \"expr\": \"max(cairn_backup_duration_seconds{job=\\\"$cat\\\"})\"\n    }\n   ]\n  },\n  {\n   \"type\": \"state-timeline\",\n   \"title\": \"Per-job last rc \\u2014 7d history (which nights failed)\",\n   \"gridPos\": {\n    \"h\": 8,\n    \"w\": 24,\n    \"x\": 0,\n    \"y\": 5\n   },\n   \"datasource\": {\n    \"type\": \"prometheus\",\n    \"uid\": \"prometheus\"\n   },\n   \"description\": \"cairn_backup_last_rc by job over time. 0 (green) = last run ok; >0 (red) = failed. The lastNotNull stats above only show NOW\
+    \ \\u2014 this shows which nights failed during an incident. Photos is best-effort: single red nights there are tolerated (see the Photos board).\",\n   \"fieldConfig\": {\n    \"defaults\": {\n     \"custom\": {\n      \"lineWidth\": 0,\n      \"fillOpacity\": 70\n     },\n     \"thresholds\": {\n      \"mode\": \"absolute\",\n      \"steps\": [\n       {\n        \"color\": \"green\",\n        \"value\": null\n       },\n       {\n        \"color\": \"red\",\n        \"value\": 1\n       }\n      ]\n     },\n     \"mappings\": []\n    },\n    \"overrides\": []\n   },\n   \"options\": {\n    \"showValue\": \"never\",\n    \"rowHeight\": 0.8,\n    \"legend\": {\n     \"displayMode\": \"list\",\n     \"placement\": \"right\"\n    }\n   },\n   \"targets\": [\n    {\n     \"refId\": \"A\",\n     \"datasource\": {\n      \"type\": \"prometheus\",\n      \"uid\": \"prometheus\"\n     },\n     \"expr\": \"max by (job) (cairn_backup_last_rc{instance=\\\"mini\\\", job!~\\\".+_lastsuccess\\\"\
+    })\",\n     \"legendFormat\": \"{{job}}\"\n    }\n   ]\n  }\n ]\n}"

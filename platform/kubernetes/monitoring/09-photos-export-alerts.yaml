@@ -25,7 +25,10 @@ spec:
           expr: time() - max(cairn_backup_last_success_timestamp_seconds{job="photos_lastsuccess",instance="mini"}) > 259200
           for: 15m
           labels:
-            severity: warning
+            # critical ON PURPOSE (2026-07-01): Alertmanager only emails critical — warning goes to
+            # the null receiver, so this is the one photos alert a human hears. It cannot page on a
+            # single bad night (3-day threshold); by the time it fires, photos is genuinely stuck.
+            severity: critical
             component: backup
             namespace: backups
           annotations:
@@ -64,12 +67,11 @@ spec:
         # 10-icloud-backups-alerts.yaml; only PHOTOS is exempted, as its substrate is the fragile one.)
 
         - alert: PhotosExportNotParsed
-          # cairn_photos_summary_parsed=0 means a run FINISHED but its summary/report
-          # couldn't be trusted (watchdog-killed mid-run, or a truncated --report CSV over
-          # SMB), so the count metrics carry -1 "unknown" sentinels and last_success was NOT
-          # stamped. Distinct from Failed (rc!=0) — catches the silent "completed but counts
-          # are garbage" case that would otherwise read as 0-missing. >1h so a mid-run
-          # snapshot doesn't flap it.
+          # cairn_photos_summary_parsed=0 on a run that otherwise SUCCEEDED (rc==0, see gate
+          # below) = the summary/report was unparseable (truncated --report CSV over SMB), so
+          # count metrics carry -1 "unknown" sentinels and last_success was withheld. Catches
+          # the silent "completed but counts are garbage" case that would otherwise read as
+          # 0-missing. >1h so a mid-run snapshot doesn't flap it.
           # Gated on rc==0 (2026-07-01): only meaningful for a run that otherwise SUCCEEDED but
           # produced an untrustworthy summary. A failed/killed run (rc!=0) is already covered by the
           # staleness alert — don't double-fire on a bad night (best-effort photos).

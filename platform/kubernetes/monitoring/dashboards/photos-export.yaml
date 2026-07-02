@@ -36,7 +36,7 @@ data:
             ] } }, "overrides": [] },
           "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
           "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
-            "expr": "100 * (1 - max(cairn_photos_missing_resolvable) / clamp_min(max(cairn_photos_total), 1))" } ]
+            "expr": "(100 * (1 - clamp_min(max(cairn_photos_missing_resolvable), 0) / clamp_min(max(cairn_photos_total), 1))) * clamp_max(max(cairn_photos_summary_parsed), 1)" } ]
         },
         {
           "type": "stat",
@@ -47,8 +47,8 @@ data:
             "unit": "s",
             "thresholds": { "mode": "absolute", "steps": [
               { "color": "green", "value": null },
-              { "color": "yellow", "value": 79200 },
-              { "color": "red", "value": 93600 }
+              { "color": "yellow", "value": 93600 },
+              { "color": "red", "value": 259200 }
             ] } }, "overrides": [] },
           "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
           "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
