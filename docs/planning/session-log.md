@@ -15,6 +15,50 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-01 (cont.) — Fable-5 full review of cairn (code+repo+docs+observability) → v0.1.7 + alert-hole fixes
+
+**What:** owner-requested full review of the cairn codebase/repo + docs/Grafana integration using
+five parallel Fable 5 reviewers (reliability core / sources+mirror / CLI+config+report /
+repo+CI+security / docs+observability). ~50 verified findings (several proven with live probes);
+all code-level fixes landed as **cairn v0.1.7** (`9832266`, 33→46 tests) + infra `c045469`.
+
+**Biggest catches (things we'd overlooked):**
+- **My 2026-07-01 photos-alert retune was INCOMPLETE:** `10-icloud-backups-alerts.yaml` claimed to
+  exclude photos but didn't — per-run photos alerts were still firing via the generic rules. AND
+  **every cairn alert was human-silent** (all `warning`; only `critical` routes to email) — a
+  2-week photos outage would have alerted nobody. Fixed: photos excluded explicitly;
+  `PhotosExportStale` → critical (3-day gate makes it page-safe); NEW `11-cairn-agent-alerts.yaml`
+  (CairnAgentDead / MiniHealthStale / MiniHealthDegraded / CairnJobsFailing — agent-dead detection
+  didn't exist; Pushgateway persistence means a dead mini looked green).
+- **Data-safety (cairn):** refuse-empty guard was TOCTOU'd (a dir source emptied after staging
+  could wipe its backup with rc=0 — now re-checked just before the --delete pass); delete-guard
+  parse now FAILS CLOSED on rsync format drift; photos `benignOnly` needed positive collision
+  evidence (an export-DB write failure was stamped success); **TCC revocation read as success**
+  (messages/photos stamped rc=0+last_success forever, silencing staleness); mirror rsyncs were
+  unsupervised (wedged-mount hang → run-lock held → ALL backups stop, + a >64KB-stderr pipe
+  deadlock); contact PHOTOs were absent from every vCard ever exported (image key not fetched).
+- **Reliability:** runSupervised could never-return (D-state child / escaped grandchild holding
+  the pipe) → unconditional-return drain deadline; clean-exit-with-straggler was misreported as a
+  stalled FAILURE (would force a needless risky photos reattach); RunLock mkdir+pidfile TOCTOU →
+  flock(2); ensureStack(force:) tore down in the wrong order (unmounted SMB under a live image).
+- **Supply chain:** Package.resolved was gitignored (unpinned deps flowed into signed TCC-trusted
+  releases — now tracked); release.yml ran `swift test` AFTER importing the signing key (build-time
+  code could sign with the TCC identity — now test/build precede import); tag-name shell injection
+  closed; SHA-pinned actions; per-run keychain password (KEYCHAIN_PASSWORD secret retired);
+  clobber guard (dispatch can't silently swap a released binary); ci.yml now exercises the release
+  build + package.sh ad-hoc on every push.
+- **Dashboards/docs:** photos coverage rendered the -1 "counts untrusted" sentinel as >100% GREEN
+  (clamped+gated); thresholds matched the abandoned 26h policy (→ 3d); iCloud board actually
+  excludes photos now + gained a 7d per-job rc state-timeline; runbook §6 documented the retired
+  pre-cutover metric schema (rewritten). Known-inert: `cairn_photos_orphans` has never been
+  emitted (countOrphans silently -1 in prod; v0.1.7 now logs WHY → diagnose from the next run's log).
+
+**Deploy plan:** v0.1.7 is released (hardened pipeline validated itself) but **NOT deployed to the
+mini yet** — tonight's 22:00 run is the first scheduled validation of v0.1.6's one-attempt heal;
+deploy v0.1.7 after that run is green (swap dist/cairn.app, TCC persists, same leaf).
+`cairn_photos_stack_unhealthy=1`/`messages_snapshot_failed=1` latched in Pushgateway self-clear on
+the first v0.1.7 runs (PUT replaces the group).
+
 ## 2026-07-02 — M110 COMPLETE + residuals done + charter shipped + full state review (H44 Authentik CVE!)
 
 **Residuals:** L31 SSE blocks (7 buckets, plan-gated, applied) + L26 automount sweep (6 workloads) — both ✅.
