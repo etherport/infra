@@ -80,6 +80,13 @@ jobs:
       - name: Terraform Init
         run: terraform init -backend-config="profile=" -reconfigure
 
+      # M125 (2026-07-02): one-time provider-source migration paultyng → community
+      # fork. Idempotent — after the state has been rewritten once, replace-provider
+      # finds no matching old refs and exits non-zero, which the `|| echo` swallows.
+      # Safe to leave in place permanently (no-op on every subsequent run).
+      - name: Migrate provider source (paultyng -> ubiquiti-community, idempotent)
+        run: terraform state replace-provider -auto-approve registry.terraform.io/paultyng/unifi registry.terraform.io/ubiquiti-community/unifi || echo "provider already migrated (no-op)"
+
       - name: Terraform Plan
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.action == 'plan'
         run: terraform plan -input=false -no-color
