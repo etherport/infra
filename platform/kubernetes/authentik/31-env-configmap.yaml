@@ -7,7 +7,6 @@ data:
   AUTHENTIK_POSTGRESQL__PORT: "5432"
   AUTHENTIK_POSTGRESQL__NAME: authentik
   AUTHENTIK_POSTGRESQL__USER: authentik
-  AUTHENTIK_REDIS__HOST: authentik-redis.authentik.svc.cluster.local
   AUTHENTIK_EMAIL__HOST: email-smtp.us-west-2.amazonaws.com
   AUTHENTIK_EMAIL__PORT: "587"
   AUTHENTIK_EMAIL__USERNAME: AKIA4C5DM33XKE5WUPG4
