@@ -87,40 +87,18 @@ jobs:
         with:
           jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}
 
-      # M110 bootstrap: the AWS host (vpn-aws) does NOT yet trust the step-ca user
-      # CA, so it rejects the minted cert above — it still authenticates only with
-      # the static automation@homelab key (its cloud-init seed). Decrypt that key
-      # from the SOPS ops bundle for inventory=aws runs so CI can reach it (incl.
-      # to run step-ca-trust, which then enables cert-SSH there). Once vpn-aws is
-      # cert-only + the static key removed (M76 cutover), this step + the aws
-      # branch of ANSIBLE_PRIVATE_KEY_FILE below can be deleted.
-      - name: Decrypt AWS bootstrap SSH key (aws inventory only)
-        id: awskey
+      # M76 cutover COMPLETE for the edge box (2026-07-02): vpn-aws trusts the
+      # step-ca user CA (step-ca-trust applied via the static bootstrap key, then
+      # cert-SSH verified) — aws runs now use the minted cert like the rest of the
+      # fleet. This step keeps only the AWS connection tuning: ControlMaster
+      # multiplexing for the intermittently-lossy homelab→AWS path (M124), and a
+      # 60s timeout (the edge box's sudo stalled 12s+ on hostname lookup until
+      # `ip-10-10-100-10` was added to /etc/hosts — root-caused 2026-07-02; the
+      # generous timeout stays as a belt against path-loss retries).
+      - name: AWS connection tuning (aws inventory only)
         if: github.event.inputs.inventory == 'aws'
-        env:
-          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
-          KEYFILE="$RUNNER_TEMP/aws_static_key"
-          sops -d --extract '["automation_ssh_private_key"]' \
-            infra/ansible/playbooks/secrets/homelab-ops.sops.yaml > "$KEYFILE"
-          chmod 600 "$KEYFILE"
-          echo "key-file=$KEYFILE" >> "$GITHUB_OUTPUT"
-          # Offer ONLY the static key. Without IdentitiesOnly=yes, ssh also offers
-          # the runner's minted step-ca cert first; vpn-aws rejects it (CA not yet
-          # trusted) and MaxAuthTries trips → "Connection reset". Scoped to aws via
-          # $GITHUB_ENV (this step only runs for inventory=aws); includes the
-          # ansible.cfg ssh_args defaults since ANSIBLE_SSH_ARGS replaces them.
-          # ControlMaster=auto + ControlPersist: multiplex the whole playbook over a
-          # SINGLE SSH connection. The homelab→AWS path is intermittently lossy, and
-          # ControlMaster=no (ansible.cfg default) reopens a connection per task → a
-          # multi-task play rarely completes. Reuse means only the first connect must
-          # land. IdentitiesOnly so only the static key is offered (cert is rejected).
           echo "ANSIBLE_SSH_ARGS=-o ControlMaster=auto -o ControlPersist=120s -o StrictHostKeyChecking=no -o IdentitiesOnly=yes" >> "$GITHUB_ENV"
-          # 2026-07-02: three step-ca-trust runs failed "Timeout (12s) waiting for
-          # privilege escalation prompt" even with the WAN path CALM (0 flaps/30m) —
-          # sudo on the edge box responds slowly (suspect: hostname/DNS lookup after
-          # the M110 technitium fold). 60s tolerates it; fix the root cause on-box
-          # (hostname in /etc/hosts) once reachable.
           echo "ANSIBLE_TIMEOUT=60" >> "$GITHUB_ENV"
 
       - name: Build inventory args + limit
@@ -146,7 +124,7 @@ jobs:
       - name: Run ansible (check)
         if: github.event.inputs.action == 'check'
         env:
-          ANSIBLE_PRIVATE_KEY_FILE: ${{ github.event.inputs.inventory == 'aws' && steps.awskey.outputs.key-file || steps.sshcert.outputs.key-file }}
+          ANSIBLE_PRIVATE_KEY_FILE: ${{ steps.sshcert.outputs.key-file }}
           # age key for community.sops.load_vars (decrypt *.sops.yaml on the
           # runner). Empty for playbooks that don't use SOPS — harmless.
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
@@ -160,7 +138,7 @@ jobs:
       - name: Run ansible (apply)
         if: github.event.inputs.action == 'apply'
         env:
-          ANSIBLE_PRIVATE_KEY_FILE: ${{ github.event.inputs.inventory == 'aws' && steps.awskey.outputs.key-file || steps.sshcert.outputs.key-file }}
+          ANSIBLE_PRIVATE_KEY_FILE: ${{ steps.sshcert.outputs.key-file }}
           # age key for community.sops.load_vars (decrypt *.sops.yaml on the
           # runner). Empty for playbooks that don't use SOPS — harmless.
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
