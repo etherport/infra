@@ -3,7 +3,7 @@
 #
 # Drift detector #2 (DNS records). The DNS records are GitOps-reconciled by dns-sync-watcher
 # (zone.yaml -> all Technitium replicas: in-cluster technitium-0/-1, the VM fallback 10.10.201.6,
-# the AWS replica 10.10.100.5), so a manual record change self-heals on the next sync. The GAP
+# the AWS replica 10.10.100.10), so a manual record change self-heals on the next sync. The GAP
 # was that a FAILED sync was silent: the dns-tier netpol denied egress to the two off-cluster
 # replicas on tcp/5380 for ~8 days (2026-06-22 -> 06-30) and nothing alerted — DNS records drifted
 # on those replicas unnoticed. (A `technitium.yml --check` detector is unsuitable: it's a
@@ -41,7 +41,7 @@ data:
               summary: "dns-sync-watcher cannot reconcile a Technitium replica (DNS records drifting)"
               description: >
                 dns-sync-watcher has logged DNS-record sync failures in the last hour — at least one
-                Technitium replica (in-cluster, VM fallback 10.10.201.6, or AWS 10.10.100.5) is not
+                Technitium replica (in-cluster, VM fallback 10.10.201.6, or AWS 10.10.100.10) is not
                 receiving record updates, so its records are drifting. Common causes: a netpol egress
                 gap (see the dns-tier CNP / networkpolicy-tiers.md), a replica down, or admin creds.
                 Check `kubectl logs -n dns deploy/dns-sync-watcher`.

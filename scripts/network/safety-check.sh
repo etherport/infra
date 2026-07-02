@@ -42,7 +42,7 @@ run_check "UDM HTTPS responding" \
   "curl -sk --max-time 5 https://10.10.200.1 -o /dev/null -w '%{http_code}' | grep -qE '^(200|301|302|404)$'"
 
 # Layer 2: Internal DNS (homelab + AWS replicas)
-# WireGuard pushes 10.10.100.5 (AWS) first, then 10.10.201.5/.6 (homelab) —
+# WireGuard pushes 10.10.100.10 (AWS) first, then 10.10.201.5/.6 (homelab) —
 # all three must resolve internal records identically. See
 # platform/wireguard/clients/graham-tcp.conf.template for the rationale.
 run_check "DNS @.5 resolves k8s-cp1" \
@@ -50,7 +50,7 @@ run_check "DNS @.5 resolves k8s-cp1" \
 run_check "DNS @.6 resolves k8s-cp1" \
   "[ \"\$(dig @10.10.201.6 +short +timeout=2 k8s-cp1.wind.etherport.net)\" = '10.10.201.50' ]"
 run_check "DNS @100.5 (AWS) resolves k8s-cp1" \
-  "[ \"\$(dig @10.10.100.5 +short +timeout=2 k8s-cp1.wind.etherport.net)\" = '10.10.201.50' ]"
+  "[ \"\$(dig @10.10.100.10 +short +timeout=2 k8s-cp1.wind.etherport.net)\" = '10.10.201.50' ]"
 run_check "DNS @.5 resolves gw" \
   "[ \"\$(dig @10.10.201.5 +short +timeout=2 gw.wind.etherport.net)\" = '10.10.200.1' ]"
 

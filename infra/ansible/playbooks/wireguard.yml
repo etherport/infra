@@ -109,7 +109,7 @@
     #   [Interface]
     #   PrivateKey = <client_private_key>
     #   Address = 10.254.0.X/32
-    #   DNS = 10.10.201.5, 10.10.201.6, 10.10.100.5, 1.1.1.1
+    #   DNS = 10.10.201.5, 10.10.201.6, 10.10.100.10, 1.1.1.1
     #
     #   [Peer]
     #   PublicKey = Aav0cNl4osaEEISQLyKLt88foAPwdVYaeTuyLF/PNTo=

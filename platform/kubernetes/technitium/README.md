@@ -28,7 +28,7 @@ Technitium DNS Server deployment for homelab DNS services, replacing pi-hole + u
           ▼                             │                             ▼
    ┌─────────────────┐                  │                  ┌─────────────────┐
    │  Local Fallback │                  │                  │  AWS Instance   │
-   │  10.10.201.6    │◄─────────────────┴─────────────────►│  10.10.100.5    │
+   │  10.10.201.6    │◄─────────────────┴─────────────────►│  10.10.100.10    │
    │  (secondary)    │                                     │  (secondary)    │
    └─────────────────┘                                     └─────────────────┘
 ```
@@ -41,7 +41,7 @@ Technitium DNS Server deployment for homelab DNS services, replacing pi-hole + u
 | technitium-0 | 10.10.201.71 | Cluster primary pod (for clustering) |
 | technitium-1 | 10.10.201.72 | Cluster secondary pod (for clustering) |
 | Local Fallback | 10.10.201.6 | Standalone VM (secondary) |
-| AWS Instance | 10.10.100.5 | Remote failover (secondary) |
+| AWS Instance | 10.10.100.10 | Remote failover (secondary) |
 
 ## Deployment
 
@@ -153,7 +153,7 @@ Clustering is pre-configured. To add a new secondary node:
 Zone transfers use catalog zones. The catalog automatically provisions member zones on secondaries. ACLs are configured to allow:
 - Kubernetes pod network: `10.42.0.0/16`
 - Local fallback: `10.10.201.6`
-- AWS instance: `10.10.100.5`
+- AWS instance: `10.10.100.10`
 
 ### Standalone-VM secondaries (Ansible-managed)
 
@@ -162,7 +162,7 @@ The two non-K8s secondaries are installed/configured by Ansible, not Flux:
 | Host | IP | Inventory |
 |------|-----|-----------|
 | dns-fallback | 10.10.201.6 | `inventory/wind` |
-| dns-aws | 10.10.100.5 | `inventory/aws` (EC2 nano) |
+| dns-aws | 10.10.100.10 | `inventory/aws` (EC2 nano) |
 
 ```bash
 cd infra/ansible
@@ -195,7 +195,7 @@ Current records are defined in `zones/wind.etherport.net.yaml`.
 | traefik | 10.10.201.70 | Traefik ingress VIP |
 | dns | 10.10.201.70 | DNS web UI (via Traefik) |
 | dns-fallback | 10.10.201.6 | Local DNS fallback |
-| dns-aws | 10.10.100.5 | AWS DNS failover |
+| dns-aws | 10.10.100.10 | AWS DNS failover |
 
 ### Network Equipment
 
@@ -277,7 +277,7 @@ velero backup create technitium-backup --include-namespaces dns
 
 ```bash
 # Test all DNS servers
-for ip in 10.10.201.5 10.10.201.71 10.10.201.72 10.10.201.6 10.10.100.5; do
+for ip in 10.10.201.5 10.10.201.71 10.10.201.72 10.10.201.6 10.10.100.10; do
   echo -n "$ip: "
   dig @$ip google.com +short | head -1
 done
@@ -329,7 +329,7 @@ If secondary zones show `isExpired: true` or `syncFailed: true`:
 
 3. **Trigger resync** on all secondaries:
    ```bash
-   for ip in 10.10.201.72 10.10.201.6 10.10.100.5; do
+   for ip in 10.10.201.72 10.10.201.6 10.10.100.10; do
      TOKEN=$(curl -s "http://$ip:5380/api/user/login?user=<user>&pass=<pass>" | jq -r .token)
      curl "http://$ip:5380/api/zones/resync?token=$TOKEN&zone=wind.etherport.net"
    done
@@ -342,7 +342,7 @@ If secondary zones show `isExpired: true` or `syncFailed: true`:
 | dns1 | 10.10.201.71 | Primary DNS server VIP (technitium-0) |
 | dns2 | 10.10.201.72 | Secondary in K8s (technitium-1) |
 | dns-fallback | 10.10.201.6 | Local fallback VM |
-| dns-aws | 10.10.100.5 | AWS remote failover |
+| dns-aws | 10.10.100.10 | AWS remote failover |
 
 > **Important**: The `dns-cluster.wind.etherport.net` zone is managed directly by Technitium (not GitOps) and is used for cluster coordination. The dns1 A record is critical - without it, secondaries cannot perform zone transfers.
 

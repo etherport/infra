@@ -229,7 +229,7 @@ data:
     # Keys are the names the advisor uses in proposed_action.params.host.
     # Values: (ip, ssh_user — always advisor-remediation per base.yml setup).
     ADVISOR_SSH_HOSTS = {
-        'dns-aws':      '10.10.100.5',
+        'dns-aws':      '10.10.100.10',
         'dns-fallback': '10.10.201.6',
         'vpn-local':    '10.10.201.15',
         'vpn-aws':      '10.10.100.10',

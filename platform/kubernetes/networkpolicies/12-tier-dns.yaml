@@ -70,7 +70,7 @@ spec:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: dns
     # dns-sync-watcher -> the two OFF-CLUSTER Technitium replicas' admin API (:5380):
-    # the VM fallback 10.10.201.6 and the AWS replica 10.10.100.5. These are external to
+    # the VM fallback 10.10.201.6 and the AWS replica 10.10.100.10. These are external to
     # the cluster (reserved:world), and the world egress above only opens the QUERY ports
     # (53/443/853/53443) — so the hourly FULL_SYNC was POLICY_DENIED (~72 drops/hr, watcher
     # "urlopen error timed out") for the ~8 days since the dns tier was enforced (2026-06-22).

@@ -44,7 +44,7 @@ spec:
         - cluster
     # External egress: SES SMTP (587/465/25) for alert email, HTTPS (:443) for the
     # ai-advisor → Anthropic API + Twilio/webhooks + SES API, :80, and external scrape
-    # targets — node-exporters on :9100 (10.10.100.5/10, 10.10.201.6/15) and the pve
+    # targets — node-exporters on :9100 (10.10.100.10, 10.10.201.6/15) and the pve
     # in-band IPMI exporter on :9290 (10.10.200.41). Add a port here if a new EXTERNAL
     # scrape target or notifier uses a different one (see the new-service runbook).
     - toEntities:

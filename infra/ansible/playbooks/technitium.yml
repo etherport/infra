@@ -24,7 +24,7 @@
     cluster_addresses:
       - "10.10.201.5"  # K8s cluster VIP
       - "10.10.201.6"  # Local fallback
-      - "10.10.100.5"  # AWS remote
+      - "10.10.100.10"  # AWS remote
     # Bootstrap config — only applied when admin/admin defaults are
     # detected. After password change the playbook is idempotent on
     # subsequent runs (login uses the SOPS password).
@@ -34,13 +34,13 @@
       - "1.0.0.1"
       - "8.8.8.8"
     technitium_conditional_forwarders:
-      # AWS EC2 internal hostnames. Forwarded to dns-aws (10.10.100.5,
+      # AWS EC2 internal hostnames. Forwarded to dns-aws (10.10.100.10,
       # EC2 nano running technitium pointed at AWS Route53 Resolver
       # Inbound endpoint). The aws.etherport.net forwarder was
       # removed 2026-05-27 — the Route53 private zone for that name
       # was deleted with the broader Route53 → CF migration. See
       # docs/runbooks/aws-private-dns.md for historical context.
-      - { zone: "us-west-2.compute.internal", forwarder: "10.10.100.5" }
+      - { zone: "us-west-2.compute.internal", forwarder: "10.10.100.10" }
 
   tasks:
     - name: Gather service facts

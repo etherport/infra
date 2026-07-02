@@ -83,7 +83,7 @@ records:
 
   - name: dns-aws
     type: A
-    value: 10.10.100.5
+    value: 10.10.100.10
     comment: Technitium DNS on AWS (remote failover)
 
   # =============================================================================
