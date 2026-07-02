@@ -12,8 +12,8 @@ spec:
   instances: 1
 
   # Same operand image as the shared postgres-cluster. Confirmed to ship
-  # PostgreSQL 16.4 + pgvector 0.8.0 available, gen_random_uuid() (core).
-  imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+  # PostgreSQL 16.14 + pgvector 0.8.0 available, gen_random_uuid() (core).
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.14
   primaryUpdateStrategy: unsupervised
 
   storage:

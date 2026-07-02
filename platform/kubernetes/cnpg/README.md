@@ -173,7 +173,7 @@ Edit `01-cluster.yaml` and update imageName:
 
 ```yaml
 spec:
-  imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.14
 ```
 
 Commit and push - Flux handles the rolling update.
