@@ -3,14 +3,17 @@ terraform {
 
   required_providers {
     unifi = {
-      # M125 (2026-07-02): migrated paultyng/unifi (ARCHIVED 2026-04-30; it
-      # deterministically 400s PUT networkconf for 3 of 7 networks — bit the M110
-      # dhcp_dns cutover) → the community fork, which continues the 0.41.x lineage
-      # as a drop-in. The provider ADDRESS change requires a one-time
-      # `terraform state replace-provider` (done in terraform-unifi.yml, idempotent).
-      # AVOID the filipowm fork (rebased to v1.0.0 with schema changes).
-      source  = "ubiquiti-community/unifi"
-      version = "0.54.0"
+      source = "paultyng/unifi"
+      # Pin to a known-good version. UniFi Network 10.3.58 is newer than
+      # what most provider versions explicitly test against, but Phase 1
+      # resources (unifi_network, unifi_port_forward, unifi_user) have
+      # stable schemas going back to v0.30+.
+      # M125 ATTEMPT REVERTED 2026-07-02: ubiquiti-community/unifi 0.54.0 is NOT a
+      # drop-in — it renamed the resource types ("provider does not support resource
+      # type unifi_network/..."), so the plan errored. The state replace-provider had
+      # already rewritten S3 state → reverted here (see the reverse step in the
+      # workflow). Re-attempt M125 with a fork VERSION matching paultyng 0.41's schema.
+      version = "~> 0.41"
     }
   }
 }
