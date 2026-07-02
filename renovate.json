@@ -98,12 +98,45 @@
         "major"
       ],
       "prPriority": -1
+    },
+    {
+      "description": "M122: raw-manifest images (kubernetes manager on platform/kubernetes/**) previously had ZERO coverage \u2014 cephcsi, the CSI sidecars, redis, velero-plugin, unpoller etc. rotted silently. Group the low-risk registry.k8s.io/quay/dockerhub infra sidecars into one settled PR.",
+      "matchManagers": [
+        "kubernetes"
+      ],
+      "groupName": "k8s raw-manifest images",
+      "minimumReleaseAge": "5 days"
+    },
+    {
+      "description": "M122: authentik server image is governed by the H44 8-hop upgrade PROGRAM (blueprint/schema migrations across the 2024.12\u2192current gap + an unpatched critical RCE window) \u2014 NOT a simple renovate bump. Disable so renovate can't tempt an unsafe one-shot merge.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "enabled": false,
+      "matchPackageNames": [
+        "/goauthentik/server/"
+      ]
+    },
+    {
+      "description": "M122: the CNPG operand postgresql image is governed by H45d (cue-db depends on pgvector bundled in the image; CNPG changed extension bundling ~1.30, so a naive minor bump can drop pgvector). Manage via the CNPG cluster CR + a verified image tag, not an auto-PR.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "enabled": false,
+      "matchPackageNames": [
+        "/cloudnative-pg/postgresql/"
+      ]
     }
   ],
   "flux": {
     "managerFilePatterns": [
       "/^clusters/wind/helm-releases/.*\\.ya?ml$/",
       "/(^|/)gotk-components\\.ya?ml$/"
+    ]
+  },
+  "kubernetes": {
+    "managerFilePatterns": [
+      "/^platform/kubernetes/.*\\.ya?ml$/"
     ]
   }
 }
