@@ -80,14 +80,6 @@ jobs:
       - name: Terraform Init
         run: terraform init -backend-config="profile=" -reconfigure
 
-      # M125 REVERSAL (2026-07-02): the paultyng→ubiquiti-community migration failed
-      # (fork 0.54 renamed resource types) AFTER replace-provider had already rewritten
-      # S3 state → this reverse step restores the state to paultyng. Idempotent (|| echo
-      # once already reverted). REMOVE this step in a follow-up once the state is back
-      # on paultyng and the plan is clean.
-      - name: Revert provider source (ubiquiti-community -> paultyng, idempotent)
-        run: terraform state replace-provider -auto-approve registry.terraform.io/ubiquiti-community/unifi registry.terraform.io/paultyng/unifi || echo "provider already reverted (no-op)"
-
       - name: Terraform Plan
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.action == 'plan'
         run: terraform plan -input=false -no-color
