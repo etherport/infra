@@ -67,40 +67,6 @@ resource "aws_vpc_security_group_egress_rule" "vpn_all_ipv6" {
 }
 
 #------------------------------------------------------------------------------
-# ALB Public HTTPS Security Group
-#------------------------------------------------------------------------------
-
-resource "aws_security_group" "alb_public" {
-  name        = "private-infra_alb-public-443"
-  description = "Allow HTTPS for ALB"
-  vpc_id      = aws_vpc.private_infra.id
-
-  tags = merge(local.common_tags, {
-    Name = "private-infra_alb-public-443"
-  })
-}
-
-resource "aws_vpc_security_group_ingress_rule" "alb_https" {
-  security_group_id = aws_security_group.alb_public.id
-  ip_protocol       = "tcp"
-  from_port         = 443
-  to_port           = 443
-  cidr_ipv4         = "0.0.0.0/0"
-}
-
-resource "aws_vpc_security_group_egress_rule" "alb_all_ipv4" {
-  security_group_id = aws_security_group.alb_public.id
-  ip_protocol       = "-1"
-  cidr_ipv4         = "0.0.0.0/0"
-}
-
-resource "aws_vpc_security_group_egress_rule" "alb_all_ipv6" {
-  security_group_id = aws_security_group.alb_public.id
-  ip_protocol       = "-1"
-  cidr_ipv6         = "::/0"
-}
-
-#------------------------------------------------------------------------------
 # Internal Communications Security Group
 #------------------------------------------------------------------------------
 
@@ -126,13 +92,6 @@ resource "aws_vpc_security_group_ingress_rule" "internal_homelab" {
   description       = "Allow all traffic from wind network"
   ip_protocol       = "-1"
   cidr_ipv4         = "10.10.192.0/19"
-}
-
-resource "aws_vpc_security_group_ingress_rule" "internal_aws_spokes" {
-  security_group_id = aws_security_group.internal_comms.id
-  description       = "Allow all traffic from AWS spoke VPCs (use1 hub, regional/travel VPNs)"
-  ip_protocol       = "-1"
-  cidr_ipv4         = "10.10.96.0/19"
 }
 
 resource "aws_vpc_security_group_ingress_rule" "internal_vpn_clients" {

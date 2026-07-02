@@ -71,11 +71,6 @@ output "security_group_vpn_id" {
   value       = aws_security_group.vpn_server.id
 }
 
-output "security_group_alb_id" {
-  description = "ID of the ALB public HTTPS security group"
-  value       = aws_security_group.alb_public.id
-}
-
 output "security_group_internal_id" {
   description = "ID of the internal communications security group"
   value       = aws_security_group.internal_comms.id
