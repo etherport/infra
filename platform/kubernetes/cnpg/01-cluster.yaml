@@ -24,7 +24,7 @@ spec:
           cnpg.io/cluster: postgres-cluster
 
   # PostgreSQL version
-  imageName: ghcr.io/cloudnative-pg/postgresql:16.4
+  imageName: ghcr.io/cloudnative-pg/postgresql:16.14
 
   # Primary update strategy
   primaryUpdateStrategy: unsupervised
