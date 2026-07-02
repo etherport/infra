@@ -71,7 +71,9 @@ resource "unifi_network" "management" {
   dhcp_enabled = true
   dhcp_start   = "10.10.200.100"
   dhcp_stop    = "10.10.200.254"
-  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "52.40.219.113"]
+  # M110 (2026-07-02): tertiary resolver = 44.240.60.80 (the consolidated AWS edge
+  # box; was 52.40.219.113 on the destroyed standalone dns instance).
+  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
   dhcp_lease   = 86400
   domain_name  = "wind.etherport.net"
 
@@ -109,7 +111,7 @@ resource "unifi_network" "servers" {
   dhcp_enabled = true
   dhcp_start   = "10.10.201.100"
   dhcp_stop    = "10.10.201.254"
-  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "52.40.219.113"]
+  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
   dhcp_lease   = 86400
   domain_name  = "wind.etherport.net"
 
@@ -147,7 +149,7 @@ resource "unifi_network" "clients" {
   dhcp_enabled = true
   dhcp_start   = "10.10.202.100"
   dhcp_stop    = "10.10.202.254"
-  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "52.40.219.113"]
+  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
   dhcp_lease   = 86400
   domain_name  = "wind.etherport.net"
 
@@ -185,7 +187,7 @@ resource "unifi_network" "iot" {
   dhcp_enabled = true
   dhcp_start   = "10.10.204.100"
   dhcp_stop    = "10.10.204.254"
-  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "52.40.219.113"]
+  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
   dhcp_lease   = 86400
   domain_name  = "wind.etherport.net"
 
@@ -308,7 +310,7 @@ resource "unifi_network" "vsan" {
   dhcp_enabled = true
   dhcp_start   = "10.10.209.100"
   dhcp_stop    = "10.10.209.254"
-  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "52.40.219.113"]
+  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
   dhcp_lease   = 86400
   domain_name  = "wind.etherport.net"
 
@@ -346,7 +348,7 @@ resource "unifi_network" "unifi" {
   dhcp_enabled = true
   dhcp_start   = "10.10.212.100"
   dhcp_stop    = "10.10.212.254"
-  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "52.40.219.113"]
+  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
   dhcp_lease   = 86400
   domain_name  = "wind.etherport.net"
 
@@ -397,7 +399,7 @@ resource "unifi_network" "ceph" {
   dhcp_enabled = true
   dhcp_start   = "10.10.210.100"
   dhcp_stop    = "10.10.210.254"
-  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "52.40.219.113"]
+  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
   dhcp_lease   = 86400
   domain_name  = "wind.etherport.net"
 
