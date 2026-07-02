@@ -3,15 +3,14 @@ terraform {
 
   required_providers {
     unifi = {
-      # M125 (2026-07-02, attempt 2): paultyng/unifi is ARCHIVED → migrated to the
-      # ubiquiti-community fork PINNED TO ITS 0.41.x LINE (0.41.25, the last one) —
-      # that line keeps paultyng's resource names, so it IS drop-in. The fork's
-      # 0.42+/0.5x re-versioning RENAMED the resource types (attempt 1 with 0.54.0
-      # errored "provider does not support resource type unifi_network" AFTER
-      # replace-provider had rewritten state — reverted). Moving past 0.41.x later
-      # = a deliberate `terraform state mv` migration, not a version bump.
-      source  = "ubiquiti-community/unifi"
-      version = "0.41.25"
+      source = "paultyng/unifi"
+      # Archived upstream but still SERVES from the registry and works with our
+      # workarounds. M125 (migrate off it) was attempted TWICE on 2026-07-02 and
+      # cleanly reverted both times: the ubiquiti-community fork is NOT drop-in at
+      # ANY version — 0.54 renamed the resource types, and even its 0.41.25 changed
+      # the unifi_network arguments. Migrating = a real schema-diff project
+      # (args + possibly state mv), tracked as M125. Don't retry as a version swap.
+      version = "~> 0.41"
     }
   }
 }
