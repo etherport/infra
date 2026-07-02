@@ -20,7 +20,10 @@ spec:
   chart:
     spec:
       chart: loki
-      version: "6.x"
+            # M122 (2026-07-02): EXACT pin — ranges silently froze majors (alloy sat 10
+      # chart minors behind a '0.x' cap). Renovate's flux manager now PRs every bump
+      # incl. majors; upgrades happen by merging PRs, never by silent drift.
+      version: "6.55.0"
       sourceRef:
         kind: HelmRepository
         name: grafana

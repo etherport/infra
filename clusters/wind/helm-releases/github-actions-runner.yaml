@@ -10,7 +10,10 @@ spec:
   chart:
     spec:
       chart: gha-runner-scale-set-controller
-      version: "0.11.x"
+            # M122 (2026-07-02): EXACT pin — ranges silently froze majors (alloy sat 10
+      # chart minors behind a '0.x' cap). Renovate's flux manager now PRs every bump
+      # incl. majors; upgrades happen by merging PRs, never by silent drift.
+      version: "0.11.0"
       sourceRef:
         kind: HelmRepository
         name: github-actions
@@ -37,7 +40,10 @@ spec:
   chart:
     spec:
       chart: gha-runner-scale-set
-      version: "0.11.x"
+            # M122 (2026-07-02): EXACT pin — ranges silently froze majors (alloy sat 10
+      # chart minors behind a '0.x' cap). Renovate's flux manager now PRs every bump
+      # incl. majors; upgrades happen by merging PRs, never by silent drift.
+      version: "0.11.0"
       sourceRef:
         kind: HelmRepository
         name: github-actions

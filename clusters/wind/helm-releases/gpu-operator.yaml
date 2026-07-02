@@ -19,7 +19,10 @@ spec:
   chart:
     spec:
       chart: gpu-operator
-      version: "v25.10.x"
+            # M122 (2026-07-02): EXACT pin — ranges silently froze majors (alloy sat 10
+      # chart minors behind a '0.x' cap). Renovate's flux manager now PRs every bump
+      # incl. majors; upgrades happen by merging PRs, never by silent drift.
+      version: "v25.10.1"
       sourceRef:
         kind: HelmRepository
         name: nvidia

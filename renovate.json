@@ -68,7 +68,7 @@
       ]
     },
     {
-      "description": "MetalLB Helm chart (Flux) is on the critical BGP path — it carries every ingress + DNS VIP with no L2 fallback (L24 FRR). Don't auto-merge a bump silently; let it land as a reviewable PR after a settle period (the MetallbBGPAllSessionsDown alert + BGP graceful-restart backstop a bad bump, but a human should sign off).",
+      "description": "MetalLB Helm chart (Flux) is on the critical BGP path \u2014 it carries every ingress + DNS VIP with no L2 fallback (L24 FRR). Don't auto-merge a bump silently; let it land as a reviewable PR after a settle period (the MetallbBGPAllSessionsDown alert + BGP graceful-restart backstop a bad bump, but a human should sign off).",
       "matchDatasources": [
         "helm"
       ],
@@ -77,6 +77,33 @@
       ],
       "automerge": false,
       "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "M122: Flux HelmRelease chart bumps \u2014 exact pins now (ranges froze majors; alloy sat 10 minors behind a 0.x cap). Patch+minor grouped weekly; MAJORS as individual PRs for deliberate review (CRDs/breaking changes).",
+      "matchManagers": [
+        "flux"
+      ],
+      "matchUpdateTypes": [
+        "patch",
+        "minor"
+      ],
+      "groupName": "flux helm charts (patch+minor)"
+    },
+    {
+      "description": "M122: chart MAJORS stay ungrouped \u2014 one PR each, hand-reviewed (kube-prometheus-stack majors carry CRD updates; metallb majors risk the BGP/no-L2 path)",
+      "matchManagers": [
+        "flux"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "prPriority": -1
     }
-  ]
+  ],
+  "flux": {
+    "managerFilePatterns": [
+      "/^clusters/wind/helm-releases/.*\\.ya?ml$/",
+      "/(^|/)gotk-components\\.ya?ml$/"
+    ]
+  }
 }

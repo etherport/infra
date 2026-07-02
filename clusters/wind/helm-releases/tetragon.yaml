@@ -23,7 +23,10 @@ spec:
   chart:
     spec:
       chart: tetragon
-      version: "1.7.x"
+            # M122 (2026-07-02): EXACT pin — ranges silently froze majors (alloy sat 10
+      # chart minors behind a '0.x' cap). Renovate's flux manager now PRs every bump
+      # incl. majors; upgrades happen by merging PRs, never by silent drift.
+      version: "1.7.0"
       sourceRef:
         kind: HelmRepository
         name: cilium   # tetragon ships from the cilium helm repo (already defined)
