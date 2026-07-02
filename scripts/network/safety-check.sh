@@ -76,7 +76,7 @@ run_check "K8s WireGuard VIP reachable" \
   "ping -c 3 -W 5 10.10.201.20"
 run_check "dns-fallback (.6) reachable" \
   "ping -c 3 -W 5 10.10.201.6"
-run_check "vpn-local (.15) reachable" \
+run_check "vpn-fallback (.15) reachable" \
   "ping -c 3 -W 5 10.10.201.15"
 run_check "gh-runner (.30) reachable" \
   "ping -c 3 -W 5 10.10.201.30"

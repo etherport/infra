@@ -2,7 +2,7 @@
 
 ## Overview
 
-Primary WireGuard gateway running in Kubernetes with high availability failover to vpn-local VM.
+Primary WireGuard gateway running in Kubernetes with high availability failover to vpn-fallback VM.
 
 For full architecture documentation, see [docs/architecture/vpn-wireguard.md](../../../docs/architecture/vpn-wireguard.md).
 
@@ -73,12 +73,12 @@ kubectl apply -k platform/kubernetes/wireguard/
 | hostNetwork | true | Direct host networking for tunnel |
 | Node affinity | Any worker, control-plane excluded | `required` rule excludes control-plane only (no per-node preference) |
 | tolerationSeconds | 10 | Fast eviction on node failure |
-| VRRP priority | 150 | Higher than vpn-local (100) |
-| VIP | 10.10.201.20 | Floating between K8s and vpn-local |
+| VRRP priority | 150 | Higher than vpn-fallback (100) |
+| VIP | 10.10.201.20 | Floating between K8s and vpn-fallback |
 
 > **VRRP failover correctness fix (commit b4999c9):** the keepalived
 > sidecar now releases the VIP cleanly on pod termination (preStop hook
-> + `garp_master_refresh`), so vpn-local takes over within VRRP's
+> + `garp_master_refresh`), so vpn-fallback takes over within VRRP's
 > advert-interval instead of waiting for the gratuitous-ARP cache to
 > age out. If you're debugging a stuck VIP, that commit is the
 > reference.
@@ -112,11 +112,11 @@ kubectl logs -n wireguard daemonset/wireguard-cleanup
 ### Test Failover
 
 ```bash
-# Scale down (vpn-local will take over)
+# Scale down (vpn-fallback will take over)
 kubectl scale deployment wireguard -n wireguard --replicas=0
 
-# Verify vpn-local has VIP
-ansible vpn-local -m shell -a "ip addr show | grep 10.10.201.20"
+# Verify vpn-fallback has VIP
+ansible vpn-fallback -m shell -a "ip addr show | grep 10.10.201.20"
 
 # Scale back up
 kubectl scale deployment wireguard -n wireguard --replicas=1
@@ -137,7 +137,7 @@ export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
 sops platform/kubernetes/wireguard/01-secrets.sops.yaml
 ```
 
-**Important:** K8s and vpn-local must use the SAME keys so AWS sees a single peer.
+**Important:** K8s and vpn-fallback must use the SAME keys so AWS sees a single peer.
 
 ## Troubleshooting
 

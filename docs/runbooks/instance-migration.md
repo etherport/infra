@@ -7,7 +7,7 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 
 **Covered instances:**
 - AWS EC2: vpn-aws (the single `private-infra_edge` box — runs WireGuard, Tailscale, **and** Technitium DNS)
-- Proxmox: vpn-local, dns-fallback
+- Proxmox: vpn-fallback, dns-fallback
 
 > **M110 done (2026-07-02):** `vpn-aws` was resized to **t4g.small** (AWS tag renamed
 > `private-infra_vpn` → `private-infra_edge`, 2026-07-01) and Technitium DNS was folded
@@ -161,16 +161,16 @@ no separate compute apply for DNS — the box is the same one.
 
 ---
 
-## Proxmox VPN Instance Migration (vpn-local)
+## Proxmox VPN Instance Migration (vpn-fallback)
 
 ### Overview
 - **VM ID**: 1002
 - **Purpose**: Site-to-site VPN endpoint, local site gateway
 - **IP**: 10.10.201.15 (VLAN 201)
 - **Services**: WireGuard (wg0)
-- **Config stored in**: `platform/wireguard/servers/vpn-local.sops.yaml`
+- **Config stored in**: `platform/wireguard/servers/vpn-fallback.sops.yaml`
 
-> **C2 done (2026-05).** vpn-local was rebuilt from the current Packer
+> **C2 done (2026-05).** vpn-fallback was rebuilt from the current Packer
 > template (VM 9001) and uses `ubuntu` like the K8s nodes. SSH is
 > cert-only (M76) — `ssh ubuntu@<host>` presents the cert via ssh-config.
 
@@ -185,7 +185,7 @@ no separate compute apply for DNS — the box is the same one.
    ```bash
    export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
    cd platform/wireguard/servers
-   sops -d vpn-local.sops.yaml | head -10
+   sops -d vpn-fallback.sops.yaml | head -10
    ```
 
 2. **Verify AWS-side peer config**
@@ -210,7 +210,7 @@ no separate compute apply for DNS — the box is the same one.
    ```bash
    cd infra/ansible
    export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
-   ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-local
+   ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-fallback
    ```
 
 3. **Verify tunnel reconnection**
@@ -241,7 +241,7 @@ no separate compute apply for DNS — the box is the same one.
 > Packer template (VM 9001) and uses `ubuntu` like the K8s nodes.
 > SSH is cert-only (M76) — `ssh ubuntu@<host>` presents the cert.
 
-> **Watchdog reattach:** as with vpn-local, imported VMs need a full
+> **Watchdog reattach:** as with vpn-fallback, imported VMs need a full
 > stop+start (not just reboot) to reattach the `i6300esb` watchdog
 > device. See `docs/runbooks/vm-watchdog.md`.
 
@@ -305,7 +305,7 @@ If instances are lost and need to be recreated from scratch:
 
 **Proxmox Instances:**
 
-2. **vpn-local**
+2. **vpn-fallback**
    - Terraform will recreate VM from cloud-init template
    - Run WireGuard playbook (keys are in SOPS)
    - AWS side will reconnect automatically
@@ -319,7 +319,7 @@ If instances are lost and need to be recreated from scratch:
 
 WireGuard keys are stored in:
 - `platform/wireguard/servers/vpn-aws.sops.yaml`
-- `platform/wireguard/servers/vpn-local.sops.yaml`
+- `platform/wireguard/servers/vpn-fallback.sops.yaml`
 - `platform/wireguard/clients/*.sops.yaml`
 
 To decrypt:

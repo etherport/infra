@@ -171,7 +171,7 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   drop) from **refused** (dead process) to localize fast.
 - **MetalLB is BGP-only, not L2** (M18/M36). Traefik VIP = `10.10.201.70`. Raw ICMP to
   VIPs fails by design; TCP works. **A VLAN-201 host (incl. the devbox, and TS/WG remote
-  clients that egress via a VLAN-201 subnet-router/`vpn-local`) CANNOT reach a BGP VIP**
+  clients that egress via a VLAN-201 subnet-router/`vpn-fallback`) CANNOT reach a BGP VIP**
   (no L2 → ARP fails); only off-subnet clients via the UDM (which holds the `/32` BGP route)
   reach them. Use the `.6` Technitium VM fallback or a `/32 via .1` route. Memory:
   `vlan201-host-cant-reach-metallb-vip`.

@@ -15,7 +15,7 @@ stringData:
       static_configs:
         - targets:
             - '10.10.201.6:9100'   # dns-fallback
-            - '10.10.201.15:9100'  # vpn-local
+            - '10.10.201.15:9100'  # vpn-fallback
             - '10.10.201.30:9100'  # gh-runner (self-hosted CI runner)
             - '10.10.201.45:9100'  # devbox (Claude Code dev-session host; node_exporter via base.yml)
             - '10.10.201.46:9100'  # step-ca (SSH CA — H42; the fleet's cert-SSH depends on it)
@@ -39,7 +39,7 @@ stringData:
         - source_labels: [__address__]
           regex: '10\.10\.201\.15:.*'
           target_label: instance
-          replacement: 'vpn-local'
+          replacement: 'vpn-fallback'
         - source_labels: [__address__]
           regex: '10\.10\.201\.30:.*'
           target_label: instance

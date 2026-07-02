@@ -1,13 +1,13 @@
 ---
 # WireGuard VPN Configuration Playbook
-# Manages WireGuard on vpn-local and vpn-aws
+# Manages WireGuard on vpn-fallback and vpn-aws
 #
 # Usage:
 #   # All VPN servers (local + AWS)
 #   ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/wireguard.yml
 #
 #   # Local only
-#   ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-local
+#   ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-fallback
 #
 #   # AWS only
 #   ansible-playbook -i inventory/aws/ playbooks/wireguard.yml --limit vpn-aws
@@ -18,7 +18,7 @@
 # KEYS MANAGEMENT:
 #   Server private keys are stored encrypted with SOPS in:
 #     platform/wireguard/servers/vpn-aws.sops.yaml
-#     platform/wireguard/servers/vpn-local.sops.yaml
+#     platform/wireguard/servers/vpn-fallback.sops.yaml
 #
 #   Client configs are stored encrypted in:
 #     platform/wireguard/clients/<name>.sops.yaml
@@ -39,10 +39,10 @@
     # Site-to-site tunnel configuration
     wg_mtu: 1420
 
-    # vpn-local specific settings
-    # NOTE: vpn-local is BACKUP to the K8s WireGuard pod. wg0/wg1 are NOT auto-started;
+    # vpn-fallback specific settings
+    # NOTE: vpn-fallback is BACKUP to the K8s WireGuard pod. wg0/wg1 are NOT auto-started;
     # Keepalived notify scripts start/stop interfaces based on VRRP state.
-    vpn_local:
+    vpn_fallback:
       ip: "10.10.201.15"  # Host IP for policy routing
       wg0:
         tunnel_ip: "10.255.255.2/29"
@@ -83,7 +83,7 @@
 
     # Regional VPN peers for wg0 (homelab side)
     # These are TEMPORARY regional VPNs for travel - add/remove as needed
-    # Both K8s WireGuard pod and vpn-local need these peers for failover to work
+    # Both K8s WireGuard pod and vpn-fallback need these peers for failover to work
     # Homelab initiates connection to regional VPNs (avoids UDM port forward issues)
     wg0_regional_peers: []
       # Travel/regional-VPN tooling DELETED 2026-07-01 (M110) — the
@@ -131,14 +131,14 @@
       no_log: true  # don't echo decrypted WG keys into CI logs
       when: inventory_hostname == 'vpn-aws'
 
-    - name: Load vpn-local keys from SOPS
+    - name: Load vpn-fallback keys from SOPS
       community.sops.load_vars:
-        file: "{{ sops_keys_path }}/vpn-local.sops.yaml"
-        name: vpn_local_keys
+        file: "{{ sops_keys_path }}/vpn-fallback.sops.yaml"
+        name: vpn_fallback_keys
       delegate_to: localhost
       become: false
       no_log: true  # don't echo decrypted WG keys into CI logs
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
 
     # =========================================================================
     # Common tasks for all VPN servers
@@ -191,30 +191,30 @@
       when: inventory_hostname == 'vpn-aws'
       no_log: true
 
-    - name: Deploy wg0 private key (vpn-local)
+    - name: Deploy wg0 private key (vpn-fallback)
       copy:
         dest: /etc/wireguard/local_private.key
-        content: "{{ vpn_local_keys.stringData.wg0_private_key }}"
+        content: "{{ vpn_fallback_keys.stringData.wg0_private_key }}"
         owner: root
         group: root
         mode: "0600"
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
       no_log: true
 
-    - name: Deploy wg1 private key (vpn-local)
+    - name: Deploy wg1 private key (vpn-fallback)
       copy:
         dest: /etc/wireguard/local_wg1_private.key
-        content: "{{ vpn_local_keys.stringData.wg1_private_key }}"
+        content: "{{ vpn_fallback_keys.stringData.wg1_private_key }}"
         owner: root
         group: root
         mode: "0600"
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
       no_log: true
 
     # =========================================================================
-    # vpn-local configuration
+    # vpn-fallback configuration
     # =========================================================================
-    - name: Configure wg0 on vpn-local
+    - name: Configure wg0 on vpn-fallback
       copy:
         dest: /etc/wireguard/wg0.conf
         owner: root
@@ -222,13 +222,13 @@
         mode: "0600"
         content: |
           [Interface]
-          Address = {{ vpn_local.wg0.tunnel_ip }}
-          ListenPort = {{ vpn_local.wg0.listen_port }}
-          PrivateKey = {{ vpn_local_keys.stringData.wg0_private_key }}
+          Address = {{ vpn_fallback.wg0.tunnel_ip }}
+          ListenPort = {{ vpn_fallback.wg0.listen_port }}
+          PrivateKey = {{ vpn_fallback_keys.stringData.wg0_private_key }}
           MTU = {{ wg_mtu }}
           # NAT for regional VPN traffic (so replies route back via wg0)
           PostUp = iptables -t nat -I POSTROUTING 1 -s 10.255.255.0/29 -o eth0 -j MASQUERADE
-          # NAT for LAN traffic going to AWS via wg0 (UDM tunnel → vpn-local → wg0 → AWS)
+          # NAT for LAN traffic going to AWS via wg0 (UDM tunnel → vpn-fallback → wg0 → AWS)
           PostUp = iptables -t nat -I POSTROUTING 1 -o wg0 -j MASQUERADE
           PostUp = iptables -I FORWARD 1 -i wg0 -o eth0 -j ACCEPT
           PostUp = iptables -I FORWARD 1 -i eth0 -o wg0 -j ACCEPT
@@ -239,10 +239,10 @@
 
           # Peer: AWS hub (primary site-to-site)
           [Peer]
-          PublicKey = {{ vpn_local.wg0.peer_public_key }}
-          Endpoint = {{ vpn_local.wg0.peer_endpoint }}
-          AllowedIPs = {{ vpn_local.wg0.peer_allowed_ips }}
-          PersistentKeepalive = {{ vpn_local.wg0.keepalive }}
+          PublicKey = {{ vpn_fallback.wg0.peer_public_key }}
+          Endpoint = {{ vpn_fallback.wg0.peer_endpoint }}
+          AllowedIPs = {{ vpn_fallback.wg0.peer_allowed_ips }}
+          PersistentKeepalive = {{ vpn_fallback.wg0.keepalive }}
 
           {% for peer in wg0_regional_peers %}
           # {{ peer.name }}{% if peer.comment is defined %} - {{ peer.comment }}{% endif %}
@@ -254,11 +254,11 @@
           PersistentKeepalive = {{ peer.keepalive }}
 
           {% endfor %}
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
       no_log: true
       notify: Restart WireGuard wg0
 
-    - name: Configure wg1 on vpn-local (remote access - direct connection)
+    - name: Configure wg1 on vpn-fallback (remote access - direct connection)
       copy:
         dest: /etc/wireguard/wg1.conf
         owner: root
@@ -266,9 +266,9 @@
         mode: "0600"
         content: |
           [Interface]
-          Address    = {{ vpn_local.wg1.tunnel_ip }}
-          ListenPort = {{ vpn_local.wg1.listen_port }}
-          PrivateKey = {{ vpn_local_keys.stringData.wg1_private_key }}
+          Address    = {{ vpn_fallback.wg1.tunnel_ip }}
+          ListenPort = {{ vpn_fallback.wg1.listen_port }}
+          PrivateKey = {{ vpn_fallback_keys.stringData.wg1_private_key }}
           MTU        = {{ wg_mtu }}
           # NAT for full-tunnel clients (route all traffic through VPN)
           # Use -I to insert at beginning - ensures rule runs before other chains
@@ -285,7 +285,7 @@
           AllowedIPs = {{ peer.allowed_ips }}
 
           {% endfor %}
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
       no_log: true
       notify: Restart WireGuard wg1
 
@@ -427,14 +427,14 @@
       when: inventory_hostname == 'vpn-aws'
 
     # =========================================================================
-    # Keepalived for VIP failover (vpn-local only)
-    # vpn-local acts as backup to the K8s WireGuard pod
+    # Keepalived for VIP failover (vpn-fallback only)
+    # vpn-fallback acts as backup to the K8s WireGuard pod
     # =========================================================================
     - name: Install Keepalived
       apt:
         name: keepalived
         state: present
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
 
     - name: Create WireGuard failover script
       copy:
@@ -479,7 +479,7 @@
                   systemctl reset-failed wg-quick@wg0 wg-quick@wg1 2>/dev/null || true
                   ;;
           esac
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
 
     - name: Configure Keepalived for WireGuard VIP
       copy:
@@ -496,7 +496,7 @@
           # Health check: verify wg0/wg1 interfaces are up. weight -50
           # means a failed check drops effective priority from 100 to 50,
           # below the K8s pod's 150 → MASTER stays on K8s as expected.
-          # Without this, vpn-local would advertise MASTER even if its
+          # Without this, vpn-fallback would advertise MASTER even if its
           # own wg-quick services died, black-holing VPN traffic.
           vrrp_script check_wg_local {
             script "/usr/local/bin/check-wireguard.sh"
@@ -508,9 +508,9 @@
 
           vrrp_instance WG_VIP {
             state BACKUP
-            interface {{ vpn_local.vip_interface }}
+            interface {{ vpn_fallback.vip_interface }}
             virtual_router_id 51
-            priority {{ vpn_local.vrrp_priority }}
+            priority {{ vpn_fallback.vrrp_priority }}
             advert_int 1
             nopreempt
 
@@ -520,7 +520,7 @@
             }
 
             virtual_ipaddress {
-              {{ vpn_local.vip }}/24
+              {{ vpn_fallback.vip }}/24
             }
 
             track_script {
@@ -529,7 +529,7 @@
 
             notify /usr/local/bin/wg-failover.sh
           }
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
       notify: Restart Keepalived
 
     - name: Install wireguard health-check script for keepalived
@@ -541,12 +541,12 @@
         content: |
           #!/bin/bash
           # Returns 0 if both wg interfaces exist (matches the K8s pod's
-          # check). vpn-local is BACKUP — failing this drops priority
+          # check). vpn-fallback is BACKUP — failing this drops priority
           # below the K8s pod's 150, keeping MASTER on K8s.
           ip link show wg0 >/dev/null 2>&1 || exit 1
           ip link show wg1 >/dev/null 2>&1 || exit 1
           exit 0
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
 
     - name: Enable and start Keepalived
       systemd:
@@ -554,7 +554,7 @@
         enabled: yes
         state: started
         daemon_reload: yes
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
 
     # =========================================================================
     # Service management
@@ -566,22 +566,22 @@
         state: started
       when: inventory_hostname == 'vpn-aws'
 
-    - name: Disable WireGuard wg0 auto-start (vpn-local - managed by Keepalived)
+    - name: Disable WireGuard wg0 auto-start (vpn-fallback - managed by Keepalived)
       systemd:
         name: wg-quick@wg0
         enabled: no
         state: stopped
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
 
-    - name: Disable WireGuard wg1 auto-start (vpn-local - managed by Keepalived)
+    - name: Disable WireGuard wg1 auto-start (vpn-fallback - managed by Keepalived)
       systemd:
         name: wg-quick@wg1
         enabled: no
         state: stopped
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
 
     # =========================================================================
-    # Policy routing for VPN clients connecting via AWS (vpn-local)
+    # Policy routing for VPN clients connecting via AWS (vpn-fallback)
     # When traffic from VPN clients (10.254.0.0/24) arrives via wg0 (from AWS),
     # responses must go back via wg0, not via the local wg1 interface
     # =========================================================================
@@ -590,7 +590,7 @@
         path: /etc/iproute2/rt_tables
         line: "100 wg0_return"
         regexp: "^100\\s+wg0_return"
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
 
     - name: Create VPN policy routing script
       copy:
@@ -605,7 +605,7 @@
 
           # Get default gateway
           DEFAULT_GW=$(ip route | grep "^default" | awk '{print $3}')
-          HOST_IP={{ vpn_local.ip }}
+          HOST_IP={{ vpn_fallback.ip }}
 
           # Create route for VPN client traffic via default gateway
           ip route replace 10.254.0.0/24 via $DEFAULT_GW table wg0_return
@@ -627,7 +627,7 @@
           ip rule add from $HOST_IP to 10.254.0.0/24 lookup wg0_return prio 97
 
           logger -t wg-policy-routing "Policy routing configured for VPN clients via AWS"
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
 
     - name: Create systemd service for VPN policy routing
       copy:
@@ -647,7 +647,7 @@
 
           [Install]
           WantedBy=multi-user.target
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
       notify: Reload systemd
 
     - name: Enable and start VPN policy routing service
@@ -656,7 +656,7 @@
         enabled: yes
         state: started
         daemon_reload: yes
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
 
     - name: Enable and start WireGuard wg1 (vpn-aws only)
       systemd:

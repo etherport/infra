@@ -2,7 +2,7 @@ name: Ansible VM Fleet (non-K8s + non-PVE)
 
 # Generic dispatch wrapper for running ansible playbooks against the
 # fleet of non-K8s VMs (AWS dns-aws/vpn-aws + local dns-fallback/
-# vpn-local). Uses the same self-hosted runner + ansible-runner image
+# vpn-fallback). Uses the same self-hosted runner + ansible-runner image
 # as ansible-proxmox.yml.
 #
 # Examples:
@@ -45,7 +45,7 @@ on:
         type: choice
         default: both
         options:
-          - wind    # dns-fallback + vpn-local (and other local non-K8s)
+          - wind    # dns-fallback + vpn-fallback (and other local non-K8s)
           - aws     # dns-aws + vpn-aws
           - both    # both inventories (non-k8s_cluster hosts only)
       action:

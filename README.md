@@ -36,7 +36,7 @@ scripts/             Ad-hoc helpers (safety-check, service-status inventory drif
    ┌────┴────────────────┴────────────────────┴────┐
    │             site-to-site WireGuard            │
    │     vpn-aws (10.10.100.10) ⇄ K8s wg pod       │
-   │     VRRP backup: vpn-local (10.10.201.15)     │
+   │     VRRP backup: vpn-fallback (10.10.201.15)     │
    └──────────────────────────┬────────────────────┘
                               │
    ┌──────────────────────────┼────────────────────────────┐
@@ -49,7 +49,7 @@ scripts/             Ad-hoc helpers (safety-check, service-status inventory drif
    │                                                       │
    │  Standalone VMs (Ansible-managed)                     │
    │    dns-fallback .6   technitium (failover)            │
-   │    vpn-local .15     WG VRRP backup                   │
+   │    vpn-fallback .15     WG VRRP backup                   │
    │    gh-runner   (VM 1003) self-hosted GH Actions       │
    │    step-ca .46 (VM 1006) SSH cert authority (M76)     │
    │    asterisk-sbc      Twilio⇄UniFi Talk SIP bridge     │
@@ -135,7 +135,7 @@ advisor that diagnoses + acts on alerts the static rules miss.
   `prune_host_logdir` (auto), `restart_systemd_unit` (approve-only),
   `journal_vacuum` (auto). Key in
   `platform/kubernetes/auto-remediation/advisor-ssh-key.sops.yaml`;
-  pubkey deployed to dns-aws / dns-fallback / vpn-local / vpn-aws.
+  pubkey deployed to dns-aws / dns-fallback / vpn-fallback / vpn-aws.
 
 **Closed-loop verification**: after every auto-execute or approve-execute,
 controller schedules a check N min later that re-queries the original
@@ -213,7 +213,7 @@ Restore procedures + RTO/RPO targets:
 | Firewall zones (UDM) | M56 (2026-05-31): **Trusted**={Servers/201}, **Management**={200, contained — device/admin plane}, Internal={Default/199}; plus IoT/Security/Infrastructure custom zones. See [`docs/architecture/firewall-zones.md`](docs/architecture/firewall-zones.md) |
 | LoadBalancer | MetalLB **BGP** (eBGP→UDM, ECMP), VIP pool 10.10.201.70-90 — L2 mode removed 2026-05-31 (M18/M36, BGP-only) |
 | Ingress | Traefik (10.10.201.70), wildcard cert `*.wind.etherport.net` via cert-manager + TLSStore default |
-| Site-to-site VPN | K8s WireGuard pod primary (VRRP prio 150), `vpn-local` backup (prio 100), shared VIP 10.10.201.20 |
+| Site-to-site VPN | K8s WireGuard pod primary (VRRP prio 150), `vpn-fallback` backup (prio 100), shared VIP 10.10.201.20 |
 | AWS VPC | 10.10.100.0/22, peered with future spokes. The `*.wind.etherport.net` **ALB was decommissioned 2026-05-27** — public edge is now CF Tunnel + Access. |
 | Cloudflare Tunnel | `cloudflared` routes public hostnames (`approve`, `cue.etherport.net`, …) through CF Access (Google SSO). **Internal** apps are gated by **Authentik** SSO (`auth.wind.etherport.net` — OIDC + a domain forward-auth middleware; H38). See CLAUDE.md §5. |
 | Remote access | Tailscale (operator-managed K8s ingresses + subnet router) |

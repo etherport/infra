@@ -185,13 +185,13 @@ data:
         more memory. Audit-tracked.
 
     TIER 3 — SSH to non-K8s hosts (advisor has restricted SSH to a small
-    set of appliances: dns-aws, dns-fallback, vpn-local, vpn-aws).
+    set of appliances: dns-aws, dns-fallback, vpn-fallback, vpn-aws).
     Defense-in-depth: cluster-side validates host + builds command from
     a template; host-side wrapper script enforces an enum of allowed
     (action, args); sudoers only permits the wrapped commands.
 
     - "prune_host_logdir"        (AUTO-ELIGIBLE)
-        params: { "host": "dns-aws" | "dns-fallback" | "vpn-local" | "vpn-aws",
+        params: { "host": "dns-aws" | "dns-fallback" | "vpn-fallback" | "vpn-aws",
                   "logdir_key": "technitium-logs" | "technitium-stats",
                   "days": 7 }
         Deletes files older than N days in a hardcoded log dir. Use for
@@ -200,7 +200,7 @@ data:
         Always safe (only deletes old log files, no other paths reachable).
 
     - "restart_systemd_unit"     (APPROVE-VIA-EMAIL only — NOT auto)
-        params: { "host": "dns-aws" | "dns-fallback" | "vpn-local" | "vpn-aws",
+        params: { "host": "dns-aws" | "dns-fallback" | "vpn-fallback" | "vpn-aws",
                   "unit_key": "technitium" | "wireguard" | "kubelet" }
         Restarts a systemd unit on the named host. Service-restart
         actions can cause brief outages; operator approval gives a

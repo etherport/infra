@@ -5,7 +5,7 @@
 # Prerequisites:
 #   - sops installed and configured with age key
 #   - wg (wireguard-tools) installed
-#   - Access to decrypt platform/wireguard/servers/vpn-local.sops.yaml
+#   - Access to decrypt platform/wireguard/servers/vpn-fallback.sops.yaml
 #
 # Usage:
 #   cd platform/kubernetes/wireguard
@@ -15,7 +15,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-VPN_LOCAL_SOPS="$REPO_ROOT/platform/wireguard/servers/vpn-local.sops.yaml"
+VPN_LOCAL_SOPS="$REPO_ROOT/platform/wireguard/servers/vpn-fallback.sops.yaml"
 SECRETS_FILE="$SCRIPT_DIR/01-secrets.sops.yaml"
 
 echo "WireGuard K8s Keys Setup"
@@ -33,8 +33,8 @@ if ! command -v wg &> /dev/null; then
     exit 1
 fi
 
-# Step 1: Get wg0 keys from vpn-local
-echo "Step 1: Extracting wg0 keys from vpn-local..."
+# Step 1: Get wg0 keys from vpn-fallback
+echo "Step 1: Extracting wg0 keys from vpn-fallback..."
 if [ ! -f "$VPN_LOCAL_SOPS" ]; then
     echo "ERROR: Cannot find $VPN_LOCAL_SOPS"
     exit 1
@@ -44,7 +44,7 @@ WG0_PRIVATE=$(sops -d "$VPN_LOCAL_SOPS" | grep 'wg0_private_key:' | awk '{print 
 WG0_PUBLIC=$(sops -d "$VPN_LOCAL_SOPS" | grep 'wg0_public_key:' | awk '{print $2}')
 
 if [ -z "$WG0_PRIVATE" ]; then
-    echo "ERROR: Could not extract wg0_private_key from vpn-local.sops.yaml"
+    echo "ERROR: Could not extract wg0_private_key from vpn-fallback.sops.yaml"
     exit 1
 fi
 
@@ -74,7 +74,7 @@ metadata:
   namespace: wireguard
 type: Opaque
 stringData:
-  # wg0 keys - copied from vpn-local for failover compatibility
+  # wg0 keys - copied from vpn-fallback for failover compatibility
   wg0-private.key: "$WG0_PRIVATE"
   wg0-public.key: "$WG0_PUBLIC"
   # wg1 keys - new keys for local remote access
@@ -91,7 +91,7 @@ echo
 echo "Done! Secrets file created and encrypted: $SECRETS_FILE"
 echo
 echo "Next steps:"
-echo "  1. Update vpn-local to also have wg1 with these same keys"
+echo "  1. Update vpn-fallback to also have wg1 with these same keys"
 echo "  2. Update Graham's WireGuard client config with the new wg1 public key:"
 echo "     PublicKey = $WG1_PUBLIC"
 echo "  3. Commit the changes and let Flux deploy"

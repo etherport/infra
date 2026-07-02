@@ -18,5 +18,5 @@ data:
 
     Failover:
     - K8s pod is primary (priority 150)
-    - vpn-local VM is backup (priority 100)
+    - vpn-fallback VM is backup (priority 100)
     - Keepalived moves VIP automatically on failure

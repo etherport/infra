@@ -341,8 +341,8 @@ curl -s "http://localhost:5380/api/dashboard/stats?token=<token>"
 
 The site-to-site VPN runs in high availability mode:
 - **Primary:** K8s WireGuard pod (priority 150)
-- **Backup:** vpn-local VM (priority 100)
-- **VIP:** 10.10.201.20 (floating between K8s and vpn-local)
+- **Backup:** vpn-fallback VM (priority 100)
+- **VIP:** 10.10.201.20 (floating between K8s and vpn-fallback)
 
 Failover is automatic via Keepalived VRRP.
 
@@ -358,8 +358,8 @@ kubectl exec -n wireguard deployment/wireguard -c wireguard -- wg show wg0
 # Check VIP assignment
 kubectl exec -n wireguard deployment/wireguard -c keepalived -- ip addr show | grep 10.10.201.20
 
-# Check vpn-local (backup)
-ansible vpn-local -m shell -a "wg show wg0; ip addr show | grep 10.10.201.20"
+# Check vpn-fallback (backup)
+ansible vpn-fallback -m shell -a "wg show wg0; ip addr show | grep 10.10.201.20"
 
 # Check AWS VPN gateway
 ssh ubuntu@44.240.60.80 "sudo wg show"
@@ -376,11 +376,11 @@ ping 10.255.255.1  # AWS tunnel endpoint
 
 ### 4.2 K8s WireGuard Pod Failure
 
-Automatic failover to vpn-local occurs within ~10-15 seconds.
+Automatic failover to vpn-fallback occurs within ~10-15 seconds.
 
 ```bash
-# Verify vpn-local took over
-ansible vpn-local -m shell -a "ip addr show | grep 10.10.201.20; wg show wg0"
+# Verify vpn-fallback took over
+ansible vpn-fallback -m shell -a "ip addr show | grep 10.10.201.20; wg show wg0"
 
 # Force K8s pod restart
 kubectl delete pod -n wireguard -l app=wireguard
@@ -390,23 +390,23 @@ kubectl scale deployment wireguard -n wireguard --replicas=0
 kubectl scale deployment wireguard -n wireguard --replicas=1
 ```
 
-### 4.3 vpn-local VM Failure (Backup)
+### 4.3 vpn-fallback VM Failure (Backup)
 
-If K8s is primary, vpn-local failure has no immediate impact.
+If K8s is primary, vpn-fallback failure has no immediate impact.
 
 ```bash
-# Recreate vpn-local VM (CI-only — dispatch the proxmox workflow)
+# Recreate vpn-fallback VM (CI-only — dispatch the proxmox workflow)
 cd ~/code/infra/infra/terraform/proxmox/standalone-vms
-terraform apply -target=proxmox_virtual_environment_vm.standalone["vpn-local"]
+terraform apply -target=proxmox_virtual_environment_vm.standalone["vpn-fallback"]
 
 # Reconfigure WireGuard and Keepalived
 cd ~/code/infra/infra/ansible
-ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-local
+ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-fallback
 ```
 
 ### 4.4 Complete Local Site Failure
 
-If both K8s and vpn-local are down, restore K8s first (faster recovery):
+If both K8s and vpn-fallback are down, restore K8s first (faster recovery):
 
 ```bash
 # Restore K8s WireGuard (reconcile source git + the flux-system kustomization)

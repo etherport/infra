@@ -83,7 +83,7 @@ ansible dns_servers -i inventory/wind/inventory.ini -i inventory/aws/inventory.i
 | Playbook | Purpose | Typical target |
 |----------|---------|----------------|
 | base.yml | System config (NTP, upgrades, SSH, swap, node_exporter, cw-agent) | all standalone VMs |
-| wireguard.yml | WireGuard config (server + keepalived for vpn-local) | vpn_servers |
+| wireguard.yml | WireGuard config (server + keepalived for vpn-fallback) | vpn_servers |
 | technitium.yml | Technitium DNS install + cluster bootstrap | dns_servers |
 | swap.yml | Provision swap files on standalone VMs | dns_servers + vpn_servers |
 | cloudwatch-agent.yml | Install AWS cw-agent on the edge box (vpn-aws) | aws hosts |
@@ -276,7 +276,7 @@ done
 ## VPN (WireGuard) Operations
 
 > The primary site-to-site WireGuard runs as a Kubernetes pod
-> (`wireguard/wireguard` deployment) with `vpn-local` as the VRRP backup.
+> (`wireguard/wireguard` deployment) with `vpn-fallback` as the VRRP backup.
 > "Restart WireGuard" on the K8s side means restarting that pod, not a
 > systemd unit. SSH to the standalone VMs is cert-only (`ssh ubuntu@<host>`).
 
@@ -288,7 +288,7 @@ kubectl get pods -n wireguard
 kubectl exec -n wireguard deployment/wireguard -c wireguard -- wg show wg0
 
 # Local VPN server (backup) — cert-only SSH
-ssh ubuntu@vpn-local.wind.etherport.net "sudo wg show"
+ssh ubuntu@vpn-fallback.wind.etherport.net "sudo wg show"
 
 # AWS VPN server
 ssh ubuntu@10.10.100.10 "sudo wg show"
@@ -300,8 +300,8 @@ ssh ubuntu@10.10.100.10 "sudo wg show"
 # K8s (primary) - restart the pod, not a systemd unit
 kubectl rollout restart deployment wireguard -n wireguard
 
-# On vpn-local (backup VM - cert-only SSH)
-ssh ubuntu@vpn-local.wind.etherport.net "sudo systemctl restart wg-quick@wg0"
+# On vpn-fallback (backup VM - cert-only SSH)
+ssh ubuntu@vpn-fallback.wind.etherport.net "sudo systemctl restart wg-quick@wg0"
 
 # On vpn-aws
 ssh ubuntu@10.10.100.10 "sudo systemctl restart wg-quick@wg0 wg-quick@wg1"
@@ -486,10 +486,10 @@ kubectl annotate --overwrite -n flux-system helmrelease/gpu-operator reconcile.f
 
 If site-to-site VPN is down:
 1. Check K8s WireGuard (primary): `kubectl get pods -n wireguard`
-2. Check vpn-local (VRRP backup): `ssh ubuntu@10.10.201.15 "sudo wg show"`
+2. Check vpn-fallback (VRRP backup): `ssh ubuntu@10.10.201.15 "sudo wg show"`
 3. Check AWS VPN: Access via AWS console if needed
 4. Restart WireGuard on the appropriate side (pod restart for K8s; systemd
-   for vpn-local/vpn-aws)
+   for vpn-fallback/vpn-aws)
 
 ### DNS Issues
 

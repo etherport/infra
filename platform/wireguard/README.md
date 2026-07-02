@@ -9,7 +9,7 @@ WireGuard VPN infrastructure providing:
 **Endpoints:**
 | Endpoint | Hostname | wg1 Port | Use Case |
 |----------|----------|----------|----------|
-| Homelab (K8s/vpn-local) | wind.etherport.net | 9821 | Direct, fastest |
+| Homelab (K8s/vpn-fallback) | wind.etherport.net | 9821 | Direct, fastest |
 | AWS US-West-2 | vpn-usw2.etherport.net | 51821 | West coast relay (ephemeral) |
 
 For full architecture documentation, see [docs/architecture/vpn-wireguard.md](../../docs/architecture/vpn-wireguard.md).
@@ -76,20 +76,20 @@ sops -d platform/wireguard/clients/graham.sops.yaml | \
 
 ```
 platform/
-├── wireguard/                    # Ansible-managed (vpn-local, vpn-aws)
+├── wireguard/                    # Ansible-managed (vpn-fallback, vpn-aws)
 │   ├── regional-peers.yaml       # Auto-generated peer list (GitHub Actions — do not edit)
 │   ├── servers/                  # Server private/public keys
 │   │   ├── vpn-aws.sops.yaml     # AWS VPN hub (wg0 + wg1)
-│   │   └── vpn-local.sops.yaml   # Local backup gateway (wg0 + wg1)
+│   │   └── vpn-fallback.sops.yaml   # Local backup gateway (wg0 + wg1)
 │   └── clients/                  # Client configurations
 │       ├── graham.sops.yaml      # Remote access client configs
 │       ├── graham-tcp.conf.template  # WireGuard-over-TCP (wstunnel) profile
-│       ├── vpn-local-s2s.sops.yaml   # Local site-to-site client keys
+│       ├── vpn-fallback-s2s.sops.yaml   # Local site-to-site client keys
 │       └── wstunnel-connect.sh   # WG-over-TCP helper (NordVPN/restrictive nets)
 │
 └── kubernetes/wireguard/         # K8s primary gateway (Flux-managed)
     ├── 00-namespace.yaml
-    ├── 01-secrets.sops.yaml      # Same wg0/wg1 keys as vpn-local
+    ├── 01-secrets.sops.yaml      # Same wg0/wg1 keys as vpn-fallback
     ├── 03-deployment.yaml        # WireGuard + Keepalived
     ├── 04-cleanup-daemonset.yaml # Orphan interface cleanup
     └── kustomization.yaml
@@ -106,7 +106,7 @@ Manual apply:
 kubectl apply -k platform/kubernetes/wireguard/
 ```
 
-### vpn-local and vpn-aws - via Ansible
+### vpn-fallback and vpn-aws - via Ansible
 
 ```bash
 cd infra/ansible
@@ -116,7 +116,7 @@ export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
 ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/wireguard.yml
 
 # Local only
-ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-local
+ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-fallback
 
 # AWS only
 ansible-playbook -i inventory/aws/ playbooks/wireguard.yml --limit vpn-aws
@@ -127,8 +127,8 @@ ansible-playbook -i inventory/aws/ playbooks/wireguard.yml --limit vpn-aws
 ### Shared Key Strategy
 
 For seamless failover, keys are shared:
-- **wg0**: K8s pod + vpn-local use same keys (AWS sees single peer)
-- **wg1**: K8s pod + vpn-local + vpn-aws use same keys (clients can switch endpoints)
+- **wg0**: K8s pod + vpn-fallback use same keys (AWS sees single peer)
+- **wg1**: K8s pod + vpn-fallback + vpn-aws use same keys (clients can switch endpoints)
 
 ### Key Rotation
 
@@ -139,8 +139,8 @@ For seamless failover, keys are shared:
 
 2. Update SOPS files:
    ```bash
-   # For homelab (K8s + vpn-local share keys)
-   sops platform/wireguard/servers/vpn-local.sops.yaml
+   # For homelab (K8s + vpn-fallback share keys)
+   sops platform/wireguard/servers/vpn-fallback.sops.yaml
    sops platform/kubernetes/wireguard/01-secrets.sops.yaml
 
    # For vpn-aws
@@ -184,7 +184,7 @@ Configure in UDM: Network → Port Forwarding → Create
     └──────┬──────┘    └──────┬──────┘    └─────────────┘
            │                  │
            │    VIP 10.10.201.20
-           │    (K8s primary, vpn-local backup)
+           │    (K8s primary, vpn-fallback backup)
            │                  │
            │                  │ wg0 site-to-site
            │                  │ (always up)
@@ -211,8 +211,8 @@ Configure in UDM: Network → Port Forwarding → Create
 # K8s
 kubectl exec -n wireguard deployment/wireguard -c wireguard -- wg show
 
-# vpn-local/vpn-aws
-ssh vpn-local "sudo wg show"
+# vpn-fallback/vpn-aws
+ssh vpn-fallback "sudo wg show"
 ssh vpn-aws "sudo wg show"
 ```
 
@@ -223,11 +223,11 @@ kubectl exec -n wireguard deployment/wireguard -c keepalived -- ip addr | grep 1
 
 ### Force failover test
 ```bash
-# Scale down K8s to trigger failover to vpn-local
+# Scale down K8s to trigger failover to vpn-fallback
 kubectl scale deployment wireguard -n wireguard --replicas=0
 
-# Check VIP moved to vpn-local
-ssh vpn-local "ip addr | grep 10.10.201.20"
+# Check VIP moved to vpn-fallback
+ssh vpn-fallback "ip addr | grep 10.10.201.20"
 
 # Restore
 kubectl scale deployment wireguard -n wireguard --replicas=1

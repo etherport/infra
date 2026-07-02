@@ -106,7 +106,7 @@ WireGuard tunnel; see note), **Hotspot** (Guest/206), **DMZ** (unused).
 > `vpn-aws` (the AWS edge box) `TargetDown`). The explicit `Trusted → Trusted` allow in `udm-firewall.yml` fixes it.
 
 > **VPN zone clarification.** The `Vpn` zone holds **only the UDM's built-in backup WireGuard tunnel**. The
-> **primary** k8s + `vpn-local` WireGuard runs on Servers/201 behind the Keepalived VIP `10.10.201.20`
+> **primary** k8s + `vpn-fallback` WireGuard runs on Servers/201 behind the Keepalived VIP `10.10.201.20`
 > (in `Trusted`): inbound via `External → Trusted (WireGuard) udp/9820-9821 → .20`, client traffic
 > intra-`Trusted`. So the primary VPN does **not** depend on the `Vpn` zone; the `Vpn→Trusted/Management`
 > allows (scoped TCP on `Vpn-Admin-Ports`, M42) keep the *backup* tunnel reaching servers/mgmt.
@@ -151,7 +151,7 @@ its sole enforcement.
 
 | Destination | Purpose | Next-hop |
 |-------------|---------|----------|
-| 10.10.100.0/22 | AWS Environment | 10.10.201.20 (vpn-local/keepalived VIP on Servers/201) |
+| 10.10.100.0/22 | AWS Environment | 10.10.201.20 (vpn-fallback/keepalived VIP on Servers/201) |
 | 10.255.255.0/30 | WireGuard tunnel endpoint (AWS) | same |
 | 10.254.0.0/24 | WireGuard client tunnel | same |
 

@@ -30,7 +30,7 @@
       dns-aws: "1G"      # t4g.nano - 512MB RAM, needs swap for Technitium
       vpn-aws: "512M"    # t4g.nano - 512MB RAM, lighter workload
       dns-fallback: "1G"
-      vpn-local: "512M"
+      vpn-fallback: "512M"
       default: "1G"
 
     # Swappiness - how aggressively to use swap (0-100)

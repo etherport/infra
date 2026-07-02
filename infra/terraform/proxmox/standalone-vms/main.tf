@@ -48,7 +48,7 @@ locals {
       description = "Technitium DNS fallback server"
       tags        = ["terraform", "dns", "standalone"]
     }
-    vpn-local = {
+    vpn-fallback = {
       vm_id       = 1002
       ip          = "10.10.201.15"
       bridge      = "servers" # SDN VNet (VLAN 201) — migrated 2026-05-18 (PR 4)
@@ -56,7 +56,7 @@ locals {
       vcpus       = 1
       memory_mb   = 512
       disk_gb     = 10
-      description = "WireGuard VPN gateway - local site S2S endpoint"
+      description = "WireGuard VPN gateway - local site S2S endpoint (VRRP backup; renamed vpn-local->vpn-fallback 2026-07-02, M128)"
       tags        = ["terraform", "vpn", "standalone"]
     }
     gh-runner = {
@@ -132,7 +132,7 @@ locals {
   }
 
   # Imported VMs - pre-existing VMs adopted into Terraform (no clone block)
-  # Currently empty - vpn-local moved to standalone_vms for fresh deployment
+  # Currently empty - vpn-fallback (ex vpn-local) moved to standalone_vms for fresh deployment
   imported_vms = {}
 }
 
@@ -304,4 +304,12 @@ resource "proxmox_virtual_environment_vm" "imported" {
       scsi_hardware,
     ]
   }
+}
+
+# M128 (2026-07-02): vpn-local renamed vpn-fallback (consistency with dns-fallback).
+# The for_each key IS the resource address AND the VM name — moved{} migrates the
+# state address so the apply is an in-place `name` update, not destroy/recreate.
+moved {
+  from = proxmox_virtual_environment_vm.standalone["vpn-local"]
+  to   = proxmox_virtual_environment_vm.standalone["vpn-fallback"]
 }

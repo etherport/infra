@@ -110,7 +110,7 @@ spec:
         # Wire the prometheus-additional-scrape-configs Secret (defined
         # in platform/kubernetes/monitoring/01-external-scrape-config.yaml)
         # so the `external-nodes` job — node_exporter on dns-fallback,
-        # vpn-local, dns-aws, vpn-aws — actually loads. Without this,
+        # vpn-fallback, dns-aws, vpn-aws — actually loads. Without this,
         # the Secret exists but is never referenced; the four hosts show
         # as UNKNOWN in the service-status dashboard + email and the
         # ExternalHostDown / TechnitiumDNSDown / VPNGatewayDown alerts

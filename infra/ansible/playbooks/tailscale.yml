@@ -29,23 +29,23 @@
     # tailscale_auth_key: ""
 
     # Subnet routes per host (override in host_vars or inventory)
-    # NOTE: vpn-local initially advertises NO routes - failover script enables them
+    # NOTE: vpn-fallback initially advertises NO routes - failover script enables them
     tailscale_advertise_routes:
       vpn-aws: "10.10.100.0/22,10.10.192.0/19"  # AWS VPC + Homelab (via WireGuard)
-      vpn-local: ""  # Backup router - routes enabled by failover script when K8s router is down
+      vpn-fallback: ""  # Backup router - routes enabled by failover script when K8s router is down
 
     # Accept routes from other Tailscale nodes (per-host)
     # IMPORTANT: Set to false for hosts with existing VPN routes (e.g., WireGuard)
     # to prevent Tailscale from overriding those routes
     tailscale_host_accept_routes:
       vpn-aws: false   # Has WireGuard S2S tunnel - don't accept Tailscale routes
-      vpn-local: false # Has WireGuard - don't accept Tailscale routes
+      vpn-fallback: false # Has WireGuard - don't accept Tailscale routes
 
     # Exit node configuration (per-host)
     # Allows routing ALL traffic through this node (must be approved in Tailscale admin)
     tailscale_advertise_exit_node:
       vpn-aws: true
-      vpn-local: true   # Backup exit node when K8s router is down
+      vpn-fallback: true   # Backup exit node when K8s router is down
 
   tasks:
     # =========================================================================
@@ -172,7 +172,7 @@
         var: final_status.stdout_lines
 
     # =========================================================================
-    # Tailscale Failover (vpn-local only)
+    # Tailscale Failover (vpn-fallback only)
     # Monitors K8s Tailscale router and advertises routes when it's down
     # =========================================================================
     - name: Create Tailscale failover script
@@ -263,7 +263,7 @@
           }
 
           main
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
 
     - name: Create Tailscale failover systemd service
       ansible.builtin.copy:
@@ -285,7 +285,7 @@
 
           [Install]
           WantedBy=multi-user.target
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
       notify: Reload systemd
 
     - name: Enable and start Tailscale failover service
@@ -294,7 +294,7 @@
         enabled: yes
         state: started
         daemon_reload: yes
-      when: inventory_hostname == 'vpn-local'
+      when: inventory_hostname == 'vpn-fallback'
 
   # ===========================================================================
   # Handlers

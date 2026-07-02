@@ -12,11 +12,11 @@
 #   STAGE 2 (per-VM, deliberate): flip `local.vm_input_policy.<vm>` ACCEPT -> DROP.
 #     ✅ COMPLETE 2026-06-28 — ALL 6 standalone VMs are now default-deny inbound:
 #       batch 1: dns-fallback (1001) + gh-runner (1003) — internal/baseline only.
-#       batch 2: step-ca (1006), devbox (1005), vpn-local (1002), asterisk (1004).
+#       batch 2: step-ca (1006), devbox (1005), vpn-fallback (1002), asterisk (1004).
 #     The existing per-VM port allows are kept; the flip closes UNLISTED ports
 #     (rpcbind:111 etc.). ⏳ Stage 2b (external-SOURCE narrowing) still open for two:
 #       asterisk SIP/RTP -> Twilio ranges (TELEPHONY-CRITICAL, 911 — call-path review),
-#       vpn-local WG -> AWS EIP 44.240.60.80 (marginal — WG is crypto-authenticated).
+#       vpn-fallback WG -> AWS EIP 44.240.60.80 (marginal — WG is crypto-authenticated).
 #
 # The NIC firewall flag (`firewall = true`) is set in ../standalone-vms/main.tf.
 # Apply THIS stack FIRST so the rules exist before the NIC firewall activates
@@ -25,7 +25,7 @@
 #
 # Per-VM required inbound (from `ss -tlnp/-ulnp`, 2026-06-25):
 #   dns-fallback 1001: 53 tcp+udp (DNS clients), 5380 (mgmt), + baseline   [Stage 2: DROP 2026-06-28]
-#   vpn-local    1002: WireGuard udp (any-src; AWS peer 44.240.60.80), + baseline  [Stage 2: DROP 2026-06-28]
+#   vpn-fallback    1002: WireGuard udp (any-src; AWS peer 44.240.60.80), + baseline  [Stage 2: DROP 2026-06-28]
 #   gh-runner    1003: baseline only (outbound-only runner)                [Stage 2: DROP 2026-06-28]
 #   asterisk-sbc 1004: SIP 5060/5061 + RTP range (any-src; Twilio scope=2b), + baseline  [Stage 2: DROP 2026-06-28]
 #   devbox       1005: tailscale udp + baseline (Claude session host)      [Stage 2: DROP 2026-06-28]
@@ -49,7 +49,7 @@ locals {
     step_ca      = "DROP" # :8443 from Servers VLAN + tailnet, SSH from mgmt — allows ALREADY source-scoped.
     devbox       = "DROP" # closes rpcbind:111; access kept via SSH(mgmt-admin) + tailscale (devbox-initiated
     #                       → conntrack); no VNC listener. Recoverable via CI (apply runs on gh-runner, not devbox).
-    vpn_local    = "DROP" # WireGuard 9820-9821 (any-source kept — WG is crypto-authenticated, so IP-scoping
+    vpn_fallback = "DROP" # WireGuard 9820-9821 (any-source kept — WG is crypto-authenticated, so IP-scoping
     #                       is marginal; the single peer is the AWS EIP 44.240.60.80 if ever wanted) + baseline.
     asterisk_sbc = "DROP" # SIP 5060/5061 + RTP 10000-20000 + baseline. Stage-2b (2026-06-29) SOURCE-SCOPED
     #                       these: 5061←twilio-signaling IPset, 5060←asterisk-internal (Talk/LAN), RTP←Twilio
@@ -133,19 +133,19 @@ resource "proxmox_virtual_environment_firewall_rules" "dns_fallback" {
   # DESIGN, not oversight. If DoT/DoH is ever enabled on this VM, add the matching allow(s) here.
 }
 
-# ---- vpn-local (1002): WireGuard site-to-site to AWS -------------------------
-resource "proxmox_virtual_environment_firewall_options" "vpn_local" {
+# ---- vpn-fallback (1002): WireGuard site-to-site to AWS -------------------------
+resource "proxmox_virtual_environment_firewall_options" "vpn_fallback" {
   node_name     = var.node_name
   vm_id         = 1002
   enabled       = true
-  input_policy  = local.vm_input_policy.vpn_local
+  input_policy  = local.vm_input_policy.vpn_fallback
   output_policy = "ACCEPT"
   log_level_in  = "info"
 }
-resource "proxmox_virtual_environment_firewall_rules" "vpn_local" {
+resource "proxmox_virtual_environment_firewall_rules" "vpn_fallback" {
   node_name  = var.node_name
   vm_id      = 1002
-  depends_on = [proxmox_virtual_environment_firewall_options.vpn_local]
+  depends_on = [proxmox_virtual_environment_firewall_options.vpn_fallback]
 
   rule {
     security_group = proxmox_virtual_environment_cluster_firewall_security_group.vm_baseline.name
@@ -338,4 +338,14 @@ resource "proxmox_virtual_environment_firewall_rules" "step_ca" {
     log     = "nolog"
     comment = "step-ca API (:8443) for remote human `step ssh login` over the tailnet"
   }
+}
+
+# M128 (2026-07-02): vpn-local -> vpn-fallback resource-address migration (state-only).
+moved {
+  from = proxmox_virtual_environment_firewall_options.vpn_local
+  to   = proxmox_virtual_environment_firewall_options.vpn_fallback
+}
+moved {
+  from = proxmox_virtual_environment_firewall_rules.vpn_local
+  to   = proxmox_virtual_environment_firewall_rules.vpn_fallback
 }

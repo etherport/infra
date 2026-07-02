@@ -7,7 +7,7 @@ auto-eligible action: `prune_host_logdir` (Tier 3 SSH).
 ## Symptom
 
 PrometheusRule `external-hosts.rules / ExternalHostLowDisk` firing on
-a Tier 3 SSH-managed host (`dns-fallback`, `vpn-local`, `vpn-aws`).
+a Tier 3 SSH-managed host (`dns-fallback`, `vpn-fallback`, `vpn-aws`).
 Most commonly a Technitium host — since M110 the AWS edge box `vpn-aws`
 runs Technitium (the former separate `dns-aws` box was destroyed), so
 query logs accumulate in `/opt/technitium/config/logs/` and

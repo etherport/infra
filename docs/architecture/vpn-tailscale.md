@@ -27,7 +27,7 @@ While WireGuard handles AWS↔homelab traffic routing, Tailscale enables:
 │                     │                      │                      │         │
 │                     ▼                      ▼                      ▼         │
 │   ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────┐ │
-│   │  k8s-homelab-router │    │  vpn-local          │    │  vpn-aws        │ │
+│   │  k8s-homelab-router │    │  vpn-fallback          │    │  vpn-aws        │ │
 │   │  (K8s Connector)    │    │  (BACKUP router)    │    │  (Subnet Router)│ │
 │   │  PRIMARY            │    │                     │    │                 │ │
 │   │  Routes:            │    │  Routes:            │    │  Routes:        │ │
@@ -114,14 +114,14 @@ spec:
     - "tag:subnet-router"
 ```
 
-### vpn-local Backup Router
+### vpn-fallback Backup Router
 
-vpn-local runs as a backup subnet router with automatic failover. When the K8s Connector is down, vpn-local takes over advertising on-prem routes:
+vpn-fallback runs as a backup subnet router with automatic failover. When the K8s Connector is down, vpn-fallback takes over advertising on-prem routes:
 
 ```bash
 # Failover script monitors K8s router every 10s
-# After 3 consecutive failures, vpn-local advertises routes
-# When K8s recovers, vpn-local releases routes
+# After 3 consecutive failures, vpn-fallback advertises routes
+# When K8s recovers, vpn-fallback releases routes
 
 # Systemd service: tailscale-failover.service
 # Script: /usr/local/bin/tailscale-failover.sh
@@ -129,7 +129,7 @@ vpn-local runs as a backup subnet router with automatic failover. When the K8s C
 
 **Failover Behavior:**
 
-| K8s Router State | vpn-local Routes | Notes |
+| K8s Router State | vpn-fallback Routes | Notes |
 |------------------|------------------|-------|
 | UP | None (standby) | K8s is primary |
 | DOWN (3+ checks) | 10.10.192.0/19 | Auto-failover |
@@ -156,13 +156,13 @@ Exit nodes allow routing **all** traffic through a Tailscale node, not just priv
 
 ### Available Exit Nodes
 
-> The `100.x` Tailscale IPs below are stable assignments, but prefer the MagicDNS hostname (`vpn-aws`, `k8s-homelab-router`, `vpn-local`) in commands — the IP can change if a node is removed and re-added.
+> The `100.x` Tailscale IPs below are stable assignments, but prefer the MagicDNS hostname (`vpn-aws`, `k8s-homelab-router`, `vpn-fallback`) in commands — the IP can change if a node is removed and re-added.
 
 | Node | Tailscale IP | Exit Location | Use Case |
 |------|--------------|---------------|----------|
 | vpn-aws | 100.117.87.10 | AWS us-west-2 | Privacy, US exit |
 | k8s-homelab-router | 100.75.199.69 | Home ISP | Appear at home (primary) |
-| vpn-local | 100.73.247.54 | Home ISP | Appear at home (backup) |
+| vpn-fallback | 100.73.247.54 | Home ISP | Appear at home (backup) |
 
 ### Usage
 
@@ -267,18 +267,18 @@ The playbook manages per-host settings:
 # From playbooks/tailscale.yml
 tailscale_advertise_routes:
   vpn-aws: "10.10.100.0/22"
-  vpn-local: ""  # Empty - failover script controls this
+  vpn-fallback: ""  # Empty - failover script controls this
 
 tailscale_host_accept_routes:
   vpn-aws: false   # Critical: prevents WireGuard route override
-  vpn-local: false # Has WireGuard - don't accept Tailscale routes
+  vpn-fallback: false # Has WireGuard - don't accept Tailscale routes
 
 tailscale_advertise_exit_node:
   vpn-aws: true    # Allow using vpn-aws as exit node
-  vpn-local: true  # Backup exit node
+  vpn-fallback: true  # Backup exit node
 ```
 
-The playbook also deploys the failover script and systemd service on vpn-local.
+The playbook also deploys the failover script and systemd service on vpn-fallback.
 
 ## Comparison: WireGuard wg1 vs Tailscale
 

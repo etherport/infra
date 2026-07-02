@@ -31,7 +31,7 @@ The local site WireGuard gateway runs in high availability mode with automatic f
 │            │                             │   └─────────────┬─────────────┘ │    │
 │            │                             │                 │ VRRP          │    │
 │            │                             │   ┌─────────────▼─────────────┐ │    │
-│            │                             │   │  vpn-local VM             │ │    │
+│            │                             │   │  vpn-fallback VM             │ │    │
 │   wg1 (remote access)                    │   │  (BACKUP - priority 100)  │ │    │
 │   10.254.0.0/24                          │   │  10.10.201.15             │ │    │
 │   [BACKUP for slow DERP]                 │   │  wg0 starts on failover   │ │    │
@@ -47,15 +47,15 @@ The local site WireGuard gateway runs in high availability mode with automatic f
 
 | Component | Primary | Backup | Failover Time |
 |-----------|---------|--------|---------------|
-| WireGuard wg0 | K8s pod | vpn-local VM | ~10-15 seconds |
-| VIP 10.10.201.20 | K8s node (k8s-w1) | vpn-local VM | ~2-3 seconds |
+| WireGuard wg0 | K8s pod | vpn-fallback VM | ~10-15 seconds |
+| VIP 10.10.201.20 | K8s node (k8s-w1) | vpn-fallback VM | ~2-3 seconds |
 
 **How it works:**
 1. K8s WireGuard pod runs with Keepalived sidecar (VRRP priority 150)
-2. vpn-local VM runs Keepalived (VRRP priority 100, `nopreempt`)
+2. vpn-fallback VM runs Keepalived (VRRP priority 100, `nopreempt`)
 3. VIP 10.10.201.20 floats between them via VRRP
-4. When K8s pod fails, vpn-local acquires VIP and starts wg0
-5. When K8s pod recovers, it reclaims VIP; vpn-local stops wg0
+4. When K8s pod fails, vpn-fallback acquires VIP and starts wg0
+5. When K8s pod recovers, it reclaims VIP; vpn-fallback stops wg0
 
 **Cleanup DaemonSet:**
 A cleanup daemon runs on all worker nodes to remove orphaned wg0 interfaces when the WireGuard pod moves between nodes.
@@ -99,11 +99,11 @@ again: [archived Regional VPN Deployment Runbook](../runbooks/archive/regional-v
 
 **Managed by:** Flux (GitOps) from `platform/kubernetes/wireguard/`. (The pod listens on 9820/9821; `vpn-aws` still listens on 51820/51821, so the K8s peer block dials `44.240.60.80:51820`.)
 
-### vpn-local (Backup Local Gateway)
+### vpn-fallback (Backup Local Gateway)
 
 | Property | Value |
 |----------|-------|
-| Hostname | vpn-local |
+| Hostname | vpn-fallback |
 | LAN IP | 10.10.201.15 |
 | VIP (when active) | 10.10.201.20 |
 | Tunnel IP | 10.255.255.2/29 |
@@ -113,7 +113,7 @@ again: [archived Regional VPN Deployment Runbook](../runbooks/archive/regional-v
 
 **Managed by:** Ansible (`playbooks/wireguard.yml`)
 
-**Note:** K8s pod and vpn-local share the same WireGuard keys so AWS sees a single peer regardless of which is active.
+**Note:** K8s pod and vpn-fallback share the same WireGuard keys so AWS sees a single peer regardless of which is active.
 
 ### vpn-aws (AWS Gateway)
 
@@ -149,7 +149,7 @@ kubectl get pods -n wireguard
 kubectl exec -n wireguard deployment/wireguard -c wireguard -- wg show wg0
 ```
 
-### vpn-local and vpn-aws (Ansible)
+### vpn-fallback and vpn-aws (Ansible)
 
 ```bash
 cd infra/ansible
@@ -157,8 +157,8 @@ cd infra/ansible
 # All VPN servers
 ansible-playbook -i inventory/wind/ -i inventory/aws/ playbooks/wireguard.yml
 
-# Local only (vpn-local)
-ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-local
+# Local only (vpn-fallback)
+ansible-playbook -i inventory/wind/ playbooks/wireguard.yml --limit vpn-fallback
 
 # AWS only
 ansible-playbook -i inventory/aws/ playbooks/wireguard.yml --limit vpn-aws
@@ -190,7 +190,7 @@ AllowedIPs = 10.10.100.0/22, 10.255.255.1/32
 PersistentKeepalive = 25
 ```
 
-### vpn-local: /etc/wireguard/wg0.conf
+### vpn-fallback: /etc/wireguard/wg0.conf
 
 ```ini
 [Interface]
@@ -248,7 +248,7 @@ Destination: 10.10.100.0/22
 Gateway: 10.10.201.20 (floating VIP)
 ```
 
-This route remains stable regardless of whether K8s or vpn-local is active.
+This route remains stable regardless of whether K8s or vpn-fallback is active.
 
 ### vpn-aws Routes
 
@@ -321,11 +321,11 @@ kubectl logs -n wireguard deployment/wireguard -c wireguard
 kubectl logs -n wireguard deployment/wireguard -c keepalived
 ```
 
-### Check vpn-local Status
+### Check vpn-fallback Status
 
 ```bash
 # Via Ansible
-ansible vpn-local -i inventory/wind/ -m shell -a "wg show wg0; ip addr show | grep 10.10.201.20"
+ansible vpn-fallback -i inventory/wind/ -m shell -a "wg show wg0; ip addr show | grep 10.10.201.20"
 
 # Keepalived logs
 journalctl -u keepalived -f
@@ -345,8 +345,8 @@ ping 10.255.255.2  # Local tunnel endpoint
 # Scale down K8s WireGuard
 kubectl scale deployment wireguard -n wireguard --replicas=0
 
-# Check vpn-local acquired VIP
-ansible vpn-local -m shell -a "ip addr show | grep 10.10.201.20"
+# Check vpn-fallback acquired VIP
+ansible vpn-fallback -m shell -a "ip addr show | grep 10.10.201.20"
 
 # Check tunnel still works
 ping 10.10.100.10
@@ -377,7 +377,7 @@ table ip mangle {
 | Host | Key File | Purpose |
 |------|----------|---------|
 | K8s | Secret `wireguard-keys` | wg0 private key |
-| vpn-local | /etc/wireguard/local_private.key | wg0 private key |
+| vpn-fallback | /etc/wireguard/local_private.key | wg0 private key |
 | vpn-aws | /etc/wireguard/local_private.key | wg0 private key |
 | vpn-aws | /etc/wireguard/aws_wg1_private.key | wg1 private key |
 
@@ -388,13 +388,13 @@ Keys are stored encrypted with SOPS:
 ```
 platform/wireguard/servers/
 ├── vpn-aws.sops.yaml      # AWS us-west-2 keys (wg0 + wg1)
-└── vpn-local.sops.yaml    # Local keys (wg0)
+└── vpn-fallback.sops.yaml    # Local keys (wg0)
 
 platform/kubernetes/wireguard/
-└── 01-secrets.sops.yaml   # K8s secret (same keys as vpn-local)
+└── 01-secrets.sops.yaml   # K8s secret (same keys as vpn-fallback)
 ```
 
-**Important:** K8s and vpn-local use the SAME wg0 keys so AWS sees a single peer.
+**Important:** K8s and vpn-fallback use the SAME wg0 keys so AWS sees a single peer.
 
 ## Configuration Sync Status
 
@@ -405,10 +405,10 @@ All WireGuard endpoints are in sync as of 2026-05-03:
 | Component | Git/Ansible | Running | Status |
 |-----------|-------------|---------|--------|
 | K8s pod wg0 | /29 | /29 | ✓ Synced |
-| vpn-local wg0 | /29 | /29 | ✓ Synced |
+| vpn-fallback wg0 | /29 | /29 | ✓ Synced |
 | vpn-aws wg0 | /29 | /29 | ✓ Synced |
 
-**Last sync:** Ansible applied to vpn-local and vpn-aws on 2026-05-03.
+**Last sync:** Ansible applied to vpn-fallback and vpn-aws on 2026-05-03.
 
 ## Security Notes
 

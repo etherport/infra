@@ -26,7 +26,7 @@ High-level overview of the homelab infrastructure with links to detailed runbook
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                    Standalone VMs (Non-K8s)                          │   │
 │  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐   │   │
-│  │  │dns-fallback │ │ vpn-local   │ │  edge box   │ │ dns-aws:    │   │   │
+│  │  │dns-fallback │ │ vpn-fallback   │ │  edge box   │ │ dns-aws:    │   │   │
 │  │  │ 10.10.201.6 │ │10.10.201.15 │ │10.10.100.10 │ │ removed     │   │   │
 │  │  │ Technitium  │ │ WireGuard   │ │ WG+DNS+TS   │ │ (M110)      │   │   │
 │  │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘   │   │
@@ -154,7 +154,7 @@ Full ownership matrix + restore procedures: [`disaster-recovery.md`](disaster-re
 
 The infrastructure is designed to self-heal:
 - **DNS failure**: Technitium cluster (in-cluster STS pair + dns-fallback + the AWS edge box) provides redundancy
-- **VPN failure**: K8s WireGuard pod ⇄ `vpn-local` VRRP failover (VIP 10.10.201.20); on K8s pod loss, vpn-local takes over in ~10-15s
+- **VPN failure**: K8s WireGuard pod ⇄ `vpn-fallback` VRRP failover (VIP 10.10.201.20); on K8s pod loss, vpn-fallback takes over in ~10-15s
 - **K8s node failure**: Workloads reschedule; Prometheus + Alertmanager run replicas=2 with podAntiAffinity
 - **Pod crash**: Kubernetes restarts automatically; auto-remediation controller layers static rules + AI advisor (Phase 3 live for opted-in alerts — `ai_remediation: auto`)
 - **Closed-loop verification**: every advisor auto-execute is re-checked N min later; failure surfaces as a `verification_failed` audit event + email

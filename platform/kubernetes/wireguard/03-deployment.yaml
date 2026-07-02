@@ -266,7 +266,7 @@ spec:
               # procps required for pkill/pgrep used by the preStop hook —
               # without it, the hook silently fails (FailedPreStopHook event
               # in `kubectl -n wireguard get events`), no priority-0 VRRP
-              # advert is sent, and vpn-local takes ~3.6s of master_down_interval
+              # advert is sent, and vpn-fallback takes ~3.6s of master_down_interval
               # to detect the gap. Caught 2026-05-22 during PR 5 of SDN migration.
               apt-get update && apt-get install -y keepalived iproute2 procps
 
@@ -295,7 +295,7 @@ spec:
                 # we don't go MASTER before wg-quick has brought up wg0/wg1.
                 # Without this, the pod went MASTER 4s after process start
                 # (preempt_delay is silently discarded for state MASTER —
-                # see below) and immediately stole the VIP from vpn-local
+                # see below) and immediately stole the VIP from vpn-fallback
                 # while its own tunnels were still being installed.
                 # Caught 2026-05-22 during SDN migration.
                 init_fail
@@ -306,7 +306,7 @@ spec:
                 # Keepalived silently clears preempt_delay when state=MASTER:
                 #   "(WG_VIP) Warning - preempt delay will not work with
                 #    initial state MASTER - clearing"
-                # With state BACKUP + higher priority (150 vs vpn-local's
+                # With state BACKUP + higher priority (150 vs vpn-fallback's
                 # 100), we still win the election — but now we wait
                 # preempt_delay seconds before promoting, AND init_fail
                 # on check_wg gates that promotion on wg0/wg1 being ready.
@@ -316,7 +316,7 @@ spec:
                 priority 150
                 advert_int 1
                 # When the K8s pod returns after a failover, wait 5 min
-                # before reclaiming the VIP from vpn-local — gives
+                # before reclaiming the VIP from vpn-fallback — gives
                 # wg-quick + Multus + Cilium time to fully settle.
                 preempt_delay 300
 
@@ -362,7 +362,7 @@ spec:
                     #
                     # Order matters:
                     #   1. SIGTERM keepalived. It sends a priority-0 VRRP
-                    #      advertisement on graceful shutdown — vpn-local
+                    #      advertisement on graceful shutdown — vpn-fallback
                     #      (the BACKUP) elects itself MASTER within one
                     #      advert_int (~1s) and claims the VIP via
                     #      gratuitous ARP. NO wait-for-VRRP-timeout (~3s)

@@ -9,7 +9,7 @@ template) configured via cloud-init.
 | VM ID | Name           | IP             | Role                                                     |
 |-------|----------------|----------------|----------------------------------------------------------|
 | 1001  | dns-fallback   | 10.10.201.6    | Technitium DNS secondary (failover for K8s technitium .5)|
-| 1002  | vpn-local      | 10.10.201.15   | WireGuard site-to-site to AWS (VRRP BACKUP for the K8s WG pod) |
+| 1002  | vpn-fallback      | 10.10.201.15   | WireGuard site-to-site to AWS (VRRP BACKUP for the K8s WG pod) |
 | 1003  | gh-runner      | 10.10.201.30   | GitHub Actions `[self-hosted, lifecycle]` runner for K8s/Proxmox workflows |
 | 1004  | asterisk-sbc   | 10.10.201.40   | Asterisk PJSIP SBC — Twilio TLS+sRTP ⇄ UniFi Talk UDP bridge (task #80) |
 | 1005  | devbox         | 10.10.201.45   | Persistent tmux/Claude Code remote dev workstation (M81) |
@@ -42,7 +42,7 @@ Per-service configuration is applied via Ansible playbooks in
 | VM           | Playbook         | Notes                                                              |
 |--------------|------------------|--------------------------------------------------------------------|
 | dns-fallback | `technitium.yml` | Installs Technitium, sets admin password from SOPS, creates wind.etherport.net zone + forwarders. Idempotent. |
-| vpn-local    | `wireguard.yml`  | Installs WG + Keepalived; loads peer keys from SOPS. Idempotent.   |
+| vpn-fallback    | `wireguard.yml`  | Installs WG + Keepalived; loads peer keys from SOPS. Idempotent.   |
 | gh-runner    | `gh-runner.yml`  | Installs the GH Actions runner binary, registers with the repo.    |
 | asterisk-sbc | `asterisk-sbc.yml` | Installs Asterisk PJSIP B2BUA bridging Twilio ⇄ UniFi Talk.       |
 | devbox       | `devbox.yml`     | Sets up Claude Code + tmux auto-resume sessions, age key, kubectl. |
@@ -78,7 +78,7 @@ will refuse to connect:
 
 ```bash
 ssh-keygen -R 10.10.201.6   # dns-fallback
-ssh-keygen -R 10.10.201.15  # vpn-local
+ssh-keygen -R 10.10.201.15  # vpn-fallback
 ssh-keygen -R 10.10.201.30  # gh-runner
 ```
 
@@ -105,7 +105,7 @@ newly created VMs:
 cd infra/ansible
 ansible-playbook -i inventory/wind/inventory.ini playbooks/technitium.yml --limit dns-fallback \
   -u ubuntu --become
-ansible-playbook -i inventory/wind/inventory.ini playbooks/wireguard.yml --limit vpn-local \
+ansible-playbook -i inventory/wind/inventory.ini playbooks/wireguard.yml --limit vpn-fallback \
   -u ubuntu --become
 ```
 
@@ -131,7 +131,7 @@ lifecycle {
 
 This guard does **not** prevent the watchdog from being attached to
 NEW VMs — it only stops TF from mutating the device on already-created
-VMs. So a fresh dns-fallback or vpn-local creation still gets the
+VMs. So a fresh dns-fallback or vpn-fallback creation still gets the
 watchdog correctly.
 
 If you genuinely need to change watchdog config (e.g. switch action

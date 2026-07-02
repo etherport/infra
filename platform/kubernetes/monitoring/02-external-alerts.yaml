@@ -192,7 +192,7 @@ spec:
     - name: vpn-service.rules
       rules:
         # location="local" => the AWS vpn gateway (vpn-aws) is covered by AWSReplicaHostDown above;
-        # this stays tight (2m) for the LOCAL vpn-local endpoint.
+        # this stays tight (2m) for the LOCAL vpn-fallback endpoint.
         - alert: VPNGatewayDown
           expr: up{job="external-nodes",instance=~"vpn-.*",location="local"} == 0
           for: 2m

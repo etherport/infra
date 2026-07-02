@@ -213,9 +213,9 @@ resource "unifi_user" "dns_fallback" {
   note     = "Technitium DNS fallback (managed by TF; see proxmox/standalone-vms)"
 }
 
-resource "unifi_user" "vpn_local" {
+resource "unifi_user" "vpn_fallback" {
   mac      = "bc:24:11:d4:cd:c1"
-  name     = "vpn-local"
+  name     = "vpn-fallback"
   fixed_ip = "10.10.201.15"
   note     = "WireGuard local site VM (managed by TF; see proxmox/standalone-vms)"
 }
@@ -317,4 +317,10 @@ resource "unifi_user" "k8s_gpu1_storage" {
   fixed_ip   = "10.10.210.60"
   network_id = unifi_network.ceph.id
   note       = "k8s-gpu1 enp6s22 (Ceph storage NIC)"
+}
+
+# M128 (2026-07-02): vpn-local -> vpn-fallback (state-address migration).
+moved {
+  from = unifi_user.vpn_local
+  to   = unifi_user.vpn_fallback
 }

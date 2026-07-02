@@ -221,7 +221,7 @@ Current records are defined in `zones/wind.etherport.net.yaml`.
 
 | Hostname | IP | Description |
 |----------|-----|-------------|
-| vpn-local | 10.10.201.15 | WireGuard local endpoint |
+| vpn-fallback | 10.10.201.15 | WireGuard local endpoint |
 | vpn-aws | 10.10.100.10 | WireGuard AWS endpoint |
 
 ### Devices

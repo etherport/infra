@@ -135,7 +135,7 @@ records:
   # Infrastructure - VPN
   # =============================================================================
 
-  - name: vpn-local
+  - name: vpn-fallback
     type: A
     value: 10.10.201.15
     comment: WireGuard VPN local endpoint

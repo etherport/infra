@@ -40,7 +40,7 @@ PrometheusRule → Alertmanager → webhook (this controller)
 - **Secrets** (all SOPS):
   - `ai-advisor-anthropic-key` — Anthropic API key
   - `ai-advisor-approval-hmac` — HMAC signing key for Approve URLs
-  - `advisor-ssh-key` — Tier 3 SSH key (deployed to dns-aws/dns-fallback/vpn-local/vpn-aws)
+  - `advisor-ssh-key` — Tier 3 SSH key (deployed to dns-aws/dns-fallback/vpn-fallback/vpn-aws)
   - (read-only CW Logs are now via IRSA role `wind-irsa-cloudwatch-read` — `AssumeRoleWithWebIdentity` + projected SA token, no static key)
 - **RBAC**: ServiceAccount + ClusterRole for pod/deployment patching across denylisted-namespaces-excluded set
 
