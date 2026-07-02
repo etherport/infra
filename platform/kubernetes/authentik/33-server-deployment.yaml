@@ -58,7 +58,7 @@ spec:
           securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] }, readOnlyRootFilesystem: true }
       containers:
         - name: server
-          image: ghcr.io/goauthentik/server:2025.12.6
+          image: ghcr.io/goauthentik/server:2026.2.4
           args: ["server"]
           envFrom:
             - configMapRef: { name: authentik-env }
