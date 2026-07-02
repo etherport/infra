@@ -51,6 +51,7 @@ docs/
 | [vlan-interfaces-netplan.md](runbooks/vlan-interfaces-netplan.md) | VLAN interface configuration |
 | [cert-manager-wildcard.md](runbooks/cert-manager-wildcard.md) | Wildcard cert issuance + Traefik TLSStore |
 | [cilium-cni-dir-owner.md](runbooks/cilium-cni-dir-owner.md) | Cilium CrashLoop after a kubespray run (/opt/cni/bin owner) + the real kubespray run path |
+| [cilium-upgrade.md](runbooks/cilium-upgrade.md) | Upgrading Cilium via `helm` from the devbox — re-assert policyAuditMode after reset-then-reuse, 4-point verify, persist to inventory + snapshot |
 | [networkpolicy-tiers.md](runbooks/networkpolicy-tiers.md) | H3 NetworkPolicy enforcement model + **catering for new services** (allowlist a new flow) + tier rollout + rollback |
 | [udm-manual-hardening-actions.md](runbooks/udm-manual-hardening-actions.md) | Console-only UDM hardening: Security/205 isolation+DNS (M104), unused/exposed switch ports → Disabled + VLAN-min + 802.1X/MAB (M105/#18), UDM_API_KEY GH secret (M47), BGP auth (L24) |
 | [secrets-rotation.md](runbooks/secrets-rotation.md) | SOPS age-key rotation (routine + post-compromise) + offline backup recipient |
