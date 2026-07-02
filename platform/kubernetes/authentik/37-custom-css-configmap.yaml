@@ -36,6 +36,14 @@ data:
     .pf-c-background-image::before,
     .pf-c-background-image svg { display: none !important; }
 
+    /* No brand logo. branding_logo is a transparent 1x1 pixel (40-blueprints.yaml)
+       — 2024.12 rendered that as nothing, but the 2026.x login UI draws an
+       empty-image placeholder frame for it (post-H44 artifact). Hide the brand
+       img/header outright. */
+    .pf-c-login__main-header .pf-c-brand,
+    .pf-c-login .pf-c-brand,
+    ak-flow-executor img.pf-c-brand { display: none !important; }
+
     /* Login card — slightly lifted surface, soft border, rounded (outer shadow
        root, so a plain .pf-c-login descendant selector reaches it reliably). */
     .pf-c-login .pf-c-login__main {
