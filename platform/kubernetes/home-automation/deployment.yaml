@@ -37,6 +37,9 @@ spec:
             }
           ]
     spec:
+      # L26 (2026-07-01): this workload never calls the kube API — don't hand
+      # every pod a cluster credential by default.
+      automountServiceAccountToken: false
       # HA is a singleton (Multus macvlan IPs would collide across replicas
       # and integrations like Z-Wave/Zigbee would fight for device state),
       # so we maximise survival of the single instance instead of true HA:

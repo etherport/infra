@@ -17,6 +17,9 @@ spec:
       annotations:
         backup.velero.io/backup-volumes-excludes: ollama-data
     spec:
+      # L26 (2026-07-01): this workload never calls the kube API — don't hand
+      # every pod a cluster credential by default.
+      automountServiceAccountToken: false
       containers:
         - name: ollama
           image: ollama/ollama:0.31.1@sha256:f1a705f2bd113fb8d15f85f7c217f0dc5f6bebda6b0cc42b82c3ad165ffcb9dc # {"$imagepolicy": "flux-system:ollama"}

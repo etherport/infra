@@ -29,6 +29,9 @@ spec:
         # defaultVolumesToFsBackup setting. See docs/runbooks (velero media spike).
         backup.velero.io/backup-volumes-excludes: movies,tv,transcode
     spec:
+      # L26 (2026-07-01): this workload never calls the kube API — don't hand
+      # every pod a cluster credential by default.
+      automountServiceAccountToken: false
       # Run on a node with an NVIDIA GPU. Matches the label automatically
       # set by gpu-operator's node-feature-discovery — no manual `gpu=true`
       # labelling required. Same selector as Ollama.
