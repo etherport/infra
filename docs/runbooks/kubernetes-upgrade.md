@@ -91,6 +91,13 @@ vars/ which BEAT inventory group_vars — override the SCALAR (e.g.
 tmux session (a harness-backgrounded run was killed mid-download); (3) a single-instance
 CNPG pod (cue-db) WILL stall its node's drain on PDB — pre-arm a watch that deletes the
 pod ~100s into that node's drain.
+Two more from the 1.35 run (2026-07-02): (4) the PDB-blocked pod RESCHEDULES —
+possibly onto the last un-upgraded node; when a later drain fails on it,
+cordon-that-node-first + delete the pod + retry. (5) retrying a failed node with
+`--limit` must NOT include already-upgraded control planes — kubespray re-runs
+`kubeadm upgrade apply`, which fails post-upgrade ("no flags found in kubelet env
+file") on an already-upgraded CP and leaves it CORDONED. `--limit <worker>` alone
+works (drain delegation uses inventory vars, not gathered CP facts).
 
 ---
 
