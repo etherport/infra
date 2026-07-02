@@ -80,12 +80,6 @@ jobs:
       - name: Terraform Init
         run: terraform init -backend-config="profile=" -reconfigure
 
-      # M125 attempt-2 REVERSAL (2026-07-02): fork 0.41.25 changed the
-      # unifi_network schema too → restore state to paultyng. Idempotent.
-      # Remove once the reversal run is green.
-      - name: Revert provider source (ubiquiti-community -> paultyng, idempotent)
-        run: terraform state replace-provider -auto-approve registry.terraform.io/ubiquiti-community/unifi registry.terraform.io/paultyng/unifi || echo "already reverted (no-op)"
-
       - name: Terraform Plan
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.action == 'plan'
         run: terraform plan -input=false -no-color
