@@ -151,6 +151,11 @@ resource "aws_instance" "vpn" {
 
   vpc_security_group_ids = [
     data.aws_security_group.vpn_server.id,
+    # M110 (2026-07-02): the DNS role folds onto this box — attaching the dns
+    # SG brings the :53 ingress rules WITH it, including the dns-restrict-ip
+    # Lambda's WAN-IP-managed port-53 allows (the Lambda manages rules ON this
+    # SG, so failover DNS keeps self-healing when the homelab WAN IP changes).
+    data.aws_security_group.dns_server.id,
     data.aws_security_group.internal_comms.id,
     data.aws_security_group.allow_ssh.id,
   ]
