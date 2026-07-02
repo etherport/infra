@@ -39,6 +39,55 @@ Before any upgrade:
 
 ---
 
+## ⚠️ `wind`-specific landmines checklist (READ BEFORE ANY kubespray RUN)
+
+These are non-obvious to a generic K8s upgrade but WILL bite this cluster. Every
+one is documented in `CLAUDE.md` §5; consolidated here as the pre/post gate.
+
+**BEFORE the run:**
+- [ ] **Run kubespray ONLY via `infra/kubespray/kubespray.sh`** — never a raw
+      `cluster.yml`/`upgrade-cluster.yml`. The wrapper auto-runs `pre-flight.yml`
+      afterward to restore `/opt/cni/bin` to `root:root`; a raw run chowns it to
+      `kube` → Cilium `mount-cgroup` `Init:CrashLoopBackOff` on the next agent
+      restart (LATENT — see [cilium-cni-dir-owner.md](cilium-cni-dir-owner.md)).
+- [ ] **No HA API VIP.** `controlPlaneEndpoint` = the single cp1 `10.10.201.50`;
+      workers use local `nginx-proxy`. Upgrade **cp1 LAST** (etcd leader + the API
+      endpoint). Verify etcd quorum (`etcdctl endpoint health --cluster`,
+      `/etc/etcd.env` has the certs) between each CP.
+- [ ] **Drain-blockers:** single-instance CNPG pods with PDB `minAvailable=1`
+      (e.g. `cue-db`) block a node drain and hang RBD unmount. `kubectl delete pod`
+      the PDB-blocked ones after drain evicts the rest, before the node reboots.
+- [ ] **Confirm the kubespray submodule supports the target `kube_version`** before
+      bumping it (the pinned submodule caps the supported range).
+- [ ] **containerd** is a kubespray binary (`/usr/local/bin/containerd`), NOT apt —
+      it upgrades via `containerd_version` in inventory + the kubespray run, and is
+      picked up per-node on the rolling restart. (H45b target: `2.2.5`.)
+
+**AFTER the run (the IRSA/Multus landmines — verify EXPLICITLY, they fail silently):**
+- [ ] **kube-apiserver `--service-account-issuer`** is STILL the OIDC bucket URL
+      (`s3://wind-cluster-oidc-830881980142` endpoint) and `--api-audiences` is still
+      pinned — a kubespray run can reset these from inventory. If the issuer changed,
+      EVERY in-cluster IRSA token 401s. (M75; `apiserver-issuer-flip-api-audiences`.)
+- [ ] **Restart Multus** after ANY issuer change: `kubectl -n kube-system rollout
+      restart ds/kube-multus-ds-amd64` — it bakes its SA token once at pod start and
+      never refreshes, so a stale `iss` → `multus … Unauthorized` → NO new pod
+      schedules cluster-wide (the ~7h 2026-06-25 incident).
+- [ ] **Cilium config not clobbered:** `policy-audit-mode` still OFF (enforce),
+      WireGuard encryption still on, MetalLB BGP 8/8 (`cilium-dbg encrypt status`;
+      `metallb_bgp_session_up`). A kubespray cilium tags run can revert these.
+- [ ] **Per-kernel modules:** don't assume a module exists after a kernel bump — the
+      `i6300esb` watchdog module is ABSENT from the node kernel (M91). Verify a module
+      is present before relying on it; never add a `modprobe i6300esb` task.
+- [ ] IRSA still assumes a role (spot-check one workload); velero/CNPG barman still archiving.
+
+**H45b + M123 combined window (ready-to-run):** bump `kube_version: 1.34.2 → 1.34.3`
++ add `containerd_version: 2.2.5` in the inventory, then the rolling `kubespray.sh`
+run (CP first per §2.3 but **cp1 last**, workers rolling per §2.4). One reboot sweep
+covers both the K8s patch and the containerd CVE batch. Targets confirmed 2026-07-02;
+awaiting an operator-named maintenance window.
+
+---
+
 ## 1. Patch Version Upgrade (e.g., 1.34.1 → 1.34.2)
 
 Low risk, rolling update with zero downtime.
