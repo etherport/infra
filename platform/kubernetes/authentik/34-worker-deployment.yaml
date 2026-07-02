@@ -34,6 +34,14 @@ spec:
           # M114: the worker had NO probes — a wedged worker (blueprint apply,
           # outpost sync, scheduled tasks all silently stop) was invisible.
           # `ak healthcheck` is authentik's documented worker health command.
+          # H44 (2026-07-02): startupProbe so a long migration (the worker can be the
+          # one that acquires the migration advisory lock) isn't killed by liveness
+          # mid-run — 60×10s = up to 10min. Mirrors the server startupProbe.
+          startupProbe:
+            exec: { command: ["ak", "healthcheck"] }
+            periodSeconds: 10
+            failureThreshold: 60
+            timeoutSeconds: 10
           livenessProbe:
             exec: { command: ["ak", "healthcheck"] }
             initialDelaySeconds: 60

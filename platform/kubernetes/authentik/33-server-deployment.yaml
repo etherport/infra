@@ -67,6 +67,13 @@ spec:
             - { name: http, containerPort: 9000 }
             - { name: https, containerPort: 9443 }
           securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } }
+          # startupProbe (H44, 2026-07-02): authentik runs DB migrations at container
+          # start BEFORE the web server binds, so /-/health/* is connection-refused during
+          # a migration. Without a startupProbe, a long migration (session cache→DB at
+          # 2025.4, RBAC at 2025.12) trips liveness → k8s kills the pod mid-migration →
+          # start-failure loop (upstream #14501). 60×10s = up to 10min for a migration to
+          # finish before liveness is enforced. Permanent (protects every future upgrade).
+          startupProbe: { httpGet: { path: /-/health/live/, port: http }, periodSeconds: 10, failureThreshold: 60 }
           livenessProbe: { httpGet: { path: /-/health/live/, port: http }, initialDelaySeconds: 30, periodSeconds: 30 }
           readinessProbe: { httpGet: { path: /-/health/ready/, port: http }, initialDelaySeconds: 20, periodSeconds: 15 }
           resources: { requests: { cpu: 100m, memory: 512Mi }, limits: { cpu: "1", memory: 1Gi } }
