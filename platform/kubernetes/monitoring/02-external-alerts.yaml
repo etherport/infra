@@ -43,8 +43,8 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "AWS replica host {{ $labels.instance }} is flapping (t4g.nano allowance)"
-            description: "{{ $labels.instance }} node_exporter scrape flapped >12x/h — intermittent per-instance packet blackouts (t4g.nano ENA/CPU-credit allowance). Service is usually fine; right-size the instance to resolve."
+            summary: "AWS replica host {{ $labels.instance }} is flapping (WAN path-loss wave)"
+            description: "{{ $labels.instance }} node_exporter scrape flapped >12x/h — an intermittent homelab-to-AWS WAN path-loss wave (M124: NOT the instance; ENA counters clean post-resize, MTU/SG/fail2ban ruled out; ISP/WAN-side, hours-scale). Service usually rides it out (WG re-handshakes); capture mtr from both ends while it fires, correlate UDM WAN events."
 
         # High CPU usage
         - alert: ExternalHostHighCPU
