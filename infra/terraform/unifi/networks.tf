@@ -4,6 +4,20 @@
 # WAN interfaces (WAN1/WAN2/LTE) and the WireGuard VPN are EXCLUDED from this
 # Phase 1 import — different schemas, higher risk, separate PRs.
 #
+# M125 (2026-07-02): converted from the archived paultyng/unifi provider schema
+# to the ubiquiti-community/unifi fork v0.41.25 schema:
+#   - `purpose` / `network_group` removed (no fork equivalent; corporate implied)
+#   - `vlan_id` → `vlan`
+#   - `internet_access_enabled` → `internet_access`
+#   - `intra_network_access_enabled` → `network_isolation` (INVERTED semantics:
+#     isolation = NOT intra-network access; intra=true → isolation=false)
+#   - flat `dhcp_enabled/dhcp_start/dhcp_stop/dhcp_lease/dhcp_dns` → nested
+#     `dhcp_server = { enabled/start/stop/leasetime/dns_enabled/dns_servers }`
+#     (attributes syntax with `=`, per the fork docs)
+#   - the old `dhcp_v6_*` / `ipv6_*` ignore_changes entries: only
+#     `ipv6_interface_type` exists in the fork; the rest were dropped (see the
+#     per-resource lifecycle comment).
+#
 # Convention for each network:
 #   resource "unifi_network" "<lowercase-name>" { ... }
 #   import { to = ... id = "<_id from dump>" }
@@ -11,8 +25,11 @@
 # Plan must report "no changes" before any apply. If diffs appear, the live
 # UDM is the source of truth — edit the HCL to match, not the other way.
 #
-# Subnet normalization: the provider stores `subnet` as the network address
-# (e.g. 10.10.201.0/24), NOT the gateway (.1/24). Use .0.
+# Subnet normalization: the paultyng provider stored `subnet` as the network
+# address (e.g. 10.10.201.0/24), NOT the gateway (.1/24). Use .0.
+# M125 CAUTION: the fork's docs example uses gateway-style "10.0.0.1/24" —
+# verify on the first plan whether the fork normalizes to .0 or wants .1;
+# fix HCL to match live/plan, not the other way.
 
 # Note: `ignore_changes` takes unquoted attribute references and must live
 # inside each resource's `lifecycle` block — it can't be shared from `locals`.
@@ -21,38 +38,47 @@
 # Standard internal DNS pushed by DHCP: K8s technitium VIP (10.10.201.5),
 # dns-fallback (10.10.201.6), AWS technitium on the edge box (44.240.60.80 — M110).
 #
-# `network_isolation_enabled` is in the live UDM state but NOT in the
-# paultyng/unifi provider schema — UI-managed only. The Security VLAN
-# isolation flag stays where it is in the UDM regardless of this code.
+# M125: `network_isolation` (was `network_isolation_enabled`, UI-managed only
+# under paultyng) IS exposed by the fork as the inversion of the old
+# intra_network_access_enabled. The Security VLAN's live isolation flag is
+# now modelable — see the warning on that resource before the first apply.
 
 resource "unifi_network" "default" {
-  name    = "Default"
-  purpose = "corporate"
-  subnet  = "10.10.199.0/24"
-  # vlan_id intentionally omitted — Default is the untagged native network
+  # M125: fork defaults differ from live when unset — pin live values explicitly.
+  auto_scale         = false
+  lte_lan            = true
+  setting_preference = "manual"
 
-  dhcp_enabled = true
-  dhcp_start   = "10.10.199.100"
-  dhcp_stop    = "10.10.199.254"
-  dhcp_lease   = 86400
-  domain_name  = "wind.etherport.net"
+  name   = "Default"
+  subnet = "10.10.199.1/24" # fork normalizes to gateway-style
+  # vlan intentionally omitted — Default is the untagged native network
+
+  dhcp_server = {
+    enabled   = true
+    start     = "10.10.199.100"
+    stop      = "10.10.199.254"
+    leasetime = 86400
+  }
+  domain_name = "wind.etherport.net"
 
 
   # Explicit defaults — provider would set these implicitly but having them
   # in source means a drift in the UI shows up as a plan diff.
-  network_group                = "LAN"
-  igmp_snooping                = false
-  multicast_dns                = false
-  intra_network_access_enabled = true
-  internet_access_enabled      = true
+  igmp_snooping     = false
+  multicast_dns     = false
+  network_isolation = false # M125: was intra_network_access_enabled = true (inverted)
+  internet_access   = true
 
   lifecycle {
     ignore_changes = [
-      dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
-      dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
-      ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
-      ipv6_ra_preferred_lifetime, ipv6_ra_priority, ipv6_ra_valid_lifetime,
-      ipv6_static_subnet, wan_dhcp_v6_pd_size,
+      # M125: of the old paultyng dhcp_v6_*/ipv6_* ignore list, only
+      # ipv6_interface_type exists in the fork schema. Dropped (no fork
+      # equivalent): dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled,
+      # dhcp_v6_lease, dhcp_v6_start, dhcp_v6_stop, ipv6_pd_interface,
+      # ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
+      # ipv6_ra_preferred_lifetime, ipv6_ra_priority, ipv6_ra_valid_lifetime,
+      # ipv6_static_subnet, wan_dhcp_v6_pd_size.
+      ipv6_interface_type,
     ]
   }
 }
@@ -63,36 +89,39 @@ import {
 }
 
 resource "unifi_network" "management" {
-  name    = "Management"
-  purpose = "corporate"
-  vlan_id = 200
-  subnet  = "10.10.200.0/24"
+  # M125: fork defaults differ from live when unset — pin live values explicitly.
+  auto_scale         = false
+  lte_lan            = false
+  setting_preference = "manual"
 
-  dhcp_enabled = true
-  dhcp_start   = "10.10.200.100"
-  dhcp_stop    = "10.10.200.254"
-  # M110 (2026-07-02): tertiary resolver = 44.240.60.80 (the consolidated AWS edge
-  # box; was 52.40.219.113 on the destroyed standalone dns instance).
-  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
-  dhcp_lease   = 86400
-  domain_name  = "wind.etherport.net"
+  name   = "Management"
+  vlan   = 200
+  subnet = "10.10.200.1/24" # fork normalizes to gateway-style
+
+  dhcp_server = {
+    enabled   = true
+    start     = "10.10.200.100"
+    stop      = "10.10.200.254"
+    leasetime = 86400
+    # M110 (2026-07-02): tertiary resolver = 44.240.60.80 (the consolidated AWS edge
+    # box; was 52.40.219.113 on the destroyed standalone dns instance).
+    dns_enabled = true
+    dns_servers = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
+  }
+  domain_name = "wind.etherport.net"
 
 
   # Explicit defaults — provider would set these implicitly but having them
   # in source means a drift in the UI shows up as a plan diff.
-  network_group                = "LAN"
-  igmp_snooping                = false
-  multicast_dns                = false
-  intra_network_access_enabled = true
-  internet_access_enabled      = true
+  igmp_snooping     = false
+  multicast_dns     = false
+  network_isolation = false # M125: was intra_network_access_enabled = true (inverted)
+  internet_access   = true
 
   lifecycle {
     ignore_changes = [
-      dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
-      dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
-      ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
-      ipv6_ra_preferred_lifetime, ipv6_ra_priority, ipv6_ra_valid_lifetime,
-      ipv6_static_subnet, wan_dhcp_v6_pd_size,
+      # M125: see unifi_network.default for the dropped dhcp_v6_*/ipv6_* list.
+      ipv6_interface_type,
     ]
   }
 }
@@ -103,34 +132,37 @@ import {
 }
 
 resource "unifi_network" "servers" {
-  name    = "Servers"
-  purpose = "corporate"
-  vlan_id = 201
-  subnet  = "10.10.201.0/24"
+  # M125: fork defaults differ from live when unset — pin live values explicitly.
+  auto_scale         = false
+  lte_lan            = false
+  setting_preference = "manual"
 
-  dhcp_enabled = true
-  dhcp_start   = "10.10.201.100"
-  dhcp_stop    = "10.10.201.254"
-  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
-  dhcp_lease   = 86400
-  domain_name  = "wind.etherport.net"
+  name   = "Servers"
+  vlan   = 201
+  subnet = "10.10.201.1/24" # fork normalizes to gateway-style
+
+  dhcp_server = {
+    enabled     = true
+    start       = "10.10.201.100"
+    stop        = "10.10.201.254"
+    leasetime   = 86400
+    dns_enabled = true
+    dns_servers = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
+  }
+  domain_name = "wind.etherport.net"
 
 
   # Explicit defaults — provider would set these implicitly but having them
   # in source means a drift in the UI shows up as a plan diff.
-  network_group                = "LAN"
-  igmp_snooping                = false
-  multicast_dns                = false
-  intra_network_access_enabled = true
-  internet_access_enabled      = true
+  igmp_snooping     = false
+  multicast_dns     = false
+  network_isolation = false # M125: was intra_network_access_enabled = true (inverted)
+  internet_access   = true
 
   lifecycle {
     ignore_changes = [
-      dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
-      dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
-      ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
-      ipv6_ra_preferred_lifetime, ipv6_ra_priority, ipv6_ra_valid_lifetime,
-      ipv6_static_subnet, wan_dhcp_v6_pd_size,
+      # M125: see unifi_network.default for the dropped dhcp_v6_*/ipv6_* list.
+      ipv6_interface_type,
     ]
   }
 }
@@ -141,41 +173,49 @@ import {
 }
 
 resource "unifi_network" "clients" {
-  name    = "Clients"
-  purpose = "corporate"
-  vlan_id = 202
-  subnet  = "10.10.202.0/24"
+  gateway_type = "switch" # live value (fork defaults to "default" when unset)
 
-  dhcp_enabled = true
-  dhcp_start   = "10.10.202.100"
-  dhcp_stop    = "10.10.202.254"
-  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
-  dhcp_lease   = 86400
-  domain_name  = "wind.etherport.net"
+  # M125: fork defaults differ from live when unset — pin live values explicitly.
+  auto_scale         = false
+  lte_lan            = true
+  setting_preference = "manual"
+
+  name   = "Clients"
+  vlan   = 202
+  subnet = "10.10.202.1/24" # fork normalizes to gateway-style
+
+  dhcp_server = {
+    enabled     = true
+    start       = "10.10.202.100"
+    stop        = "10.10.202.254"
+    leasetime   = 86400
+    dns_enabled = true
+    dns_servers = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
+  }
+  domain_name = "wind.etherport.net"
 
 
   # Explicit defaults — provider would set these implicitly but having them
   # in source means a drift in the UI shows up as a plan diff.
-  network_group                = "LAN"
-  igmp_snooping                = false
-  multicast_dns                = false
-  intra_network_access_enabled = true
-  internet_access_enabled      = true
+  igmp_snooping     = false
+  multicast_dns     = false
+  network_isolation = false # M125: was intra_network_access_enabled = true (inverted)
+  internet_access   = true
 
   lifecycle {
     ignore_changes = [
-      # M110 (2026-07-02): dhcp_dns ignored — the archived paultyng provider 400s on
-      # PUT for THIS network (api.err.Invalid; 4 of 7 networks applied fine). The
-      # dhcpd_dns_3=44.240.60.80 cutover was applied via a direct UDM API round-trip
-      # PUT (verified live). Live UDM = source of truth for dhcp_dns here until the
-      # ubiquiti-community/unifi fork migration (tracked in the 2026-07-01 currency
-      # review) makes the provider writable again.
-      dhcp_dns,
-      dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
-      dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
-      ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
-      ipv6_ra_preferred_lifetime, ipv6_ra_priority, ipv6_ra_valid_lifetime,
-      ipv6_static_subnet, wan_dhcp_v6_pd_size,
+      # M110 (2026-07-02): dhcp_dns was ignored — the archived paultyng provider
+      # 400'd on PUT for THIS network (api.err.Invalid; 4 of 7 networks applied
+      # fine). The dhcpd_dns_3=44.240.60.80 cutover was applied via a direct UDM
+      # API round-trip PUT (verified live). Live UDM = source of truth for
+      # dhcp_dns here.
+      # M125: dhcp_dns is now nested → the WHOLE dhcp_server attribute is
+      # ignored (was scoped to dhcp_dns before; note this also masks range/
+      # leasetime drift). The 400 was a paultyng bug — once the fork proves
+      # writable on the first plan/apply, drop this entry.
+      dhcp_server,
+      # M125: see unifi_network.default for the dropped dhcp_v6_*/ipv6_* list.
+      ipv6_interface_type,
     ]
   }
 }
@@ -186,34 +226,37 @@ import {
 }
 
 resource "unifi_network" "iot" {
-  name    = "IoT"
-  purpose = "corporate"
-  vlan_id = 204
-  subnet  = "10.10.204.0/24"
+  # M125: fork defaults differ from live when unset — pin live values explicitly.
+  auto_scale         = false
+  lte_lan            = false
+  setting_preference = "manual"
 
-  dhcp_enabled = true
-  dhcp_start   = "10.10.204.100"
-  dhcp_stop    = "10.10.204.254"
-  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
-  dhcp_lease   = 86400
-  domain_name  = "wind.etherport.net"
+  name   = "IoT"
+  vlan   = 204
+  subnet = "10.10.204.1/24" # fork normalizes to gateway-style
+
+  dhcp_server = {
+    enabled     = true
+    start       = "10.10.204.100"
+    stop        = "10.10.204.254"
+    leasetime   = 86400
+    dns_enabled = true
+    dns_servers = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
+  }
+  domain_name = "wind.etherport.net"
 
 
   # Explicit defaults — provider would set these implicitly but having them
   # in source means a drift in the UI shows up as a plan diff.
-  network_group                = "LAN"
-  igmp_snooping                = false
-  multicast_dns                = false
-  intra_network_access_enabled = true
-  internet_access_enabled      = true
+  igmp_snooping     = false
+  multicast_dns     = false
+  network_isolation = false # M125: was intra_network_access_enabled = true (inverted)
+  internet_access   = true
 
   lifecycle {
     ignore_changes = [
-      dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
-      dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
-      ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
-      ipv6_ra_preferred_lifetime, ipv6_ra_priority, ipv6_ra_valid_lifetime,
-      ipv6_static_subnet, wan_dhcp_v6_pd_size,
+      # M125: see unifi_network.default for the dropped dhcp_v6_*/ipv6_* list.
+      ipv6_interface_type,
     ]
   }
 }
@@ -227,35 +270,43 @@ import {
 # (DHCP hands out empty DNS list) so devices don't try to resolve through
 # the homelab. network_isolation prevents lateral movement.
 resource "unifi_network" "security" {
-  name    = "Security"
-  purpose = "corporate"
-  vlan_id = 205
-  subnet  = "10.10.205.0/24"
+  # M125: fork defaults differ from live when unset — pin live values explicitly.
+  auto_scale         = false
+  lte_lan            = true
+  setting_preference = "manual"
 
-  # network_isolation_enabled=true exists in live UDM but is NOT in the
-  # provider schema — UI-managed only. Stays on regardless.
-  dhcp_enabled = true
-  dhcp_start   = "10.10.205.100"
-  dhcp_stop    = "10.10.205.254"
-  dhcp_lease   = 86400
-  domain_name  = "wind.etherport.net"
+  name   = "Security"
+  vlan   = 205
+  subnet = "10.10.205.1/24" # fork normalizes to gateway-style
+
+  # ⚠️ M125: under paultyng, network_isolation_enabled=true in live UDM was
+  # NOT in the provider schema (UI-managed only) while the separate
+  # intra_network_access_enabled arg was true. The fork DOES expose
+  # network_isolation; the mechanical intra=true → isolation=false mapping is
+  # applied below, but if the fork's attribute reads the live UDM
+  # network_isolation_enabled=true, the FIRST PLAN WILL DIFF HERE — if so,
+  # set network_isolation = true to match live (live UDM is source of truth;
+  # do NOT apply a diff that would disable the Security VLAN's isolation).
+  dhcp_server = {
+    enabled   = true
+    start     = "10.10.205.100"
+    stop      = "10.10.205.254"
+    leasetime = 86400
+  }
+  domain_name = "wind.etherport.net"
 
 
   # Explicit defaults — provider would set these implicitly but having them
   # in source means a drift in the UI shows up as a plan diff.
-  network_group                = "LAN"
-  igmp_snooping                = false
-  multicast_dns                = false
-  intra_network_access_enabled = true
-  internet_access_enabled      = true
+  igmp_snooping     = false
+  multicast_dns     = false
+  network_isolation = false # M125: was intra_network_access_enabled = true (inverted) — SEE WARNING ABOVE
+  internet_access   = true
 
   lifecycle {
     ignore_changes = [
-      dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
-      dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
-      ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
-      ipv6_ra_preferred_lifetime, ipv6_ra_priority, ipv6_ra_valid_lifetime,
-      ipv6_static_subnet, wan_dhcp_v6_pd_size,
+      # M125: see unifi_network.default for the dropped dhcp_v6_*/ipv6_* list.
+      ipv6_interface_type,
     ]
   }
 }
@@ -268,37 +319,48 @@ import {
 # Guest VLAN — hands out public DNS (1.1.1.1, 8.8.8.8) by design so guests
 # can't resolve internal hostnames.
 resource "unifi_network" "guest" {
-  name    = "Guest"
-  purpose = "guest"
-  vlan_id = 206
-  subnet  = "10.10.206.0/24"
+  # M125: fork defaults differ from live when unset — pin live values explicitly.
+  auto_scale         = false
+  lte_lan            = false
+  setting_preference = "manual"
 
-  dhcp_enabled = true
-  dhcp_start   = "10.10.206.100"
-  dhcp_stop    = "10.10.206.254"
-  dhcp_dns     = ["1.1.1.1", "8.8.8.8"]
-  dhcp_lease   = 86400
+  # M125: dropped `purpose = "guest"` (no fork equivalent — the purpose arg is
+  # gone from the schema entirely). ⚠️ How the fork models guest-portal
+  # semantics is UNVERIFIED — check the first plan for a diff on this network
+  # and confirm the guest policy survives in the UDM UI after apply.
+  name   = "Guest"
+  vlan   = 206
+  subnet = "10.10.206.1/24" # fork normalizes to gateway-style
+
+  dhcp_server = {
+    enabled     = true
+    start       = "10.10.206.100"
+    stop        = "10.10.206.254"
+    leasetime   = 86400
+    dns_enabled = true
+    dns_servers = ["1.1.1.1", "8.8.8.8"]
+  }
 
 
   # Explicit defaults — provider would set these implicitly but having them
   # in source means a drift in the UI shows up as a plan diff.
-  network_group                = "LAN"
-  igmp_snooping                = false
-  multicast_dns                = false
-  intra_network_access_enabled = true
-  internet_access_enabled      = true
+  igmp_snooping     = false
+  multicast_dns     = false
+  network_isolation = false # M125: was intra_network_access_enabled = true (inverted)
+  internet_access   = true
 
   lifecycle {
-    # dhcp_dns added to ignore_changes — provider doesn't READ the field
-    # back for purpose=guest, causing a perpetual plan diff. Live UDM
+    # dhcp_dns was in ignore_changes — the paultyng provider didn't READ the
+    # field back for purpose=guest, causing a perpetual plan diff. Live UDM
     # state keeps the values.
+    # M125: dhcp_dns is now nested → the WHOLE dhcp_server attribute is
+    # ignored (was scoped to dhcp_dns before; also masks range/leasetime
+    # drift). The read-back bug may be fixed in the fork — if the first plan
+    # is clean without it, drop this entry.
     ignore_changes = [
-      dhcp_dns,
-      dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
-      dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
-      ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
-      ipv6_ra_preferred_lifetime, ipv6_ra_priority, ipv6_ra_valid_lifetime,
-      ipv6_static_subnet, wan_dhcp_v6_pd_size,
+      dhcp_server,
+      # M125: see unifi_network.default for the dropped dhcp_v6_*/ipv6_* list.
+      ipv6_interface_type,
     ]
   }
 }
@@ -309,41 +371,49 @@ import {
 }
 
 resource "unifi_network" "vsan" {
-  name    = "vSAN"
-  purpose = "corporate"
-  vlan_id = 209
-  subnet  = "10.10.209.0/24"
+  gateway_type = "switch" # live value (fork defaults to "default" when unset)
 
-  dhcp_enabled = true
-  dhcp_start   = "10.10.209.100"
-  dhcp_stop    = "10.10.209.254"
-  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
-  dhcp_lease   = 86400
-  domain_name  = "wind.etherport.net"
+  # M125: fork defaults differ from live when unset — pin live values explicitly.
+  auto_scale         = false
+  lte_lan            = false
+  setting_preference = "manual"
+
+  name   = "vSAN"
+  vlan   = 209
+  subnet = "10.10.209.1/24" # fork normalizes to gateway-style
+
+  dhcp_server = {
+    enabled     = true
+    start       = "10.10.209.100"
+    stop        = "10.10.209.254"
+    leasetime   = 86400
+    dns_enabled = true
+    dns_servers = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
+  }
+  domain_name = "wind.etherport.net"
 
 
   # Explicit defaults — provider would set these implicitly but having them
   # in source means a drift in the UI shows up as a plan diff.
-  network_group                = "LAN"
-  igmp_snooping                = false
-  multicast_dns                = false
-  intra_network_access_enabled = true
-  internet_access_enabled      = true
+  igmp_snooping     = false
+  multicast_dns     = false
+  network_isolation = false # M125: was intra_network_access_enabled = true (inverted)
+  internet_access   = true
 
   lifecycle {
     ignore_changes = [
-      # M110 (2026-07-02): dhcp_dns ignored — the archived paultyng provider 400s on
-      # PUT for THIS network (api.err.Invalid; 4 of 7 networks applied fine). The
-      # dhcpd_dns_3=44.240.60.80 cutover was applied via a direct UDM API round-trip
-      # PUT (verified live). Live UDM = source of truth for dhcp_dns here until the
-      # ubiquiti-community/unifi fork migration (tracked in the 2026-07-01 currency
-      # review) makes the provider writable again.
-      dhcp_dns,
-      dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
-      dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
-      ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
-      ipv6_ra_preferred_lifetime, ipv6_ra_priority, ipv6_ra_valid_lifetime,
-      ipv6_static_subnet, wan_dhcp_v6_pd_size,
+      # M110 (2026-07-02): dhcp_dns was ignored — the archived paultyng provider
+      # 400'd on PUT for THIS network (api.err.Invalid; 4 of 7 networks applied
+      # fine). The dhcpd_dns_3=44.240.60.80 cutover was applied via a direct UDM
+      # API round-trip PUT (verified live). Live UDM = source of truth for
+      # dhcp_dns here.
+      # M125: dhcp_dns is now nested → the WHOLE dhcp_server attribute is
+      # ignored (was scoped to dhcp_dns before; also masks range/leasetime
+      # drift). The 400 was a paultyng bug — once the fork proves writable on
+      # the first plan/apply, drop this entry.
+      dhcp_server,
+      # M125: see unifi_network.default for the dropped dhcp_v6_*/ipv6_* list.
+      ipv6_interface_type,
     ]
   }
 }
@@ -354,34 +424,37 @@ import {
 }
 
 resource "unifi_network" "unifi" {
-  name    = "Unifi"
-  purpose = "corporate"
-  vlan_id = 212
-  subnet  = "10.10.212.0/24"
+  # M125: fork defaults differ from live when unset — pin live values explicitly.
+  auto_scale         = false
+  lte_lan            = false
+  setting_preference = "manual"
 
-  dhcp_enabled = true
-  dhcp_start   = "10.10.212.100"
-  dhcp_stop    = "10.10.212.254"
-  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
-  dhcp_lease   = 86400
-  domain_name  = "wind.etherport.net"
+  name   = "Unifi"
+  vlan   = 212
+  subnet = "10.10.212.1/24" # fork normalizes to gateway-style
+
+  dhcp_server = {
+    enabled     = true
+    start       = "10.10.212.100"
+    stop        = "10.10.212.254"
+    leasetime   = 86400
+    dns_enabled = true
+    dns_servers = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
+  }
+  domain_name = "wind.etherport.net"
 
 
   # Explicit defaults — provider would set these implicitly but having them
   # in source means a drift in the UI shows up as a plan diff.
-  network_group                = "LAN"
-  igmp_snooping                = false
-  multicast_dns                = false
-  intra_network_access_enabled = true
-  internet_access_enabled      = true
+  igmp_snooping     = false
+  multicast_dns     = false
+  network_isolation = false # M125: was intra_network_access_enabled = true (inverted)
+  internet_access   = true
 
   lifecycle {
     ignore_changes = [
-      dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
-      dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
-      ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
-      ipv6_ra_preferred_lifetime, ipv6_ra_priority, ipv6_ra_valid_lifetime,
-      ipv6_static_subnet, wan_dhcp_v6_pd_size,
+      # M125: see unifi_network.default for the dropped dhcp_v6_*/ipv6_* list.
+      ipv6_interface_type,
     ]
   }
 }
@@ -398,47 +471,55 @@ import {
 #
 # Router: Switch Rack PoE (US624P) — L3 forwarding offloaded to that switch
 # instead of the UDM, for lower latency on storage traffic. The "Router"
-# selection is a UI-only setting (paultyng/unifi provider does not currently
-# expose per-network L3 device assignment), so it must be verified manually
+# selection is a UI-only setting (neither paultyng nor the fork currently
+# exposes per-network L3 device assignment), so it must be verified manually
 # after import.
 #
 # DHCP enabled with reserved range 100-254. Static IPs 1-99 for the storage
 # fabric (PVE host, K8s nodes via Multus secondary NIC, etc.).
 resource "unifi_network" "ceph" {
-  name    = "Ceph"
-  purpose = "corporate"
-  vlan_id = 210
-  subnet  = "10.10.210.0/24"
+  gateway_type = "switch" # live value (fork defaults to "default" when unset)
 
-  dhcp_enabled = true
-  dhcp_start   = "10.10.210.100"
-  dhcp_stop    = "10.10.210.254"
-  dhcp_dns     = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
-  dhcp_lease   = 86400
-  domain_name  = "wind.etherport.net"
+  # M125: fork defaults differ from live when unset — pin live values explicitly.
+  auto_scale         = false
+  lte_lan            = true
+  setting_preference = "manual"
+
+  name   = "Ceph"
+  vlan   = 210
+  subnet = "10.10.210.1/24" # fork normalizes to gateway-style
+
+  dhcp_server = {
+    enabled     = true
+    start       = "10.10.210.100"
+    stop        = "10.10.210.254"
+    leasetime   = 86400
+    dns_enabled = true
+    dns_servers = ["10.10.201.5", "10.10.201.6", "44.240.60.80"]
+  }
+  domain_name = "wind.etherport.net"
 
   # Explicit defaults — provider would set these implicitly but having them
   # in source means a drift in the UI shows up as a plan diff.
-  network_group                = "LAN"
-  igmp_snooping                = false
-  multicast_dns                = false
-  intra_network_access_enabled = true
-  internet_access_enabled      = true
+  igmp_snooping     = false
+  multicast_dns     = false
+  network_isolation = false # M125: was intra_network_access_enabled = true (inverted)
+  internet_access   = true
 
   lifecycle {
     ignore_changes = [
-      # M110 (2026-07-02): dhcp_dns ignored — the archived paultyng provider 400s on
-      # PUT for THIS network (api.err.Invalid; 4 of 7 networks applied fine). The
-      # dhcpd_dns_3=44.240.60.80 cutover was applied via a direct UDM API round-trip
-      # PUT (verified live). Live UDM = source of truth for dhcp_dns here until the
-      # ubiquiti-community/unifi fork migration (tracked in the 2026-07-01 currency
-      # review) makes the provider writable again.
-      dhcp_dns,
-      dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
-      dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
-      ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
-      ipv6_ra_preferred_lifetime, ipv6_ra_priority, ipv6_ra_valid_lifetime,
-      ipv6_static_subnet, wan_dhcp_v6_pd_size,
+      # M110 (2026-07-02): dhcp_dns was ignored — the archived paultyng provider
+      # 400'd on PUT for THIS network (api.err.Invalid; 4 of 7 networks applied
+      # fine). The dhcpd_dns_3=44.240.60.80 cutover was applied via a direct UDM
+      # API round-trip PUT (verified live). Live UDM = source of truth for
+      # dhcp_dns here.
+      # M125: dhcp_dns is now nested → the WHOLE dhcp_server attribute is
+      # ignored (was scoped to dhcp_dns before; also masks range/leasetime
+      # drift). The 400 was a paultyng bug — once the fork proves writable on
+      # the first plan/apply, drop this entry.
+      dhcp_server,
+      # M125: see unifi_network.default for the dropped dhcp_v6_*/ipv6_* list.
+      ipv6_interface_type,
     ]
   }
 }
@@ -452,23 +533,22 @@ import {
 # (10.255.253.3) that VLANs use to reach the UDM for upstream routing.
 # DHCP disabled (static peers only).
 resource "unifi_network" "inter_vlan_routing" {
-  name    = "Inter-VLAN routing"
-  purpose = "corporate"
-  vlan_id = 4040
-  subnet  = "10.255.253.0/24"
+  # M125: fork defaults differ from live when unset — pin live values explicitly.
+  auto_scale = false
+  lte_lan    = true
 
-  dhcp_enabled = false
-  # Provider default is 86400; live is 0 because DHCP is disabled. Match live.
-  dhcp_lease  = 0
-  domain_name = "routing"
+  name   = "Inter-VLAN routing"
+  vlan   = 4040
+  subnet = "10.255.253.1/24" # fork normalizes to gateway-style
+
+  dhcp_server = {
+    enabled = false # transit net — never DHCP; controller echoes template values (fork read-back quirk)
+  }
 
   lifecycle {
     ignore_changes = [
-      dhcp_v6_dns, dhcp_v6_dns_auto, dhcp_v6_enabled, dhcp_v6_lease,
-      dhcp_v6_start, dhcp_v6_stop, ipv6_interface_type, ipv6_pd_interface,
-      ipv6_pd_prefixid, ipv6_pd_start, ipv6_pd_stop, ipv6_ra_enable,
-      ipv6_ra_preferred_lifetime, ipv6_ra_priority, ipv6_ra_valid_lifetime,
-      ipv6_static_subnet, wan_dhcp_v6_pd_size,
+      # M125: see unifi_network.default for the dropped dhcp_v6_*/ipv6_* list.
+      ipv6_interface_type,
     ]
   }
 }

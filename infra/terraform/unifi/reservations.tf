@@ -6,8 +6,14 @@
 #     IPs today but no DHCP anchor — adding here so a renaming/swapped
 #     MAC won't put their IP into the floating DHCP scope by accident.
 #
-# Schema: `unifi_user` in paultyng/unifi. Required: mac. Optional: name,
-# fixed_ip, network_id, note.
+# Schema: `unifi_client` in the ubiquiti-community/unifi fork (M125, 2026-07-02;
+# was `unifi_user` in the archived paultyng/unifi provider — same args:
+# required mac; optional name, fixed_ip, network_id, note).
+#
+# M125 state migration: the type rename unifi_user → unifi_client cannot be
+# expressed as a moved{} block (moved cannot change resource type) — existing
+# state entries are re-imported instead; see import-commands.sh alongside this
+# draft.
 #
 # Note: PVE (10.10.200.41) deferred — physical host, MAC requires SSH
 # lookup and wasn't reachable when this file was authored. Add later.
@@ -16,7 +22,7 @@
 # Imported reservations (10) — existing in UDM today.
 # =============================================================================
 
-resource "unifi_user" "hue1" {
+resource "unifi_client" "hue1" {
   mac        = "00:17:88:7a:1f:3f"
   name       = "hue1"
   fixed_ip   = "10.10.204.51"
@@ -25,11 +31,11 @@ resource "unifi_user" "hue1" {
 }
 
 import {
-  to = unifi_user.hue1
+  to = unifi_client.hue1
   id = "60915d81f2a1050260a93ad6"
 }
 
-resource "unifi_user" "hue2" {
+resource "unifi_client" "hue2" {
   mac        = "ec:b5:fa:34:ab:ef"
   name       = "hue2"
   fixed_ip   = "10.10.204.52"
@@ -38,12 +44,12 @@ resource "unifi_user" "hue2" {
 }
 
 import {
-  to = unifi_user.hue2
+  to = unifi_client.hue2
   id = "60915d5df2a1050260a935a4"
 }
 
 # Graham's original wired MBP MAC (pre-WiFi-only era). Kept for reference.
-resource "unifi_user" "mac_graham_wired" {
+resource "unifi_client" "mac_graham_wired" {
   mac        = "00:30:93:12:0c:f9"
   name       = "mac-graham-wired"
   fixed_ip   = "10.10.202.100"
@@ -52,11 +58,11 @@ resource "unifi_user" "mac_graham_wired" {
 }
 
 import {
-  to = unifi_user.mac_graham_wired
+  to = unifi_client.mac_graham_wired
   id = "609199a48af751055c6f7d15"
 }
 
-resource "unifi_user" "canon" {
+resource "unifi_client" "canon" {
   mac        = "f4:a9:97:ca:ca:a4"
   name       = "Canon MF743C"
   fixed_ip   = "10.10.202.50"
@@ -65,11 +71,11 @@ resource "unifi_user" "canon" {
 }
 
 import {
-  to = unifi_user.canon
+  to = unifi_client.canon
   id = "6099a2492d6b290436a8229f"
 }
 
-resource "unifi_user" "mac_graham" {
+resource "unifi_client" "mac_graham" {
   mac      = "f0:2f:4b:09:b9:b4"
   name     = "Grahams-MBP-WiFi"
   fixed_ip = "10.10.202.110"
@@ -77,11 +83,11 @@ resource "unifi_user" "mac_graham" {
 }
 
 import {
-  to = unifi_user.mac_graham
+  to = unifi_client.mac_graham
   id = "63f2e463ef3a475d6a8eb61b"
 }
 
-resource "unifi_user" "mac_workroom" {
+resource "unifi_client" "mac_workroom" {
   mac      = "2c:82:17:db:17:83"
   name     = "Workroom Mac Mini"
   fixed_ip = "10.10.202.101"
@@ -89,11 +95,11 @@ resource "unifi_user" "mac_workroom" {
 }
 
 import {
-  to = unifi_user.mac_workroom
+  to = unifi_client.mac_workroom
   id = "64a9fbfb6adaed18e78f29d4"
 }
 
-resource "unifi_user" "ups1" {
+resource "unifi_client" "ups1" {
   mac      = "28:29:86:36:d6:30"
   name     = "UPS1"
   fixed_ip = "10.10.200.10"
@@ -101,11 +107,11 @@ resource "unifi_user" "ups1" {
 }
 
 import {
-  to = unifi_user.ups1
+  to = unifi_client.ups1
   id = "67f8e8cda53ac25b1e041572"
 }
 
-resource "unifi_user" "ups2" {
+resource "unifi_client" "ups2" {
   mac      = "00:c0:b7:9f:b5:dd"
   name     = "UPS2"
   fixed_ip = "10.10.200.11"
@@ -113,11 +119,11 @@ resource "unifi_user" "ups2" {
 }
 
 import {
-  to = unifi_user.ups2
+  to = unifi_client.ups2
   id = "6808be9a044c620ffe187129"
 }
 
-resource "unifi_user" "pdu1" {
+resource "unifi_client" "pdu1" {
   mac      = "28:29:86:1a:60:4f"
   name     = "PDU1"
   fixed_ip = "10.10.200.15"
@@ -125,11 +131,11 @@ resource "unifi_user" "pdu1" {
 }
 
 import {
-  to = unifi_user.pdu1
+  to = unifi_client.pdu1
   id = "6808be9a044c620ffe18712a"
 }
 
-resource "unifi_user" "pdu2" {
+resource "unifi_client" "pdu2" {
   mac      = "00:c0:b7:e3:fe:da"
   name     = "PDU2"
   fixed_ip = "10.10.200.16"
@@ -137,7 +143,7 @@ resource "unifi_user" "pdu2" {
 }
 
 import {
-  to = unifi_user.pdu2
+  to = unifi_client.pdu2
   id = "67f8e8cda53ac25b1e041573"
 }
 
@@ -150,77 +156,77 @@ import {
 # PVE (10.10.200.41) deferred — physical host, will add after MAC lookup.
 # =============================================================================
 
-resource "unifi_user" "k8s_cp1" {
+resource "unifi_client" "k8s_cp1" {
   mac      = "bc:24:11:b1:c9:45"
   name     = "k8s-cp1"
   fixed_ip = "10.10.201.50"
   note     = "Kubernetes control plane 1 (managed by TF; see proxmox/k8s-vms)"
 }
 
-resource "unifi_user" "k8s_cp2" {
+resource "unifi_client" "k8s_cp2" {
   mac      = "bc:24:11:1b:17:14"
   name     = "k8s-cp2"
   fixed_ip = "10.10.201.51"
   note     = "Kubernetes control plane 2 (managed by TF; see proxmox/k8s-vms)"
 }
 
-resource "unifi_user" "k8s_cp3" {
+resource "unifi_client" "k8s_cp3" {
   mac      = "bc:24:11:3d:fd:d8"
   name     = "k8s-cp3"
   fixed_ip = "10.10.201.52"
   note     = "Kubernetes control plane 3 (managed by TF; see proxmox/k8s-vms)"
 }
 
-resource "unifi_user" "k8s_w1" {
+resource "unifi_client" "k8s_w1" {
   mac      = "bc:24:11:7a:47:f2"
   name     = "k8s-w1"
   fixed_ip = "10.10.201.53"
   note     = "Kubernetes worker 1 (managed by TF; see proxmox/k8s-vms)"
 }
 
-resource "unifi_user" "k8s_w2" {
+resource "unifi_client" "k8s_w2" {
   mac      = "bc:24:11:48:e4:57"
   name     = "k8s-w2"
   fixed_ip = "10.10.201.54"
   note     = "Kubernetes worker 2 (managed by TF; see proxmox/k8s-vms)"
 }
 
-resource "unifi_user" "k8s_w3" {
+resource "unifi_client" "k8s_w3" {
   mac      = "bc:24:11:df:b9:44"
   name     = "k8s-w3"
   fixed_ip = "10.10.201.55"
   note     = "Kubernetes worker 3 (managed by TF; see proxmox/k8s-vms)"
 }
 
-resource "unifi_user" "k8s_w4" {
+resource "unifi_client" "k8s_w4" {
   mac      = "bc:24:11:b8:d4:f8"
   name     = "k8s-w4"
   fixed_ip = "10.10.201.56"
   note     = "Kubernetes worker 4 (managed by TF; see proxmox/k8s-vms)"
 }
 
-resource "unifi_user" "k8s_gpu1" {
+resource "unifi_client" "k8s_gpu1" {
   mac      = "bc:24:11:04:fb:3f"
   name     = "k8s-gpu1"
   fixed_ip = "10.10.201.60"
   note     = "Kubernetes GPU worker (managed by TF; see proxmox/k8s-vms)"
 }
 
-resource "unifi_user" "dns_fallback" {
+resource "unifi_client" "dns_fallback" {
   mac      = "bc:24:11:4a:2c:36"
   name     = "dns-fallback"
   fixed_ip = "10.10.201.6"
   note     = "Technitium DNS fallback (managed by TF; see proxmox/standalone-vms)"
 }
 
-resource "unifi_user" "vpn_fallback" {
+resource "unifi_client" "vpn_fallback" {
   mac      = "bc:24:11:d4:cd:c1"
   name     = "vpn-fallback"
   fixed_ip = "10.10.201.15"
   note     = "WireGuard local site VM (managed by TF; see proxmox/standalone-vms)"
 }
 
-resource "unifi_user" "gh_runner" {
+resource "unifi_client" "gh_runner" {
   mac      = "bc:24:11:39:74:c7"
   name     = "gh-runner"
   fixed_ip = "10.10.201.30"
@@ -237,7 +243,7 @@ resource "unifi_user" "gh_runner" {
 # NOTE: the LACP "system MAC" (e2:83:54:f9:17:57 in /proc/net/bonding/lag0)
 # is a DIFFERENT concept — used only for LACP control-plane identification,
 # not for L2 data frames. Don't use that MAC for the reservation.
-resource "unifi_user" "sequoia" {
+resource "unifi_client" "sequoia" {
   mac      = "8c:30:66:c4:8d:45"
   name     = "sequoia"
   fixed_ip = "10.10.209.10"
@@ -255,7 +261,7 @@ resource "unifi_user" "sequoia" {
 # .201.50 → .210.50) for operator predictability.
 # =============================================================================
 
-resource "unifi_user" "k8s_cp1_storage" {
+resource "unifi_client" "k8s_cp1_storage" {
   mac        = "bc:24:11:f0:72:2d"
   name       = "k8s-cp1-storage"
   fixed_ip   = "10.10.210.50"
@@ -263,7 +269,7 @@ resource "unifi_user" "k8s_cp1_storage" {
   note       = "k8s-cp1 enp6s22 (Ceph storage NIC)"
 }
 
-resource "unifi_user" "k8s_cp2_storage" {
+resource "unifi_client" "k8s_cp2_storage" {
   mac        = "bc:24:11:b3:78:be"
   name       = "k8s-cp2-storage"
   fixed_ip   = "10.10.210.51"
@@ -271,7 +277,7 @@ resource "unifi_user" "k8s_cp2_storage" {
   note       = "k8s-cp2 enp6s22 (Ceph storage NIC)"
 }
 
-resource "unifi_user" "k8s_cp3_storage" {
+resource "unifi_client" "k8s_cp3_storage" {
   mac        = "bc:24:11:65:d7:b4"
   name       = "k8s-cp3-storage"
   fixed_ip   = "10.10.210.52"
@@ -279,7 +285,7 @@ resource "unifi_user" "k8s_cp3_storage" {
   note       = "k8s-cp3 enp6s22 (Ceph storage NIC)"
 }
 
-resource "unifi_user" "k8s_w1_storage" {
+resource "unifi_client" "k8s_w1_storage" {
   mac        = "bc:24:11:45:c6:11"
   name       = "k8s-w1-storage"
   fixed_ip   = "10.10.210.53"
@@ -287,7 +293,7 @@ resource "unifi_user" "k8s_w1_storage" {
   note       = "k8s-w1 enp6s22 (Ceph storage NIC)"
 }
 
-resource "unifi_user" "k8s_w2_storage" {
+resource "unifi_client" "k8s_w2_storage" {
   mac        = "bc:24:11:5b:7c:51"
   name       = "k8s-w2-storage"
   fixed_ip   = "10.10.210.54"
@@ -295,7 +301,7 @@ resource "unifi_user" "k8s_w2_storage" {
   note       = "k8s-w2 enp6s22 (Ceph storage NIC)"
 }
 
-resource "unifi_user" "k8s_w3_storage" {
+resource "unifi_client" "k8s_w3_storage" {
   mac        = "bc:24:11:85:54:6d"
   name       = "k8s-w3-storage"
   fixed_ip   = "10.10.210.55"
@@ -303,7 +309,7 @@ resource "unifi_user" "k8s_w3_storage" {
   note       = "k8s-w3 enp6s22 (Ceph storage NIC)"
 }
 
-resource "unifi_user" "k8s_w4_storage" {
+resource "unifi_client" "k8s_w4_storage" {
   mac        = "bc:24:11:f9:de:e3"
   name       = "k8s-w4-storage"
   fixed_ip   = "10.10.210.56"
@@ -311,7 +317,7 @@ resource "unifi_user" "k8s_w4_storage" {
   note       = "k8s-w4 enp6s22 (Ceph storage NIC)"
 }
 
-resource "unifi_user" "k8s_gpu1_storage" {
+resource "unifi_client" "k8s_gpu1_storage" {
   mac        = "bc:24:11:64:3c:2e"
   name       = "k8s-gpu1-storage"
   fixed_ip   = "10.10.210.60"
@@ -319,8 +325,9 @@ resource "unifi_user" "k8s_gpu1_storage" {
   note       = "k8s-gpu1 enp6s22 (Ceph storage NIC)"
 }
 
-# M128 (2026-07-02): vpn-local -> vpn-fallback (state-address migration).
-moved {
-  from = unifi_user.vpn_local
-  to   = unifi_user.vpn_fallback
-}
+# M128 (2026-07-02): vpn-local -> vpn-fallback. The moved{} block that handled
+# this state-address migration under paultyng (unifi_user.vpn_local →
+# unifi_user.vpn_fallback) was DELETED in the M125 conversion — a moved block
+# cannot change resource type, and the unifi_user → unifi_client migration is
+# handled by re-import instead (see import-commands.sh; the old unifi_user.*
+# state entries are state-rm'd, so there is nothing left to move).

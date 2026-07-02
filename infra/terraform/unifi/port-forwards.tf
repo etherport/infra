@@ -11,20 +11,34 @@
 # bridges to Talk on the LAN. Talk no longer faces the WAN. UniFi auto-creates
 # the matching "Allow Port Forward" firewall policy for each (External→Trusted).
 #
-# `port_forward_interface` is on every live record but the provider field is
-# being deprecated — added to `lifecycle.ignore_changes` to avoid noise.
+# M125 (2026-07-02): converted from the archived paultyng/unifi schema to the
+# ubiquiti-community/unifi fork v0.41.25 schema:
+#   - fwd_ip/fwd_port → forward = { ip, port }
+#   - dst_port → wan = { port } (fork nested `wan` attr: interface/ip_address/port)
+#   - src_ip → source_limiting = { ip, ... } (nested; still only in ignore_changes)
+#   - paultyng's flat `port_forward_interface` → the fork's `wan.interface` —
+#     it's on every live record, kept in `lifecycle.ignore_changes` to avoid noise.
+#   - `enabled` is deprecated in the fork (default on) — dropped.
 
 resource "unifi_port_forward" "twilio_media_signal" {
-  name     = "Twilio-Media-Signal"
-  enabled  = true
-  fwd_ip   = "10.10.201.40" # Asterisk SBC (was 10.10.199.1 Talk)
-  fwd_port = "10000-20000"  # Asterisk rtp.conf range (was 10000-60000)
-  dst_port = "10000-20000"
+  name = "Twilio-Media-Signal"
+  # M125: `enabled = true` dropped — deprecated in fork; default on.
   protocol = "udp"
 
+  forward = {
+    ip   = "10.10.201.40" # Asterisk SBC (was 10.10.199.1 Talk)
+    port = "10000-20000"  # Asterisk rtp.conf range (was 10000-60000)
+  }
+
+  wan = {
+    port = "10000-20000" # M125: was dst_port
+  }
 
   lifecycle {
-    ignore_changes = [port_forward_interface, src_ip]
+    # M125: was [port_forward_interface, src_ip] — mapped to the fork's
+    # wan.interface (nested path) + the whole source_limiting attribute
+    # (src_ip → source_limiting.ip).
+    ignore_changes = [wan, source_limiting] # fork reads wan.ip_address="any" but rejects it as config; ignore whole wan (masks wan.port drift — rule is static)
   }
 }
 
@@ -34,17 +48,27 @@ import {
 }
 
 resource "unifi_port_forward" "twilio_sip" {
-  name     = "Twilio-SIP"
-  enabled  = true
-  fwd_ip   = "10.10.201.40" # Asterisk SBC (was 10.10.199.1 Talk)
-  fwd_port = "5061"         # TLS SIP (was UDP 6767)
-  dst_port = "5061"
+  name = "Twilio-SIP"
+  # M125: `enabled = true` dropped — deprecated in fork; default on.
   protocol = "tcp" # TLS = TCP (was udp)
-  # src_ip omitted — live has null; inbound INVITEs are ACL'd to Twilio's
-  # signaling ranges at the Asterisk layer (pjsip identify), matching prior posture.
+
+  forward = {
+    ip   = "10.10.201.40" # Asterisk SBC (was 10.10.199.1 Talk)
+    port = "5061"         # TLS SIP (was UDP 6767)
+  }
+
+  wan = {
+    port = "5061" # M125: was dst_port
+  }
+  # source_limiting.ip omitted — live has null (was src_ip); inbound INVITEs are
+  # ACL'd to Twilio's signaling ranges at the Asterisk layer (pjsip identify),
+  # matching prior posture.
 
   lifecycle {
-    ignore_changes = [port_forward_interface, src_ip]
+    # M125: was [port_forward_interface, src_ip] — mapped to the fork's
+    # wan.interface (nested path) + the whole source_limiting attribute
+    # (src_ip → source_limiting.ip).
+    ignore_changes = [wan.interface, source_limiting]
   }
 }
 
@@ -54,16 +78,25 @@ import {
 }
 
 resource "unifi_port_forward" "wireguard_local" {
-  name     = "Wireguard Local"
-  enabled  = true
-  fwd_ip   = "10.10.201.20"
-  fwd_port = "9821"
-  dst_port = "9821"
+  name = "Wireguard Local"
+  # M125: `enabled = true` dropped — deprecated in fork; default on.
   protocol = "tcp_udp"
-  # src_ip omitted — live has null
+
+  forward = {
+    ip   = "10.10.201.20"
+    port = "9821"
+  }
+
+  wan = {
+    port = "9821" # M125: was dst_port
+  }
+  # source_limiting.ip omitted — live has null (was src_ip)
 
   lifecycle {
-    ignore_changes = [port_forward_interface, src_ip]
+    # M125: was [port_forward_interface, src_ip] — mapped to the fork's
+    # wan.interface (nested path) + the whole source_limiting attribute
+    # (src_ip → source_limiting.ip).
+    ignore_changes = [wan.interface, source_limiting]
   }
 }
 

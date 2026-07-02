@@ -3,14 +3,11 @@ terraform {
 
   required_providers {
     unifi = {
-      source = "paultyng/unifi"
-      # Archived upstream but still SERVES from the registry and works with our
-      # workarounds. M125 (migrate off it) was attempted TWICE on 2026-07-02 and
-      # cleanly reverted both times: the ubiquiti-community fork is NOT drop-in at
-      # ANY version — 0.54 renamed the resource types, and even its 0.41.25 changed
-      # the unifi_network arguments. Migrating = a real schema-diff project
-      # (args + possibly state mv), tracked as M125. Don't retry as a version swap.
-      version = "~> 0.41"
+      # M125 (2026-07-02): migrated to the maintained community fork via a FULL
+      # schema rewrite + state-rm/import session (replace-provider is unsafe across
+      # this fork's rewritten schemas — see docs/planning/outstanding-work.md M125).
+      source  = "ubiquiti-community/unifi"
+      version = "0.41.25"
     }
   }
 }

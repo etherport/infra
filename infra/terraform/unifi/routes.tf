@@ -28,7 +28,7 @@ resource "unifi_static_route" "aws_environment_udm" {
   network  = "10.10.100.0/22"
   next_hop = "10.10.201.20"
   type     = "nexthop-route"
-  distance = 0
+  distance = 1 # M125: fork validates 1-255; paultyng recorded 0 (controller default) — sole route per prefix, metric moot
 }
 
 import {
@@ -46,7 +46,7 @@ resource "unifi_static_route" "wg_tunnel_aws_udm" {
   network  = "10.255.255.0/30"
   next_hop = "10.10.201.20"
   type     = "nexthop-route"
-  distance = 0
+  distance = 1 # M125: fork validates 1-255; paultyng recorded 0 (controller default) — sole route per prefix, metric moot
 }
 
 import {
@@ -65,7 +65,7 @@ resource "unifi_static_route" "wg_client_tunnel_udm" {
   network  = "10.254.0.0/24"
   next_hop = "10.10.201.20"
   type     = "nexthop-route"
-  distance = 0
+  distance = 1 # M125: fork validates 1-255; paultyng recorded 0 (controller default) — sole route per prefix, metric moot
 }
 
 import {
