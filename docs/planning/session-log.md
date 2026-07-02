@@ -15,6 +15,21 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-02 (cont.) — Hit-list execution: H45a Cilium CVE, M122 update-automation, H45c CNPG operator ladder 1.24→1.30
+
+Owner: "check this morning's ai-advisor alerts and failed s3 sync task… then proceed automatically with your hit list… keep going autonomously… ask me questions along the way." Maximizing pre-5pm-reset token budget.
+
+**Morning triage (resolved):** s3-sync jobs all Complete on the new staggered schedule (M119) — the "failed sync" was the staggering doing its job. Real signals were cairn photos (mini-local, agent can't SSH — known photos saga) + a masked `fwupd-refresh` on dns-fallback + the pve memory alert perma-firing at 85.9%. Fixed the last one (`8e894a6`): excluded pve from the generic `ExternalHostHighMemory` 85% rule + added `PveHostMemoryPressure` at 94%/10m (the hypervisor legitimately runs hot).
+
+**H45a Cilium 1.18.6→1.18.11 (CVE-2026-49445) — DONE `a5784c7`:** installed helm v3.19 on the devbox (`~/.local/bin`; recorded in CLAUDE.md §4). `helm upgrade --reuse-values` threw a hubble.relay.logOptions nil-pointer template error → `--reset-then-reuse-values` worked BUT **re-enabled `policyAuditMode=true`** — the helm stored-values had drifted from the live ConfigMap hand-patches, so a reset-then-reuse silently reverted enforcement on all 6 netpol tiers. Caught it in the post-upgrade verify, fixed with `--set policyAuditMode=false` + `rollout restart ds/cilium`. Final verify: enforce mode, WG encryption on, BGP 8/8, 0 drops. **Lesson:** after any `--reset-then-reuse-values`, re-assert every hand-patched value that isn't in the stored helm values. Snapshot: `docs/reference/snapshots/cilium-helm-values.yaml`.
+
+**M122 update-automation blind spot — DONE `122caaa`:** renovate `flux` manager now watches `clusters/wind/helm-releases/**` (previously invisible — only gotk-components was covered); all 17 HelmReleases exact-pinned to deployed versions (ranges had silently frozen majors — alloy sat ~10 chart minors behind a `0.x` cap). Majors → individual hand-review PRs. **Correction:** the Grafana chart repo is NOT dead (the currency review's guess) — original repo serves current charts; the alloy staleness was the range cap, not the URL.
+
+**H45c CNPG operator 1.24.1→1.30.0 — DONE (operator); PG data-plane HELD:** laddered one minor at a time (CNPG's documented no-skip policy) through 1.25.1/1.26.1/1.27.1/1.28.1/1.29.1/1.30.0, verifying operator-image + both clusters healthy + `ContinuousArchiving=True` at each hop. **The Critical 9.4 (fixed ≥1.28.3) is resolved.** cue-db (single instance) restarts ~4-6 min per hop on RBD multi-attach detach-lag (self-clears via force-detach); postgres-cluster (HA 3) rolls with no downtime. A mid-ladder observation: kured ran a full-fleet reboot sweep (accumulated kernel updates, likely the M116 unattended-upgrades) — paused the ladder until all 8 nodes were schedulable to avoid compounding pod-move churn.
+- **HELD — H45d PG image 16.4→16.14:** cue-db depends on **pgvector** bundled in the operand image; CNPG changed extension bundling around 1.30, so a naive tag bump risks dropping pgvector → cue-api breakage. Classifier (correctly) blocked a direct SQL probe into the prod DB. Flagged to operator rather than done blind. postgres-cluster (no pgvector dep) can go first.
+
+**State:** Cilium + CNPG operator CVEs closed. Update automation now catches chart drift. **Next (operator-gated, batched as questions):** H45d PG image bump, H44 Authentik 8-hop (unpatched critical RCE — needs windows), H45b containerd (fold into M123 K8s window), M123 K8s 1.34 train, M125 unifi provider fork migration. Blocked-on-mini: cairn photos.
+
 ## 2026-07-02 — Fable-5 review of the aws-s3 backup app → fix set (status semantics, chat.db mid-run downgrade, settle-pass repair)
 
 Owner: "do a full review of this code using the fable 5 model", then "fix everything you can… give me a prompt for the infra agent" (who is separately investigating an overnight sync error — findings TBC; **hypothesis: the known chat.db false-corruption**, which this session's fix addresses).
