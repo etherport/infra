@@ -344,7 +344,9 @@ spec:
             - name: TECHNITIUM_URL
               value: "http://technitium-0.technitium-headless.dns.svc.cluster.local:5380"
             - name: SECONDARY_URLS
-              value: "http://technitium-1.technitium-headless.dns.svc.cluster.local:5380,http://10.10.201.6:5380,http://10.10.100.5:5380"
+              # M110 (2026-07-02): .10 = the consolidated edge box (DNS folded on). .5 stays
+              # in the list only until the standalone dns-aws box is destroyed — remove it then.
+              value: "http://technitium-1.technitium-headless.dns.svc.cluster.local:5380,http://10.10.201.6:5380,http://10.10.100.5:5380,http://10.10.100.10:5380"
             - name: TECHNITIUM_USER
               valueFrom:
                 secretKeyRef:
