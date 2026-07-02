@@ -1,7 +1,7 @@
 ---
 # Kubernetes version - must match what's currently deployed on control plane
 # API server is v1.34.2, upgrading nodes to match
-kube_version: 1.34.3
+kube_version: 1.35.0
 
 # Kubernetes configuration dirs and system namespace.
 # Those are where all the additional config stuff goes
