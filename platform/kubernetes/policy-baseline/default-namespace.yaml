@@ -1,0 +1,14 @@
+# M120/L27 (2026-07-01): adopt the built-in `default` namespace as a RESOURCE so
+# its PSS labels are GitOps-owned (it can't be a kustomize patch target — nothing
+# else creates it). default is EMPTY since the ceph-csi move; enforce=baseline
+# means anything that lands here gets admission guardrails (server dry-run was
+# clean at labeling time). If a privileged workload legitimately needs default
+# (it shouldn't — give it a namespace), this is the file to argue with.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: default
+  labels:
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline

@@ -6,5 +6,6 @@ kind: Kustomization
 # Namespaces created by sibling kustomizations like helm-releases/
 # monitoring.yaml). See 00-namespace-labels.yaml for the patch payload.
 resources:
+  - default-namespace.yaml   # M120/L27: PSS-enforce the (now-empty) default ns
   - limitranges/default-limits.yaml
   - resourcequotas/default-quota.yaml

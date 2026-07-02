@@ -1,5 +1,13 @@
 # Ceph CSI Storage
 
+> **M120 (2026-07-01):** the FULL ceph-csi stack (provisioner Deployment, node
+> DaemonSet, SAs, RBAC) is now codified in `platform/kubernetes/storage/ceph-csi/`
+> and runs in the **`ceph-csi` namespace** (it previously ran as an out-of-band
+> apply in `default`). The SC-referenced `csi-rbd-secret` lives in `ceph-csi`
+> (unchanged). ⚠️ History note: an out-of-band configmap copy in ceph-csi carried
+> the pre-VLAN-migration monitor `10.10.201.41` — git's `10.10.210.41` config is
+> authoritative; never hand-edit the live configmaps.
+
 ## Purpose
 Provide persistent volumes via Ceph RBD (preferred) or CephFS.
 

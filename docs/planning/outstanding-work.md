@@ -189,22 +189,22 @@ This file foregrounds open/in-progress/gated work._
 ### ✅ M114. authentik-server HA — DONE 2026-07-01 (`72cb120`), verified: replicas 2 on distinct nodes (w1+w4), zero-gap RollingUpdate, hostname topologySpread, PDB minAvailable 1, worker `ak healthcheck` probes. **Unblocked by dropping the RWO media PVC** (it held only the initContainer-regenerated login-bg.png → emptyDir now; future real media = RWX/S3 decision, don't re-add RWO). In-cluster `/-/health/ready/` = 200.
 - Same failure class as the just-fixed cue-api: every drain of its node takes down SSO (Grafana/wiki/Open WebUI + all forward-auth admin UIs). Server is stateless (shared HA postgres + redis) → safe at 2. **Fix:** replicas 2 + PDB minAvailable 1 + topologySpread (mirror `493868b`) + liveness/readiness on the worker. **Effort: S.**
 
-### ⏳ M115. authentik as the 6th NetworkPolicy-enforced tier
+### ✅ M115. authentik = 6th NetworkPolicy-enforced tier — DONE 2026-07-01 (`38da9a9`), verified: `15-tier-authentik.yaml` (ingress :9000 from traefik+blackbox-exporter+intra-ns; egress postgres :5432 + SES :587 + intra-ns; world :443 deliberately absent — update-check/analytics/gravatar all disabled). Full audit-toggle procedure: audit ON → label → 605 real flows observed, **0 would-be drops** → audit OFF → enforced-path verified (traefik-pod→authentik OK, probe_success=1, 0 DROPPED).
 - The SSO IdP (crown-jewel credential system) sits allow-all while `cue,dns,monitoring,postgres,traefik` are enforced; it's already a postgres-tier client so half its flows are mapped. **Fix:** the documented audit-on→observe→enforce procedure (`docs/runbooks/networkpolicy-tiers.md`). **Effort: M.**
 
-### ⏳ M116. k8s nodes (8 of 15 fleet hosts) have NO automated security patching
+### ✅ M116. k8s-node automated security patching — DONE 2026-07-01 (`f4bc0dd`), applied to all 8 nodes + spot-verified: NEW `k8s-unattended-upgrades.yml` (Ubuntu -security pocket only, `Automatic-Reboot=false`) — **kured owns reboots** (existing deploy: concurrency 1, nightly 02:00-06:00 PT window, watches /var/run/reboot-required, cordon+drain). kubelet/containerd are kubespray binaries, not apt packages — untouchable by the security origin.
 - `base.yml` is `hosts: all:!k8s_cluster` — nodes get no unattended-upgrades and none of the sshd baseline; the only patch path is the manual `k8s-node-patch.yml`. **Fix:** either a scheduled (monthly) dispatch of the rolling patch playbook, or a security-only unattended-upgrades profile on `k8s_cluster` with reboots left to kured. **Effort: M.**
 
 ### ✅ M117. metrics-server — DONE 2026-07-01 (`727a40d`), verified: HelmRelease (chart 3.13.0, kube-system, kubelet-insecure-tls) — `kubectl top nodes/pods` now works cluster-wide.
 - Blocks HPA, incident triage when the monitoring ns itself is down, and utilization-aware tooling. **Fix:** metrics-server via kubespray flag or a small HelmRelease. **Effort: S.**
 
-### ⏳ M118. Data-driven resource-request right-sizing (velero node-agent over; prometheus/alloy/tetragon under)
+### ✅ M118. Resource right-sizing — DONE 2026-07-01 (7d PromQL evidence), rolled + verified: velero node-agent 200m/256Mi→**25m/160Mi** (7d max incl. backups = 138Mi; freed ~1.4 CPU + ~0.8Gi schedulable); prometheus 512Mi req/2Gi lim→**2Gi/3Gi** (P95 1.83Gi — was <10% from OOM); alloy 128Mi→**384Mi** (P95 315Mi); tetragon 32Mi(kyverno-default)→**256Mi** (P95 219Mi; the HR requests hadn't been landing — fresh upgrade fixed it).
 - PromQL vs requests: 8× velero node-agent ~200m/200Mi each over-requested (~1.6 CPU + 1.6Gi reserved idle fleet-wide); prometheus runs ~1Gi ABOVE its 512Mi request, alloy ~175-217Mi over 128Mi/node, tetragon 50-155Mi over — under-requested pods burst into headroom the scheduler thinks is free and are first-evicted under pressure. **Fix:** lower node-agent, raise the three under-requesters to observed P95. **Effort: S.**
 
 ### ✅ M119. Backup thundering-herd stagger — DONE 2026-07-01 (`727a40d`,`6fa4f2d`), verified live: 7 s3-sync shares 01:00→01:50 at 10-min steps (scans suspended but slotted at 02:00); velero de-stacked to :00/:20/:40 (02:00,04:00 groups) + :00/:12/:24/:36/:48 (03:00 group).
 - All six s3-sync CronJobs fire at `0 1 * * *` (simultaneous UNAS+WAN hammer + shared-lock contention); 5 velero Schedules at exactly `0 3 * * *` drive the fs-backup/CNPG spike — same fan-out pattern that fed the 10:00 UTC etcd cascade. **Fix:** stagger minutes (01:00/01:15/… and 03:00/03:20/…). **Effort: S.**
 
-### ⏳ M120. ceph-csi lives in the unlabeled `default` namespace (+ empty `ceph-csi` ns, 50-day-old test PVC)
+### ✅ M120. ceph-csi codified + moved to its namespace — DONE 2026-07-01 (`8851750`), e2e-verified. Bigger than reported: the workloads (deploy/DS/SA/RBAC) ran 50d as an **out-of-band kubectl apply** (not in git at all), and the ceph-csi-ns configmap copy pointed at the **pre-VLAN-migration monitor 10.10.201.41** — a naive move would have broken all new volume ops. Codified the full stack from a cleaned live dump into `storage/ceph-csi/` (ns ceph-csi; git configmaps with the correct 10.10.210.41 overwrote the stale copy). Cutover: old deleted → Flux applied new → **one gotcha: the old pods' termination deleted the new registrar's socket** (plugins_registry emptied post-registration) → DS restart re-registered 5/5 → **acid test green** (PVC provision→attach→mount→write→delete all through the moved stack; 22 existing Bound PVCs unaffected). default ns now EMPTY + PSS enforce=baseline (adopted as a git resource in policy-baseline/); 50d rbd-test-pvc deleted; provisioner PDB moved with the workload.
 - The privileged CSI DS + provisioner run in `default`, which has no PSA label (anything landing there gets zero admission guardrails); the intended `ceph-csi` ns exists but is empty; `default/rbd-test-pvc` (1Gi) has lingered 50d. **Fix:** migrate CSI into `ceph-csi` (careful — storage path), or at minimum PSA-label `default`, delete the test PVC + decide the empty ns. **Effort: M (move) / S (label+PVC).**
 
 ### ✅ M121. Drift plan redaction — DONE 2026-07-01 (`35dce3a`): plan.txt redacted to structure-only lines (Plan: summary + resource headers) before artifact upload AND the drift-issue embed; attribute values no longer leave the run.
@@ -358,10 +358,10 @@ orphaned. Not service-affecting on its own.
 ### ✅ L28. DONE 2026-07-01 (`35dce3a`) — no_log on the 3 token-in-URL tasks; structurally verified every technitium_token task now carries it.
 - They pass `?token={{ technitium_token }}` in the URL — the admin DNS token lands in ansible output on failure/`-v` (the user/password tasks nearby DO have `no_log`). (#18.) **Effort: S.**
 
-### ⏳ L29. Loki per-stream rate limits + shorter retention for audit streams
+### ✅ L29. Loki per-stream limits — DONE 2026-07-01: per_stream_rate_limit 3MB/10MB-burst + 7d retention_stream for hubble-audit + tetragon export (selectors verified against the actual ruler rules). loki-0 restarted clean.
 - Global limits only today — a hubble-audit/tetragon runaway can eat the whole 10MB/s tenant budget; 30d retention applies uniformly to high-volume audit streams. (#19.) **Effort: S.**
 
-### ⏳ L30. PDBs for `coredns`/`cilium-operator`/`csi-rbdplugin-provisioner`; scope velero RBAC below `cluster-admin`
+### 🟡 L30. Infra PDBs DONE 2026-07-01 (coredns/cilium-operator/csi-provisioner, minAvailable 1, selectors verified, live). **velero cluster-admin deliberately KEPT** — restore must create arbitrary resources incl. RBAC; scoping it risks silently breaking DR. Documented decision; close unless posture changes.
 - Drains can momentarily evict both replicas of cluster DNS; velero needs broad-but-not-cluster-admin. (#20.) **Effort: S.**
 
 ### 🟡 L31. Minor hygiene batch — email_fwd abort-MPU DONE 2026-07-01 (applied via terraform-s3); WG-key item moot (workflow deleted); ⏳ remaining: codify SSE blocks on the 7 buckets relying on AWS-default SSE-S3 (parity only).
