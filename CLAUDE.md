@@ -14,14 +14,17 @@ and the rules for keeping the project's durable memory current.
 
 1. **`README.md`** (repo root) — project overview, architecture diagram, "How to
    apply changes", documentation map. The canonical reference.
-2. **`docs/planning/outstanding-work.md`** — the **live to-do tracker**. Items keep
+2. **`docs/guides/agent-operating-principles.md`** — the **operating charter**:
+   change/verification/diagnosis/doc discipline, safety rails, when to ask the
+   operator. **Binding for any agent, any model.**
+3. **`docs/planning/outstanding-work.md`** — the **live to-do tracker**. Items keep
    stable IDs (`H29`, `M53`, `L21`…) across revisions so history is grep-able.
    Status legend: ✅ done · 🟡 in progress · ⏳ pending · 📋 drafted/awaiting apply.
-3. **`docs/planning/session-log.md`** — **narrative journal** of what each working
+4. **`docs/planning/session-log.md`** — **narrative journal** of what each working
    session did, why, and how to resume. Read the latest entries to know where we
    left off. This is the "pick up after a chat-history loss" artifact.
-4. **`docs/README.md`** — index into `docs/{architecture,runbooks,operations,reference,setup,guides,planning}`.
-5. User's Claude Code memory lives outside the repo, **per-machine**. On the **devbox**
+5. **`docs/README.md`** — index into `docs/{architecture,runbooks,operations,reference,setup,guides,planning}`.
+6. User's Claude Code memory lives outside the repo, **per-machine**. On the **devbox**
    (where dev sessions run): `~/.claude/projects/-home-ubuntu-code-infra/memory/`
    (`MEMORY.md` + files); the mini has its own under `-Users-grahamsmith-code-infra/`.
    It holds operator preferences + cross-session facts. Repo `CLAUDE.md` is the
@@ -321,7 +324,7 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
 
 ## 6. Maintenance rules (keep this memory alive)
 
-**Docs are part of the change, not an afterthought.** Treat documentation like code:
+**Docs are part of the change, not an afterthought** (charter D1 — the full operating discipline lives in `docs/guides/agent-operating-principles.md`; this section is the doc-maintenance subset). Treat documentation like code:
 if a change alters documented behavior, update the relevant docs **in the same change
 (or an immediate follow-up commit)**. A change isn't done until its docs are current.
 This applies to **everything** — not just the handoff files:
@@ -354,8 +357,8 @@ This applies to **everything** — not just the handoff files:
 5. **Save durable, non-obvious cross-session facts** to the user's Claude Code memory
    (`~/.claude/projects/.../memory/`) too, with a one-line pointer in its `MEMORY.md`.
 6. Commit docs together with the change they describe (or as a follow-up commit). The
-   mini auto-pushes `main`; docs/ and this file are **not** Flux-reconciled (Flux only
+   headless agent hosts (devbox — M81) auto-push `main`; docs/ and this file are **not** Flux-reconciled (Flux only
    watches `clusters/wind`), so committing them is purely for durable handoff.
 
-> If you're a fresh agent: skim §1's four files, then check the newest
+> If you're a fresh agent: skim §1's files (charter included), then check the newest
 > `session-log.md` entry for the current frontier. That's enough to pick up.

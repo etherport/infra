@@ -276,6 +276,11 @@ gh workflow run terraform-<project>.yml -f action=plan
 gh workflow run terraform-<project>.yml -f action=apply
 ```
 
+> **From the devbox there is no `gh` CLI** — dispatch workflows via the GitHub REST API
+> with the M92 PAT (`github_dispatch_pat` in the SOPS ops bundle); snippets in
+> [`infra/devbox/README.md`](infra/devbox/README.md). This applies to every `gh workflow run`
+> example in this README.
+
 Project → workflow map:
 
 | Module | Workflow |

@@ -158,6 +158,7 @@ docs/
 
 | Document | Description |
 |----------|-------------|
+| [agent-operating-principles.md](guides/agent-operating-principles.md) | **The operating charter** — binding agent discipline (change/verification/diagnosis/docs/safety), model-agnostic |
 | [vpn-split-tunnel.md](guides/vpn-split-tunnel.md) | NordVPN + Tailscale split-tunnel setup |
 | [localtuya/](guides/archive/localtuya-2026-01/) | LocalTuya setup for IoT devices (archived 2026-01) |
 
