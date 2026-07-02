@@ -86,7 +86,7 @@ ansible dns_servers -i inventory/wind/inventory.ini -i inventory/aws/inventory.i
 | wireguard.yml | WireGuard config (server + keepalived for vpn-local) | vpn_servers |
 | technitium.yml | Technitium DNS install + cluster bootstrap | dns_servers |
 | swap.yml | Provision swap files on standalone VMs | dns_servers + vpn_servers |
-| cloudwatch-agent.yml | Install AWS cw-agent on external VMs (dns-aws, vpn-aws) | aws hosts |
+| cloudwatch-agent.yml | Install AWS cw-agent on the edge box (vpn-aws) | aws hosts |
 | etcd-backup.yml | Install systemd timer for daily etcd snapshots | k8s_cp |
 | etcd-defrag.yml | Install weekly staggered etcd defrag timer (H41 — reclaims boltdb fragmentation) | k8s_cp |
 | proxmox.yml + proxmox-setup.yml | PVE host management (root-over-key, see `pve-ansible-model`) | proxmox_hosts |
@@ -256,7 +256,7 @@ kubectl logs -n flux-system deployment/kustomize-controller
 
 - Primary: https://dns.wind.etherport.net:5380
 - Fallback: http://10.10.201.6:5380
-- AWS: http://10.10.100.5:5380
+- AWS edge box (vpn-aws): http://10.10.100.10:5380
 
 Credentials: See 1Password "Technitium DNS"
 
@@ -268,7 +268,7 @@ dig @10.10.201.71 k8s-cp1.wind.etherport.net
 dig @10.10.201.6 google.com
 
 # Check all cluster nodes
-for ip in 10.10.201.71 10.10.201.72 10.10.201.6 10.10.100.5; do
+for ip in 10.10.201.71 10.10.201.72 10.10.201.6 10.10.100.10; do
   echo "$ip: $(dig @$ip k8s-cp1.wind.etherport.net +short)"
 done
 ```
@@ -496,5 +496,5 @@ If site-to-site VPN is down:
 If DNS is failing:
 1. Check cluster DNS: `dig @10.10.201.71 google.com`
 2. Check fallback: `dig @10.10.201.6 google.com`
-3. Check AWS: `dig @10.10.100.5 google.com` (via VPN)
+3. Check AWS edge box: `dig @10.10.100.10 google.com` (via VPN)
 4. Access Technitium web UI to check cluster status

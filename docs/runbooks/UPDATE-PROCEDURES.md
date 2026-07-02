@@ -49,9 +49,8 @@ DAILY (Automatic - no action needed)
   ~04:00        Security patches installed (unattended-upgrades)
   02:00-06:00   K8s node reboots if needed (Kured, one at a time)
   02:00         dns-fallback reboot window
-  02:30         dns-aws reboot window
   03:00         vpn-local reboot window
-  03:30         vpn-aws reboot window
+  03:30         vpn-aws (edge box) reboot window
 
 WEEKLY (Review required)
 ──────────────────────────────────────────────────────────────────
@@ -155,17 +154,17 @@ ansible k8s_cluster -i infra/ansible/inventory/wind/inventory.ini \
 ### 1.3 Standalone VM OS
 
 There are **6 local PVE standalone VMs** (1001 dns-fallback, 1002 vpn-local,
-1003 gh-runner, 1004 asterisk-sbc, 1005 devbox, 1006 step-ca) **+ 2 AWS VMs**
-(dns-aws, vpn-aws). Only the 4 below have explicit staggered reboot windows; the
-other VMs reboot on the default schedule.
+1003 gh-runner, 1004 asterisk-sbc, 1005 devbox, 1006 step-ca) **+ 1 AWS VM**
+(vpn-aws — the single `private-infra_edge` box running VPN + Tailscale + DNS since
+M110). Only the 3 below have explicit staggered reboot windows; the other VMs
+reboot on the default schedule.
 
 **VMs with staggered reboot windows:**
 | VM | IP | Purpose | Reboot Time |
 |----|-----|---------|-------------|
 | dns-fallback | 10.10.201.6 | Backup DNS | 02:00 |
-| dns-aws | 10.10.100.5 | AWS DNS | 02:30 |
 | vpn-local | 10.10.201.15 | Local VPN | 03:00 |
-| vpn-aws | 10.10.100.10 | AWS VPN | 03:30 |
+| vpn-aws | 10.10.100.10 | AWS edge (VPN + DNS + Tailscale) | 03:30 |
 
 **Monitor:**
 ```bash

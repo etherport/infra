@@ -6,13 +6,16 @@ This runbook covers the process of migrating critical infrastructure instances
 for scenarios like EBS encryption, instance type changes, or disaster recovery.
 
 **Covered instances:**
-- AWS EC2: vpn-aws, dns-aws
+- AWS EC2: vpn-aws (the single `private-infra_edge` box — runs WireGuard, Tailscale, **and** Technitium DNS)
 - Proxmox: vpn-local, dns-fallback
 
-> 🟡 **M110 (2026-07, in progress):** `vpn-aws` was resized to **t4g.small** (AWS tag
-> renamed `private-infra_vpn` → `private-infra_edge`, 2026-07-01); `dns-aws` is being
-> consolidated onto that box and will be **destroyed** — its section below becomes
-> historical once M110 lands.
+> **M110 done (2026-07-02):** `vpn-aws` was resized to **t4g.small** (AWS tag renamed
+> `private-infra_vpn` → `private-infra_edge`, 2026-07-01) and Technitium DNS was folded
+> onto it. The former separate `dns-aws` instance was **destroyed** and its EIP
+> `52.40.219.113` **released**. There is now exactly one standing AWS EC2 instance; the
+> "DNS Instance Migration" steps below now target that edge box (`vpn-aws`,
+> 10.10.100.10). **Residual (pending):** the edge box still uses the static
+> `automation@homelab` bootstrap key for SSH — it is not yet on cert-only SSH.
 
 ## Prerequisites
 
@@ -20,7 +23,9 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
   hold no standing AWS/PVE creds. Dispatch the relevant workflow (see each "Apply
   Terraform" step). To dispatch you need the Actions:write PAT (M92) / `gh`.
 - Age key available for SOPS decryption
-- SSH access to existing instances (cert-only, M76 — `ssh ubuntu@<host>`)
+- SSH access to existing instances (cert-only, M76 — `ssh ubuntu@<host>`). **Exception:** the
+  AWS edge box (`vpn-aws`) is still on the static `automation@homelab` bootstrap key (not yet
+  cert-only — M110 residual).
 - Ansible installed (the playbook steps still run locally)
 - **Rare local-debug TF escape hatch (M82):** render throwaway creds with
   `scripts/render-aws-credentials.sh` (writes `~/.aws` `[homelab]` from SOPS) and,
@@ -30,19 +35,12 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 
 ## Architecture
 
-### VPN Instance (vpn-aws)
-- **Purpose**: Site-to-site VPN hub, remote access VPN
+### Edge Instance (vpn-aws / `private-infra_edge`)
+- **Purpose**: Site-to-site VPN hub, remote access VPN, Tailscale subnet-router/exit-node, **and** Technitium DNS (folded on in M110)
 - **Private IP**: 10.10.100.10 (must be preserved)
 - **Public IP**: 44.240.60.80 (EIP - preserved automatically)
-- **Services**: WireGuard (wg0, wg1), nftables
-- **Config stored in**: `platform/wireguard/servers/vpn-aws.sops.yaml`
-
-### DNS Instance (dns-aws)
-- **Purpose**: Remote DNS server, Technitium cluster member
-- **Private IP**: 10.10.100.5 (must be preserved)
-- **Public IP**: EIP (preserved automatically)
-- **Services**: Technitium DNS Server
-- **Config**: Part of DNS cluster, syncs automatically
+- **Services**: WireGuard (wg0, wg1), nftables, tailscaled, Technitium DNS Server
+- **Config stored in**: `platform/wireguard/servers/vpn-aws.sops.yaml`; Technitium is part of the DNS cluster and syncs automatically
 
 ---
 
@@ -121,49 +119,44 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 
 ---
 
-## DNS Instance Migration
+## DNS Role Migration (Technitium on the edge box)
+
+Since M110, Technitium DNS runs on the single edge box (`vpn-aws`, 10.10.100.10) — there
+is no separate `dns-aws` instance. If you recreate the edge box (see "VPN Instance
+Migration" above), also restore the Technitium role on it with the steps below. There is
+no separate compute apply for DNS — the box is the same one.
 
 ### Pre-Migration
 
 1. **Backup Technitium config**
    ```bash
-   ssh ubuntu@10.10.100.5 "sudo tar -czvf /tmp/technitium-backup.tar.gz -C /opt/technitium config/"
-   scp ubuntu@10.10.100.5:/tmp/technitium-backup.tar.gz ./backups/technitium-backup-$(date +%Y%m%d).tar.gz
+   ssh ubuntu@10.10.100.10 "sudo tar -czvf /tmp/technitium-backup.tar.gz -C /opt/technitium config/"
+   scp ubuntu@10.10.100.10:/tmp/technitium-backup.tar.gz ./backups/technitium-backup-$(date +%Y%m%d).tar.gz
    ```
 
 ### Migration Steps
 
-1. **Update Terraform config** (`infra/terraform/aws/compute/main.tf`)
-   - Verify `private_ip = "10.10.100.5"` is set
-   - Comment out `prevent_destroy = true` (temporarily)
+1. **Compute is the edge box** — the instance itself is created/recreated by the "VPN
+   Instance Migration" steps above (`terraform-compute.yml`). No separate DNS instance.
 
-2. **Apply Terraform** — dispatch the `Compute Terraform` workflow
-   (`terraform-compute.yml`, AWS via OIDC); `action=plan` then `action=apply`.
-   ```bash
-   gh workflow run terraform-compute.yml -f action=plan
-   gh workflow run terraform-compute.yml -f action=apply
-   ```
-
-3. **Run Technitium Ansible playbook with restore**
+2. **Run Technitium Ansible playbook with restore**
    ```bash
    cd infra/ansible
-   ansible-playbook -i inventory/aws/ playbooks/technitium.yml --limit dns-aws \
+   ansible-playbook -i inventory/aws/ playbooks/technitium.yml --limit vpn-aws \
      -e "technitium_restore_backup=../../backups/technitium-backup-YYYYMMDD.tar.gz"
    ```
 
    Or, if DNS cluster is healthy, let it sync automatically:
    ```bash
-   ansible-playbook -i inventory/aws/ playbooks/technitium.yml --limit dns-aws
+   ansible-playbook -i inventory/aws/ playbooks/technitium.yml --limit vpn-aws
    # Then join cluster via web UI
    ```
 
-4. **Restore lifecycle protection**
-
 ### Post-Migration Verification
 
-- [ ] Technitium web UI accessible at `http://10.10.100.5:5380`
-- [ ] DNS resolution working (`dig @10.10.100.5 google.com`)
-- [ ] Internal zones resolving (`dig @10.10.100.5 grafana.wind.etherport.net`)
+- [ ] Technitium web UI accessible at `http://10.10.100.10:5380`
+- [ ] DNS resolution working (`dig @10.10.100.10 google.com`)
+- [ ] Internal zones resolving (`dig @10.10.100.10 grafana.wind.etherport.net`)
 - [ ] Cluster sync status healthy (check web UI)
 
 ---
@@ -282,7 +275,7 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
    - Access `http://10.10.201.6:5380`
    - Set admin password
    - Go to Settings → Cluster
-   - Add cluster peers: 10.10.201.5, 10.10.100.5
+   - Add cluster peers: 10.10.201.5, 10.10.100.10 (edge box)
    - Zones will sync automatically
 
 ### Post-Migration Verification
@@ -302,25 +295,22 @@ If instances are lost and need to be recreated from scratch:
 
 **AWS Instances:**
 
-1. **vpn-aws**
+1. **vpn-aws** (the single `private-infra_edge` box — VPN + Tailscale + DNS)
    - Terraform will recreate with correct settings
    - Run WireGuard playbook (keys are in SOPS)
    - Update route_tables.tf with new ENI
    - Local site will auto-reconnect (PersistentKeepalive=25)
-
-2. **dns-aws**
-   - Terraform will recreate with correct settings
-   - Run Technitium playbook with backup restore
-   - Or configure fresh instance and join cluster
+   - Then restore the DNS role: run the Technitium playbook (`--limit vpn-aws`) with
+     backup restore, or configure fresh and let the cluster sync
 
 **Proxmox Instances:**
 
-3. **vpn-local**
+2. **vpn-local**
    - Terraform will recreate VM from cloud-init template
    - Run WireGuard playbook (keys are in SOPS)
    - AWS side will reconnect automatically
 
-4. **dns-fallback**
+3. **dns-fallback**
    - Terraform will recreate VM from cloud-init template
    - Run Technitium playbook
    - Join cluster via web UI (zones sync automatically)

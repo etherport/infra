@@ -103,7 +103,7 @@ WireGuard tunnel; see note), **Hotspot** (Guest/206), **DMZ** (unused).
 > **Custom zones default intra-zone to BLOCK** (the built-in `Internal` has a predefined intra-zone Allow;
 > custom zones do not). This bites `Trusted` on **hairpin routes** — the AWS static route's next-hop
 > `10.10.201.20` is back inside 201, so the UDM sees `Trusted→Trusted` and drops it (symptom:
-> `dns-aws`/`vpn-aws` `TargetDown`). The explicit `Trusted → Trusted` allow in `udm-firewall.yml` fixes it.
+> `vpn-aws` (the AWS edge box) `TargetDown`). The explicit `Trusted → Trusted` allow in `udm-firewall.yml` fixes it.
 
 > **VPN zone clarification.** The `Vpn` zone holds **only the UDM's built-in backup WireGuard tunnel**. The
 > **primary** k8s + `vpn-local` WireGuard runs on Servers/201 behind the Keepalived VIP `10.10.201.20`

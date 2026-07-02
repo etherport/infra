@@ -4,7 +4,7 @@
 
 Site-to-site VPN connecting local homelab to AWS.
 
-> The public edge is the **Cloudflare Tunnel + Access** — this site-to-site tunnel carries only AWS↔homelab traffic (dns-aws replica sync, monitoring, ansible management). It once fronted the AWS ALB ingress path; that history is in [`../runbooks/archive/alb-decom.md`](../runbooks/archive/alb-decom.md).
+> The public edge is the **Cloudflare Tunnel + Access** — this site-to-site tunnel carries only AWS↔homelab traffic (Technitium DNS replica sync on the edge box, monitoring, ansible management). It once fronted the AWS ALB ingress path; that history is in [`../runbooks/archive/alb-decom.md`](../runbooks/archive/alb-decom.md).
 
 **Note:** For remote client access, [Tailscale](vpn-tailscale.md) is the primary solution.
 

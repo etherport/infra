@@ -18,24 +18,21 @@ AWS holds no public HTTPS entry point for `*.wind.etherport.net`. See
 ```
                                    Internet
                                       |
-                    +-----------------+------------------+
-                    |                                    |
-                    v                                    v
-              +-------------+                  +---------------+
-              | DNS Server  |                  | VPN Server    |
-              | Port 53     |                  | Port 51820-21 |
-              +------+------+                  +-------+-------+
-                     |                                  |
-                     v                                  v
-                +--------+                       +-----------+
-                |dns-aws |                       | vpn-aws   |
-                |10.10.  |                       | 10.10.    |
-                |100.5   |                       | 100.10    |
-                +--------+                       +-----+-----+
-                                                       |
-                    +--------+                         | WireGuard Tunnel
-                             |                         | (wg0: site-to-site)
-                             v                v
+                                      v
+                         +---------------------------+
+                         | Edge box (private-        |
+                         | infra_edge, host vpn-aws) |
+                         |   DNS         :53         |
+                         |   WireGuard   :51820-21   |
+                         |   Tailscale (subnet-      |
+                         |     router + exit node)   |
+                         |   10.10.100.10 /          |
+                         |   EIP 44.240.60.80        |
+                         +-------------+-------------+
+                                       |
+                                       | WireGuard Tunnel
+                                       | (wg0: site-to-site)
+                                       v
                     +-----------------------------------------+
                     |     Homelab (10.10.192.0/19)           |
                     |                                         |
@@ -69,16 +66,27 @@ AWS holds no public HTTPS entry point for `*.wind.etherport.net`. See
 
 | Name | Instance ID | Private IP | Public IP | Type | Purpose |
 |------|-------------|------------|-----------|------|---------|
-| private-infra_edge | `i-011086cefc7ab3cc1` | 10.10.100.10 | 44.240.60.80 | t4g.small | Multi-service edge box (hostname `vpn-aws`): WireGuard VPN gateway; renamed from `private-infra_vpn` + resized from t4g.nano 2026-07-01 (M110) |
-| private-infra_dns | `i-050de21bdad2603bb` | 10.10.100.5 | 52.40.219.113 | t4g.nano | Technitium DNS (failover, hostname `dns-aws`) |
+| private-infra_edge | `i-011086cefc7ab3cc1` | 10.10.100.10 | 44.240.60.80 | t4g.small | **Single standing edge box** (hostname `vpn-aws`): WireGuard site-to-site (wg0) + remote-client (wg1) gateway, Tailscale subnet-router/exit-node, **and Technitium DNS** (folded on in M110). Renamed from `private-infra_vpn` + resized from t4g.nano 2026-07-01 (M110). |
 
-> **🟡 M110 consolidation in progress (2026-07):** Technitium DNS is being folded onto
-> the `private-infra_edge` box; `private-infra_dns` will then be **destroyed** and its
-> EIP `52.40.219.113` released. Update this table (and every `10.10.100.5` /
-> `52.40.219.113` reference) when that lands — see M110 in
+> **M110 consolidation complete (2026-07-02):** Technitium DNS was folded onto the
+> `private-infra_edge` box; the former separate `private-infra_dns` instance was
+> **destroyed** and its EIP `52.40.219.113` **released**. DNS now answers on the edge
+> EIP `44.240.60.80` and private `10.10.100.10` (~47 records synced). There is now
+> exactly **one** standing AWS EC2 instance. See M110 in
 > `docs/planning/outstanding-work.md`.
+> **Residual (pending):** the edge box still uses the static `automation@homelab`
+> bootstrap key for SSH (cloud-init seed) — it is **not** yet on cert-only SSH.
 
 ## Security Groups
+
+> **M110 (2026-07-02):** the two security groups below (`vpn-server_sg` + `dns-server_sg`)
+> are BOTH now attached to the single `private-infra_edge` box (`aws_instance.vpn`
+> `vpc_security_group_ids`), plus `internal-comms_sg` + `allow-ssh_sg`. Folding the DNS
+> role onto the edge box brought the `dns-server_sg` `:53` rules with it, so the
+> `dns_restrict_ip` Lambda keeps managing the WAN-IP `:53` allows on that same SG — DNS
+> failover self-heals exactly as before. No SG was deleted in the consolidation.
+> ⏳ **Pending (SG redesign residual, F1-F7):** delete the unused `internal_aws_spokes`
+> /19 and port-scope the remaining `-1` (all-ports) rules.
 
 ### VPN Server Security Group (`sg-08323ff8e98ecb563`)
 **Name:** `vpn-server_sg`
@@ -238,7 +246,7 @@ All Lambda functions are managed via Terraform modules in `infra/terraform/aws/`
 
 ### EC2 Instance Profile
 
-Both vpn-aws and dns-aws use the IAM instance profile:
+The edge box (`vpn-aws`) uses the IAM instance profile:
 - `arn:aws:iam::830881980142:instance-profile/ec2-cloudwatch-agent`
 
 This allows the CloudWatch agent to publish metrics and logs.
@@ -251,18 +259,16 @@ and the per-service `terraform-*.json` documents). Don't hand-author it here.
 
 ## Services Running
 
-### vpn-aws
+### private-infra_edge (`vpn-aws`)
+
+All roles run on the single edge box:
 
 | Service | Status | Description |
 |---------|--------|-------------|
 | wg-quick@wg0 | enabled | Site-to-site VPN to homelab |
 | wg-quick@wg1 | enabled | Remote access VPN for mobile |
-
-### dns-aws
-
-| Service | Status | Description |
-|---------|--------|-------------|
-| technitium | enabled | Technitium DNS Server |
+| tailscaled | enabled | Tailscale subnet-router + exit node |
+| technitium | enabled | Technitium DNS Server (folded on in M110) |
 
 ## Ansible Management
 
@@ -291,8 +297,8 @@ ansible-playbook -i inventory/aws/ playbooks/base.yml --check --diff
 | Playbook | Purpose |
 |----------|---------|
 | base.yml | System config: timezone, NTP, unattended-upgrades, SSH hardening |
-| wireguard.yml | WireGuard VPN configuration (vpn-aws only) |
-| technitium.yml | Technitium DNS Server installation (dns-aws only) |
+| wireguard.yml | WireGuard VPN configuration (edge box) |
+| technitium.yml | Technitium DNS Server installation (edge box, folded on in M110) |
 
 ### Inventory Structure
 
@@ -307,12 +313,12 @@ infra/ansible/inventory/aws/
 
 1. **WireGuard VPN must be up** - All management traffic flows over VPN
 2. **SSH via VPN** - No public SSH access, use VPN tunnel
-3. **DNS via VPN** - dns-aws only accessible from VPN networks
+3. **DNS on the edge box** - Technitium answers on the edge EIP `44.240.60.80` and private `10.10.100.10`
 
 ## Cost Optimization
 
 - Using Graviton (ARM64) instances for ~20% cost savings
-- t4g.small for the edge box (resized from t4g.nano 2026-07-01, M110), t4g.nano for DNS (until consolidated)
+- t4g.small for the single edge box (resized from t4g.nano 2026-07-01, M110; the separate t4g.nano DNS box was destroyed once DNS folded onto the edge box)
 - No NAT Gateway (using Internet Gateway + public IP for VPN)
 - S3-native Terraform state locking (`use_lockfile=true` — no DynamoDB table)
 - Lambda on ARM64 architecture

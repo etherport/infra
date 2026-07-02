@@ -4,7 +4,7 @@ Two related rules (split by name 2026-06-30 — see note):
 - **`dns-services / TechnitiumDNSDown`** (this name) — in-cluster `technitium`
   StatefulSet has <2 ready replicas for 3 minutes. **Auto-remediation: `restart_pods`.**
 - **`dns-service.rules / TechnitiumExternalHostDown`** (renamed) — external Technitium
-  hosts (dns-aws, dns-fallback) unreachable for 1 minute. **No auto-action.**
+  hosts (the AWS edge box `vpn-aws`, dns-fallback) unreachable for 1 minute. **No auto-action.**
 
 > **Why the rename (2026-06-30):** the two alerts previously shared the name
 > `TechnitiumDNSDown`. The auto-remediation controller matches by alertname only, so an

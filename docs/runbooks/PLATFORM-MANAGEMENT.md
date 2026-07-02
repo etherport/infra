@@ -26,9 +26,9 @@ High-level overview of the homelab infrastructure with links to detailed runbook
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                    Standalone VMs (Non-K8s)                          │   │
 │  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐   │   │
-│  │  │dns-fallback │ │ vpn-local   │ │  dns-aws    │ │  vpn-aws    │   │   │
-│  │  │ 10.10.201.6 │ │10.10.201.15 │ │ 10.10.100.5 │ │10.10.100.10 │   │   │
-│  │  │ Technitium  │ │ WireGuard   │ │ Technitium  │ │ WireGuard   │   │   │
+│  │  │dns-fallback │ │ vpn-local   │ │  edge box   │ │ dns-aws:    │   │   │
+│  │  │ 10.10.201.6 │ │10.10.201.15 │ │10.10.100.10 │ │ removed     │   │   │
+│  │  │ Technitium  │ │ WireGuard   │ │ WG+DNS+TS   │ │ (M110)      │   │   │
 │  │  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘   │   │
 │  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐   │   │
 │  │  │ gh-runner   │ │asterisk-sbc │ │   devbox    │ │  step-ca    │   │   │
@@ -47,10 +47,12 @@ High-level overview of the homelab infrastructure with links to detailed runbook
 > NB: there is **no HA API VIP** — `controlPlaneEndpoint` pins **cp1** (`10.10.201.50`);
 > workers use their local `nginx-proxy`. See CLAUDE.md §3 before patching CP nodes.
 >
-> **🟡 M110 (2026-07, in progress):** the two AWS VMs are being consolidated — `vpn-aws`
-> was resized to t4g.small (AWS tag now `private-infra_edge`); `dns-aws` (10.10.100.5)
-> will be folded onto it and **destroyed**. Update the diagram + health-check IPs when
-> that lands.
+> **M110 done (2026-07-02):** the two AWS VMs were consolidated into one — `vpn-aws`
+> was resized to t4g.small (AWS tag now `private-infra_edge`) and now runs WireGuard,
+> Tailscale, **and** Technitium DNS (on 10.10.100.10 / EIP 44.240.60.80). The former
+> `dns-aws` (10.10.100.5) was **destroyed** and its EIP `52.40.219.113` **released**.
+> There is now exactly one standing AWS EC2 instance. (Residual: the edge box is not
+> yet on cert-only SSH — still the static bootstrap key.)
 
 ---
 
@@ -75,7 +77,7 @@ kubectl get pods -A | grep -v Running | grep -v Completed
 kubectl get gitrepository,kustomization,helmrelease -A
 
 # Standalone VMs
-for host in 10.10.201.6 10.10.201.15 10.10.100.5 10.10.100.10; do
+for host in 10.10.201.6 10.10.201.15 10.10.100.10; do
   echo -n "$host: "
   curl -s --connect-timeout 2 "http://$host:9100/metrics" | grep -c "^node_" || echo "DOWN"
 done
@@ -151,7 +153,7 @@ Full ownership matrix + restore procedures: [`disaster-recovery.md`](disaster-re
 ### Self-Healing Capabilities
 
 The infrastructure is designed to self-heal:
-- **DNS failure**: Technitium cluster (in-cluster STS pair + dns-fallback + dns-aws) provides redundancy
+- **DNS failure**: Technitium cluster (in-cluster STS pair + dns-fallback + the AWS edge box) provides redundancy
 - **VPN failure**: K8s WireGuard pod ⇄ `vpn-local` VRRP failover (VIP 10.10.201.20); on K8s pod loss, vpn-local takes over in ~10-15s
 - **K8s node failure**: Workloads reschedule; Prometheus + Alertmanager run replicas=2 with podAntiAffinity
 - **Pod crash**: Kubernetes restarts automatically; auto-remediation controller layers static rules + AI advisor (Phase 3 live for opted-in alerts — `ai_remediation: auto`)

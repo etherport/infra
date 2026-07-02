@@ -7,15 +7,16 @@ auto-eligible action: `prune_host_logdir` (Tier 3 SSH).
 ## Symptom
 
 PrometheusRule `external-hosts.rules / ExternalHostLowDisk` firing on
-a Tier 3 SSH-managed host (`dns-aws`, `dns-fallback`, `vpn-local`,
-`vpn-aws`). Most commonly `dns-aws` — Technitium query logs accumulate
-in `/opt/technitium/config/logs/` and `/opt/technitium/config/stats/`
-and can fill a small EBS volume in days.
+a Tier 3 SSH-managed host (`dns-fallback`, `vpn-local`, `vpn-aws`).
+Most commonly a Technitium host — since M110 the AWS edge box `vpn-aws`
+runs Technitium (the former separate `dns-aws` box was destroyed), so
+query logs accumulate in `/opt/technitium/config/logs/` and
+`/opt/technitium/config/stats/` and can fill a small EBS volume in days.
 
 ## Verified root cause(s)
 
-- Technitium DNS query-log accumulation on dns-aws / dns-fallback —
-  the documented 2026-05-25 pattern that motivated wiring
+- Technitium DNS query-log accumulation on the edge box (vpn-aws) /
+  dns-fallback — the documented 2026-05-25 pattern that motivated wiring
   `prune_host_logdir` to this alert.
 - Journald accumulation — large `/var/log/journal/` directory on hosts
   with verbose units. Cleared via `journal_vacuum`.

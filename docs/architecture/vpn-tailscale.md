@@ -68,7 +68,7 @@ The vpn-aws server runs **both** WireGuard and Tailscale. To prevent Tailscale f
 tailscale set --accept-routes=false
 ```
 
-If `--accept-routes=true`, Tailscale will accept routes from `k8s-homelab-router`, causing traffic to 10.10.201.x to go via Tailscale instead of WireGuard. This breaks the AWS→homelab path over the site-to-site tunnel (e.g. dns-aws/vpn-aws and any service reached from AWS via wg0 start timing out).
+If `--accept-routes=true`, Tailscale will accept routes from `k8s-homelab-router`, causing traffic to 10.10.201.x to go via Tailscale instead of WireGuard. This breaks the AWS→homelab path over the site-to-site tunnel (e.g. the edge box's Technitium DNS replica sync and any service reached from AWS via wg0 start timing out).
 
 ## Components
 
@@ -223,7 +223,7 @@ Internal domains resolve to internal DNS servers via Tailscale's split DNS:
 
 | Domain | Nameservers |
 |--------|-------------|
-| etherport.net | 10.10.201.5, 10.10.201.6, 10.10.100.5 |
+| etherport.net | 10.10.201.5, 10.10.201.6, 10.10.100.10 |
 
 Configure in [Tailscale Admin Console](https://login.tailscale.com/admin/dns) → DNS → Add nameservers → Restrict to domain.
 
@@ -325,7 +325,7 @@ ip route get 10.10.201.70
 
 ### AWS→homelab traffic over wg0 times out
 
-**Symptom:** Traffic from AWS to on-prem (e.g. dns-aws/vpn-aws reaching `10.10.201.x`, or anything routed over the site-to-site tunnel) stalls/times out.
+**Symptom:** Traffic from AWS to on-prem (e.g. the edge box `vpn-aws` reaching `10.10.201.x`, or anything routed over the site-to-site tunnel) stalls/times out.
 
 **Cause:** vpn-aws has `--accept-routes=true`, accepting routes from k8s-homelab-router via Tailscale, so on-prem traffic takes the Tailscale path instead of wg0.
 

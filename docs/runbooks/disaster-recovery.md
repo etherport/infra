@@ -291,11 +291,12 @@ ceph-rbd PVC that you can't afford to lose):**
 ### 3.1 Technitium Cluster Degraded
 
 **Cluster nodes:** `technitium-0` (10.10.201.71) and `technitium-1` (10.10.201.72)
-running as the K8s StatefulSet, plus `dns-fallback` (10.10.201.6) and
-`dns-aws` (10.10.100.5) standalone VMs. Clients reach the in-cluster pair
-via MetalLB VIP 10.10.201.5. (🟡 M110: `dns-aws` is being folded onto the
-`private-infra_edge` box and destroyed — update the `10.10.100.5` references
-here when that lands.)
+running as the K8s StatefulSet, plus `dns-fallback` (10.10.201.6) standalone VM
+and the AWS **edge box** (`private-infra_edge`, hostname `vpn-aws`,
+10.10.100.10 / EIP 44.240.60.80), which runs Technitium as an off-site replica.
+Clients reach the in-cluster pair via MetalLB VIP 10.10.201.5. (M110, 2026-07-02:
+the former separate `dns-aws` VM was destroyed and Technitium DNS folded onto the
+edge box.)
 
 ```bash
 # Check cluster status
@@ -309,7 +310,7 @@ kubectl rollout restart statefulset/technitium -n dns
 
 # Check standalone nodes
 curl -s "http://10.10.201.6:5380/api/dashboard/stats?token=<token>"
-curl -s "http://10.10.100.5:5380/api/dashboard/stats?token=<token>"
+curl -s "http://10.10.100.10:5380/api/dashboard/stats?token=<token>"  # AWS edge box (vpn-aws)
 ```
 
 ### 3.2 Complete DNS Failure
