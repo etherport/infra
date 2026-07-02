@@ -67,6 +67,8 @@
 # containerd-2.2.5-linux-amd64.tar.gz.sha256sum). Overriding the dict replaces it
 # entirely — only amd64/2.2.5 is ever looked up on this all-amd64 fleet.
 containerd_version: "2.2.5"
-containerd_archive_checksums:
-  amd64:
-    2.2.5: sha256:d4031557773a8e969d604b4ee809c64ed3c6cd024d38d521d93984fa17d37b89
+# NB: kubespray v2.30 keeps the checksum DICT in role vars/ (beats inventory
+# group_vars — a dict override here is silently ignored; bit us 2026-07-02:
+# "dict object has no attribute 2.2.5"). Override the SCALAR instead — it lives
+# in role defaults/ (download.yml), which inventory group_vars DOES beat.
+containerd_archive_checksum: sha256:d4031557773a8e969d604b4ee809c64ed3c6cd024d38d521d93984fa17d37b89
