@@ -1,3 +1,5 @@
+# NB (M110, 2026-07-02): the dns_* alarms were removed with the standalone dns
+# instance; the vpn_* alarms cover the consolidated edge box.
 # CloudWatch Alarms and SNS for EC2 Monitoring
 
 #------------------------------------------------------------------------------
@@ -96,69 +98,7 @@ resource "aws_cloudwatch_metric_alarm" "vpn_high_swap" {
 # CloudWatch Alarms - DNS Instance
 #------------------------------------------------------------------------------
 
-resource "aws_cloudwatch_metric_alarm" "dns_high_memory" {
-  alarm_name          = "High-Memory-Utilization-DNS"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
-  datapoints_to_alarm = 2
-  metric_name         = "mem_used_percent"
-  namespace           = "CWAgent"
-  period              = 300
-  statistic           = "Average"
-  threshold           = 80
-  treat_missing_data  = "missing"
 
-  dimensions = {
-    InstanceId   = aws_instance.dns.id
-    ImageId      = aws_instance.dns.ami
-    InstanceType = aws_instance.dns.instance_type
-  }
-
-  alarm_actions = [
-    aws_sns_topic.ec2_alerts.arn,
-    "arn:aws:swf:us-west-2:830881980142:action/actions/AWS_EC2.InstanceId.Reboot/1.0"
-  ]
-
-  tags = {
-    Name        = "High-Memory-Utilization-DNS"
-    Environment = "homelab"
-    ManagedBy   = "terraform"
-    Module      = "compute"
-  }
-}
-
-resource "aws_cloudwatch_metric_alarm" "dns_high_swap" {
-  alarm_name          = "High-Swap-Utilization-DNS"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
-  datapoints_to_alarm = 2
-  metric_name         = "swap_used_percent"
-  namespace           = "CWAgent"
-  period              = 300
-  statistic           = "Average"
-  threshold           = 50
-  treat_missing_data  = "missing"
-
-  dimensions = {
-    InstanceId   = aws_instance.dns.id
-    ImageId      = aws_instance.dns.ami
-    InstanceType = aws_instance.dns.instance_type
-  }
-
-  # Notify only — NO auto-reboot (same rationale as the VPN swap alarm). Genuine
-  # pressure is High-Memory-Utilization-DNS (>80%, keeps its reboot). Raised
-  # 30->50 for consistency.
-  alarm_actions = [
-    aws_sns_topic.ec2_alerts.arn
-  ]
-
-  tags = {
-    Name        = "High-Swap-Utilization-DNS"
-    Environment = "homelab"
-    ManagedBy   = "terraform"
-    Module      = "compute"
-  }
-}
 
 #------------------------------------------------------------------------------
 # Hard-failure auto-recovery
@@ -208,32 +148,3 @@ resource "aws_cloudwatch_metric_alarm" "vpn_status_check_recover" {
   }
 }
 
-resource "aws_cloudwatch_metric_alarm" "dns_status_check_recover" {
-  alarm_name          = "EC2-StatusCheck-Recover-DNS"
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods  = 2
-  datapoints_to_alarm = 2
-  metric_name         = "StatusCheckFailed_System"
-  namespace           = "AWS/EC2"
-  period              = 60
-  statistic           = "Maximum"
-  threshold           = 1
-  treat_missing_data  = "missing"
-  alarm_description   = "Auto-recover DNS instance on hypervisor or system-status failure."
-
-  dimensions = {
-    InstanceId = aws_instance.dns.id
-  }
-
-  alarm_actions = [
-    "arn:aws:automate:us-west-2:ec2:recover",
-    aws_sns_topic.ec2_alerts.arn,
-  ]
-
-  tags = {
-    Name        = "EC2-StatusCheck-Recover-DNS"
-    Environment = "homelab"
-    ManagedBy   = "terraform"
-    Module      = "compute"
-  }
-}

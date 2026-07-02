@@ -19,20 +19,8 @@ output "vpn_public_ip" {
   value       = aws_eip.vpn.public_ip
 }
 
-output "dns_instance_id" {
-  description = "ID of the DNS EC2 instance"
-  value       = aws_instance.dns.id
-}
 
-output "dns_private_ip" {
-  description = "Private IP of the DNS instance"
-  value       = aws_instance.dns.private_ip
-}
 
-output "dns_public_ip" {
-  description = "Public IP (EIP) of the DNS instance"
-  value       = aws_eip.dns.public_ip
-}
 
 #------------------------------------------------------------------------------
 # Network Interfaces (for routing references)

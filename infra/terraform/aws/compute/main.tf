@@ -202,60 +202,10 @@ resource "aws_instance" "vpn" {
 }
 
 #------------------------------------------------------------------------------
-# DNS Instance
+# DNS Instance — DESTROYED 2026-07-02 (M110): the DNS role folded onto the edge
+# box (aws_instance.vpn / "private-infra_edge"); Technitium serves on the retained
+# EIP 44.240.60.80 + private .10. The dns EIP 52.40.219.113 was released.
 #------------------------------------------------------------------------------
-
-resource "aws_instance" "dns" {
-  ami                  = "ami-0acefc55c3a331fa8"
-  instance_type        = "t4g.nano"
-  key_name             = aws_key_pair.gs_ec2.key_name
-  iam_instance_profile = aws_iam_instance_profile.ec2_cloudwatch_agent.name
-  subnet_id            = data.aws_subnet.public1.id
-  private_ip           = "10.10.100.5"
-
-  # Same cloud-init payload as vpn-aws — see comment on aws_instance.vpn.
-  user_data = local.aws_vm_cloud_init
-
-  vpc_security_group_ids = [
-    data.aws_security_group.dns_server.id,
-    data.aws_security_group.internal_comms.id,
-    data.aws_security_group.allow_ssh.id,
-  ]
-
-  # DNS instance keeps default source/dest check
-  source_dest_check = true
-
-  # IMDSv2 required
-  metadata_options {
-    http_endpoint               = "enabled"
-    http_tokens                 = "required"
-    http_put_response_hop_limit = 2
-  }
-
-  root_block_device {
-    volume_size           = 8
-    volume_type           = "gp3"
-    iops                  = 3000
-    throughput            = 125
-    delete_on_termination = true
-    encrypted             = true
-
-    tags = merge(local.common_tags, {
-      Name = "private-infra_dns_vol"
-    })
-  }
-
-  tags = merge(local.common_tags, {
-    Name = "private-infra_dns"
-  })
-
-  lifecycle {
-    # Prevent accidental destruction
-    prevent_destroy = true
-    # Ignore AMI + user_data — see comment on aws_instance.vpn.
-    ignore_changes = [ami, user_data]
-  }
-}
 
 #------------------------------------------------------------------------------
 # Elastic IPs
@@ -274,15 +224,3 @@ resource "aws_eip" "vpn" {
   }
 }
 
-resource "aws_eip" "dns" {
-  domain   = "vpc"
-  instance = aws_instance.dns.id
-
-  tags = merge(local.common_tags, {
-    Name = "private-infra_dns_ip"
-  })
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}

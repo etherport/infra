@@ -25,8 +25,9 @@ stringData:
             location: 'local'
             environment: 'production'
         - targets:
-            - '10.10.100.5:9100'   # dns-aws
-            - '10.10.100.10:9100'  # vpn-aws
+            # M110 (2026-07-02): ONE consolidated AWS box (edge — VPN + Tailscale +
+            # Technitium DNS). The dns-aws instance (.5) was destroyed.
+            - '10.10.100.10:9100'  # vpn-aws (the edge box)
           labels:
             location: 'aws'
             environment: 'production'
@@ -59,10 +60,6 @@ stringData:
           regex: '10\.10\.200\.41:.*'
           target_label: instance
           replacement: 'pve'
-        - source_labels: [__address__]
-          regex: '10\.10\.100\.5:.*'
-          target_label: instance
-          replacement: 'dns-aws'
         - source_labels: [__address__]
           regex: '10\.10\.100\.10:.*'
           target_label: instance
