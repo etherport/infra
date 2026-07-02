@@ -6,8 +6,8 @@ Step-by-step procedures for upgrading Kubernetes cluster components.
 
 | Component | Version | Upgrade Frequency |
 |-----------|---------|-------------------|
-| Kubernetes | v1.34.2 | Quarterly |
-| containerd | 2.2.1 | With K8s upgrade |
+| Kubernetes | v1.34.3 (2026-07-02) | Quarterly |
+| containerd | 2.2.5 (2026-07-02, H45b CVE batch) | With K8s upgrade |
 | Ubuntu | 24.04 LTS | Security: auto, Major: yearly |
 
 ## Upgrade Types
@@ -82,9 +82,15 @@ one is documented in `CLAUDE.md` §5; consolidated here as the pre/post gate.
 
 **H45b + M123 combined window (ready-to-run):** bump `kube_version: 1.34.2 → 1.34.3`
 + add `containerd_version: 2.2.5` in the inventory, then the rolling `kubespray.sh`
-run (CP first per §2.3 but **cp1 last**, workers rolling per §2.4). One reboot sweep
-covers both the K8s patch and the containerd CVE batch. Targets confirmed 2026-07-02;
-awaiting an operator-named maintenance window.
+run (CP first per §2.3 but **cp1 last**, workers rolling per §2.4). EXECUTED 2026-07-02 — all 8 nodes
+v1.34.3 + containerd 2.2.5, RECAP 0 failed/0 unreachable, all landmine checks passed
+(issuer/audiences intact, multus 8/8, cilium enforce+WG+BGP 8/8, cni root:root).
+Two run gotchas for next time: (1) kubespray v2.30 keeps the checksum DICTS in role
+vars/ which BEAT inventory group_vars — override the SCALAR (e.g.
+`containerd_archive_checksum`) from defaults/ instead; (2) run kubespray in a detached
+tmux session (a harness-backgrounded run was killed mid-download); (3) a single-instance
+CNPG pod (cue-db) WILL stall its node's drain on PDB — pre-arm a watch that deletes the
+pod ~100s into that node's drain.
 
 ---
 

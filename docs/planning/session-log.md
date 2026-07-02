@@ -37,6 +37,20 @@ the tracker's archived "Recently completed" blocks — now in
   (verified against the live DB: 43,990 ledger rows readable). Tonight's 22:00 run emits orphans for
   the first time. cairn README §6 corrected to the proven lock mechanism (`7976511`).
 
+## 2026-07-02 (cont. 2) — H45b+M123 rolling upgrade EXECUTED (K8s 1.34.3 + containerd 2.2.5), Authentik→2026.5.3, M128 rename, L32 TS rejoin
+
+Owner: "kick off m45b and m123" + "do the full rename to vpn-fallback" + TS auth key. All executed same-session.
+
+**H45b+M123 (combined rolling window) — DONE, fully verified.** Gates: 8/8 Ready, Flux green, etcd snapshot on cp1 + quorum 3/3, velero full backup (went PartiallyFailed 1 error racing the drains — benign; etcd+CNPG were the anchors). Run: `kubespray.sh upgrade-cluster.yml`, devbox venv (python3.12-venv installed), `KUBESPRAY_SSH_KEY=~/.ssh/id_homelab_cert` (the wrapper defaults to the REMOVED static key), in a **detached tmux** (`kubespray` session) after the harness killed a backgrounded attempt mid-download. **Attempt 1 failed harmlessly in prepare:** kubespray v2.30 keeps checksum DICTS in `kubespray_defaults/vars/` which BEAT inventory group_vars — my dict override was silently ignored ("dict object has no attribute 2.2.5"); fixed by overriding the **`containerd_archive_checksum` SCALAR** (lives in defaults/, inventory wins). CPs rolled first (cp1→cp2→cp3, ~20 min), then workers serially. **cue-db stalled w3's drain on its PDB exactly as predicted** — a pre-armed watch deleted the pod at +100s, CNPG rescheduled to (already-upgraded) w1. Result: **all 8 nodes v1.34.3 + containerd://2.2.5, RECAP 0 failed/0 unreachable**, wrapper pre-flight restored cni-owner (was already root). Landmine verification ALL green: issuer+api-audiences intact (inventory-persisted; IRSA safe, no multus restart needed), multus 8/8, cilium PolicyAuditMode **Disabled** + WireGuard + **BGP 8/8**, 0 non-running pods, CNPG 3/3+1/1, authentik 3/3. Firing alerts after: only the 2 benign upgrade-induced ones (VeleroBackupPartial = our racing pre-upgrade backup; CPUThrottlingHigh on wireguard-cleanup). M123 remainder: the 1.35 minor via kubespray v2.31 before the Oct EOL.
+
+**H44 finale (same session, operator present):** hops 5–8 → **2026.5.3** (see the cont. entry below); Redis removed; RBAC 0056 clean after the ak-shell group-uniqueness check (2 groups, 0 dups).
+
+**M128 vpn-local→vpn-fallback — COMPLETE:** repo (40+ files) + TF with moved{} blocks (plans verified EXACTLY the intended diff: 1 in-place VM-name change / pure moves 0-0-0 / 1 reservation change → all 3 applies success) + guest hostname/hosts + **TS rejoin as vpn-fallback** (owner deleted the old node; ran tailscale.yml with a fresh auth key → 100.97.20.113, tagged-devices, exit-node advertised — owner to approve + disable key expiry). SOPS gotcha recorded: comment edits broke the MAC on the two platform/wireguard sops files (filename-only rename) but not on advisor-ssh-key.
+
+**M125 attempt REVERTED cleanly:** ubiquiti-community/unifi 0.54 is NOT drop-in (renamed resource types) and replace-provider had already rewritten S3 state before plan validation → reverse replace-provider restored it (final plan green, zero infra impact). Lesson + re-attempt options in the tracker.
+
+**Operator TODO carried:** verify OIDC/forward-auth logins post-authentik-2026.5.3 (email_verified flip); approve vpn-fallback as exit node + disable its key expiry; cairn photos (mini-local) still failing.
+
 ## 2026-07-02 (cont.) — Hit-list execution: H45a Cilium CVE, M122 update-automation, H45c CNPG operator ladder 1.24→1.30
 
 Owner: "check this morning's ai-advisor alerts and failed s3 sync task… then proceed automatically with your hit list… keep going autonomously… ask me questions along the way." Maximizing pre-5pm-reset token budget.
