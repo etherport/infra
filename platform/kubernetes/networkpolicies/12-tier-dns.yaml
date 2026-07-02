@@ -77,7 +77,12 @@ spec:
     # Least-privilege: just these two /32s on tcp/5380 (NOT 5380-to-all-world).
     - toCIDR:
         - 10.10.201.6/32
+        # M110 (2026-07-02): 10.10.100.10 = the consolidated AWS edge box (DNS
+        # folded on). 10.10.100.5 leaves this list when the standalone dns box
+        # is destroyed. (First sync to .10 was POLICY_DENIED — this /32 list is
+        # exactly the "enforced-tier operational tax" from CLAUDE.md §5.)
         - 10.10.100.5/32
+        - 10.10.100.10/32
       toPorts:
         - ports:
             - { port: "5380", protocol: TCP }
