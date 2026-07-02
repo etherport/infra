@@ -97,7 +97,7 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   2026-06-18). No FileVault gate → sessions auto-resume on reboot (systemd user unit
   `claude-sessions.service` + `loginctl enable-linger`; per-repo tmux running
   `claude --continue`, see `infra/devbox/`). **Has:** `kubectl` (cluster-admin),
-  `sops`+age, `git`, `claude`, `terraform` 1.15.5 + `aws` CLI.
+  `sops`+age, `git`, `claude`, `terraform` 1.15.5 + `aws` CLI, `helm` v3.19 (~/.local/bin — added 2026-07-02; cilium upgrades run from the devbox now, values snapshot in docs/reference/snapshots/).
   ✅ **TF is CI-only (M82, decided 2026-06-24): the devbox holds NO standing AWS/PVE creds.**
   Every TF stack runs via a GitHub Actions workflow (AWS via OIDC; proxmox/unifi/cloudflare
   on the self-hosted `lifecycle` runner with PVE/CF/UDM creds as **GH secrets**) — incl. the
