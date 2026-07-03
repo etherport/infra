@@ -35,20 +35,14 @@ resource "cloudflare_dns_record" "spf_mail_stopthecastle" {
   ttl     = 3600
 }
 
-// Bot Fight Mode (Insight, Moderate) — BLOCKED on token scope (2026-07-03 apply:
-// PUT zones/<id>/bot_management -> 403; the CI token lacks "Zone: Bot Fight Mode:
-// Edit"). To enable: dash -> My Profile -> API Tokens -> edit the TF token -> add
-// that scope (all zones), then UNCOMMENT these three + dispatch apply. etherport.net
-// stays deliberately excluded (cue API/HealthKit/HA machine traffic breaks under BFM).
-# resource "cloudflare_bot_management" "grahamsmith" {
-#   zone_id    = data.cloudflare_zones.grahamsmith.result[0].id
-#   fight_mode = true
-# }
-# resource "cloudflare_bot_management" "stopthecastle" {
-#   zone_id    = data.cloudflare_zones.stopthecastle.result[0].id
-#   fight_mode = true
-# }
-# resource "cloudflare_bot_management" "smithforsb" {
-#   zone_id    = data.cloudflare_zones.smithforsb.result[0].id
-#   fight_mode = true
-# }
+// Bot Fight Mode (Insight, Moderate). Owner decision 2026-07-03: etherport.net
+// BFM is managed HERE; the three personal-web zones (grahamsmith/smithforsb/
+// stopthecastle) are the personal-web agent's to manage (prompt handed over).
+// ⚠️ etherport carries machine traffic (cue API, HealthKit ingest, HA mobile) —
+// if BFM challenges break those clients, set fight_mode=false + apply (fast
+// rollback) and note it in the tracker. Requires the token scope
+// "Zone: Bot Management: Edit" (owner adding).
+resource "cloudflare_bot_management" "etherport" {
+  zone_id    = var.cloudflare_zone_id
+  fight_mode = true
+}
