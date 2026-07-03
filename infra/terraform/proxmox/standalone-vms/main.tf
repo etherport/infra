@@ -121,8 +121,9 @@ locals {
       # DEDICATED OFF-CLUSTER host so a k8s outage can't strand node SSH (the CA
       # that authorizes SSH must not live inside the thing you SSH in to fix).
       # Lightweight service (a Go CA + small badger DB). Provisioned by
-      # infra/ansible/playbooks/step-ca.yml. NB: this host still bootstraps with the
-      # automation key via cloud-init; the M76 cutover (Phase 5) handles that later.
+      # infra/ansible/playbooks/step-ca.yml. NB: like every VM here, a REBUILD
+      # bootstraps with the automation key via cloud-init; post-enrollment the key
+      # is stripped and SSH is cert-only (M76 cutover complete 2026-06-26).
       vcpus       = 1
       memory_mb   = 1024
       disk_gb     = 15
@@ -173,11 +174,12 @@ resource "proxmox_virtual_environment_vm" "standalone" {
     bridge  = each.value.bridge
     model   = "virtio"
     vlan_id = each.value.vlan_tag
-    # M77: route this NIC through the PVE firewall so the per-VM rules in
-    # ../firewall/standalone-vms.tf take effect. Apply the firewall stack FIRST
-    # (rules exist) before this flips on. Harmless until then — Stage 1 sets
-    # input_policy = ACCEPT (nothing denied; inbound just logged). The k8s nodes
-    # are a SEPARATE stack and are intentionally NOT firewalled here.
+    # M77: route this NIC through the PVE firewall — the per-VM rules live in
+    # ../firewall/standalone-vms.tf and are ENFORCING (default-deny inbound
+    # since 2026-06-28). For a NEW VM, apply the firewall stack (rules + a
+    # per-VM input policy) BEFORE or together with this, or its inbound is
+    # dropped. The k8s nodes are a SEPARATE stack and are intentionally NOT
+    # firewalled here.
     firewall = true
     # Jumbo frames to match bond0/vmbr0/SDN-zone MTU. Without this, the
     # tap device defaults to MTU 1500, becoming the path bottleneck even
@@ -263,11 +265,12 @@ resource "proxmox_virtual_environment_vm" "imported" {
     bridge  = each.value.bridge
     model   = "virtio"
     vlan_id = each.value.vlan_tag
-    # M77: route this NIC through the PVE firewall so the per-VM rules in
-    # ../firewall/standalone-vms.tf take effect. Apply the firewall stack FIRST
-    # (rules exist) before this flips on. Harmless until then — Stage 1 sets
-    # input_policy = ACCEPT (nothing denied; inbound just logged). The k8s nodes
-    # are a SEPARATE stack and are intentionally NOT firewalled here.
+    # M77: route this NIC through the PVE firewall — the per-VM rules live in
+    # ../firewall/standalone-vms.tf and are ENFORCING (default-deny inbound
+    # since 2026-06-28). For a NEW VM, apply the firewall stack (rules + a
+    # per-VM input policy) BEFORE or together with this, or its inbound is
+    # dropped. The k8s nodes are a SEPARATE stack and are intentionally NOT
+    # firewalled here.
     firewall = true
     # Jumbo frames to match bond0/vmbr0/SDN-zone MTU. Without this, the
     # tap device defaults to MTU 1500, becoming the path bottleneck even

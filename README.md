@@ -35,14 +35,16 @@ scripts/             Ad-hoc helpers (safety-check, service-status inventory drif
         │                │                    │
    ┌────┴────────────────┴────────────────────┴────┐
    │             site-to-site WireGuard            │
-   │     vpn-aws (10.10.100.10) ⇄ K8s wg pod       │
-   │     VRRP backup: vpn-fallback (10.10.201.15)     │
+   │  AWS edge box `private-infra_edge` (the ONLY  │
+   │  standing EC2; host `vpn-aws`, 10.10.100.10)  │
+   │  WG + Tailscale + Technitium ⇄ K8s wg pod     │
+   │  VRRP backup: vpn-fallback (10.10.201.15)     │
    └──────────────────────────┬────────────────────┘
                               │
    ┌──────────────────────────┼────────────────────────────┐
    │  wind site (Proxmox `pve.wind.etherport.net`)         │
    │                                                       │
-   │  K8s cluster (Kubespray, Cilium CNI, Multus VLAN NADs)│
+   │  K8s cluster v1.35.0 (Kubespray, Cilium CNI + Multus) │
    │    cp1-3 .50-.52  ·  w1-4 .53-.56  ·  gpu1 .60        │
    │    VLAN 201 primary  ·  VLAN 210 Ceph (MTU 9000)      │
    │    VLAN 202/204/205 secondary via Multus              │
@@ -72,6 +74,12 @@ on demand via `scripts/render-aws-credentials.sh` + `scripts/tf-proxmox.sh`. It
 reconciles the cluster headlessly. Provisioned by `infra/ansible/playbooks/devbox.yml`
 (+ `infra/devbox/README.md`).
 
+**SSH to the whole fleet — including the AWS edge box — is cert-only (M76):** every
+host trusts the step-ca user CA (VM 1006); the devbox auto-renews a 13h user cert
+(`~/.ssh/id_homelab_cert`) and CI mints a ≤1h cert per run. The old static
+`automation@homelab` key is rejected everywhere (it survives only as the cloud-init
+bootstrap seed for rebuilding a host). Break-glass = PVE console + IPMI.
+
 An always-on **Mac mini** (`10.10.202.101`, tailnet `100.79.165.113`) is the
 secondary, macOS-only ops host — full kubectl/terraform/sops/ansible with **no
 1Password at runtime** (age key + on-disk SSH keys; AWS creds rendered from SOPS
@@ -95,6 +103,12 @@ velero · tailscale-operator + tailscale-connector ·
 github-actions-runner · kyverno (admission policy — both guardrails enforcing, M73) ·
 tetragon (observe-only eBPF runtime detection, M74) ·
 metallb (FRR mode, BGP + TCP-MD5 to UDM, L24).
+
+All 17 HelmReleases are **exact-pinned** to the deployed chart version (no semver
+ranges — ranges silently froze majors) and updated by Renovate's `flux` manager
+(M122); majors arrive as individual PRs. Cilium is the exception: **Helm-managed
+directly, not Flux** (release `cilium`/kube-system, upgraded from the devbox — see
+`docs/runbooks/cilium-upgrade.md`).
 
 **Kustomization-only** (no Helm): technitium · ceph-csi ·
 auto-remediation (+ auto-remediation-rbac) · cloudflared · blackbox-exporter ·
@@ -135,7 +149,7 @@ advisor that diagnoses + acts on alerts the static rules miss.
   `prune_host_logdir` (auto), `restart_systemd_unit` (approve-only),
   `journal_vacuum` (auto). Key in
   `platform/kubernetes/auto-remediation/advisor-ssh-key.sops.yaml`;
-  pubkey deployed to dns-aws / dns-fallback / vpn-fallback / vpn-aws.
+  pubkey deployed to dns-fallback / vpn-fallback / the AWS edge box (`vpn-aws`).
 
 **Closed-loop verification**: after every auto-execute or approve-execute,
 controller schedules a check N min later that re-queries the original
@@ -211,6 +225,7 @@ Restore procedures + RTO/RPO targets:
 | Multus parents | 202 (client), 204 (IoT), 205 (security) — `enp6s19/20/21` per K8s node, NADs in `platform/kubernetes/multus/` |
 | Proxmox SDN | Per-VLAN bridges: `servers`(201), `clients`(202), `iot`(204), `security`(205), `vsan`(209), `guest`(206), `unifi`(212). Standalone VMs migrated 2026-05-18. K8s VM migration in `infra/terraform/proxmox/sdn/` |
 | Firewall zones (UDM) | M56 (2026-05-31): **Trusted**={Servers/201}, **Management**={200, contained — device/admin plane}, Internal={Default/199}; plus IoT/Security/Infrastructure custom zones. See [`docs/architecture/firewall-zones.md`](docs/architecture/firewall-zones.md) |
+| UniFi IaC | `infra/terraform/unifi` on the **`ubiquiti-community/unifi`** provider 0.41.x (M125, 2026-07-03 — the retired `paultyng/unifi` is replaced; new schema: nested `dhcp_server{}`, `unifi_client`, gateway-style subnets). Auth via `UNIFI_API_KEY` (avoids UDM login rate-limit). Cardinal rule: plan must be `No changes` before apply. |
 | LoadBalancer | MetalLB **BGP** (eBGP→UDM, ECMP), VIP pool 10.10.201.70-90 — L2 mode removed 2026-05-31 (M18/M36, BGP-only) |
 | Ingress | Traefik (10.10.201.70), wildcard cert `*.wind.etherport.net` via cert-manager + TLSStore default |
 | Site-to-site VPN | K8s WireGuard pod primary (VRRP prio 150), `vpn-fallback` backup (prio 100), shared VIP 10.10.201.20 |
@@ -224,7 +239,7 @@ Restore procedures + RTO/RPO targets:
 |---|---|---|
 | `etherport.net` public | Cloudflare (since 2026-05-25) | DNSSEC-signed, ~30 records. Manage via `infra/terraform/cloudflare/`. Route53 zone deleted. |
 | `aws.etherport.net` private | Deleted 2026-05-27 | Never had real content; private zone removed with route53 module decom |
-| `wind.etherport.net` internal | Technitium (in-cluster pair + dns-fallback + dns-aws) | MetalLB VIP 10.10.201.5 |
+| `wind.etherport.net` internal | Technitium (in-cluster pair + dns-fallback VM + AWS edge-box replica) | MetalLB VIP 10.10.201.5 |
 | 3 personal zones (grahamsmith / smithforsb / stopthecastle) | Cloudflare, DNSSEC enabled | Owned by [sparked-diamond/personal-web](https://github.com/sparked-diamond/personal-web) (split out 2026-05-27); SES domain identities + email forwarding recipients live there too. The forwarding Lambda itself stays in this repo. |
 | DDNS writers | ddns-updater Lambda + cloudflare-ddns CronJob | ✅ **Migrated to the Cloudflare API** (2026-06). The CronJob writes `wind`/`wan1`/`wan2`/`sip` to the active WAN every minute. See `platform/kubernetes/cloudflare-ddns/README.md`. |
 
@@ -325,6 +340,16 @@ The container image used by these workflows is built by
 `ansible-runner-image.yml` (published to ghcr.io/sparked-diamond).
 
 ### Kubespray
+
+Kubespray runs **from the devbox** (venv `~/.kubespray-venv`, ansible 11.13/core 2.18)
+via the wrapper `infra/kubespray/kubespray.sh` — never raw `ansible-playbook`
+(it restores `/opt/cni/bin` ownership afterwards; see
+`docs/runbooks/cilium-cni-dir-owner.md`). Two devbox gotchas: export
+`KUBESPRAY_SSH_KEY=~/.ssh/id_homelab_cert` (the wrapper default is the dead static
+key — fleet SSH is cert-only, M76), and run long plays in a **detached tmux** (harness
+background tasks get killed). Version-override facts: checksum overrides must be
+**scalar** vars (e.g. `containerd_archive_checksum`), not the dict form — role
+defaults beat inventory dicts. The CI `kubespray.yml` workflow_dispatch also exists:
 
 ```bash
 gh workflow run kubespray.yml -f playbook=cluster   # full deploy

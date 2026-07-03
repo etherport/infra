@@ -1,37 +1,22 @@
 # =============================================================================
-# MetalLB — Helm/Flux-managed, FRR MODE (L24).  ✅ ACTIVE since 2026-06-28 (Phase 2).
+# MetalLB — Helm/Flux-managed, FRR MODE (L24, since 2026-06-28).
 #
-# MetalLB now runs from THIS Helm release in FRR mode (controller=metallb-controller,
-# speaker=metallb-speaker DS with the frr/reloader/frr-metrics sidecars). The native
-# kubespray addon was deleted in the Phase-2 window and `metallb_enabled: false` set in
-# kubespray addons.yml. The Flux-managed CRs in platform/kubernetes/metallb/
-# (IPAddressPool/BGPPeer/BGPAdvertisement + the TEMPORARY Phase-1 L2Advertisement) drive it.
+# MetalLB runs from THIS Helm release in FRR mode (controller=metallb-controller,
+# speaker=metallb-speaker DS with the frr/reloader/frr-metrics sidecars). The
+# native kubespray addon is gone (`metallb_enabled: false` in kubespray
+# addons.yml — never re-enable it; it would fight this release). The
+# Flux-managed CRs in platform/kubernetes/metallb/ (IPAddressPool/BGPPeer/
+# BGPAdvertisement) drive it: BGP-ONLY advertisement (no L2Advertisement),
+# eBGP to the UDM with TCP-MD5 (BGPPeer spec.passwordSecret `bgp-md5` —
+# honored ONLY in FRR mode, which is why FRR).
 #
-# WHY: native MetalLB cannot do TCP-MD5 — the BGPPeer password is honored ONLY in
-# FRR mode. Switching to FRR also unlocks BGP graceful-restart + BFD (fixes today's
-# silent VIP-blackhole-on-speaker-restart exposure). MD5 itself is a trivial
-# follow-on once FRR is in place (set spec.passwordSecret on the BGPPeer + the
-# matching `neighbor metallb password` on the UDM UI — Phase 3).
-#
-# ── PHASE-2 EXECUTION MECHANICS (do NOT just `flux reconcile` this in) ──────────
-# The controller Deployment + speaker DaemonSet currently exist WITHOUT Helm
-# ownership (kubespray-applied), and the CRDs pre-exist too. A naive Helm install
-# will conflict ("exists and cannot be imported"). Controlled sequence, in a
-# maintenance window with the temporary L2Advertisement safety net already up
-# (Phase 1):
-#   1. kubespray addons.yml: set `metallb_enabled: false` (stops a future kubespray
-#      run from re-applying the native addon; it does NOT uninstall the running one).
-#   2. Delete ONLY the kubespray-applied WORKLOADS (controller Deploy, speaker DS,
-#      their SA/RBAC/configmaps) — KEEP the CRDs and all CRs (BGP config survives).
-#   3. Wire this file into helm-releases/kustomization.yaml + reconcile → Flux/Helm
-#      installs the FRR-mode controller+speaker it owns. Speakers re-establish BGP
-#      in FRR mode (L2 net cushions the gap).
-#   4. Verify all sessions Established (FRR), routes re-advertised, every VIP up,
-#      metallb_bgp_session_up==1. THEN Phase 3 (MD5), Phase 4 (remove L2 net).
-# CRDs: kept as the pre-existing ones (crds.enabled:false below) to avoid Helm CRD
-# ownership conflict — the live v1beta2 BGPPeer CRD already exposes password/
-# passwordSecret. ⚠️ Phase-0 TODO: `helm template metallb metallb/metallb --version
-# 0.14.x -f <these values>` to confirm FRR rendering + CRD suppression before Phase 2.
+# CRDs: kept as the pre-existing cluster CRDs (crds.enabled:false +
+# install/upgrade crds: Skip below) to avoid a Helm CRD-ownership conflict.
+# Session health: metallb_bgp_session_up (frr-metrics :7473) →
+# MetallbBGPAllSessionsDown alert — an MD5 mismatch on either end drops ALL
+# sessions (no L2 fallback).
+# Migration history (kubespray-native → Helm FRR, phases, gotchas):
+# docs/planning/session-log.md + docs/planning/archive/l24-metallb-frr-migration-plan.md.
 # =============================================================================
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2

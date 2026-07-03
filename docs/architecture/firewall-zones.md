@@ -242,6 +242,9 @@ by design. **Default/199** and **Security/205** are empty (205 = the open M104 s
 3. **LTE WAN still configured** — failover priority 4, never carried traffic. Slated for removal.
 4. **`Wireguard Travel` port-forward `enabled=false`** but still present — delete.
 5. **Legacy Twilio user rules + the dead 205→201 switch ACL** — vestigial; cleanup candidates (above).
+6. **devbox → `10.10.100.10:53` hairpin is dropped BY DESIGN** (zone policy; zero IaC drift) — a
+   Servers/201 host cannot query the AWS edge-box Technitium via the tunnel hairpin. The DNS-failover
+   path is the **public EIP** `44.240.60.80`; don't "fix" the drop.
 
 ---
 

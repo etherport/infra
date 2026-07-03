@@ -8,15 +8,17 @@ data:
     WireGuard VPN Configuration
     ===========================
 
-    This pod runs WireGuard site-to-site tunnel:
-    - wg0: Site-to-site tunnel to vpn-aws (10.255.255.2/30)
+    This pod runs both WireGuard tunnels:
+    - wg0: Site-to-site tunnel to vpn-aws (10.255.255.2/29, ListenPort 9820)
+    - wg1: Direct remote access (10.254.0.1/24, ListenPort 9821)
 
-    Remote access (wg1) is handled by vpn-aws only.
-    Clients connect to vpn-aws:51821, then route through wg0 to homelab.
+    Remote clients can also connect via vpn-aws:51821 (same wg1 keys),
+    then route through wg0 to homelab.
 
     VIP: 10.10.201.20 (managed by Keepalived)
 
     Failover:
-    - K8s pod is primary (priority 150)
+    - K8s pod is primary (priority 150; preempt_delay 5 min before
+      reclaiming the VIP after it returns — sticky by design)
     - vpn-fallback VM is backup (priority 100)
     - Keepalived moves VIP automatically on failure

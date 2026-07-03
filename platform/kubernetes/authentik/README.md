@@ -1,6 +1,6 @@
 # Authentik — Homelab SSO IdP
 
-Authentik (goauthentik **2024.12**) is the single sign-on identity provider for
+Authentik (goauthentik **2026.5.3**) is the single sign-on identity provider for
 the `wind` homelab (H38). It killed the old "internal == trusted" assumption:
 internal apps now sit behind real auth instead of being reachable by anyone on
 the LAN.
@@ -14,9 +14,11 @@ the LAN.
   `/outpost.goauthentik.io/` forward-auth endpoints used by gated apps.
 - **Database**: shared **HA Postgres** (CloudNativePG, `postgres` namespace) —
   Authentik has its own DB on the shared cluster, not a dedicated instance.
-- **Redis**: in-namespace (`20-redis.yaml`) for the cache/task queue.
+- **No Redis**: 2026.x dropped the Redis dependency (cache/task queue moved to
+  Postgres); the old in-namespace Redis Deployment was removed entirely.
 - **Components**: `server` + `worker` deployments; the **worker** is what
-  applies blueprints.
+  applies blueprints. Both carry a **startupProbe** (60×10s, H44) so long DB
+  migrations at upgrade time aren't killed mid-run by the liveness probe.
 
 ## What it gates
 
@@ -46,8 +48,8 @@ secret via `!Env`, commit, reconcile.
 2. **Grafana `role_attribute_path`**: a literal `'GrafanaAdmin'` evaluates to
    EMPTY (go-ini strips the quotes) → roles reset to Viewer every login. We use
    `skip_org_role_sync: true` + a manual server-admin grant instead.
-3. **Dark theme** = brand `attributes.settings.theme.base=dark` (no UI toggle in
-   2024.12).
+3. **Dark theme** = brand `attributes.settings.theme.base=dark` (set via brand
+   attributes, not a UI toggle).
 4. **Forward-auth is wrong for machine APIs and HA** — it breaks mobile/API/
    webhook clients. Keep those ungated (firewall-scoped) or on their own auth.
 
@@ -56,7 +58,6 @@ secret via `!Env`, commit, reconcile.
 | File | Purpose |
 |------|---------|
 | `00-namespace.yaml` | `authentik` namespace |
-| `20-redis.yaml` | In-namespace Redis (cache / task queue) |
 | `30-authentik-secret.sops.yaml` | SOPS-encrypted secrets (secret key, client secrets) |
 | `31-env-configmap.yaml` | Non-secret env (Postgres host, etc.) |
 | `39-pdb.yaml` | Server PDB (minAvailable 1 — M114 HA; media PVC removed same change, emptyDir now) |

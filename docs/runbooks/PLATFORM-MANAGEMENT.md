@@ -18,7 +18,8 @@ High-level overview of the homelab infrastructure with links to detailed runbook
 │  │                       k8s-w3 (.55)   k8s-w4 (.56)                   │   │
 │  │  GPU:                 k8s-gpu1 (.60) — NVIDIA Tesla P40             │   │
 │  │                                                                     │   │
-│  │  Updates: Kured + unattended-upgrades (automatic)                  │   │
+│  │  Version: v1.35.0 (kubespray)                                      │   │
+│  │  Updates: kured reboots + unattended-upgrades security-only (M116) │   │
 │  │  Apps: Flux GitOps + Helm                                          │   │
 │  │  Monitoring: Prometheus + Grafana                                  │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
@@ -51,8 +52,9 @@ High-level overview of the homelab infrastructure with links to detailed runbook
 > was resized to t4g.small (AWS tag now `private-infra_edge`) and now runs WireGuard,
 > Tailscale, **and** Technitium DNS (on 10.10.100.10 / EIP 44.240.60.80). The former
 > `dns-aws` (10.10.100.5) was **destroyed** and its EIP `52.40.219.113` **released**.
-> There is now exactly one standing AWS EC2 instance. (Residual: the edge box is not
-> yet on cert-only SSH — still the static bootstrap key.)
+> There is now exactly one standing AWS EC2 instance, on **cert-only SSH** like the
+> rest of the fleet (M76 parity, 2026-07-03; the static key survives only as the
+> cloud-init rebuild seed).
 
 ---
 
@@ -154,7 +156,7 @@ Full ownership matrix + restore procedures: [`disaster-recovery.md`](disaster-re
 
 The infrastructure is designed to self-heal:
 - **DNS failure**: Technitium cluster (in-cluster STS pair + dns-fallback + the AWS edge box) provides redundancy
-- **VPN failure**: K8s WireGuard pod ⇄ `vpn-fallback` VRRP failover (VIP 10.10.201.20); on K8s pod loss, vpn-fallback takes over in ~10-15s
+- **VPN failure**: K8s WireGuard pod ⇄ `vpn-fallback` VRRP failover (VIP 10.10.201.20); on K8s pod loss, vpn-fallback takes over in ~10-15s. ⚠️ Fail-*back* to the pod is not always automatic — see the sticky-failover caveat in [vpn-wireguard.md](../architecture/vpn-wireguard.md)
 - **K8s node failure**: Workloads reschedule; Prometheus + Alertmanager run replicas=2 with podAntiAffinity
 - **Pod crash**: Kubernetes restarts automatically; auto-remediation controller layers static rules + AI advisor (Phase 3 live for opted-in alerts — `ai_remediation: auto`)
 - **Closed-loop verification**: every advisor auto-execute is re-checked N min later; failure surfaces as a `verification_failed` audit event + email

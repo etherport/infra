@@ -4,7 +4,8 @@
 // (the old /health|/telegram path-limit is removed — Telegram is gone); CF Access
 // does the gating. CF matches the MOST SPECIFIC app path first, so these three
 // apps compose:
-//   - cue.etherport.net/health            -> BYPASS (no login; data-free liveness)
+//   - cue.etherport.net/health            -> SERVICE AUTH (cue-health-probe token;
+//                                            was bypass+everyone until 2026-07-03)
 //   - cue.etherport.net/ingest/healthkit  -> SERVICE AUTH (CF service token only;
 //                                            the Apple Health Auto Export app
 //                                            can't do interactive SSO)
@@ -37,7 +38,7 @@ resource "cloudflare_zero_trust_access_service_token" "cue_health_probe" {
   duration   = "8760h" # 1y
 }
 
-// 1. /health -> BYPASS (public, unauthenticated liveness probe)
+// 1. /health -> SERVICE AUTH (cue-health-probe token; no unauthenticated access)
 resource "cloudflare_zero_trust_access_application" "cue_health" {
   account_id           = var.cloudflare_account_id
   name                 = "Cue — /health (service token)"

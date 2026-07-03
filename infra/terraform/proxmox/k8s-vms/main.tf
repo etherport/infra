@@ -205,6 +205,10 @@ resource "proxmox_virtual_environment_vm" "control_plane" {
   # watchdog is instead attached host-side via `qm set <vmid> --watchdog` + the guest
   # daemon (ansible k8s-node-fixes.yml). Ignore it here so TF stops reporting
   # unresolvable drift / triggering pointless reboots. (M91.)
+  # ⚠️ AND the watchdog remains NON-FUNCTIONAL even when attached: the node kernel
+  # ships no i6300esb module (only softdog + wdat_wdt), so /dev/watchdog0 never
+  # appears and it has never armed. Do NOT modprobe i6300esb (FATALs
+  # k8s-node-fixes.yml). Blocked pending the kernel module — see CLAUDE.md §5 (M91).
   lifecycle {
     ignore_changes = [watchdog]
   }
@@ -329,6 +333,10 @@ resource "proxmox_virtual_environment_vm" "workers" {
   # watchdog is instead attached host-side via `qm set <vmid> --watchdog` + the guest
   # daemon (ansible k8s-node-fixes.yml). Ignore it here so TF stops reporting
   # unresolvable drift / triggering pointless reboots. (M91.)
+  # ⚠️ AND the watchdog remains NON-FUNCTIONAL even when attached: the node kernel
+  # ships no i6300esb module (only softdog + wdat_wdt), so /dev/watchdog0 never
+  # appears and it has never armed. Do NOT modprobe i6300esb (FATALs
+  # k8s-node-fixes.yml). Blocked pending the kernel module — see CLAUDE.md §5 (M91).
   lifecycle {
     ignore_changes = [watchdog]
   }
@@ -477,6 +485,10 @@ resource "proxmox_virtual_environment_vm" "k8s_gpu1" {
   # watchdog is instead attached host-side via `qm set <vmid> --watchdog` + the guest
   # daemon (ansible k8s-node-fixes.yml). Ignore it here so TF stops reporting
   # unresolvable drift / triggering pointless reboots. (M91.)
+  # ⚠️ AND the watchdog remains NON-FUNCTIONAL even when attached: the node kernel
+  # ships no i6300esb module (only softdog + wdat_wdt), so /dev/watchdog0 never
+  # appears and it has never armed. Do NOT modprobe i6300esb (FATALs
+  # k8s-node-fixes.yml). Blocked pending the kernel module — see CLAUDE.md §5 (M91).
   lifecycle {
     ignore_changes = [watchdog]
   }

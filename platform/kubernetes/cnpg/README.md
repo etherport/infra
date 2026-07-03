@@ -25,8 +25,9 @@ postgres namespace (Flux managed)
 ### 1. Install CloudNativePG Operator (Flux HelmRelease)
 
 The operator is installed via Flux at
-`clusters/wind/helm-releases/cnpg.yaml` (chart version pinned to the
-`0.22.x` track). To force an upgrade (no flux CLI on the hosts — CLAUDE.md §3):
+`clusters/wind/helm-releases/cnpg.yaml` (chart version **exact-pinned** —
+currently `0.29.0` = operator 1.30.0; Renovate PRs handle bumps, M122).
+To force an upgrade (no flux CLI on the hosts — CLAUDE.md §3):
 
 ```bash
 kubectl annotate -n flux-system helmrelease/cnpg reconcile.fluxcd.io/requestedAt="$(date +%s)" --overwrite
@@ -41,7 +42,7 @@ helm repo update
 helm upgrade --install cnpg cnpg/cloudnative-pg \
   --namespace cnpg-system \
   --create-namespace \
-  --version 0.22.x \
+  --version 0.29.0 \
   -f platform/kubernetes/cnpg/operator-values.yaml
 ```
 

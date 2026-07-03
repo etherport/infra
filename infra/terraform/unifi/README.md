@@ -1,14 +1,65 @@
 # Terraform: UniFi (UDM Pro Max — site `wind`)
 
-Manages UDM-side network config (VLANs, port forwards, static DHCP
-reservations, eventually static routes + firewall) as code.
+Manages UDM-side network config (VLANs, static DHCP reservations, port
+forwards, static routes) as code.
 
-**Status:** Phase 1 live (2026-05-17). `networks.tf`, `port-forwards.tf`,
-`reservations.tf`, `routes.tf` all shipped + imported. `terraform plan`
-should show `0 to add, 0 to change, 0 to destroy` against the live UDM.
-If you see diffs, edit HCL to match live state — don't apply blind.
+**Status:** live. `networks.tf`, `port-forwards.tf`, `reservations.tf`,
+`routes.tf` all shipped + imported; `terraform plan` shows
+`0 to add, 0 to change, 0 to destroy` against the live UDM (verified after
+the M125 provider migration, 2026-07-02). If you see diffs, edit HCL to
+match live state — don't apply blind.
 Firewall zones + switch ACLs are NOT in this TF module — they're codified
 via Ansible (`infra/ansible/playbooks/udm-firewall.yml` + `usw-acls.yml`).
+
+## Provider: ubiquiti-community/unifi fork (M125)
+
+The stack runs on **`ubiquiti-community/unifi` 0.41.25** — the maintained
+community fork. The original `paultyng/unifi` provider is **archived/retired**;
+the stack migrated off it on 2026-07-02 (M125) via a full schema rewrite +
+state-rm/re-import session (details in `docs/planning/session-log.md`
+2026-07-02 cont. 4b).
+
+**Fork schema differences vs paultyng** (the fork is NOT drop-in — a plain
+`terraform state replace-provider` corrupts plans; every resource needed
+HCL changes):
+
+- `unifi_network`: `vlan_id` → `vlan`; `purpose`/`network_group` removed;
+  `internet_access_enabled` → `internet_access`;
+  `intra_network_access_enabled` → `network_isolation` (**inverted**
+  semantics); flat `dhcp_*` args → nested `dhcp_server = { ... }` attribute;
+  `subnet` is **gateway-style** (`10.10.201.1/24`, not `.0/24`).
+- `unifi_user` → **`unifi_client`** (same args). ⚠️ The fork **imports
+  clients by MAC address**, not by controller `_id` — it rejects id-imports.
+  A `moved {}` block can't express the type rename either; migration was
+  done by `state rm` + re-import by MAC.
+- `unifi_port_forward`: `fwd_ip`/`fwd_port` → nested `forward = { ip, port }`;
+  `dst_port` → `wan = { port }`; `port_forward_interface` → `wan.interface`;
+  `src_ip` → nested `source_limiting`; `enabled` deprecated (default on).
+  The fork reads `wan.ip_address = "any"` from live records but rejects it
+  as config — kept in `ignore_changes`.
+- `unifi_static_route`: `distance` validates 1-255 (paultyng recorded the
+  controller-default 0).
+- Fork defaults diverge from live when unset — `auto_scale`, `lte_lan`,
+  `setting_preference`, `gateway_type` are pinned explicitly per network.
+
+**Fork fixes the paultyng PUT-400 bug.** paultyng deterministically 400'd
+(`api.err.Invalid`) on network PUTs for clients/vsan/ceph (and mis-read
+`dhcp_dns` on guest), which forced `dhcp_dns` into `ignore_changes` and
+pushed the M110 DNS cutover through raw UDM API PUTs. The fork's PUTs are
+all clean (47/47 during migration). The **whole-`dhcp_server`
+`ignore_changes` entries remaining on clients / vsan / ceph / guest are
+now removal candidates** — they also mask range/leasetime drift; drop them
+one at a time and confirm plan stays clean (live UDM remains the source of
+truth). NB the fork's occasional "Provider produced inconsistent result
+after apply" errors are cosmetic read-back races, and the controller echoes
+template DHCP values onto DHCP-disabled networks (see `inter_vlan_routing`).
+
+**Auth / rate limit:** CI authenticates with the `tf-admin` local
+username/password (GH secrets `UNIFI_USERNAME`/`UNIFI_PASSWORD`). For
+local iterative sessions prefer a **`UNIFI_API_KEY`** (UDM UI → Control
+Plane → Integrations) — repeated rapid username/password logins (~30 in the
+M125 session) trip the UDM's **login rate-limiter** and lock the account
+out temporarily; API-key auth doesn't.
 
 ## Why this module exists
 
@@ -18,35 +69,16 @@ via Ansible (`infra/ansible/playbooks/udm-firewall.yml` + `usw-acls.yml`).
 - The `gh-runner` footgun (VM landed without a VLAN tag) wouldn't have
   happened if the L2 zone definitions and the VM provisioning shared a
   source of truth. UniFi-as-code closes that gap.
-- Safety: today a UI typo can break inbound Twilio or WG access with no
-  audit trail. With TF, every change goes through plan → review → apply.
-
-## Operator prerequisites
-
-| Prereq | Where it goes | Source |
-|--------|---------------|--------|
-| 1P SSH/age unlocked | Local session | Touch ID / passphrase |
-| `terraform` binary | on `$PATH` | `brew install terraform` |
-| AWS creds for S3 backend | env or profile | 1P "AWS — claude-admin IAM keys" |
-| UniFi tf-admin user | UDM UI (already created) | 1P "Windroute (tf-admin)" — local-only admin |
-| L3 reach to UDM API | VPN or LAN | homelab WG or on-site |
-
-Quick verification before any plan:
-
-```bash
-ls ~/.config/sops/age/keys.txt          # exists
-which terraform                          # exists, >= 1.5.0
-op vault list >/dev/null                 # 1P session live
-curl -sk -o /dev/null -w '%{http_code}' https://10.10.200.1   # 200/301/etc.
-```
+- Safety: a UI typo can break inbound Twilio or WG access with no audit
+  trail. With TF, every change goes through plan → review → apply.
 
 ## Safety model
 
 **Cardinal rule:** never `terraform apply` until `terraform plan` shows
-`0 to add, 0 to change, 0 to destroy`. The whole point of Phase 1's
-import-based bootstrap is to capture LIVE state as code without
-mutating anything. If plan shows diffs, edit the HCL to match the live
-UDM until plan is clean.
+`0 to add, 0 to change, 0 to destroy` (plus, at most, exactly your intended
+change). This stack is import-based: it captures LIVE state as code. If
+plan shows unexpected diffs, edit the HCL to match the live UDM until plan
+is clean — the live UDM is the source of truth.
 
 Before any apply, run the network safety check from the repo root:
 
@@ -65,50 +97,45 @@ Out-of-band recovery if something breaks:
 3. **UDM config backup** — download via UI before any apply. Restore via
    UDM UI Settings → System → Backup & Restore.
 
-Phase 1 **deliberately excludes** firewall policy + zone matrix imports
-— those carry lockout risk and need their own phase.
+Firewall policy + the zone matrix are **deliberately excluded** from TF —
+they carry lockout risk and are codified via Ansible instead
+(`udm-firewall.yml` + `usw-acls.yml`).
 
 ## Apply paths
 
-### Local (default for Phase 1 imports + verification)
-
-```bash
-cd infra/terraform/unifi
-terraform init
-export TF_VAR_unifi_username="$(op read 'op://Private/Windroute (tf-admin)/username')"
-export TF_VAR_unifi_password="$(op read 'op://Private/Windroute (tf-admin)/password')"
-terraform plan
-```
-
-If plan shows zero changes → import is correct, ready to commit. If
-plan shows changes → edit HCL to match live state, re-plan, loop.
-
-### GitHub Actions (post-Phase-1 ongoing management)
+### GitHub Actions (default — TF is CI-only, M82)
 
 Workflow at `.github/workflows/terraform-unifi.yml`:
 - Push to main touching `infra/terraform/unifi/**` → automatic `plan`
 - Manual `workflow_dispatch` with `action: apply` → apply
-- Runs on `[self-hosted, lifecycle]` (gh-runner has L3 reach to the UDM)
+- Runs on `[self-hosted, lifecycle]` (gh-runner has L3 reach to the UDM);
+  creds from GH secrets (`UNIFI_USERNAME`/`UNIFI_PASSWORD`)
 
-## Import procedure (Phase 1 bootstrap)
+### Local (rare debug / state surgery — M82 throwaway-creds allowance)
 
-For each resource type:
+```bash
+cd infra/terraform/unifi
+~/code/infra/scripts/render-aws-credentials.sh   # S3 backend creds (throwaway)
+terraform init
+export TF_VAR_unifi_username=...   # from the SOPS ops bundle or 1P "Windroute (tf-admin)"
+export TF_VAR_unifi_password=...
+terraform plan
+```
+
+For a longer local session, use a `UNIFI_API_KEY` instead of the login pair
+(see the rate-limit note above).
+
+## Adding / importing a resource
 
 1. Dump live state: `./scripts/unifi/dump-state.sh`
 2. Read the JSON for the relevant resource (e.g. `networks.json`)
-3. Author the `import {}` block + matching HCL resource definition
+3. Author the `import {}` block + matching HCL resource definition.
+   Networks / routes / port-forwards import by controller `_id`;
+   **`unifi_client` imports by MAC**.
 4. `terraform plan` — expect "no changes"
-5. If diffs appear → edit HCL until clean
-6. Commit HCL, move to next resource
-
-Phase 1 order (lowest → highest risk):
-
-1. VLANs / networks (`unifi_network`)
-2. Static DHCP reservations (`unifi_user`) — only for infra hosts, not
-   transient clients
-3. Port forwards (`unifi_port_forward`)
-4. Static routes (`unifi_static_route`) — shipped + imported; repointed to
-   the K8s WG VIP (`10.10.201.20`) after Servers/201 moved to UDM-routed
+5. If diffs appear → edit HCL until clean (pin the fork-default divergences:
+   `auto_scale`, `lte_lan`, `setting_preference`, `gateway_type`)
+6. Commit HCL
 
 ## Force-unlock procedure
 
@@ -121,13 +148,19 @@ cd infra/terraform/unifi
 terraform force-unlock <lock-id>     # from the error message
 ```
 
-## Phase 2+ scope
+## Not in this module
 
-- Firewall policies + zone matrix — now codified via Ansible
-  (`udm-firewall.yml` + `usw-acls.yml`), not this TF module
-- DDNS for `wan1.wind.etherport.net` integrated with Technitium (closes
-  the stale-internal-DNS bug we hit on 2026-05-17)
-- UniFi Protect + UNAS — if user wants those in code (currently UI-only)
+- **Firewall policies + zone matrix** — Ansible
+  (`udm-firewall.yml` + `usw-acls.yml`)
+- **Per-network L3 router assignment** (e.g. the Ceph VLAN's US624P
+  offload) — UI-only; neither the fork nor paultyng exposes it
+- **UniFi Protect + UNAS** — UI-only today
 
-See also: `docs/planning/archive/udm-config-drift-2026-05-17.md` (the audit
-this module is the response to).
+## History
+
+- **M125 fork migration (2026-07-02)** — paultyng → ubiquiti-community
+  0.41.25; two earlier attempts (0.54, then 0.41.25 via replace-provider)
+  proved the fork isn't drop-in and were cleanly reverted. Full narrative:
+  `docs/planning/session-log.md` (2026-07-02 entries).
+- **Phase 1 import bootstrap (2026-05-17)** + the drift audit that
+  motivated it: `docs/planning/archive/udm-config-drift-2026-05-17.md`.

@@ -27,10 +27,11 @@ Technitium DNS Server deployment for homelab DNS services, replacing pi-hole + u
           │                             │                             │
           ▼                             │                             ▼
    ┌─────────────────┐                  │                  ┌─────────────────┐
-   │  Local Fallback │                  │                  │  AWS Instance   │
+   │  Local Fallback │                  │                  │  AWS edge box   │
    │  10.10.201.6    │◄─────────────────┴─────────────────►│  10.10.100.10    │
-   │  (secondary)    │                                     │  (secondary)    │
-   └─────────────────┘                                     └─────────────────┘
+   │  (secondary)    │                                     │  (secondary,    │
+   └─────────────────┘                                     │   vpn-aws)      │
+                                                           └─────────────────┘
 ```
 
 ### Service IPs
@@ -41,7 +42,7 @@ Technitium DNS Server deployment for homelab DNS services, replacing pi-hole + u
 | technitium-0 | 10.10.201.71 | Cluster primary pod (for clustering) |
 | technitium-1 | 10.10.201.72 | Cluster secondary pod (for clustering) |
 | Local Fallback | 10.10.201.6 | Standalone VM (secondary) |
-| AWS Instance | 10.10.100.10 | Remote failover (secondary) |
+| AWS edge box (vpn-aws) | 10.10.100.10 | Remote failover (secondary; consolidated edge instance) |
 
 ## Deployment
 
@@ -153,7 +154,7 @@ Clustering is pre-configured. To add a new secondary node:
 Zone transfers use catalog zones. The catalog automatically provisions member zones on secondaries. ACLs are configured to allow:
 - Kubernetes pod network: `10.42.0.0/16`
 - Local fallback: `10.10.201.6`
-- AWS instance: `10.10.100.10`
+- AWS edge box (vpn-aws): `10.10.100.10`
 
 ### Standalone-VM secondaries (Ansible-managed)
 
@@ -162,12 +163,17 @@ The two non-K8s secondaries are installed/configured by Ansible, not Flux:
 | Host | IP | Inventory |
 |------|-----|-----------|
 | dns-fallback | 10.10.201.6 | `inventory/wind` |
-| dns-aws | 10.10.100.10 | `inventory/aws` (EC2 nano) |
+| vpn-aws (consolidated edge box) | 10.10.100.10 | `inventory/aws` |
+
+The AWS DNS role runs on the single consolidated edge box (`vpn-aws`,
+EC2 `private-infra_edge`, t4g.small) — the former dedicated `dns-aws`
+instance was destroyed 2026-07 (M110). The `dns-aws` DNS record is kept
+as an alias for 10.10.100.10.
 
 ```bash
 cd infra/ansible
 ansible-playbook -i inventory/wind/ playbooks/technitium.yml --limit dns-fallback
-ansible-playbook -i inventory/aws/  playbooks/technitium.yml --limit dns-aws
+ansible-playbook -i inventory/aws/  playbooks/technitium.yml --limit vpn-aws
 ```
 
 The playbook installs Technitium, sets the admin credentials (decrypted from
@@ -195,7 +201,7 @@ Current records are defined in `zones/wind.etherport.net.yaml`.
 | traefik | 10.10.201.70 | Traefik ingress VIP |
 | dns | 10.10.201.70 | DNS web UI (via Traefik) |
 | dns-fallback | 10.10.201.6 | Local DNS fallback |
-| dns-aws | 10.10.100.10 | AWS DNS failover |
+| dns-aws | 10.10.100.10 | AWS DNS failover (alias for the vpn-aws edge box) |
 
 ### Network Equipment
 
@@ -342,7 +348,7 @@ If secondary zones show `isExpired: true` or `syncFailed: true`:
 | dns1 | 10.10.201.71 | Primary DNS server VIP (technitium-0) |
 | dns2 | 10.10.201.72 | Secondary in K8s (technitium-1) |
 | dns-fallback | 10.10.201.6 | Local fallback VM |
-| dns-aws | 10.10.100.10 | AWS remote failover |
+| dns-aws | 10.10.100.10 | AWS remote failover (vpn-aws edge box) |
 
 > **Important**: The `dns-cluster.wind.etherport.net` zone is managed directly by Technitium (not GitOps) and is used for cluster coordination. The dns1 A record is critical - without it, secondaries cannot perform zone transfers.
 

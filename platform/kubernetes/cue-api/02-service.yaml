@@ -7,8 +7,9 @@ metadata:
     app: cue-api
 spec:
   # ClusterIP only — reached publicly via the cloudflared tunnel + CF Access
-  # (per-path: /health bypass, /ingest/healthkit service token, else Google SSO —
-  # cue-access.tf) and otherwise over the tailnet / in-cluster. No LB/Ingress/cert-manager.
+  # (per-path: /health service token [cue-health-probe, since 2026-07-03],
+  # /ingest/healthkit service token, else Google SSO — cue-access.tf) and
+  # otherwise over the tailnet / in-cluster. No LB/Ingress/cert-manager.
   type: ClusterIP
   selector:
     app: cue-api

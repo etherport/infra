@@ -2,7 +2,17 @@
 
 ## Overview
 
-Primary WireGuard gateway running in Kubernetes with high availability failover to vpn-fallback VM.
+Primary WireGuard gateway running in Kubernetes with high availability failover to the vpn-fallback VM.
+
+**HA design: the K8s pod is PRIMARY** (VRRP priority 150 vs vpn-fallback's 100),
+vpn-fallback is the BACKUP. **Failover is sticky by design**: after a failover,
+the returning pod waits `preempt_delay` (5 min of healthy wg0/wg1) before
+reclaiming the VIP from vpn-fallback — so finding vpn-fallback holding the VIP
+shortly after a pod restart is normal; holding it long-term means preemption
+didn't happen. First check: vpn-fallback's PVE firewall must allow **VRRP
+(IP proto 112)** or it never hears the pod's adverts and never yields (the
+2026-07-03 split-brain root cause); then check keepalived on both ends.
+Reclaim was drill-verified 2026-07-03 (9s takeover / clean 300s reclaim).
 
 For full architecture documentation, see [docs/architecture/vpn-wireguard.md](../../../docs/architecture/vpn-wireguard.md).
 
@@ -82,6 +92,13 @@ kubectl apply -k platform/kubernetes/wireguard/
 > advert-interval instead of waiting for the gratuitous-ARP cache to
 > age out. If you're debugging a stuck VIP, that commit is the
 > reference.
+>
+> **HOST_IP split-brain fix (2026-07-03):** the wireguard container's
+> policy-routing setup derives `HOST_IP` from eth0 — which can carry BOTH
+> the host IP and the keepalived VIP 10.10.201.20 (hostNetwork; keepalived
+> can claim the VIP before the script runs). The old grab returned two IPs
+> → malformed `ip rule` → CrashLoopBackOff → VIP split-brain with
+> vpn-fallback. Fixed in `03-deployment.yaml` (VIP-exclude + `head -1`).
 
 ### Probes
 

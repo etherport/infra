@@ -10,7 +10,7 @@ WireGuard VPN infrastructure providing:
 | Endpoint | Hostname | wg1 Port | Use Case |
 |----------|----------|----------|----------|
 | Homelab (K8s/vpn-fallback) | wind.etherport.net | 9821 | Direct, fastest |
-| AWS US-West-2 | vpn-usw2.etherport.net | 51821 | West coast relay (ephemeral) |
+| AWS US-West-2 (vpn-aws, the consolidated edge box) | vpn-usw2.etherport.net | 51821 | West coast relay |
 
 For full architecture documentation, see [docs/architecture/vpn-wireguard.md](../../docs/architecture/vpn-wireguard.md).
 
@@ -77,7 +77,6 @@ sops -d platform/wireguard/clients/graham.sops.yaml | \
 ```
 platform/
 ├── wireguard/                    # Ansible-managed (vpn-fallback, vpn-aws)
-│   ├── regional-peers.yaml       # Auto-generated peer list (GitHub Actions — do not edit)
 │   ├── servers/                  # Server private/public keys
 │   │   ├── vpn-aws.sops.yaml     # AWS VPN hub (wg0 + wg1)
 │   │   └── vpn-fallback.sops.yaml   # Local backup gateway (wg0 + wg1)
@@ -161,7 +160,7 @@ Required port forwards for homelab WireGuard endpoints:
 
 | Name | WAN Port | Forward IP | Forward Port | Protocol | Purpose |
 |------|----------|------------|--------------|----------|---------|
-| WireGuard wg0 | 9820 | 10.10.201.20 | 51820 | UDP | Regional VPN tunnels (Mumbai, etc.) |
+| WireGuard wg0 | 9820 | 10.10.201.20 | 51820 | UDP | Inbound s2s spoke tunnels (all regional spokes now decommissioned — Mumbai 2026-05, us-east-1 2026-07) |
 | WireGuard wg1 | 9821 | 10.10.201.20 | 9821 | UDP | Direct remote access |
 
 Configure in UDM: Network → Port Forwarding → Create
@@ -202,7 +201,7 @@ Configure in UDM: Network → Port Forwarding → Create
 | wg0 | Site-to-site + Regional | 9820 | 51820 | 51820 | 10.255.255.0/29 |
 | wg1 | Remote access | 9821 | 9821 | 51821 | 10.254.0.0/24 |
 
-**Note:** Regional VPNs (Mumbai, etc.) connect INBOUND to homelab's wg0 via port 9820. The vpn-aws connection is OUTBOUND from homelab, so it doesn't need a port forward.
+**Note:** The vpn-aws wg0 connection is OUTBOUND from homelab, so it doesn't need a port forward. (Regional spokes used to connect INBOUND via port 9820 — all decommissioned; only vpn-aws remains as the single s2s peer.)
 
 ## Troubleshooting
 

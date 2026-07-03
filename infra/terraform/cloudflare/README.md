@@ -1,7 +1,8 @@
 # Cloudflare full-zone management — etherport.net
 
 Manages the **`etherport.net` zone in Cloudflare** (CF is authoritative for the domain), its
-**Cloudflare Tunnel** + ingress, and the **CF Access** apps in front of tunnel-exposed services.
+**Cloudflare Tunnel** + ingress, and the **CF Access** apps in front of tunnel-exposed services —
+plus a small **cross-zone** footprint (SPF hardening on other CF zones, see item 9).
 Ships via the `terraform-cloudflare.yml` GitHub Actions workflow. CF Free plan, **$0/mo**.
 
 > CF provider **v5** (`cloudflare/cloudflare ~> 5.0`). Access policies are **inline** on each app;
@@ -35,13 +36,22 @@ Ships via the `terraform-cloudflare.yml` GitHub Actions workflow. CF Free plan, 
    - **`ha`** — Home Assistant, **dual-policy**: a non-identity **service-token** policy for the
      Alexa skill Lambda (it can't follow SSO redirects), then a browser-SSO policy.
    - **`cue` (per-path, `cue-access.tf`)** — CF matches most-specific path first:
-     `/health` → **bypass** (public liveness), `/ingest/healthkit` → **service token** (Apple Health
-     Auto Export), everything else → **allow `cue_tester_emails`** (SSO).
+     `/health` → **service token** (`cue-health-probe`, used by the in-cluster blackbox probe with
+     CF-Access headers from a SOPS Secret; replaced the old bypass+everyone policy 2026-07-03 after a
+     CF "Overprovisioned Access Policies" insight), `/ingest/healthkit` → **service token** (Apple
+     Health Auto Export), everything else → **allow `cue_tester_emails`** (SSO).
    - **`cf_tunnel_services`** map — one CNAME + Access app (allow `allowed_emails`) per entry.
      Current entries: `technitium.wind`, `grafana.wind`, `plex.wind`, `ollama.wind`, `chat.wind`,
      `backup-approve.wind`.
-8. **CF Access Service Tokens** — `alexa_skill` (Alexa Lambda → HA, `alexa-service-token.tf`) and
-   `cue_healthkit` (Apple Health → Cue, `cue-access.tf`). Client ID/secret are TF outputs.
+8. **CF Access Service Tokens** — `alexa_skill` (Alexa Lambda → HA, `alexa-service-token.tf`),
+   `cue_healthkit` (Apple Health → Cue) and `cue_health_probe` (in-cluster blackbox → `/health`),
+   both in `cue-access.tf`. Client ID/secret are TF outputs.
+9. **Cross-zone security-insight remediations** (`insights-cross-zone.tf`, 2026-07-03) — hard-fail
+   SPF (`v=spf1 -all`) TXT records on the receive-only `mail.grahamsmith.net` +
+   `mail.stopthecastle.com` names (via `cloudflare_zones` data lookups — the CI token's DNS scope is
+   all-zones), and **Bot Fight Mode** for `etherport.net` (`cloudflare_bot_management` — apply
+   pending the "Zone: Bot Management: Edit" token scope; the three personal-web zones' BFM is
+   managed by the personal-web repo instead).
 
 ## What this module does NOT own
 
@@ -64,8 +74,11 @@ Ships via the `terraform-cloudflare.yml` GitHub Actions workflow. CF Free plan, 
   - Account: Cloudflare Tunnel: Edit
   - Account: Access: Apps and Policies: Edit
   - Account: Access: Service Tokens: Edit
-  - Zone: DNS: Edit
+  - Zone: DNS: Edit — **all zones** (the cross-zone SPF records in `insights-cross-zone.tf`
+    rely on this; it is not etherport-only)
   - Zone: Zone: Edit
+  - Zone: Bot Management: Edit (needed by `cloudflare_bot_management.etherport`; being added —
+    the BFM apply is pending this scope)
   - (No "Account: Zone: Edit" — the zone is dashboard-created, not API-created.)
 - Token saved to 1P as `Cloudflare API (tf)` → field `token`.
 - GitHub repo secrets set:

@@ -1,11 +1,21 @@
 #!/bin/bash
-# Kubespray wrapper — wind cluster, headless ops host (mini).
+# Kubespray wrapper — wind cluster. Runs from the DEVBOX (venv ~/.kubespray-venv).
 # Usage: ./kubespray.sh <playbook> [extra ansible-playbook args]
 #
 #   ./kubespray.sh cluster.yml                           # deploy/update full cluster
 #   ./kubespray.sh cluster.yml --tags=cilium,download    # reconfigure cilium
 #   ./kubespray.sh upgrade-cluster.yml --limit k8s-w1
 #   ./kubespray.sh cluster.yml --check --diff            # dry run
+#
+# SSH: the fleet is CERT-ONLY (M76) — the SSH_KEY default below is the RETIRED
+# static key (every host now rejects it). On the devbox always override with the
+# step-ca cert identity:
+#   KUBESPRAY_SSH_KEY=~/.ssh/id_homelab_cert ./kubespray.sh …
+# (the step-ssh-renew loop keeps the cert fresh — 13h lifetime).
+#
+# Long runs (cluster.yml / upgrade-cluster.yml take 30–90+ min): run inside a
+# DETACHED tmux session, not an agent-harness background task (those die with
+# the session) — e.g.  tmux new -d -s kubespray '… ./kubespray.sh upgrade-cluster.yml …'
 #
 # CRITICAL: cluster.yml / upgrade-cluster.yml / scale.yml (incl. --tags=cilium) chown
 # /opt/cni/bin to kube_owner (kube), which breaks Cilium's mount-cgroup on the next
@@ -19,7 +29,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KUBESPRAY_DIR="$SCRIPT_DIR/kubespray"                 # git submodule (playbooks live here)
 INVENTORY="$SCRIPT_DIR/inventory/inventory.ini"       # wind inventory (outside the submodule)
 PREFLIGHT="$SCRIPT_DIR/inventory/pre-flight.yml"
-VENV="${KUBESPRAY_VENV:-$HOME/.kubespray-venv}"       # ansible 10.7.0 / core 2.17 (kubespray v2.30)
+VENV="${KUBESPRAY_VENV:-$HOME/.kubespray-venv}"       # ansible 11.13 / core 2.18 (kubespray v2.31)
 SSH_USER="${KUBESPRAY_SSH_USER:-ubuntu}"
 SSH_KEY="${KUBESPRAY_SSH_KEY:-$HOME/.ssh/id_ed25519_homelab}"
 

@@ -2,7 +2,8 @@
 # UDM firewall policies via the UniFi 10+ zone-policy API.
 #
 # Why this playbook exists (and not Terraform):
-#   paultyng/unifi only speaks the legacy /rest/firewallrule endpoint,
+#   The unifi TF provider (ubiquiti-community/unifi since M125; formerly
+#   paultyng/unifi) only speaks the legacy /rest/firewallrule endpoint,
 #   which on UniFi 10+ rejects address-group creates + applies stricter
 #   rule_index ranges (FirewallGroupInvalidArgs, FirewallRuleIndexOutOfRange).
 #   The "modern" zone-based v2 API at /proxy/network/v2/api/.../firewall-policies
@@ -16,8 +17,10 @@
 #
 # Configure rules via the `udm_firewall_*` vars below.
 #
-# Auth: 1Password "UDM (tf-admin)" item. Username + password fetched via
-# `op item get` at runtime (op CLI must be in PATH; agent must be unlocked).
+# Auth (in preference order): UDM_API_KEY env var (CI / SOPS `udm_api_key`,
+# X-API-KEY header — M47) → UDM_USERNAME/UDM_PASSWORD env vars → 1Password
+# "UDM (tf-admin)" via `op` (interactive-laptop fallback only; `op` does NOT
+# work from agent shells).
 #
 # Usage (check / apply against the real UDM):
 #   ansible-playbook -i inventory/wind/inventory.ini \

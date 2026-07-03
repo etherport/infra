@@ -30,7 +30,8 @@ Automated, safe node reboots for security updates.
 ## Installation
 
 **Kured is GitOps-managed by a Flux HelmRelease** (`clusters/wind/helm-releases/kured.yaml`,
-chart `5.10.x`, wired into that dir's `kustomization.yaml`). Flux installs and reconciles it
+chart exact-pinned — currently `5.10.0`; Renovate PRs bumps, M122 — wired into that dir's
+`kustomization.yaml`). Flux installs and reconciles it
 into `kube-system` — a manual `helm install kured` is reverted on the next reconcile. Treat the
 steps below as bootstrap/verification context; **the live config source of truth is the
 HelmRelease's `spec.values`** (the `kured-values.yaml` in this dir is reference-only).

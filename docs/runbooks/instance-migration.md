@@ -14,8 +14,9 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
 > onto it. The former separate `dns-aws` instance was **destroyed** and its EIP
 > `52.40.219.113` **released**. There is now exactly one standing AWS EC2 instance; the
 > "DNS Instance Migration" steps below now target that edge box (`vpn-aws`,
-> 10.10.100.10). **Residual (pending):** the edge box still uses the static
-> `automation@homelab` bootstrap key for SSH — it is not yet on cert-only SSH.
+> 10.10.100.10). The edge box is on **cert-only SSH** (M76 parity, 2026-07-03) — the
+> static `automation@homelab` key survives only as the cloud-init bootstrap seed a
+> rebuilt instance boots with (re-enroll against step-ca, then strip it).
 
 ## Prerequisites
 
@@ -23,9 +24,8 @@ for scenarios like EBS encryption, instance type changes, or disaster recovery.
   hold no standing AWS/PVE creds. Dispatch the relevant workflow (see each "Apply
   Terraform" step). To dispatch you need the Actions:write PAT (M92) / `gh`.
 - Age key available for SOPS decryption
-- SSH access to existing instances (cert-only, M76 — `ssh ubuntu@<host>`). **Exception:** the
-  AWS edge box (`vpn-aws`) is still on the static `automation@homelab` bootstrap key (not yet
-  cert-only — M110 residual).
+- SSH access to existing instances (cert-only, M76 — `ssh ubuntu@<host>`; the AWS edge
+  box included, since 2026-07-03).
 - Ansible installed (the playbook steps still run locally)
 - **Rare local-debug TF escape hatch (M82):** render throwaway creds with
   `scripts/render-aws-credentials.sh` (writes `~/.aws` `[homelab]` from SOPS) and,

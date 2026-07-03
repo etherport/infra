@@ -126,7 +126,7 @@ docs/
 ### CI/CD & Hosts
 | Document | Description |
 |----------|-------------|
-| [github-actions/README.md](setup/github-actions/README.md) | CI/CD workflows (⚠️ partly stale — CI now uses GitHub→AWS **OIDC**, not static keys) |
+| [github-actions/README.md](setup/github-actions/README.md) | CI/CD workflows — image builds + TF dispatch (AWS via GitHub→AWS **OIDC**; PVE/CF/UDM on the self-hosted `lifecycle` runner) |
 | [headless-ops-host.md](setup/headless-ops-host.md) | Headless ops/RC host provisioning (devbox `10.10.201.45` is the live session host since 2026-06-18; mini secondary) |
 
 ### GitOps
@@ -154,6 +154,7 @@ docs/
 | [kubectl-cheatsheet.md](reference/kubectl-cheatsheet.md) | kubectl command reference |
 | [kustomize-patterns.md](reference/kustomize-patterns.md) | Kustomize patterns and examples |
 | [node-vlan-setup.md](reference/node-vlan-setup.md) | Node VLAN configuration reference |
+| [snapshots/](reference/snapshots/) | Point-in-time live-config snapshots (e.g. `cilium-helm-values.yaml` — refreshed on each cilium upgrade) |
 
 ## Guides
 
@@ -173,7 +174,11 @@ captured yet.
 | Document | Description |
 |----------|-------------|
 | [outstanding-work.md](planning/outstanding-work.md) | **Source of truth** for prioritized open work (C/H/M/L tiers) + completed index |
+| [session-log.md](planning/session-log.md) | **Narrative journal** of each working session (what/why/how-to-resume), newest first |
+| [dev-roadmap-2026-06-11.md](planning/dev-roadmap-2026-06-11.md) | Forward-looking build backlog (4-track review) — dated snapshot kept live; `outstanding-work.md` is the status |
+| [roadmap-specs-2026-06-11.md](planning/roadmap-specs-2026-06-11.md) | Executable specs for roadmap items B1/A2/C2-I7 (B1 shipped; A2 spec needs a us-west-2-local rework) |
 | [outstanding-work-completed-2026-07.md](planning/archive/outstanding-work-completed-2026-07.md) | Completed-items archive — 2026-07-01 extraction (full text of ✅ items + retired tracker top-matter) |
+| [aws-vpn-dns-consolidation-plan.md](planning/archive/aws-vpn-dns-consolidation-plan.md) | M110 AWS one-box consolidation plan — ✅ fully executed 2026-07-01→03; archived. Live state: [architecture/aws-infrastructure.md](architecture/aws-infrastructure.md) |
 | [zero-trust-assessment-2026-06-17.md](planning/archive/zero-trust-assessment-2026-06-17.md) | Zero-trust posture: what's done vs gaps (H37/H38, M72–M76, L24) |
 | [ai-alert-remediation-2026-05-23.md](planning/archive/ai-alert-remediation-2026-05-23.md) | AI advisor system design spec (M41) |
 | [ai-advisor-phases-2-3-scope.md](planning/archive/ai-advisor-phases-2-3-scope.md) | M41 Phase 2/3 implementation scope |
@@ -195,7 +200,7 @@ context only) live in [docs/planning/archive/](planning/archive/).
 Infrastructure layer:
 ├── Proxmox (Terraform)               VM provisioning + SDN bridges
 ├── Kubernetes (Kubespray)            Container orchestration (Cilium CNI + Multus)
-├── AWS (Terraform)                   VPC, EC2 (vpn-aws/dns-aws), SES, Lambdas (ALB + Route53 decommissioned 2026-05-27)
+├── AWS (Terraform)                   VPC, ONE EC2 edge box (private-infra_edge: WG+Tailscale+DNS), SES, Lambdas (ALB + Route53 decommissioned 2026-05-27; dns-aws folded in, M110)
 ├── UniFi (Terraform — terraform-unifi) Networks/VLANs/routes/reservations/port-forwards
 └── Cloudflare (Terraform)            etherport.net zone (authoritative since 2026-05-25), Tunnel, Access
 

@@ -84,10 +84,10 @@ variable "cf_tunnel_services" {
          cloudflared pod CIDR (10.42.0.0/16) to "LAN Networks" so it
          treats tunnel traffic as local + skips its own login
 
-    Legacy fallback: existing Traefik IngressRoutes at the same hostname
-    keep functioning via the *.wind.etherport.net wildcard → ALB path.
-    CF explicit records take precedence over the wildcard for external
-    resolution.
+    NB: these explicit CF records are the ONLY external resolution path —
+    the old *.wind.etherport.net wildcard (→ ALB) was removed with the
+    2026-05-27 ALB decom; hostnames not listed here resolve NXDOMAIN
+    externally (internal-only via Technitium).
   EOT
   type = map(object({
     cluster_service_url = string

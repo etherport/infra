@@ -4,8 +4,8 @@
 # Variables for VPN routing
 #------------------------------------------------------------------------------
 
-# VPN instance network interface ID - hardcoded until Phase 2 (EC2 module)
-# Instance: i-011086cefc7ab3cc1 (private-infra_vpn)
+# Edge instance network interface ID - hardcoded (the compute stack is a
+# separate state). Instance: i-011086cefc7ab3cc1 (private-infra_edge)
 locals {
   vpn_network_interface_id = "eni-0979054c909a044f4"
 }

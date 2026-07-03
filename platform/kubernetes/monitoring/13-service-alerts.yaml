@@ -70,7 +70,7 @@ spec:
             severity: critical
           annotations:
             summary: "authentik SSO is not answering /-/health/live/"
-            description: "The in-cluster health probe has failed for 5m — all OIDC logins (Grafana/wiki/Open WebUI) + every forward-auth admin UI are blocked. HA/Plex keep working (own auth). Check: kubectl -n authentik get pods; shared postgres + redis health."
+            description: "The in-cluster health probe has failed for 5m — all OIDC logins (Grafana/wiki/Open WebUI) + every forward-auth admin UI are blocked. HA/Plex keep working (own auth). Check: kubectl -n authentik get pods; shared postgres health (no redis — removed with the 2026.x upgrade)."
 
     - name: cloudflared.rules
       rules:

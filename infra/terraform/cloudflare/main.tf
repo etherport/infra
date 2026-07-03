@@ -180,10 +180,10 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "wind_cluster" {
           origin_request = { no_tls_verify = false, connect_timeout = 10 }
         },
         // Cue API — serves the WHOLE app now (2026-06-23); CF Access does the
-        // gating via per-path apps in cue-access.tf (testers SSO / /health bypass
-        // / /ingest/healthkit service token). Telegram is removed, so the old
-        // path-limit is gone. NOT in the cf_tunnel_services map because that wires
-        // a single blanket SSO policy; cue needs the per-path Access apps instead.
+        // gating via per-path apps in cue-access.tf (testers SSO / /health
+        // service token / /ingest/healthkit service token). Telegram is removed,
+        // so the old path-limit is gone. NOT in the cf_tunnel_services map because
+        // that wires a single blanket SSO policy; cue needs per-path Access apps.
         {
           hostname       = "cue.etherport.net"
           path           = null
@@ -232,6 +232,10 @@ resource "cloudflare_dns_record" "approve_cname" {
 // Cue API — apex-level "cue.etherport.net" so Universal SSL (root +
 // *.etherport.net) covers TLS. Proxied so the edge terminates TLS and CF Access
 // intercepts. Whole app served; CF Access apps (cue-access.tf) gate per path.
+// NB the `comment` argument below still says "/health bypass" — /health is a
+// SERVICE-TOKEN policy since 2026-07-03; update the string on the next
+// deliberate apply (it's an applied CF-side attribute, so fixing it here alone
+// would surface as a plan diff).
 resource "cloudflare_dns_record" "cue_cname" {
   zone_id = var.cloudflare_zone_id
   name    = "cue.${var.cf_zone_domain}"

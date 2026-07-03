@@ -7,7 +7,7 @@ High-level infrastructure design for the homelab environment.
 | Component | Details |
 |-----------|---------|
 | Hypervisor | Proxmox (`pve.wind.etherport.net`) |
-| Kubernetes | 3 CPs (.50-.52; etcd HA, but **no HA API VIP** — `controlPlaneEndpoint` pins cp1) + 4 workers (.53-.56) + 1 GPU (.60) |
+| Kubernetes | v1.35.0 (kubespray) — 3 CPs (.50-.52; etcd HA, but **no HA API VIP** — `controlPlaneEndpoint` pins cp1) + 4 workers (.53-.56) + 1 GPU (.60) |
 
 ### Kubernetes Nodes
 

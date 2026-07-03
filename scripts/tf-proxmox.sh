@@ -16,7 +16,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SECRETS="$ROOT/infra/terraform/proxmox/secrets.sops.yaml"
-STACK="${1:?usage: tf-proxmox.sh <stack: k8s-vms|sdn|standalone-vms> <terraform args...>}"
+STACK="${1:?usage: tf-proxmox.sh <stack: k8s-vms|sdn|standalone-vms|firewall> <terraform args...>}"
 shift
 DIR="$ROOT/infra/terraform/proxmox/$STACK"
 [ -d "$DIR" ] || { echo "ERROR: no such stack: $DIR" >&2; exit 1; }

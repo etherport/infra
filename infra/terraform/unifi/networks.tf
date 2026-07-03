@@ -25,11 +25,9 @@
 # Plan must report "no changes" before any apply. If diffs appear, the live
 # UDM is the source of truth — edit the HCL to match, not the other way.
 #
-# Subnet normalization: the paultyng provider stored `subnet` as the network
-# address (e.g. 10.10.201.0/24), NOT the gateway (.1/24). Use .0.
-# M125 CAUTION: the fork's docs example uses gateway-style "10.0.0.1/24" —
-# verify on the first plan whether the fork normalizes to .0 or wants .1;
-# fix HCL to match live/plan, not the other way.
+# Subnet normalization: the fork wants GATEWAY-style subnets ("10.10.201.1/24")
+# — confirmed on the M125 migration plans. (The archived paultyng provider
+# stored the network address, .0/24; that convention is dead.)
 
 # Note: `ignore_changes` takes unquoted attribute references and must live
 # inside each resource's `lifecycle` block — it can't be shared from `locals`.
@@ -205,14 +203,13 @@ resource "unifi_network" "clients" {
   lifecycle {
     ignore_changes = [
       # M110 (2026-07-02): dhcp_dns was ignored — the archived paultyng provider
-      # 400'd on PUT for THIS network (api.err.Invalid; 4 of 7 networks applied
-      # fine). The dhcpd_dns_3=44.240.60.80 cutover was applied via a direct UDM
-      # API round-trip PUT (verified live). Live UDM = source of truth for
-      # dhcp_dns here.
+      # 400'd on PUT for THIS network (api.err.Invalid); the dhcpd_dns_3=
+      # 44.240.60.80 cutover went in via a direct UDM API PUT instead.
       # M125: dhcp_dns is now nested → the WHOLE dhcp_server attribute is
-      # ignored (was scoped to dhcp_dns before; note this also masks range/
-      # leasetime drift). The 400 was a paultyng bug — once the fork proves
-      # writable on the first plan/apply, drop this entry.
+      # ignored (note this also masks range/leasetime drift). The 400 was a
+      # paultyng bug and the fork FIXED it (all PUTs clean in the M125
+      # migration) → this entry is a REMOVAL CANDIDATE: drop it, confirm the
+      # plan stays clean, keep live UDM as source of truth.
       dhcp_server,
       # M125: see unifi_network.default for the dropped dhcp_v6_*/ipv6_* list.
       ipv6_interface_type,
@@ -279,14 +276,14 @@ resource "unifi_network" "security" {
   vlan   = 205
   subnet = "10.10.205.1/24" # fork normalizes to gateway-style
 
-  # ⚠️ M125: under paultyng, network_isolation_enabled=true in live UDM was
-  # NOT in the provider schema (UI-managed only) while the separate
-  # intra_network_access_enabled arg was true. The fork DOES expose
-  # network_isolation; the mechanical intra=true → isolation=false mapping is
-  # applied below, but if the fork's attribute reads the live UDM
-  # network_isolation_enabled=true, the FIRST PLAN WILL DIFF HERE — if so,
-  # set network_isolation = true to match live (live UDM is source of truth;
-  # do NOT apply a diff that would disable the Security VLAN's isolation).
+  # M125 NB: under paultyng, the live UDM's network_isolation_enabled=true was
+  # UI-managed only (not in that schema) while intra_network_access_enabled
+  # was true. The fork's `network_isolation` attribute maps to the INVERSE of
+  # the old intra-access flag, and the M125 migration plans converged clean
+  # with isolation=false below — i.e. the fork attribute does NOT read the
+  # UI-level network_isolation_enabled flag, which stays UI-managed. If a
+  # future provider bump starts diffing here, match live (isolation=true)
+  # rather than applying a diff that would touch the Security VLAN's isolation.
   dhcp_server = {
     enabled   = true
     start     = "10.10.205.100"
@@ -325,9 +322,9 @@ resource "unifi_network" "guest" {
   setting_preference = "manual"
 
   # M125: dropped `purpose = "guest"` (no fork equivalent — the purpose arg is
-  # gone from the schema entirely). ⚠️ How the fork models guest-portal
-  # semantics is UNVERIFIED — check the first plan for a diff on this network
-  # and confirm the guest policy survives in the UDM UI after apply.
+  # gone from the schema entirely). The M125 migration plan/apply converged
+  # clean on this network and the guest policy survived in the UDM UI; the
+  # guest-portal semantics live controller-side, not in the provider schema.
   name   = "Guest"
   vlan   = 206
   subnet = "10.10.206.1/24" # fork normalizes to gateway-style
@@ -354,9 +351,9 @@ resource "unifi_network" "guest" {
     # field back for purpose=guest, causing a perpetual plan diff. Live UDM
     # state keeps the values.
     # M125: dhcp_dns is now nested → the WHOLE dhcp_server attribute is
-    # ignored (was scoped to dhcp_dns before; also masks range/leasetime
-    # drift). The read-back bug may be fixed in the fork — if the first plan
-    # is clean without it, drop this entry.
+    # ignored (note this also masks range/leasetime drift). The fork fixed
+    # the paultyng read/write bugs, so this entry is a REMOVAL CANDIDATE:
+    # drop it and confirm the plan stays clean.
     ignore_changes = [
       dhcp_server,
       # M125: see unifi_network.default for the dropped dhcp_v6_*/ipv6_* list.
@@ -403,14 +400,13 @@ resource "unifi_network" "vsan" {
   lifecycle {
     ignore_changes = [
       # M110 (2026-07-02): dhcp_dns was ignored — the archived paultyng provider
-      # 400'd on PUT for THIS network (api.err.Invalid; 4 of 7 networks applied
-      # fine). The dhcpd_dns_3=44.240.60.80 cutover was applied via a direct UDM
-      # API round-trip PUT (verified live). Live UDM = source of truth for
-      # dhcp_dns here.
+      # 400'd on PUT for THIS network (api.err.Invalid); the dhcpd_dns_3=
+      # 44.240.60.80 cutover went in via a direct UDM API PUT instead.
       # M125: dhcp_dns is now nested → the WHOLE dhcp_server attribute is
-      # ignored (was scoped to dhcp_dns before; also masks range/leasetime
-      # drift). The 400 was a paultyng bug — once the fork proves writable on
-      # the first plan/apply, drop this entry.
+      # ignored (note this also masks range/leasetime drift). The 400 was a
+      # paultyng bug and the fork FIXED it (all PUTs clean in the M125
+      # migration) → this entry is a REMOVAL CANDIDATE: drop it, confirm the
+      # plan stays clean, keep live UDM as source of truth.
       dhcp_server,
       # M125: see unifi_network.default for the dropped dhcp_v6_*/ipv6_* list.
       ipv6_interface_type,
@@ -509,14 +505,13 @@ resource "unifi_network" "ceph" {
   lifecycle {
     ignore_changes = [
       # M110 (2026-07-02): dhcp_dns was ignored — the archived paultyng provider
-      # 400'd on PUT for THIS network (api.err.Invalid; 4 of 7 networks applied
-      # fine). The dhcpd_dns_3=44.240.60.80 cutover was applied via a direct UDM
-      # API round-trip PUT (verified live). Live UDM = source of truth for
-      # dhcp_dns here.
+      # 400'd on PUT for THIS network (api.err.Invalid); the dhcpd_dns_3=
+      # 44.240.60.80 cutover went in via a direct UDM API PUT instead.
       # M125: dhcp_dns is now nested → the WHOLE dhcp_server attribute is
-      # ignored (was scoped to dhcp_dns before; also masks range/leasetime
-      # drift). The 400 was a paultyng bug — once the fork proves writable on
-      # the first plan/apply, drop this entry.
+      # ignored (note this also masks range/leasetime drift). The 400 was a
+      # paultyng bug and the fork FIXED it (all PUTs clean in the M125
+      # migration) → this entry is a REMOVAL CANDIDATE: drop it, confirm the
+      # plan stays clean, keep live UDM as source of truth.
       dhcp_server,
       # M125: see unifi_network.default for the dropped dhcp_v6_*/ipv6_* list.
       ipv6_interface_type,

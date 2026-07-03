@@ -14,7 +14,8 @@ automatically, what needs a human, and on what cadence. (The former
 │                    (no action needed)                            │
 ├──────────────────────────────────────────────────────────────────┤
 │  Container Images (14)    Flux scans hourly, commits to git      │
-│  K8s Node OS Patches      unattended-upgrades runs daily         │
+│  K8s Node OS Patches      unattended-upgrades, security-only     │
+│                           (M116)                                 │
 │  K8s Node Reboots         Kured coordinates 2-6am Pacific        │
 │  Standalone VM OS         unattended-upgrades + auto-reboot      │
 └──────────────────────────────────────────────────────────────────┘
@@ -23,7 +24,9 @@ automatically, what needs a human, and on what cadence. (The former
 │                    SEMI-AUTOMATIC                                │
 │                    (review & merge PRs)                          │
 ├──────────────────────────────────────────────────────────────────┤
-│  Helm Charts              Renovate creates PRs on new releases   │
+│  Helm Charts (17, exact-  Renovate flux manager PRs (M122)       │
+│    pinned HelmReleases)                                          │
+│  K8s manifest images      Renovate kubernetes manager PRs        │
 │  Terraform Providers      Renovate creates PRs on new releases   │
 │  GitHub Actions           Renovate creates PRs on new releases   │
 └──────────────────────────────────────────────────────────────────┘
@@ -84,11 +87,12 @@ ANNUALLY
 | Component | Count | Method | Frequency | Action |
 |-----------|-------|--------|-----------|--------|
 | Container Images | 14 | Flux ImageUpdateAutomation | Hourly scan | None |
-| K8s Node OS | 8 nodes | unattended-upgrades | Daily | None |
+| K8s Node OS | 8 nodes | unattended-upgrades (security-only, M116) | Daily | None |
 | K8s Node Reboots | 8 nodes | Kured | 2-6am when needed | None |
-| Standalone VM OS | 6 local PVE + 2 AWS | unattended-upgrades | Daily | None |
-| Standalone VM Reboots | 4 staggered (others default) | Staggered cron | 02:00-04:00 | None |
-| Helm Charts | 16 releases | Renovate PRs | On release | Merge PR |
+| Standalone VM OS | 6 local PVE + 1 AWS | unattended-upgrades | Daily | None |
+| Standalone VM Reboots | 3 staggered (others default) | Staggered cron | 02:00-03:30 | None |
+| Helm Charts | 17 releases (exact-pinned) | Renovate flux-manager PRs (M122) | On release | Merge PR |
+| K8s manifest images | `platform/kubernetes/**` | Renovate kubernetes-manager PRs (M122) | On release | Merge PR |
 | Terraform Providers | ~10 sources | Renovate PRs | On release | Merge PR |
 | GitHub Actions | varies | Renovate PRs | On release | Merge PR |
 | Proxmox Host | 1 | Ansible | Monthly | Run playbook |
@@ -178,10 +182,16 @@ ansible dns_servers,vpn_servers \
 
 ## 2. Semi-Automatic Updates (Renovate PRs)
 
-**What Renovate tracks:**
-- Helm chart versions
+**What Renovate tracks (M122, 2026-07-03):**
+- Helm chart versions — the **`flux` manager** on `clusters/wind/helm-releases/**`.
+  All 17 HelmReleases are **exact-pinned** to the deployed version (semver *ranges*
+  were silently freezing majors — never reintroduce a range)
+- Container images in raw manifests — the **`kubernetes` manager** on
+  `platform/kubernetes/**`. Exclusions: `goauthentik/server` and
+  `cloudnative-pg/postgresql` images (program-managed upgrades, not PR-bumped)
 - Terraform provider versions
 - GitHub Actions versions
+- Major versions always arrive as **individual PRs** (never grouped)
 
 **Workflow:**
 1. Renovate scans repo continuously
@@ -210,10 +220,11 @@ gh pr list --label renovate
 - **A PR open >2 weeks** → merge or close. Stale Renovate PRs accumulate merge
   conflicts and stop being useful.
 
-**Current Helm releases tracked** (HelmRelease CRs in `clusters/wind/helm-releases/`;
-list live with `kubectl get helmrelease -A`): alloy, arc-controller,
-arc-runner-homelab, cert-manager, cnpg, gpu-operator, kured, kyverno, loki,
-metallb, monitoring, pushgateway, tailscale-operator, tetragon, traefik, velero.
+**Current Helm releases tracked** (17 HelmRelease files in
+`clusters/wind/helm-releases/`; list live with `kubectl get helmrelease -A`):
+alloy, cert-manager, cnpg, github-actions-runner, gpu-operator, kured, kyverno,
+loki, metallb, metrics-server, monitoring, pushgateway, tailscale-connector,
+tailscale-operator, tetragon, traefik, velero.
 
 ---
 
@@ -251,7 +262,9 @@ cd kubespray && git checkout v2.XX.X && cd ..
 
 # Run upgrade via the wrapper (auto-runs pre-flight to restore the CNI dir owner —
 # NEVER raw ansible-playbook cluster.yml/upgrade-cluster.yml; see cilium-cni-dir-owner)
-cd infra/kubespray && ./kubespray.sh upgrade-cluster.yml
+# Runs FROM THE DEVBOX (venv ~/.kubespray-venv) in a DETACHED tmux; export
+# KUBESPRAY_SSH_KEY=~/.ssh/id_homelab_cert (wrapper default is the dead static key)
+cd infra/kubespray && KUBESPRAY_SSH_KEY=~/.ssh/id_homelab_cert ./kubespray.sh upgrade-cluster.yml
 
 # Verify
 kubectl get nodes

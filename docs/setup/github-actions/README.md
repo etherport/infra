@@ -32,7 +32,17 @@ Automatically build and push container images to GitHub Container Registry (GHCR
 
 ### 2. Terraform Infrastructure
 
-Deploy AWS infrastructure via Terraform with plan/apply/destroy capabilities.
+Deploy infrastructure via Terraform with plan/apply/destroy capabilities.
+
+**Authentication (current):**
+- **AWS stacks** run on GitHub-hosted runners with **GitHub→AWS OIDC** (H29) —
+  short-lived per-run credentials, **no static AWS keys in CI**.
+- **PVE/UniFi/Cloudflare/Google/Twilio stacks** run on the self-hosted `lifecycle`
+  runner with creds as GH secrets. (UniFi uses the `ubiquiti-community/unifi`
+  provider with `UNIFI_API_KEY`, M125.)
+- GCP uses **Workload Identity Federation** (L21).
+- The devbox has no `gh` CLI — it dispatches workflows via the GitHub REST API with
+  the Actions:write PAT (M92).
 
 **Triggers:**
 - Push to `main`: Validation plan only
@@ -117,7 +127,10 @@ jobs:
 
 ### Terraform Workflow Considerations
 
-For new Terraform workflows:
+For new Terraform workflows (NB: new AWS workflows should authenticate via the
+**OIDC role** like the existing `terraform-*.yml` AWS workflows do — copy one of
+those; the profile plumbing below exists so the same stacks also run locally with
+the rendered `[homelab]` profile):
 
 1. **Backend Profile Override**: Always add `-backend-config="profile="` to `terraform init`
 2. **Provider Profile Variable**: Add `aws_profile` variable with conditional:
@@ -160,7 +173,7 @@ For new Terraform workflows:
 
 ```bash
 # List recent runs
-gh run list --workflow="terraform-regional-vpn.yml" --limit 5
+gh run list --workflow="terraform-compute.yml" --limit 5
 
 # View specific run
 gh run view <run-id>

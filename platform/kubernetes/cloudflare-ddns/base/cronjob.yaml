@@ -43,7 +43,7 @@ spec:
               args:
                 - |
                   set -euo pipefail
-                  # Run DDNS update (auth validation happens in Route53 API calls)
+                  # Run DDNS update (auth validation happens in the Cloudflare API calls)
                   /scripts/update-cf-dns.sh
               securityContext:
                 allowPrivilegeEscalation: false

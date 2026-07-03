@@ -21,8 +21,16 @@ patches. Kubespray uses this directory's inventory as its single source of truth
 ## Inventory
 
 - `inventory/wind/inventory.ini` — homelab hosts (PVE, K8s nodes, standalone VMs). Shared with kubespray.
-- `inventory/aws/inventory.ini` — AWS VPN/DNS hosts.
+- `inventory/aws/inventory.ini` — the single AWS edge box `vpn-aws` (EC2
+  `private-infra_edge`, `10.10.100.10`), which carries the DNS + WireGuard +
+  Tailscale roles since the M110 consolidation (the separate `dns-aws` instance
+  was destroyed 2026-07-02).
 - `inventory/wind/group_vars/`, `host_vars/` — per-group/host vars.
+
+SSH to the whole fleet — **including the AWS edge box** since 2026-07-02 — is
+**cert-only** (M76): the devbox renew-loop / the CI `setup-ssh-cert` action mint
+short-lived step-ca user certs; the static `automation@homelab` key is rejected
+everywhere (it survives only as the cloud-init bootstrap seed for rebuilds).
 
 ## Secrets
 

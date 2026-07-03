@@ -41,8 +41,8 @@ variable "node_name" {
 #                   of the host's VMs/pods. UDM routes (no SNAT) so PVE sees the
 #                   192.168.3.x client IP. MUST stay allowed — it's our last way
 #                   in if the host's WG-pod / TS-subnet-routers (both VMs) die.
-# Stage 1 is permissive (input policy ACCEPT) so this denies nothing yet; we
-# observe logs to pin the real SNAT sources before the Stage 2 DROP flip.
+# The host input policy is DROP (enforced 2026-06-17), so anything NOT in this
+# list cannot reach the management plane — extend it BEFORE adding a new admin path.
 variable "mgmt_admin_cidrs" {
   description = "Trusted admin source CIDRs for the PVE host management plane"
   type        = list(string)

@@ -10,10 +10,11 @@
 # was `unifi_user` in the archived paultyng/unifi provider — same args:
 # required mac; optional name, fixed_ip, network_id, note).
 #
-# M125 state migration: the type rename unifi_user → unifi_client cannot be
-# expressed as a moved{} block (moved cannot change resource type) — existing
-# state entries are re-imported instead; see import-commands.sh alongside this
-# draft.
+# M125 state migration (done 2026-07-02): the type rename unifi_user →
+# unifi_client cannot be expressed as a moved{} block (moved cannot change
+# resource type) — the old unifi_user.* state entries were state-rm'd and
+# re-imported as unifi_client BY MAC (the fork rejects id-imports for
+# clients). See docs/planning/session-log.md 2026-07-02 (cont. 4b).
 #
 # Note: PVE (10.10.200.41) deferred — physical host, MAC requires SSH
 # lookup and wasn't reachable when this file was authored. Add later.

@@ -61,13 +61,13 @@
 #     password: pass
 
 # H45b (2026-07-02): containerd 2.2.1 → 2.2.5 (the 2026-06-18 coordinated release —
-# 3 Criticals incl. image-LABEL→host-root exec). kubespray v2.30 ships checksums only
-# up to 2.2.1, so we pin the version AND supply the official amd64 checksum (from
+# 3 Criticals incl. image-LABEL→host-root exec). The kubespray submodule (v2.31)
+# ships checksums only up to 2.2.1, so we pin the version AND supply the official
+# amd64 checksum (from
 # https://github.com/containerd/containerd/releases/download/v2.2.5/
-# containerd-2.2.5-linux-amd64.tar.gz.sha256sum). Overriding the dict replaces it
-# entirely — only amd64/2.2.5 is ever looked up on this all-amd64 fleet.
+# containerd-2.2.5-linux-amd64.tar.gz.sha256sum).
 containerd_version: "2.2.5"
-# NB: kubespray v2.30 keeps the checksum DICT in role vars/ (beats inventory
+# NB: kubespray keeps the checksum DICT in role vars/ (beats inventory
 # group_vars — a dict override here is silently ignored; bit us 2026-07-02:
 # "dict object has no attribute 2.2.5"). Override the SCALAR instead — it lives
 # in role defaults/ (download.yml), which inventory group_vars DOES beat.

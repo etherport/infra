@@ -1,12 +1,12 @@
-# WireGuard S2S Client Configuration - vpn-local
+# WireGuard S2S Client Configuration - vpn-fallback (renamed from vpn-local, M128)
 # Site-to-site tunnel from local site to AWS
 #
 # Note: This config is also deployed via Ansible playbook, but stored here
 # for reference and disaster recovery purposes.
 #
-# Encrypt with: sops -e -i vpn-local-s2s.sops.yaml
-# Decrypt with: sops -d vpn-local-s2s.sops.yaml
-# Export to file: sops -d vpn-local-s2s.sops.yaml | yq '.stringData.config' > wg0.conf
+# Encrypt with: sops -e -i vpn-fallback-s2s.sops.yaml
+# Decrypt with: sops -d vpn-fallback-s2s.sops.yaml
+# Export to file: sops -d vpn-fallback-s2s.sops.yaml | yq '.stringData.config' > wg0.conf
 apiVersion: v1
 kind: Secret
 metadata:

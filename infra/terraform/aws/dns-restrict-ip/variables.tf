@@ -55,10 +55,11 @@ variable "rule_specs" {
       port              = 22
       protocols         = ["tcp"]
     },
-    # vpn_server SG: wg0 site-to-site :51820 udp (F2, 2026-07-02). The static
-    # 0.0.0.0/0 51820-51821 rule is being split — 51821 (roaming remote clients)
-    # stays world; 51820 (site-to-site, only ever dialed from the homelab WANs)
-    # becomes Lambda-managed so a WAN-IP change self-heals like :53/:22.
+    # vpn_server SG: wg0 site-to-site :51820 udp (F2, 2026-07-02, applied). The
+    # old static 0.0.0.0/0 51820-51821 rule was split — 51821 (roaming remote
+    # clients) stays world (static TF rule in aws/networking); 51820 (site-to-
+    # site, only ever dialed from the homelab WANs) is Lambda-managed per-WAN
+    # /32s so a WAN-IP change self-heals like :53/:22.
     {
       security_group_id = "sg-08323ff8e98ecb563"
       port              = 51820

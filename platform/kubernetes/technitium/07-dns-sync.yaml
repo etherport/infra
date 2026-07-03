@@ -152,7 +152,7 @@ data:
         # absent from the zone file. This catches:
         #   - UI-added records that someone forgot to commit
         #   - Stale records (e.g. wan1/wan2 frozen at old IPs because
-        #     the DDNS Lambda updates Route53 but never Technitium)
+        #     the DDNS Lambda updates Cloudflare but never Technitium)
         # Safety:
         #   - DRY_RUN_DELETE=true: log "would delete" but DON'T actually delete
         #   - MAX_DRIFT_DELETE caps the number deleted in one run (default 10)

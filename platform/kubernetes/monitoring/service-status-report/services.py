@@ -94,10 +94,9 @@ SERVICES = [
     # `external-nodes` scrape job (01-external-scrape-config.yaml). Fleet is 6 local
     # PVE VMs (1001-1006) + 2 AWS; the M77 firewalls allow :9100 from the K8s VLAN.
     ("External edge", "dns-fallback", "external", "external-nodes", "dns-fallback"),
-    ("External edge", "vpn-local",    "external", "external-nodes", "vpn-local"),
+    ("External edge", "vpn-fallback", "external", "external-nodes", "vpn-fallback"),
     ("External edge", "gh-runner",    "external", "external-nodes", "gh-runner"),
     ("External edge", "devbox",       "external", "external-nodes", "devbox"),
-    ("External edge", "dns-aws",      "external", "external-nodes", "dns-aws"),
     ("External edge", "vpn-aws",      "external", "external-nodes", "vpn-aws"),
     # ⏳ asterisk-sbc (1004 .40) + step-ca (1006 .46) NOT yet monitored: node_exporter
     #    isn't running on them (base.yml not applied — :9100 returns no listener, while

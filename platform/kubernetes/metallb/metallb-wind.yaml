@@ -20,13 +20,13 @@ spec:
 # their IPs, so re-adding L2 is non-disruptive.
 
 # =============================================================================
-# BGP (M18/M36 migration, Phase C — runs ALONGSIDE the L2Advertisement above).
-# Each speaker peers eBGP to the UDM (the VLAN-201 gateway since Phase B) and
-# advertises the pool VIPs as /32s. The UDM prefers the more-specific /32 when
-# the session is up and falls back to L2/ARP if it drops, so this is safe to run
-# in parallel. Phase D removes the L2Advertisement, which is what finally stops
-# the ARP/MAC ownership churn behind the M36 .5/.71 IP-conflict alerts.
-# UDM side (not modelled by the paultyng provider — applied via the UDM BGP UI):
+# BGP — the ONLY advertisement path (BGP-only since 2026-05-31; M18/M36, then
+# L24 FRR+MD5). Each speaker peers eBGP to the UDM (the VLAN-201 gateway) and
+# advertises the pool VIPs as /32s. There is NO L2/ARP fallback — if all BGP
+# sessions drop (e.g. an MD5 mismatch), every VIP is withdrawn (the
+# MetallbBGPAllSessionsDown alert catches this). Migration history →
+# docs/planning/session-log.md.
+# UDM side (not modelled by the unifi TF provider — applied via the UDM BGP UI):
 #   router bgp 64512 / remote-as 64513 / listen range 10.10.201.0/24.
 # =============================================================================
 ---

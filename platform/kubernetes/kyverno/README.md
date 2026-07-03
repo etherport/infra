@@ -2,7 +2,8 @@
 
 Cluster-wide **admission policy engine**. The *engine* is a Flux HelmRelease
 ([`clusters/wind/helm-releases/kyverno.yaml`](../../../clusters/wind/helm-releases/kyverno.yaml),
-chart 3.8.x / Kyverno v1.18); this directory holds the **ClusterPolicies**.
+chart exact-pinned — currently 3.8.1 / Kyverno v1.18; Renovate PRs bumps, M122);
+this directory holds the **ClusterPolicies**.
 
 ## Safety model (why this can't wedge the cluster)
 

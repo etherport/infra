@@ -90,7 +90,8 @@ records:
   # Infrastructure - WAN DDNS
   # =============================================================================
   # wan1 and wan2 records are NOT defined here - they are dynamic and managed
-  # by Route53 via the DDNS Lambda. Technitium forwards these queries upstream.
+  # in Cloudflare via the DDNS Lambda (CF API since the 2026-05-27 Route53→CF
+  # migration). Technitium forwards these queries upstream.
   # See: infra/terraform/aws/ddns-lambda/ and docs/setup/network/ubiquiti-ddns.md
 
   # =============================================================================

@@ -17,9 +17,18 @@
 # - infra.wind.etherport.net - General-purpose homelab infra state +
 #                              backups (UDM/Protect controller-DB,
 #                              future Loki S3 backing, ad-hoc dumps)
+# - postgres-barman.wind.etherport.net - CNPG barman WAL/base backups
+#                                        (both postgres clusters)
+# - etcd-snapshots.wind.etherport.net - K8s etcd snapshots (STANDARD
+#                                       storage, 30d expiry — deliberately
+#                                       NOT the Deep Archive bucket)
+# - cue-media.etherport.net - Cue app media (bug screenshots etc., via
+#                             the wind-irsa-cue-media IRSA role)
 #
 # NOT managed (reference only):
 # - terraform.wind.etherport.net - Terraform state (in use)
+# - wind-cluster-oidc-830881980142 - IRSA OIDC issuer bucket (deliberately
+#                                    public-read; owned by aws/cluster-irsa)
 
 #------------------------------------------------------------------------------
 # Velero Kubernetes Backups

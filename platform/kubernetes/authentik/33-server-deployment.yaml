@@ -8,7 +8,8 @@ spec:
   # M114 (2026-07-01): 2 replicas + zero-gap rollout + node spread + PDB (39-pdb.yaml).
   # The server was a 1-replica SPOF — every drain of its node took down SSO (all
   # OIDC apps + every forward-auth admin UI). Server state lives in the shared HA
-  # postgres + redis, so 2 stateless replicas are safe. This required dropping the
+  # postgres (redis removed with the 2026.x upgrade), so 2 stateless replicas are
+  # safe. This required dropping the
   # RWO media PVC (Recreate-strategy blocker): the volume held ONLY login-bg.png,
   # which the seed-login-bg initContainer regenerates on every pod start — so media
   # is now an emptyDir per replica (same as the worker). If real uploaded media is

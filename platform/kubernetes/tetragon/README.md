@@ -6,13 +6,14 @@ capability use) that admission (PSA/Kyverno) and network policy (H3) can't.
 
 The **engine** is a Flux HelmRelease
 ([`clusters/wind/helm-releases/tetragon.yaml`](../../../clusters/wind/helm-releases/tetragon.yaml),
-chart 1.7.x, from the existing `cilium` helm repo). **Observe-only — no enforcement/kill.**
-This directory will hold the **TracingPolicies** (the detections) in v2.
+chart exact-pinned — currently 1.7.0 (M122) — from the existing `cilium` helm repo).
+**Observe-only — no enforcement/kill.**
+This directory holds the **TracingPolicies** (the detections).
 
 ## Status
 
-**v2 (2026-06-28) — LIVE: selective export + alerting (see below).** 2 TracingPolicies detect
-high-signal events → selective Loki export (firehose excluded) → 2 loki-ruler alerts. Still
+**v2 (2026-06-28) — LIVE: selective export + alerting (see below).** 4 TracingPolicies detect
+high-signal events → selective Loki export (firehose excluded) → 4 loki-ruler alerts. Still
 observe-only. Verified e2e (policy match → export → all alert field-paths resolve → ruler loaded).
 
 **v1 (2026-06-24) — agent deployed, stdout export OFF (superseded by v2).** The eBPF sensors are

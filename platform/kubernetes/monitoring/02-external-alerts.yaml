@@ -12,9 +12,10 @@ spec:
   groups:
     - name: external-hosts.rules
       rules:
-        # Host availability. LOCAL hosts only at 2m — the AWS replica hosts (dns-aws/vpn-aws)
-        # are t4g.nano and suffer brief per-instance ENA-allowance packet blackouts (they flap
-        # 600+x/24h independently), so they get their own relaxed rules below to avoid false pages.
+        # Host availability. LOCAL hosts only at 2m — the AWS host (vpn-aws, the single
+        # consolidated t4g.small edge box; dns-aws destroyed 2026-07, M110) sits behind an
+        # intermittently lossy homelab→AWS WAN path (M124: ISP-side waves, NOT the instance),
+        # so it gets its own relaxed rules below to avoid false pages.
         - alert: ExternalHostDown
           expr: up{job="external-nodes",location="local"} == 0
           for: 2m
@@ -24,8 +25,8 @@ spec:
             summary: "External host {{ $labels.instance }} is down"
             description: "{{ $labels.instance }} ({{ $labels.location }}) has been unreachable for more than 2 minutes."
 
-        # AWS replica hosts: only a SUSTAINED outage (>15m) pages — brief t4g.nano blackouts are
-        # expected and the services tolerate them (dns-sync is resilient; these are failover replicas).
+        # AWS host: only a SUSTAINED outage (>15m) pages — brief WAN path-loss waves are
+        # expected and the services tolerate them (dns-sync is resilient; it's a failover replica).
         - alert: AWSReplicaHostDown
           expr: up{job="external-nodes",location="aws"} == 0
           for: 15m
@@ -33,10 +34,11 @@ spec:
             severity: critical
           annotations:
             summary: "AWS replica host {{ $labels.instance }} sustained-down (>15m)"
-            description: "{{ $labels.instance }} (aws) unreachable >15m — beyond the expected brief t4g.nano packet blackouts. Check the EC2 instance / ENA allowance / CPU credits (needs AWS access)."
+            description: "{{ $labels.instance }} (aws) unreachable >15m — beyond the expected brief WAN path-loss waves (M124: ISP-side, not the instance). Check the EC2 instance state and the homelab WAN path (mtr from both ends)."
 
         # The flap itself, tracked as a WARNING (dashboard-only, does not page) so it's a known
-        # condition not silence. Root fix = right-size the t4g.nano (see outstanding-work).
+        # condition not silence. Root cause = ISP/WAN-side loss waves (M124), not the instance
+        # (already resized to t4g.small; ENA/MTU/SG ruled out).
         - alert: AWSReplicaHostFlapping
           expr: changes(up{job="external-nodes",location="aws"}[1h]) > 12
           for: 10m
@@ -160,8 +162,9 @@ spec:
         # dns-fallback) going down wrongly force-restarted the in-cluster technitium StatefulSet
         # pods (8x overnight 06-29/30). Distinct name => the restart_pods rule no longer fires
         # for an external probe. This still alerts/emails normally.
-        # location="local" => the AWS dns replica (dns-aws) is handled by AWSReplicaHostDown/Flapping
-        # above (its brief blackouts shouldn't page); this stays tight (1m) for the LOCAL dns-fallback.
+        # location="local" => the AWS dns replica (now on the vpn-aws edge box; dns-aws destroyed
+        # 2026-07, M110) is handled by AWSReplicaHostDown/Flapping above (its brief WAN-loss waves
+        # shouldn't page); this stays tight (1m) for the LOCAL dns-fallback.
         - alert: TechnitiumExternalHostDown
           expr: up{job="external-nodes",instance=~"dns-.*",location="local"} == 0
           for: 1m

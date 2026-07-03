@@ -1,16 +1,16 @@
 name: Ansible VM Fleet (non-K8s + non-PVE)
 
 # Generic dispatch wrapper for running ansible playbooks against the
-# fleet of non-K8s VMs (AWS dns-aws/vpn-aws + local dns-fallback/
-# vpn-fallback). Uses the same self-hosted runner + ansible-runner image
-# as ansible-proxmox.yml.
+# fleet of non-K8s VMs (the consolidated AWS edge box vpn-aws + local
+# dns-fallback/vpn-fallback + the other standalone VMs). Uses the same
+# self-hosted runner + ansible-runner image as ansible-proxmox.yml.
 #
 # Examples:
 #   - playbook=base, inventory=both          → install node_exporter +
 #     base packages everywhere
-#   - playbook=swap, inventory=aws           → add swap to AWS t4g.nano
-#     instances (essential — they have only 512MB RAM)
-#   - playbook=cloudwatch-agent, inventory=aws --limit dns-aws → install
+#   - playbook=swap, inventory=aws           → (re)create swap on the
+#     AWS edge box
+#   - playbook=cloudwatch-agent, inventory=aws --limit vpn-aws → install
 #     CW agent on a single host
 #
 # Use the existing ansible-proxmox.yml for anything that targets the PVE
@@ -46,7 +46,7 @@ on:
         default: both
         options:
           - wind    # dns-fallback + vpn-fallback (and other local non-K8s)
-          - aws     # dns-aws + vpn-aws
+          - aws     # vpn-aws (the consolidated edge box — carries DNS too since M110)
           - both    # both inventories (non-k8s_cluster hosts only)
       action:
         description: 'check (--check --diff) or apply'

@@ -1,7 +1,8 @@
 # github-oidc (H29)
 
-Retires the 22 CI workflows' long-lived static AWS keys in favour of GitHub-OIDC
-short-lived per-run credentials (`AssumeRoleWithWebIdentity`).
+GitHub-OIDC short-lived per-run AWS credentials (`AssumeRoleWithWebIdentity`) for
+CI. **Cutover complete** — every AWS-touching workflow assumes the
+`gh-actions-terraform` role; the old long-lived static CI keys are gone.
 
 ## What it creates
 - An IAM **OIDC provider** for `token.actions.githubusercontent.com`.
@@ -17,7 +18,7 @@ short-lived per-run credentials (`AssumeRoleWithWebIdentity`).
 > vs long-lived keys). Tightening to per-stack roles / the exact scoped set is a
 > follow-up (would need the IAM policies-per-role quota raised past 10).
 
-## Bootstrap (one-time, needs ADMIN — claude-admin cannot do this)
+## Bootstrap (one-time, DONE — kept for a from-scratch rebuild; needs ADMIN)
 claude-admin is PowerUser (no `iam:*`); this stack creates IAM objects, so the
 first apply needs admin. `gs_admin` has AdministratorAccess but is console-only —
 so create a temporary key for it, apply, then delete the key:
@@ -39,15 +40,15 @@ terraform output role_arn                          # note the ARN
 #    nothing else ever needs admin — CI assumes the role from here.
 ```
 
-## Cutover (after bootstrap — keys + role coexist; migrate, verify, then delete keys)
-Per workflow, 3 edits: add `permissions: id-token: write`, swap
-`configure-aws-credentials` to `role-to-assume: <role_arn>`, drop the
+## Cutover (DONE — recipe kept for adding a NEW AWS-touching workflow)
+Per workflow, 3 edits: add `permissions: id-token: write`, use
+`configure-aws-credentials` with `role-to-assume: <role_arn>`, and no
 `aws-access-key-id`/`aws-secret-access-key` inputs. Keep `AWS_PROFILE=""` /
 `-backend-config="profile="`.
 
-1. Migrate **one GitHub-hosted** workflow first (`terraform-s3.yml`) → verify PR plan + dispatch apply (CloudTrail shows `AssumeRoleWithWebIdentity`).
-2. Migrate **one self-hosted** workflow (`terraform-unifi.yml`) → the runner-OIDC gate (confirm no ambient `~/.aws/credentials` on the gh-runner VM masks the role).
-3. Roll the remaining ~20 in batches.
-4. When `grep -rl AWS_ACCESS_KEY_ID .github/workflows` is empty: deactivate the `terraform-homelab` access key, soak one cycle, then delete the key + the `AWS_ACCESS_KEY_ID`/`_SECRET` GH secrets.
-
-Every step before key deletion is a single-file `git revert`.
+History: the migration ran GitHub-hosted-first (`terraform-s3.yml`), then a
+self-hosted workflow (checking no ambient `~/.aws/credentials` on the gh-runner
+VM masked the role), then the rest in batches; the static `terraform-homelab`
+CI key + `AWS_ACCESS_KEY_ID`/`_SECRET` GH secrets were then deactivated/removed.
+(The `terraform-homelab` IAM access key itself is retained for the local
+`[homelab]` profile render — rotate-only, never delete; see CLAUDE.md §4.)

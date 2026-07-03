@@ -70,7 +70,7 @@ variable "endpoints" {
       resource_path     = "/api/health"
       failure_threshold = 3
       request_interval  = 30
-      enabled           = false # Disabled - ALB/tunnel issue
+      enabled           = false # Disabled — endpoint sits behind CF Access now (health path isn't publicly probeable unauthenticated)
     }
     # Traefik ingress controller
     traefik = {
@@ -80,7 +80,7 @@ variable "endpoints" {
       resource_path     = "/ping"
       failure_threshold = 3
       request_interval  = 30
-      enabled           = false # Disabled - ALB/tunnel issue
+      enabled           = false # Disabled — hostname is VPN/internal-only since the 2026-05-27 ALB decom (external DNS = NXDOMAIN)
     }
     # Plex media server
     plex = {

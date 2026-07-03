@@ -141,7 +141,7 @@ firmware `v1.21.17`, with `v1.24.8` available.
 Note: the **SBC's** secrets are in SOPS (`asterisk-sbc.sops.yaml`), decrypted
 headlessly in CI/locally via the age key — so the external-leg auth is fully IaC.
 **Talk's own** config (extensions, ring groups, DIDs) is **not** in the repo: the
-`paultyng/unifi` provider doesn't model Talk, so that state lives only on the UDM.
+`ubiquiti-community/unifi` provider (the retired `paultyng` fork's successor, M125) doesn't model Talk, so that state lives only on the UDM.
 
 ## Port-forwards on the UDM
 
@@ -172,7 +172,7 @@ signalling + the media /18. Re-check quarterly (Twilio may add ranges).
 
 ## Disaster recovery
 
-> Talk config is **not** in IaC. The `paultyng/unifi` Terraform provider
+> Talk config is **not** in IaC. The `ubiquiti-community/unifi` Terraform provider
 > only models the Network app — there's no resource for SIP trunks,
 > extensions, ring groups, or DIDs. Talk state lives entirely on the UDM
 > and in Twilio's console.
@@ -252,7 +252,7 @@ Telnyx) for HA — the Talk API exposes adding multiple gateways via
 6. **Logging level is `debug`** — fine for triage but produces a lot of
    I/O. Set back to `info` once the emergency-address issue is fixed.
 7. **Talk not in IaC.** Document the manual settings in this runbook is
-   the only safety net. If the `paultyng/unifi` provider ever models
+   the only safety net. If the `ubiquiti-community/unifi` provider ever models
    Talk (or Ubiquiti ships an official one), move trunk + extensions
    here. Until then, snapshot `/proxy/talk/api/third_party_sip/gateway_list`
    and `/proxy/talk/api/users` into source control on changes.

@@ -16,27 +16,27 @@ provider "proxmox" {
 }
 
 # =============================================================================
-# H37 — Proxmox HOST firewall (management plane). STAGED, lock-out-safe.
+# H37 — Proxmox HOST firewall (management plane). DEFAULT-DENY INBOUND
+# (input_policy = DROP, enforced since 2026-06-17).
 #
-# STAGE 1 (this config): firewall ENABLED but PERMISSIVE — input_policy = ACCEPT
-#   + inbound logging on. Nothing is denied; we install the full ruleset
-#   (mgmt-admin IPset + pve-mgmt security group + node rule) and watch the host
-#   firewall log to confirm admin access (TS / WG / mini / laptop) matches the
-#   allows and to pin the real SNAT source IPs.
+# Only the allow-listed traffic reaches the host: mgmt-admin sources to the
+# management plane (pve-mgmt), the Ceph storage VLAN to mon/OSD (pve-ceph),
+# and the K8s/Servers VLAN to the ipmi_exporter :9290 (pve-ipmi) +
+# node_exporter :9100 (pve-nodeexp). ⚠️ These are the FOUR required allows —
+# never tighten this stack without keeping all four (see CLAUDE.md §5; the
+# Ceph and IPMI groups each began life as a latent default-deny break).
 #
-# STAGE 2 (later, deliberate, with IPMI/console break-glass confirmed): flip
-#   `local.input_policy` ACCEPT -> DROP. Then only mgmt-admin reaches the host
-#   management plane; everything else (IoT/guest/security VLANs, internet) is
-#   dropped. Reversible by flipping back.
+# Rollout history (Stage-1 permissive/observe window 2026-06-17, then the
+# DROP flip): docs/planning/archive/zero-trust-assessment-2026-06-17.md +
+# session-log. Rollback = flip `local.input_policy` back to "ACCEPT".
 #
-# k8s nodes + standalone VMs are NOT touched here (all VM NICs are firewall=0).
-# Selective VM firewalling is tracked separately as M77. See
-# docs/planning/archive/zero-trust-assessment-2026-06-17.md.
+# k8s nodes are NOT touched here; the standalone VMs have their own per-VM
+# firewall (M77) in standalone-vms.tf.
 # =============================================================================
 
 locals {
-  # STAGE 1 = "ACCEPT" (permissive/observe). STAGE 2 = "DROP" (enforce).
-  # Flipped to DROP 2026-06-17 after the observation window confirmed all admin
+  # "DROP" = default-deny inbound (enforced). Flipped from the Stage-1 "ACCEPT"
+  # observe mode on 2026-06-17 after the observation window confirmed all admin
   # sources (mini, TS/WG via 201, backup-WG 192.168.3.2) are in mgmt-admin and
   # nothing legit hits 22/8006/3128 from outside it. Revert to "ACCEPT" to roll back.
   input_policy = "DROP"
@@ -46,7 +46,7 @@ locals {
 resource "proxmox_virtual_environment_cluster_firewall" "this" {
   enabled = true
 
-  # Host inbound default. Stage 1 = ACCEPT (deny nothing). Flip to DROP for Stage 2.
+  # Host inbound default — DROP (default-deny; see locals above for rollback).
   input_policy = local.input_policy
   # Never constrain the host's own egress or VM-forwarded (bridged) traffic —
   # the k8s VXLAN/BGP/pod fabric bridges through this host.
@@ -60,8 +60,8 @@ resource "proxmox_node_firewall" "pve" {
   node_name = var.node_name
   enabled   = true
 
-  # Stage 1 observation: log inbound so we can see real admin source IPs
-  # (TS subnet-router / WG-pod SNAT / mini / laptop) before the DROP flip.
+  # Keep inbound logging on: under the DROP policy this records what gets
+  # denied (the fastest way to spot the next missing-allow latent break).
   log_level_in = "info"
 
   depends_on = [proxmox_virtual_environment_cluster_firewall.this]

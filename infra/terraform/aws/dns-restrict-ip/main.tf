@@ -60,9 +60,11 @@ resource "aws_lambda_function" "dns_restrict_ip" {
       RECORD_NAMES   = join(",", var.record_names)
       # JSON-encoded list of {security_group_id, port, protocols}.
       # The Lambda iterates over each spec and keeps its SG's ingress
-      # rules in sync with the Route53 record IPs. Multi-SG / multi-port
+      # rules in sync with the WAN-IP record values (resolved via public
+      # DNS — see the vestigial note above). Multi-SG / multi-port
       # support added 2026-05-23 so the same WAN IPs that gate DNS can
-      # also gate SSH on the allow_ssh SG.
+      # also gate SSH (allow_ssh SG) and, since F2 (2026-07-02), the
+      # wg0 WireGuard :51820 on the vpn_server SG.
       RULE_SPECS = jsonencode(var.rule_specs)
     }
   }

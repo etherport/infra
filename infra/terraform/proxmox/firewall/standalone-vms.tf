@@ -1,22 +1,20 @@
 # =============================================================================
 # M77 — Selective PVE firewall for the STANDALONE VMs (k8s nodes EXCLUDED — their
-# traffic is owned by Cilium H3 NetPol + M66 WireGuard + UDM zones). Staged like
-# H37 (lock-out-safe):
-#   STAGE 1 (this config): per-VM firewall ENABLED but PERMISSIVE
-#     (input_policy = ACCEPT) with inbound logging ON. NOTHING is denied; we
-#     install the full allow-list and watch the PVE firewall log to confirm it
-#     covers real inbound (and to pin the external source IPs — Twilio for SIP,
-#     the AWS peer for WireGuard) before denying anything. This avoids repeating
-#     the H37 Ceph/IPMI latent-break class (a needed allow missing from a
-#     default-deny that only bites later).
-#   STAGE 2 (per-VM, deliberate): flip `local.vm_input_policy.<vm>` ACCEPT -> DROP.
-#     ✅ COMPLETE 2026-06-28 — ALL 6 standalone VMs are now default-deny inbound:
-#       batch 1: dns-fallback (1001) + gh-runner (1003) — internal/baseline only.
-#       batch 2: step-ca (1006), devbox (1005), vpn-fallback (1002), asterisk (1004).
-#     The existing per-VM port allows are kept; the flip closes UNLISTED ports
-#     (rpcbind:111 etc.). ⏳ Stage 2b (external-SOURCE narrowing) still open for two:
-#       asterisk SIP/RTP -> Twilio ranges (TELEPHONY-CRITICAL, 911 — call-path review),
-#       vpn-fallback WG -> AWS EIP 44.240.60.80 (marginal — WG is crypto-authenticated).
+# traffic is owned by Cilium H3 NetPol + M66 WireGuard + UDM zones).
+#
+# CURRENT STATE: ALL 6 standalone VMs are DEFAULT-DENY INBOUND
+# (input_policy = DROP, complete 2026-06-28) with per-VM allow-lists below.
+# asterisk's external legs were SOURCE-SCOPED to Twilio ranges (Stage 2b,
+# 2026-06-29). vpn-fallback's WireGuard stays any-source deliberately (WG is
+# crypto-authenticated; IP-scoping to the single AWS EIP peer is marginal).
+#
+# Rollout was staged like H37 (lock-out-safe): Stage 1 permissive/observe
+# (ACCEPT + inbound logging, allow-lists built from `ss` + the firewall log),
+# then per-VM ACCEPT -> DROP flips — batch 1 dns-fallback (1001) + gh-runner
+# (1003), batch 2 step-ca (1006), devbox (1005), vpn-fallback (1002),
+# asterisk (1004). This avoided the H37 Ceph/IPMI latent-break class (a needed
+# allow missing from a default-deny that only bites later). History:
+# docs/planning/session-log.md 2026-06-25 → 2026-06-29.
 #
 # The NIC firewall flag (`firewall = true`) is set in ../standalone-vms/main.tf.
 # Apply THIS stack FIRST so the rules exist before the NIC firewall activates
@@ -151,6 +149,11 @@ resource "proxmox_virtual_environment_firewall_rules" "vpn_fallback" {
     security_group = proxmox_virtual_environment_cluster_firewall_security_group.vm_baseline.name
     comment        = "M77 baseline (SSH + node_exporter)"
   }
+  # NB the live rule's comment string predates the Stage-2 decision: source
+  # stays ANY deliberately (WG is crypto-authenticated; scoping to the sole
+  # AWS EIP peer 44.240.60.80 was judged marginal — see vm_input_policy notes).
+  # Don't edit the `comment` argument just to fix the prose — it's applied
+  # PVE-side and would show as a plan diff.
   rule {
     type    = "in"
     action  = "ACCEPT"
@@ -283,9 +286,10 @@ resource "proxmox_virtual_environment_firewall_rules" "asterisk_sbc" {
 }
 
 # ---- devbox (1005): Claude dev session host + Tailscale ---------------------
-# ⚠️ The Claude Code dev sessions run ON this VM. Stage 2 (DROP) needs EXTRA care
-# (keep SSH from mgmt-admin + the tailnet, + the tailscale UDP, or you lose access
-# / the operator's path in). Stage 1 (ACCEPT) is harmless here.
+# ⚠️ The Claude Code dev sessions run ON this VM and it is default-deny inbound —
+# NEVER drop the SSH-from-mgmt-admin baseline or the tailscale UDP allow, or you
+# lose access / the operator's path in. Recovery if it happens: CI applies run on
+# gh-runner (not devbox), plus PVE console.
 resource "proxmox_virtual_environment_firewall_options" "devbox" {
   node_name     = var.node_name
   vm_id         = 1005

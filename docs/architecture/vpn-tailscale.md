@@ -27,7 +27,7 @@ While WireGuard handles AWS↔homelab traffic routing, Tailscale enables:
 │                     │                      │                      │         │
 │                     ▼                      ▼                      ▼         │
 │   ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────┐ │
-│   │  k8s-homelab-router │    │  vpn-fallback          │    │  vpn-aws        │ │
+│   │  k8s-homelab-router │    │  vpn-fallback       │    │  vpn-aws        │ │
 │   │  (K8s Connector)    │    │  (BACKUP router)    │    │  (Subnet Router)│ │
 │   │  PRIMARY            │    │                     │    │                 │ │
 │   │  Routes:            │    │  Routes:            │    │  Routes:        │ │
@@ -162,7 +162,11 @@ Exit nodes allow routing **all** traffic through a Tailscale node, not just priv
 |------|--------------|---------------|----------|
 | vpn-aws | 100.117.87.10 | AWS us-west-2 | Privacy, US exit |
 | k8s-homelab-router | 100.75.199.69 | Home ISP | Appear at home (primary) |
-| vpn-fallback | 100.73.247.54 | Home ISP | Appear at home (backup) |
+| vpn-fallback | 100.97.20.113 | Home ISP | Appear at home (backup) |
+
+k8s-homelab-router and vpn-fallback are **both approved** exit nodes in the tailnet.
+vpn-fallback re-registered as a tagged device after the M128 `vpn-local` →
+`vpn-fallback` rename (new node, hence the new 100.x IP).
 
 ### Usage
 

@@ -7,14 +7,14 @@
 #   ansible-playbook -i inventory/aws/ playbooks/swap.yml
 #
 #   # Specific host
-#   ansible-playbook -i inventory/aws/ playbooks/swap.yml --limit dns-aws
+#   ansible-playbook -i inventory/aws/ playbooks/swap.yml --limit vpn-aws
 #
 #   # Check mode
 #   ansible-playbook -i inventory/aws/ playbooks/swap.yml --check --diff
 #
-# IMPORTANT: For instances with limited RAM (t4g.nano = 512MB), swap is
-# essential to prevent OOM crashes, especially when running .NET apps
-# like Technitium DNS or memory-intensive services.
+# IMPORTANT: For memory-constrained VMs, swap prevents OOM crashes,
+# especially when running .NET apps like Technitium DNS or other
+# memory-hungry services.
 
 - name: Configure Swap File
   hosts: all:!k8s_cluster:!proxmox_hosts
@@ -27,8 +27,7 @@
     # Swap size per host (override in host_vars or inventory)
     # Default: 1GB for most hosts
     swap_sizes:
-      dns-aws: "1G"      # t4g.nano - 512MB RAM, needs swap for Technitium
-      vpn-aws: "512M"    # t4g.nano - 512MB RAM, lighter workload
+      vpn-aws: "512M"    # t4g.small edge box (was sized for the t4g.nano era; harmless headroom)
       dns-fallback: "1G"
       vpn-fallback: "512M"
       default: "1G"

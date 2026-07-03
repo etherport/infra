@@ -6,16 +6,16 @@ Step-by-step procedures for upgrading Kubernetes cluster components.
 
 | Component | Version | Upgrade Frequency |
 |-----------|---------|-------------------|
-| Kubernetes | v1.34.3 (2026-07-02) | Quarterly |
+| Kubernetes | v1.35.0 (2026-07-02; kubespray submodule v2.31.0) | Quarterly |
 | containerd | 2.2.5 (2026-07-02, H45b CVE batch) | With K8s upgrade |
-| Ubuntu | 24.04 LTS | Security: auto, Major: yearly |
+| Ubuntu | 24.04 LTS | Security: unattended-upgrades security-only (M116) + kured reboots, Major: yearly |
 
 ## Upgrade Types
 
 | Type | Risk | Downtime | Method |
 |------|------|----------|--------|
-| Patch (1.34.x → 1.34.y) | Low | None | Rolling update |
-| Minor (1.34 → 1.35) | Medium | Minimal | Rolling update |
+| Patch (1.35.x → 1.35.y) | Low | None | Rolling update |
+| Minor (1.35 → 1.36) | Medium | Minimal | Rolling update |
 | Major (1.x → 2.x) | High | Possible | Planned maintenance |
 
 ---
@@ -61,7 +61,11 @@ one is documented in `CLAUDE.md` §5; consolidated here as the pre/post gate.
       bumping it (the pinned submodule caps the supported range).
 - [ ] **containerd** is a kubespray binary (`/usr/local/bin/containerd`), NOT apt —
       it upgrades via `containerd_version` in inventory + the kubespray run, and is
-      picked up per-node on the rolling restart. (H45b target: `2.2.5`.)
+      picked up per-node on the rolling restart. (Current: `2.2.5`, H45b.)
+- [ ] **Run from the devbox** (venv `~/.kubespray-venv`, ansible 11.13/core 2.18) and
+      export `KUBESPRAY_SSH_KEY=~/.ssh/id_homelab_cert` — the wrapper's default key is
+      the dead static key (fleet SSH is cert-only, M76). Run long plays in a
+      **detached tmux** (harness-backgrounded runs get killed).
 
 **AFTER the run (the IRSA/Multus landmines — verify EXPLICITLY, they fail silently):**
 - [ ] **kube-apiserver `--service-account-issuer`** is STILL the OIDC bucket URL
@@ -80,12 +84,12 @@ one is documented in `CLAUDE.md` §5; consolidated here as the pre/post gate.
       is present before relying on it; never add a `modprobe i6300esb` task.
 - [ ] IRSA still assumes a role (spot-check one workload); velero/CNPG barman still archiving.
 
-**H45b + M123 combined window (ready-to-run):** bump `kube_version: 1.34.2 → 1.34.3`
-+ add `containerd_version: 2.2.5` in the inventory, then the rolling `kubespray.sh`
-run (CP first per §2.3 but **cp1 last**, workers rolling per §2.4). EXECUTED 2026-07-02 — all 8 nodes
-v1.34.3 + containerd 2.2.5, RECAP 0 failed/0 unreachable, all landmine checks passed
-(issuer/audiences intact, multus 8/8, cilium enforce+WG+BGP 8/8, cni root:root).
-Two run gotchas for next time: (1) kubespray v2.30 keeps the checksum DICTS in role
+**H45b + M123 window — EXECUTED 2026-07-02 (two back-to-back rolling runs):** first
+`kube_version: 1.34.2 → 1.34.3` + `containerd_version: 2.2.5`, then the **minor bump
+to v1.35.0** (kubespray submodule → v2.31.0). All 8 nodes v1.35.0 + containerd 2.2.5,
+RECAP 0 failed/0 unreachable, all landmine checks passed (issuer/audiences intact,
+multus 8/8, cilium enforce+WG+BGP 8/8, cni root:root).
+Run gotchas for next time: (1) kubespray keeps the checksum DICTS in role
 vars/ which BEAT inventory group_vars — override the SCALAR (e.g.
 `containerd_archive_checksum`) from defaults/ instead; (2) run kubespray in a detached
 tmux session (a harness-backgrounded run was killed mid-download); (3) a single-instance
@@ -101,7 +105,7 @@ works (drain delegation uses inventory vars, not gathered CP facts).
 
 ---
 
-## 1. Patch Version Upgrade (e.g., 1.34.1 → 1.34.2)
+## 1. Patch Version Upgrade (e.g., 1.35.0 → 1.35.1)
 
 Low risk, rolling update with zero downtime.
 
@@ -113,7 +117,7 @@ grep kube_version infra/kubespray/inventory/group_vars/k8s_cluster/k8s-cluster.y
 
 # Update to new patch version
 vim infra/kubespray/inventory/group_vars/k8s_cluster/k8s-cluster.yml
-# Change: kube_version: 1.34.2
+# Change: kube_version: 1.35.1
 ```
 
 ### 1.2 Run Upgrade Playbook
@@ -149,7 +153,7 @@ kubectl get --raw='/readyz?verbose'
 
 ---
 
-## 2. Minor Version Upgrade (e.g., 1.34 → 1.35)
+## 2. Minor Version Upgrade (e.g., 1.35 → 1.36)
 
 Medium risk, requires API deprecation review.
 
@@ -177,7 +181,7 @@ git -C infra/kubespray/kubespray fetch && git -C infra/kubespray/kubespray check
 
 # Update version in inventory
 vim infra/kubespray/inventory/group_vars/k8s_cluster/k8s-cluster.yml
-# Change: kube_version: 1.35.0
+# Change: kube_version: 1.36.0
 ```
 
 ### 2.3 Upgrade Control Plane First

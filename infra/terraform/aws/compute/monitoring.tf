@@ -77,11 +77,12 @@ resource "aws_cloudwatch_metric_alarm" "vpn_high_swap" {
     InstanceType = aws_instance.vpn.instance_type
   }
 
-  # Notify only — NO auto-reboot. Baseline swap on this 0.5GB t4g.nano sits
+  # Notify only — NO auto-reboot. On the old 0.5GB t4g.nano, baseline swap sat
   # ~15-20% (Linux parks cold pages while mem stays <50%), so the old 20% +
-  # reboot action flap-rebooted the VPN for a non-problem. Genuine memory
-  # pressure is covered by High-Memory-Utilization-VPN (>80%, which keeps its
-  # reboot). Raised 20->50; if it still flaps, drop the swap alarm entirely.
+  # reboot action flap-rebooted the VPN for a non-problem; threshold raised
+  # 20->50 then. (Box resized to t4g.small 2026-07-01, M110 — even more
+  # headroom now.) Genuine memory pressure is covered by
+  # High-Memory-Utilization-VPN (>80%, which keeps its reboot).
   alarm_actions = [
     aws_sns_topic.ec2_alerts.arn
   ]
@@ -95,7 +96,8 @@ resource "aws_cloudwatch_metric_alarm" "vpn_high_swap" {
 }
 
 #------------------------------------------------------------------------------
-# CloudWatch Alarms - DNS Instance
+# CloudWatch Alarms - DNS Instance: REMOVED with the standalone dns instance
+# (M110, 2026-07-02 — see the NB at the top of this file)
 #------------------------------------------------------------------------------
 
 

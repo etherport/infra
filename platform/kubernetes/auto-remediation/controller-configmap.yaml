@@ -197,7 +197,7 @@ data:
         'rollback_deployment',
         'cnpg_recreate_replica',
         'bump_resource_request',
-        # Tier 3 — SSH to non-K8s hosts (dns-aws, dns-fallback, vpn-fallback, vpn-aws).
+        # Tier 3 — SSH to non-K8s hosts (dns-fallback, vpn-fallback, vpn-aws).
         # Strictly bounded by host allowlist + wrapped script on remote side.
         'prune_host_logdir',
         'restart_systemd_unit',
@@ -229,7 +229,6 @@ data:
     # Keys are the names the advisor uses in proposed_action.params.host.
     # Values: (ip, ssh_user — always advisor-remediation per base.yml setup).
     ADVISOR_SSH_HOSTS = {
-        'dns-aws':      '10.10.100.10',
         'dns-fallback': '10.10.201.6',
         'vpn-fallback':    '10.10.201.15',
         'vpn-aws':      '10.10.100.10',

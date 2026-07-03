@@ -207,10 +207,11 @@ resource "aws_security_group" "allow_ssh" {
 
 # SSH ingress from homelab WAN is now managed by the dns-restrict-ip
 # Lambda (rule_specs include allow_ssh:22:tcp as of 2026-05-23). The
-# Lambda keeps SG state in sync with wan1/wan2.wind.etherport.net
-# Route53 records; hardcoded TF rules below would fight it on every
-# WAN-IP change. Same pattern as the DNS rules transferred in H6 first
-# half (commit d0f3a36).
+# Lambda keeps SG state in sync with the wan1/wan2.wind.etherport.net
+# DNS records (public resolution — CF-hosted since the Route53→CF
+# migration); hardcoded TF rules below would fight it on every WAN-IP
+# change. Same pattern as the DNS rules transferred in H6 first half
+# (commit d0f3a36).
 removed {
   from = aws_vpc_security_group_ingress_rule.ssh_restricted
   lifecycle { destroy = false }
@@ -248,9 +249,11 @@ resource "aws_security_group" "dns_server" {
 
 # DNS access from homelab WAN IPs — these four rules are now managed
 # by the dns-restrict-ip Lambda (infra/terraform/aws/dns-restrict-ip)
-# which keeps them in sync with Route53 records wan1/wan2.wind.etherport.net.
-# The Lambda re-applies on every Route53 change so hardcoding the IPs
-# here would silently drift on the next IP change.
+# which keeps them in sync with the wan1/wan2.wind.etherport.net records
+# (resolved via public DNS; CF-hosted post-migration). The Lambda
+# re-applies on every record change so hardcoding the IPs here would
+# silently drift on the next IP change. It also manages the :51820 wg0
+# rules on the vpn_server SG (F2, 2026-07-02 — per-WAN /32 allows).
 #
 # Removed from this module on 2026-05-23 (H6). The four `removed`
 # blocks below tell TF to forget them without destroying — the Lambda
@@ -272,7 +275,8 @@ removed {
   lifecycle { destroy = false }
 }
 
-# HTTPS access from CloudFront (for DoH or management)
+# Egress-all (intentional; the CloudFront ingress rule that used to sit here
+# — dns_https_cloudfront — was deleted in the F-series SG scoping, 2026-07-02)
 resource "aws_vpc_security_group_egress_rule" "dns_all_ipv4" {
   security_group_id = aws_security_group.dns_server.id
   ip_protocol       = "-1"

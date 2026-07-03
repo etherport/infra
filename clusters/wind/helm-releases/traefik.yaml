@@ -40,7 +40,7 @@ spec:
   values:
     # HA setup: replicas=2 with podAntiAffinity, no RWO PVC.
     # Certs come from cert-manager — see platform/kubernetes/traefik/:
-    #   * clusterissuer-letsencrypt.yaml (DNS-01 via Route53, 6-day certs)
+    #   * clusterissuer-letsencrypt.yaml (DNS-01 via Cloudflare since 2026-05-27)
     #   * certificate-wildcard.yaml (*.wind.etherport.net + apex)
     #   * tlsstore-default.yaml (default TLSStore points at the Secret)
     # All IngressRoutes use `tls: {}` so they pick up the wildcard via

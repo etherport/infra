@@ -51,11 +51,29 @@ The local site WireGuard gateway runs in high availability mode with automatic f
 | VIP 10.10.201.20 | K8s node (k8s-w1) | vpn-fallback VM | ~2-3 seconds |
 
 **How it works:**
-1. K8s WireGuard pod runs with Keepalived sidecar (VRRP priority 150)
+1. K8s WireGuard pod runs with Keepalived sidecar (VRRP priority 150; `state BACKUP`
+   + `preempt_delay 300` + `init_fail` so it never claims the VIP before wg0/wg1 are up)
 2. vpn-fallback VM runs Keepalived (VRRP priority 100, `nopreempt`)
 3. VIP 10.10.201.20 floats between them via VRRP
 4. When K8s pod fails, vpn-fallback acquires VIP and starts wg0
-5. When K8s pod recovers, it reclaims VIP; vpn-fallback stops wg0
+5. When K8s pod recovers, it should reclaim the VIP after the 5-min preempt window;
+   vpn-fallback then stops wg0
+
+> ✅ **Reclaim is automatic** (drilled 2026-07-03): kill the pod → vpn-fallback takes
+> the VIP + starts wg0 in ~9s; the pod reclaims ~5 min after it is fully healthy
+> (`preempt_delay 300`) and vpn-fallback yields + stops wg0. ⚠️ This ONLY converges
+> because vpn-fallback's PVE firewall explicitly allows **VRRP (IP proto 112)** —
+> the M77 default-deny silently blocked it for 5 days and produced a persistent
+> split-brain (both held the VIP, neither yielded). If reclaim ever stalls again,
+> check proto-112 first, then who holds `10.10.201.20`.
+>
+> **Incident lesson (2026-07-02/03, HOST_IP split-brain):** the pod's startup script
+> derived `HOST_IP` from the first `eth0` IPv4 address — when keepalived claimed the
+> VIP before the script read the interface, it grabbed **the VIP itself** as HOST_IP,
+> producing a malformed `ip rule`, a CrashLooping pod, and an overnight **VIP
+> split-brain** with vpn-fallback. Fixed by filtering `10.10.201.20` out of the HOST_IP
+> detection (`platform/kubernetes/wireguard/03-deployment.yaml`). Detail:
+> [`../planning/session-log.md`](../planning/session-log.md) (2026-07-03 entry).
 
 **Cleanup DaemonSet:**
 A cleanup daemon runs on all worker nodes to remove orphaned wg0 interfaces when the WireGuard pod moves between nodes.
@@ -69,15 +87,15 @@ A cleanup daemon runs on all worker nodes to remove orphaned wg0 interfaces when
 | 10.10.192.0/19 | Local homelab | All local VLANs (10.10.192.0 - 10.10.223.255) |
 | 10.10.100.0/22 | AWS networks | AWS VPC and related (10.10.100.0 - 10.10.103.255) |
 
-## Regional Travel VPNs (none deployed; tooling retired-in-place)
+## Regional Travel VPNs (none deployed; tooling DELETED)
 
 **There are no regional/travel VPN peers.** The sole standing AWS WireGuard peer is
 `vpn-aws` (us-west-2, EIP `44.240.60.80`, `vpn-usw2.etherport.net`) — the site-to-site
 hub described above. The former permanent east-coast (us-east-1) endpoint was
 decommissioned 2026-07-01 (M110); Tailscale covers east-coast/remote reach. The
 ephemeral travel-VPN tooling (`infra/terraform/aws-regional-vpn/`,
-`terraform-regional-vpn.yml`) has been unused since the Mumbai teardown 2026-05-23 and
-is marked for retirement. The `.3-.6` tunnel IPs in the /29 above are the (unused)
+`terraform-regional-vpn.yml`) was **deleted 2026-07-01** (unused since the Mumbai
+teardown 2026-05-23). The `.3-.6` tunnel IPs in the /29 above are the (unused)
 reservations for such peers.
 
 Resurrection procedure, architecture, and costs — should a travel VPN ever be needed
@@ -117,9 +135,13 @@ again: [archived Regional VPN Deployment Runbook](../runbooks/archive/regional-v
 
 ### vpn-aws (AWS Gateway)
 
+This is the **single standing AWS EC2 box** (`private-infra_edge`, t4g.small — ansible
+host name `vpn-aws`); besides WireGuard it also runs Tailscale (subnet router + exit
+node) and Technitium DNS. See [aws-infrastructure.md](aws-infrastructure.md).
+
 | Property | Value |
 |----------|-------|
-| Hostname | vpn-aws |
+| Hostname | vpn-aws (instance `private-infra_edge`) |
 | Private IP | 10.10.100.10 |
 | Public IP | 44.240.60.80 |
 | Tunnel IPs | wg0: 10.255.255.1/29, wg1: 10.254.0.1/24 |
@@ -415,5 +437,5 @@ All WireGuard endpoints are in sync as of 2026-05-03:
 - Private keys stored with 600 permissions, owned by root
 - All keys encrypted at rest with SOPS/age
 - PresharedKey can be added for post-quantum resistance
-- AWS Security Groups allow UDP 51820/51821 from 0.0.0.0/0
+- AWS Security Groups: wg0 UDP 51820 is restricted to the current homelab WAN /32s (managed by the `dns-restrict-ip` Lambda); wg1 UDP 51821 is world-open by design (roaming clients); wstunnel TCP 443 world (WG-over-TCP for restrictive networks)
 - SSH access to vpn-aws only via VPN (no public SSH)

@@ -1,6 +1,6 @@
 # Runbook — UDM/UniFi manual hardening actions (console-only)
 
-Network-hardening items that **can't be done via IaC** (the `paultyng/unifi` TF provider
+Network-hardening items that **can't be done via IaC** (the `ubiquiti-community/unifi` TF provider
 + `udm-firewall.yml` don't cover them) and need the UniFi console. Created 2026-06-24
 from the network-hardening cleanup pass. Do these in one sitting; tick them off + ping the
 agent to update the tracker (M105 / M104 / M47 follow-up / L24).

@@ -74,8 +74,12 @@ AWS holds no public HTTPS entry point for `*.wind.etherport.net`. See
 > EIP `44.240.60.80` and private `10.10.100.10` (~47 records synced). There is now
 > exactly **one** standing AWS EC2 instance. See M110 in
 > `docs/planning/outstanding-work.md`.
-> **Residual (pending):** the edge box still uses the static `automation@homelab`
-> bootstrap key for SSH (cloud-init seed) — it is **not** yet on cert-only SSH.
+> **SSH is cert-only (M76 parity, 2026-07-03):** the edge box trusts the step-ca user
+> CA and the static `automation@homelab` key was removed from `authorized_keys` — it
+> survives only as the cloud-init bootstrap seed for a rebuild. CI ansible runs mint a
+> short-lived cert per run (the SOPS `awskey` step was deleted from
+> `ansible-vm-fleet.yml`); `ANSIBLE_TIMEOUT=60` + ControlMaster are kept for the lossy
+> WAN path (the M124 packet-loss waves are ISP-side, not instance-side).
 
 ## Security Groups
 
@@ -84,16 +88,23 @@ AWS holds no public HTTPS entry point for `*.wind.etherport.net`. See
 > `vpc_security_group_ids`), plus `internal-comms_sg` + `allow-ssh_sg`. Folding the DNS
 > role onto the edge box brought the `dns-server_sg` `:53` rules with it, so the
 > `dns_restrict_ip` Lambda keeps managing the WAN-IP `:53` allows on that same SG — DNS
-> failover self-heals exactly as before. No SG was deleted in the consolidation.
-> ⏳ **Pending (SG redesign residual, F1-F7):** delete the unused `internal_aws_spokes`
-> /19 and port-scope the remaining `-1` (all-ports) rules.
+> failover self-heals exactly as before.
+> ✅ **SG redesign complete (F1-F7, 2026-07-03):** every SG is now fully port-scoped.
+> The unused `internal_aws_spokes` /19 rule and the orphaned `alb-public-443` SG were
+> **deleted**, the four blanket `-1` (all-ports) ingress rules were scoped down (DNS
+> 53 tcp/udp, Technitium admin `:5380` homelab-/19-only, node_exporter `:9100`, ICMP),
+> the CloudFront `:443` DNS rule was deleted, and the stale `10.10.112.0/24`
+> all-traffic rule was revoked. wstunnel `:443`/world was **kept deliberately**
+> (service verified active). Egress-all rules are intentional.
 
 ### VPN Server Security Group (`sg-08323ff8e98ecb563`)
 **Name:** `vpn-server_sg`
 
 | Direction | Protocol | Port | Source/Dest | Description |
 |-----------|----------|------|-------------|-------------|
-| Inbound | UDP | 51820-51821 | 0.0.0.0/0 | Public WireGuard VPN access |
+| Inbound | UDP | 51820 | homelab WAN /32s (Lambda-managed) | WireGuard wg0 site-to-site — kept in sync with `wan1`/`wan2.wind.etherport.net` by the `dns-restrict-ip` Lambda (`rule_specs`); no static world rule |
+| Inbound | UDP | 51821 | 0.0.0.0/0 | WireGuard wg1 remote clients (roaming — world by design) |
+| Inbound | TCP | 443 | 0.0.0.0/0 | wstunnel WSS for WireGuard-over-TCP (restrictive networks; kept deliberately, service verified active) |
 | Outbound | All | All | 0.0.0.0/0 | All outbound |
 
 ### DNS Server Security Group (`sg-08d12e417159c18d2`)
@@ -101,43 +112,38 @@ AWS holds no public HTTPS entry point for `*.wind.etherport.net`. See
 
 | Direction | Protocol | Port | Source/Dest | Description |
 |-----------|----------|------|-------------|-------------|
-| Inbound | UDP | 53 | 47.159.189.230/32 | DNS from restricted IP (dynamic) |
-| Inbound | TCP | 53 | 47.159.189.230/32 | DNS (TCP) from restricted IP |
-| Inbound | TCP | 443 | pl-82a045eb (CloudFront) | HTTPS from CloudFront |
+| Inbound | UDP+TCP | 53 | homelab WAN /32s (Lambda-managed) | DNS from the current WAN1/WAN2 IPs — four rules owned by the `dns-restrict-ip` Lambda (removed from TF 2026-05-23, H6) |
 | Outbound | All | All | 0.0.0.0/0 | All outbound |
 
-**Note:** The restricted IP (47.159.189.230) is dynamically updated by the `dns_restrict_ip` Lambda function based on the `wind.etherport.net` DNS record.
+**Note:** The allowed WAN IPs are dynamically updated by the `dns_restrict_ip` Lambda based on the `wind`/`wan1`/`wan2.wind.etherport.net` DNS records. The former CloudFront `:443` rule was deleted in F1-F7.
 
 ### Internal Communications Security Group (`sg-0c882ffea5692bd63`)
 **Name:** `private-infra-internal-comms_sg`
 
+All rules port-scoped (F1-F7 — each was a blanket `-1` before):
+
 | Direction | Protocol | Port | Source/Dest | Description |
 |-----------|----------|------|-------------|-------------|
-| Inbound | All | All | 10.10.100.0/22 | VPC resources |
-| Inbound | All | All | 10.10.192.0/19 | Homelab (wind) network |
-| Inbound | All | All | 10.254.0.0/24 | Remote VPN clients |
-| Inbound | All | All | 10.255.255.0/29 | Site-to-site VPN clients |
-| Inbound | All | All | spoke VPCs (peered CIDRs) | AWS spoke VPCs reachable through this VPC (commit 8764631) |
+| Inbound | ICMP | — | 10.10.100.0/22 | VPC-local diagnostics (single-box VPC) |
+| Inbound | UDP+TCP | 53 | 10.10.192.0/19 | Homelab: DNS |
+| Inbound | TCP | 5380 | 10.10.192.0/19 | Homelab ONLY: Technitium admin UI |
+| Inbound | TCP | 9100 | 10.10.192.0/19 | Homelab: node_exporter scrape |
+| Inbound | ICMP | — | 10.10.192.0/19 | Homelab: diagnostics |
+| Inbound | UDP+TCP | 53 | 10.254.0.0/24 | Remote clients: DNS (no `:5380` admin by design) |
+| Inbound | ICMP | — | 10.254.0.0/24 | Remote clients: diagnostics |
+| Inbound | ICMP | — | 10.255.255.0/29 | S2S tunnel interface IPs: diagnostics |
 | Outbound | All | All | 0.0.0.0/0 | All outbound |
+
+The former `internal_aws_spokes` rule (all traffic from peered spoke-VPC CIDRs) was
+**deleted** — the spoke VPCs are decommissioned.
 
 ### SSH Access Security Group (`sg-0079fee23ee54417a`)
 **Name:** `allow-ssh_sg`
 
 | Direction | Protocol | Port | Source/Dest | Description |
 |-----------|----------|------|-------------|-------------|
-| Inbound | TCP | 22 | 47.159.189.230/32 | SSH from restricted IP |
+| Inbound | TCP | 22 | homelab WAN /32s (Lambda-managed) | SSH — kept in sync with `wan1`/`wan2.wind.etherport.net` by the `dns-restrict-ip` Lambda (`rule_specs` includes `allow_ssh:22:tcp`) |
 | Outbound | All | All | 0.0.0.0/0 | All outbound |
-
-### ALB Public HTTPS Security Group (`sg-0a4bebabcd3bd4d20`) — ORPHANED
-**Name:** `private-infra_alb-public-443`
-
-| Direction | Protocol | Port | Source/Dest | Description |
-|-----------|----------|------|-------------|-------------|
-| Inbound | TCP | 443 | 0.0.0.0/0 | HTTPS from internet |
-| Outbound | All | All | 0.0.0.0/0 | All outbound |
-
-**Note:** Unattached — the ALB it fronted is gone (edge is the CF Tunnel). Still in
-`networking/security_groups.tf` (`aws_security_group.alb_public`); a cleanup candidate.
 
 ## Network ACLs
 
@@ -272,7 +278,9 @@ All roles run on the single edge box:
 
 ## Ansible Management
 
-AWS instances are managed via Ansible from the local workstation over the WireGuard VPN:
+The edge box is managed via Ansible over the WireGuard VPN — normally by CI
+(`ansible-vm-fleet.yml`, which mints a short-lived step-ca SSH cert per run), or from
+the devbox (cert-only SSH via the renew-loop cert):
 
 ```bash
 # Base system configuration (unattended-upgrades, NTP, etc.)
@@ -312,8 +320,10 @@ infra/ansible/inventory/aws/
 ## Connectivity Requirements
 
 1. **WireGuard VPN must be up** - All management traffic flows over VPN
-2. **SSH via VPN** - No public SSH access, use VPN tunnel
+2. **SSH via VPN, cert-only** - No public SSH access (the `allow-ssh_sg` WAN allows are Lambda-managed); auth is a short-lived step-ca certificate (M76)
 3. **DNS on the edge box** - Technitium answers on the edge EIP `44.240.60.80` and private `10.10.100.10`
+4. **`/etc/hosts` must map the instance hostname** (`ip-10-10-100-10` → `10.10.100.10`) — without it `sudo` stalls ~12s per invocation on hostname lookup (fixed 2026-07-03; this stall was part of the historic "CI can't reach the edge box" symptom, not just WAN loss)
+5. **Homelab-side gotcha:** the UDM zone firewall drops devbox→`10.10.100.10:53` hairpin traffic **by design** (zero drift); the DNS failover path is the public EIP
 
 ## Cost Optimization
 

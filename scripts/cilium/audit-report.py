@@ -9,7 +9,7 @@ lateral movement (leave it to be blocked). This script pulls cluster-wide AUDIT 
 from the hubble relay, dedupes them, and prints a table to drive allowlist refinement.
 
 Usage:  python3 scripts/cilium/audit-report.py [--last N] [--since DURATION]
-Needs:  kubectl context for the wind cluster (the mini). Reads the hubble relay via a
+Needs:  kubectl context for the wind cluster (devbox or mini). Reads the hubble relay via a
         `kubectl exec` into a cilium agent. See docs/runbooks/cilium-cni-dir-owner.md
         and platform/kubernetes/networkpolicies/README.md.
 """

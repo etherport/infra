@@ -1,7 +1,7 @@
 # SSH private key for the AI advisor's Phase 3 remediation actions.
 # Mounted into the controller pod at /etc/advisor-ssh/id_ed25519.
-# Pubkey is distributed to allowed hosts (dns-aws, dns-fallback,
-# vpn-fallback, vpn-aws) by infra/ansible/playbooks/base.yml.
+# Pubkey is distributed to allowed hosts (dns-fallback, vpn-fallback,
+# vpn-aws — dns-aws destroyed 2026-07, M110) by infra/ansible/playbooks/base.yml.
 #
 # Sister item in 1P: "AI Advisor SSH Key" (tqqnfam7vattfcsta7zf6zikem)
 apiVersion: v1

@@ -74,7 +74,6 @@
     # Format: "HH:MM" in local timezone
     reboot_times:
       dns-fallback: "02:00"
-      dns-aws: "02:30"
       vpn-fallback: "03:00"
       vpn-aws: "03:30"
       devbox: "05:00"        # runs the persistent Claude tmux sessions; they auto-resume on reboot
@@ -364,7 +363,7 @@
         shell: /bin/bash
         create_home: true
         state: present
-      when: inventory_hostname in ['dns-aws', 'dns-fallback', 'vpn-fallback', 'vpn-aws']
+      when: inventory_hostname in ['dns-fallback', 'vpn-fallback', 'vpn-aws']
 
     - name: Install advisor-remediation wrapper script
       ansible.builtin.copy:
@@ -447,7 +446,7 @@
               exit 3
               ;;
           esac
-      when: inventory_hostname in ['dns-aws', 'dns-fallback', 'vpn-fallback', 'vpn-aws']
+      when: inventory_hostname in ['dns-fallback', 'vpn-fallback', 'vpn-aws']
 
     - name: Install sudoers rule for advisor-remediation
       ansible.builtin.copy:
@@ -468,7 +467,7 @@
             /usr/bin/systemctl restart kubelet
           Cmnd_Alias ADVISOR_JOURNALCTL = /usr/bin/journalctl --vacuum-size=*
           advisor-remediation ALL=(root) NOPASSWD: ADVISOR_FIND_DELETE, ADVISOR_SYSTEMCTL, ADVISOR_JOURNALCTL
-      when: inventory_hostname in ['dns-aws', 'dns-fallback', 'vpn-fallback', 'vpn-aws']
+      when: inventory_hostname in ['dns-fallback', 'vpn-fallback', 'vpn-aws']
 
     - name: Install advisor pubkey with command restriction
       ansible.posix.authorized_key:
@@ -480,7 +479,7 @@
         key_options: 'command="/usr/local/sbin/advisor-remediation.sh",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty,no-user-rc'
         key: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHXO0PZ9MkM+axg0Ml/fYMz3JEfJSGkATB3wGUYdjYug ai-advisor@auto-remediation'
         comment: 'AI advisor Phase 3 remediation (auto-remediation/remediation-controller)'
-      when: inventory_hostname in ['dns-aws', 'dns-fallback', 'vpn-fallback', 'vpn-aws']
+      when: inventory_hostname in ['dns-fallback', 'vpn-fallback', 'vpn-aws']
 
     # =========================================================================
     # =========================================================================

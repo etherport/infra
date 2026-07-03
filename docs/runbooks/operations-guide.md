@@ -496,5 +496,7 @@ If site-to-site VPN is down:
 If DNS is failing:
 1. Check cluster DNS: `dig @10.10.201.71 google.com`
 2. Check fallback: `dig @10.10.201.6 google.com`
-3. Check AWS edge box: `dig @10.10.100.10 google.com` (via VPN)
+3. Check AWS edge box: `dig @10.10.100.10 google.com` (via VPN — ⚠️ NOT from a
+   Servers/201 host like the devbox: the UDM drops that `:53` hairpin **by design**;
+   from 201, test the public EIP instead: `dig @44.240.60.80 google.com`)
 4. Access Technitium web UI to check cluster status

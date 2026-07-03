@@ -5,6 +5,21 @@ FileVault gate) hosts the Claude Code **dev sessions** (cue, personal-web,
 infra), migrated off the Mac mini so they survive mini reboots and are
 remote-controllable from claude.ai. The mini keeps the macOS-only work (Photos/iCloud).
 
+## What's on the box (current toolset)
+- `kubectl` (cluster-admin kubeconfig)
+- `sops` + the age key (`~/.config/sops/age/keys.txt`) — headless `sops -d`
+- `git`, `claude`
+- `terraform` 1.15.5 + `aws` CLI — **throwaway/local-debug only** (M82: TF is
+  CI-only; no standing AWS/PVE creds — re-render on demand via
+  `scripts/render-aws-credentials.sh` / `scripts/tf-proxmox.sh`)
+- `helm` v3.19 (`~/.local/bin`) — Cilium upgrades run from here
+- kubespray venv at `~/.kubespray-venv` (ansible 11 / core 2.18) — cluster
+  runs via `infra/kubespray/kubespray.sh` with
+  `KUBESPRAY_SSH_KEY=~/.ssh/id_homelab_cert`, long runs in detached tmux
+
+Still lacks: a browser (headless-Chrome verification → mini/CI) and the `gh`
+CLI (dispatch workflows via the M92 PAT + REST API instead, see below).
+
 ## Why devbox over the mini for sessions
 - No FileVault unlock-on-reboot gate → genuinely unattended auto-resume.
 - System `node`/`claude`/`tmux`/`git` in `/usr/bin` → works under systemd's minimal env.

@@ -1,8 +1,8 @@
-# WireGuard Server Keys - vpn-local
+# WireGuard Server Keys - vpn-fallback (VM 1002; renamed from vpn-local, M128)
 # Used by Ansible to deploy keys during instance provisioning
 #
-# Encrypt with: sops -e -i vpn-local.sops.yaml
-# Decrypt with: sops -d vpn-local.sops.yaml
+# Encrypt with: sops -e -i vpn-fallback.sops.yaml
+# Decrypt with: sops -d vpn-fallback.sops.yaml
 apiVersion: v1
 kind: Secret
 metadata:

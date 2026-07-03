@@ -34,9 +34,10 @@
       - "1.0.0.1"
       - "8.8.8.8"
     technitium_conditional_forwarders:
-      # AWS EC2 internal hostnames. Forwarded to dns-aws (10.10.100.10,
-      # EC2 nano running technitium pointed at AWS Route53 Resolver
-      # Inbound endpoint). The aws.etherport.net forwarder was
+      # AWS EC2 internal hostnames. Forwarded to the AWS edge box vpn-aws
+      # (10.10.100.10 — Technitium on the consolidated private-infra_edge
+      # instance since M110; dns-aws destroyed 2026-07-02 — pointed at the
+      # AWS Route53 Resolver Inbound endpoint). The aws.etherport.net forwarder was
       # removed 2026-05-27 — the Route53 private zone for that name
       # was deleted with the broader Route53 → CF migration. See
       # docs/runbooks/aws-private-dns.md for historical context.
@@ -421,7 +422,7 @@
     # Filesystem-level log retention. Technitium's built-in maxLogFileDays
     # setting is the *preferred* way to bound log size, but it requires API
     # access with the admin password — and the standalone (non-cluster)
-    # Technitium nodes (dns-aws, dns-fallback) have different admin
+    # Technitium nodes (vpn-aws, dns-fallback) have different admin
     # credentials than the K8s cluster Technitium, so the
     # `technitium-set-log-retention` K8s CronJob can't reach them. This
     # systemd timer is the durable fallback: deletes log files older than

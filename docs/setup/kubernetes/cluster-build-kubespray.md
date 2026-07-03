@@ -1,5 +1,14 @@
 # Build / Rebuild Kubernetes with Kubespray
 
+> **Where/how to run (2026-07):** kubespray runs **from the devbox** (venv
+> `~/.kubespray-venv`). Export `KUBESPRAY_SSH_KEY=~/.ssh/id_homelab_cert` — the
+> wrapper's default key is the dead static key (fleet SSH is cert-only, M76) — and
+> run long plays in a **detached tmux** (harness-backgrounded runs get killed).
+> Current cluster: **v1.35.0**, containerd 2.2.5, submodule v2.31.0. Read the
+> landmines checklist in
+> [`../../runbooks/kubernetes-upgrade.md`](../../runbooks/kubernetes-upgrade.md)
+> before ANY run.
+
 ## Repo layout
 - Kubespray is a git submodule: `infra/kubespray/kubespray`
 - Wrapper scripts: `infra/kubespray/kubespray.sh` and `infra/kubespray/setup.sh`

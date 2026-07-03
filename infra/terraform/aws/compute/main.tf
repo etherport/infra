@@ -8,19 +8,19 @@ locals {
     Module      = "compute"
   }
 
-  # Cloud-init payload shared by both AWS VMs (vpn + dns). Appends the
-  # gh-runner's automation pubkey to ubuntu's authorized_keys so the
-  # ansible-vm-fleet workflow can SSH in without a manual key push.
-  # Runs only on first boot — has no effect on a running instance, and
-  # both `aws_instance` blocks `ignore_changes = [user_data]` so a
-  # source diff doesn't try to recreate them.
+  # Cloud-init payload for the (sole) AWS edge instance. Appends the
+  # automation BOOTSTRAP pubkey to ubuntu's authorized_keys so a freshly
+  # rebuilt instance is reachable for step-ca enrollment. Runs only on
+  # first boot — has no effect on a running instance, and the
+  # `aws_instance` block `ignore_changes = [user_data]` so a source diff
+  # doesn't try to recreate it.
   #
-  # If the homelab automation key is ever rotated (1Password item
-  # "Homelab Automation SSH Key"), update the pubkey here AND in
-  # `infra/ansible/playbooks/pve-sshd.yml` AND on the live AWS hosts
-  # (~ubuntu/.ssh/authorized_keys on dns-aws + vpn-aws). See
-  # `memory/reference_pve_automation_pubkey.md` for the canonical
-  # list of placement.
+  # M76: fleet SSH is CERT-ONLY. This static key is stripped from the
+  # RUNNING host's authorized_keys post-enrollment and survives only here
+  # as the per-host rebuild seed; day-to-day access (devbox + the
+  # ansible-vm-fleet CI) uses short-lived step-ca certs. If the key is
+  # ever rotated, update the `automation_ssh_pubkey` default (and the
+  # other bootstrap-seed locations listed in variables.tf).
   aws_vm_cloud_init = <<-EOT
     #cloud-config
     users:
@@ -141,12 +141,12 @@ resource "aws_instance" "vpn" {
   private_ip           = "10.10.100.10"
 
   # Cloud-init payload — runs ONCE on first boot to append the
-  # homelab-automation pubkey to ubuntu's authorized_keys so the
-  # gh-runner can ansible this host without a manual SSH key push.
-  # (2026-05-23: discovered both AWS VMs were provisioned with only
-  # the personal GS-EC2 key; the automation pubkey was added manually
-  # post-hoc via SSH-from-laptop. This bakes the fix for any future
-  # recreate.) Has no effect on the existing running instance.
+  # automation BOOTSTRAP pubkey to ubuntu's authorized_keys (rebuild
+  # seed for step-ca enrollment; see the locals comment above).
+  # (History, 2026-05-23: the then-two AWS VMs were provisioned with
+  # only the personal GS-EC2 key; the automation pubkey was added
+  # manually post-hoc. This bakes the fix for any future recreate.)
+  # Has no effect on the existing running instance.
   user_data = local.aws_vm_cloud_init
 
   vpc_security_group_ids = [

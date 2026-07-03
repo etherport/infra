@@ -74,10 +74,13 @@ spec:
         appliance: unas
 ---
 # Cue API — public health endpoint through the Cloudflare tunnel. Probes the
-# full external path (DNS → CF edge → tunnel → cue-api Service), so it catches
-# tunnel/DNS/cert failures the in-cluster deployment check would miss. /health
-# is one of only two publicly-routed paths. http_2xx_insecure expects 2xx;
-# /health returns 200.
+# full external path (DNS → CF edge → CF Access → tunnel → cue-api Service), so
+# it catches tunnel/DNS/cert failures the in-cluster deployment check would miss.
+# /health is one of only two publicly-routed paths and is gated by a CF Access
+# SERVICE-TOKEN policy (2026-07-03; the old bypass+everyone policy is gone) —
+# the http_2xx_cf_token module sends the CF-Access-Client-Id/-Secret headers
+# (from the SOPS config Secret, 01-config-secret.sops.yaml) and requires a
+# strict 200 (an Access login page would be a non-200/302 → probe fails).
 apiVersion: monitoring.coreos.com/v1
 kind: Probe
 metadata:
@@ -128,7 +131,7 @@ spec:
 ---
 # authentik (SSO IdP) — gates every OIDC app + all forward-auth admin UIs (H38).
 # M113 (2026-07-01): authentik had zero alert coverage. Probes the in-cluster
-# Service /-/health/live/ (plain http_2xx module — see 01-configmap). Pairs with
+# Service /-/health/live/ (plain http_2xx module — see 01-config-secret.sops.yaml). Pairs with
 # the AuthentikDown rule (monitoring/13-service-alerts.yaml). NB the pod-level
 # liveness probes restart a sick pod; this catches the SERVICE being dark (both
 # replicas down / Service broken / namespace-level failure).

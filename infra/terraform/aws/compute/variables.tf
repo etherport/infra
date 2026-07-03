@@ -21,8 +21,8 @@ variable "alert_email" {
   default     = "graham.m.smith@me.com"
 }
 
-# gh-runner automation pubkey appended to ubuntu's authorized_keys via cloud-init
-# (first-boot only; both aws_instance blocks ignore_changes=[user_data]). NOTE:
+# Automation pubkey appended to ubuntu's authorized_keys via cloud-init
+# (first-boot only; the aws_instance block ignore_changes=[user_data]). NOTE:
 # this same key is ALSO declared in proxmox/{k8s-vms,standalone-vms}/variables.tf
 # and infra/ansible/playbooks/pve-sshd.yml — true cross-stack dedup isn't possible
 # from a single TF var. If rotated, update all of them (see

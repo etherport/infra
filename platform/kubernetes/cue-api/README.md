@@ -53,7 +53,9 @@ local Docker build — CI is the source of truth.
 `cue.etherport.net` is served by the wind-cluster cloudflared tunnel
 (`infra/terraform/cloudflare/main.tf`), which now passes the **whole app** to the
 origin; **Cloudflare Access gates per path** (`infra/terraform/cloudflare/cue-access.tf`):
-- `/health` → **bypass** (public liveness, no login)
+- `/health` → **service token** (`cue-health-probe`; the blackbox-exporter probe
+  sends the `CF-Access-Client-*` headers — the old public bypass+everyone policy
+  was replaced 2026-07-03, so `/health` is no longer anonymous)
 - `/ingest/healthkit` → **service token** (the Apple Health Auto Export client; `CF-Access-Client-*`)
 - everything else → **Google SSO**, allow-list = `var.cue_tester_emails`
 
