@@ -35,18 +35,20 @@ resource "cloudflare_dns_record" "spf_mail_stopthecastle" {
   ttl     = 3600
 }
 
-// Bot Fight Mode (Insight, Moderate) — the three STATIC sites only. etherport.net
-// deliberately EXCLUDED: it carries machine traffic (cue API + HealthKit ingest +
-// HA mobile/webhooks) that BFM is known to challenge/break; pending owner call.
-resource "cloudflare_bot_management" "grahamsmith" {
-  zone_id    = data.cloudflare_zones.grahamsmith.result[0].id
-  fight_mode = true
-}
-resource "cloudflare_bot_management" "stopthecastle" {
-  zone_id    = data.cloudflare_zones.stopthecastle.result[0].id
-  fight_mode = true
-}
-resource "cloudflare_bot_management" "smithforsb" {
-  zone_id    = data.cloudflare_zones.smithforsb.result[0].id
-  fight_mode = true
-}
+// Bot Fight Mode (Insight, Moderate) — BLOCKED on token scope (2026-07-03 apply:
+// PUT zones/<id>/bot_management -> 403; the CI token lacks "Zone: Bot Fight Mode:
+// Edit"). To enable: dash -> My Profile -> API Tokens -> edit the TF token -> add
+// that scope (all zones), then UNCOMMENT these three + dispatch apply. etherport.net
+// stays deliberately excluded (cue API/HealthKit/HA machine traffic breaks under BFM).
+# resource "cloudflare_bot_management" "grahamsmith" {
+#   zone_id    = data.cloudflare_zones.grahamsmith.result[0].id
+#   fight_mode = true
+# }
+# resource "cloudflare_bot_management" "stopthecastle" {
+#   zone_id    = data.cloudflare_zones.stopthecastle.result[0].id
+#   fight_mode = true
+# }
+# resource "cloudflare_bot_management" "smithforsb" {
+#   zone_id    = data.cloudflare_zones.smithforsb.result[0].id
+#   fight_mode = true
+# }
