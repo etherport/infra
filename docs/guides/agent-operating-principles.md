@@ -49,6 +49,25 @@ as separate commands (compound commands trip the permission classifier); let the
 push-triggered plan finish before dispatching an apply (S3 state-lock contention);
 a killed run can leave a stale `.tflock` — clear it deliberately, don't retry blindly.
 
+
+**A8. Version ladders are sequential-with-anchors.** When a component documents
+no-skip upgrades (CNPG minors, Authentik majors), ladder one step at a time, take a
+restore anchor before the first irreversible migration (DB backup + WAL/PITR, etcd
+snapshot), and verify per hop (migration-under-lock completed, replicas Ready, 0
+restarts) before the next. *Example:* CNPG 1.24→1.30 (6 hops) and Authentik
+2024.12→2026.5 (8 hops) both landed clean this way on 2026-07-02/03; the
+known-dangerous RBAC migration was de-risked by verifying its precondition
+(`ak shell`: group-name uniqueness) BEFORE the hop.
+
+**A9. Terraform identity changes are state surgery, not source edits.** A rename =
+`moved {}` blocks (verified: plan shows moves + in-place, never destroy/create). A
+provider swap across a schema rewrite CANNOT use `replace-provider` (the new provider
+can't read the old schema's state → plans replacement of live resources); the safe
+recipe is state-backup → `state rm` → rewrite `.tf` to the new schema → `import`
+under the new types → iterate plan to zero, pinning config to LIVE values.
+*Example:* M128 (moved{}) and M125 (import migration; two failed swap attempts were
+cleanly reverted by a reverse replace-provider before the recipe was applied).
+
 ## B. Verification bar — what "done" means
 
 **B1. Never trust "apply succeeded" — verify the live result.** The exit code proves
@@ -85,6 +104,21 @@ night.
 P95/max over a real window and cite it in the commit. *Example:* M118 set prometheus
 requests from "P95 1.83Gi vs the old 2Gi limit — <10% from OOM".
 
+
+**B6. Verify redundancy CONVERGES, not just that each half runs.** Two healthy
+keepaliveds can still split-brain if the control protocol between them is blocked; a
+standby whose daemon is dead is not a standby. After changing anything on a failover
+path (firewall, image, script), run the actual failover drill and watch BOTH
+directions (takeover AND reclaim). *Example:* 2026-07-03 — M77's default-deny
+silently dropped VRRP (IP proto 112) into vpn-fallback for five days; the design
+looked healthy until the first real failover produced a VIP split-brain. The drill
+(kill pod → 9s VM takeover → 300s pod reclaim) is now the acceptance test.
+
+**B7. Long-running operations run in detached tmux, monitored via their log file.**
+Harness-managed background tasks can be killed mid-operation; a cluster upgrade or
+state migration must survive that. *Example:* the 2026-07-02 kubespray run was killed
+mid-download as a background task and completed flawlessly in tmux.
+
 ## C. Diagnosis discipline
 
 **C1. Localize the layer first: timeout vs refused.** A connect **timeout** means a
@@ -118,6 +152,22 @@ Kyverno (Audit→Enforce), PSA labels (`--dry-run=server`), VM firewalls (ACCEPT
 before DROP). And remember the enforced-tier tax: a service crossing an enforced
 boundary needs that tier's allowlist updated in the same change (the M110 dns-sync
 :5380 sync was POLICY_DENIED for exactly this).
+
+
+**C7. "It worked before" may mean "it won a race before".** A component that
+functioned for weeks can be latently broken and surviving on a startup race, a
+conntrack entry, or a stale ARP/cache. When a restart breaks something old, suspect
+the ordering, not (only) the change that restarted it. *Example:* the WG pod's
+HOST_IP script ran 50 days only because it usually started before keepalived claimed
+the VIP; 2026-07-02's recreation lost the race and exposed the bug.
+
+**C8. Stored config can drift from live config — re-assert on any reset.** Helm
+stored values vs ConfigMap hand-patches, TF state vs console edits, blueprints vs UI
+changes: any "reset-then-reuse" style operation re-materializes the STORED truth.
+Enumerate hand-patched knobs and re-assert them in the same command. *Example:*
+cilium `--reset-then-reuse-values` re-enabled policyAuditMode (would have silently
+un-enforced 6 netpol tiers); caught in post-upgrade verify, now baked into the
+cilium-upgrade runbook.
 
 ## D. Documentation & memory discipline
 
@@ -183,6 +233,14 @@ rather than guessing — and attach an honest confidence to diagnoses.
 **F3. When you and the operator disagree, show the evidence.** *Example:* the cost
 investigation disproved the storage-transition hypothesis with object-count data
 before proposing the real fix (request-cost from hourly Kopia maintenance).
+
+
+**F6. Peer-agent handoffs carry evidence, not summaries.** When work crosses into
+another agent's repo/domain (the s3-backup app, the personal-web zones), hand over a
+prompt containing: the precise failing artifact paths (report keys, run IDs), what
+was already verified on this side, and the boundary (what they own vs what stays
+here). *Example:* the 2026-07-03 multipart-ETag finding shipped with the exact
+report path + the confirmation that the bytes were verified complete in S3.
 
 ## G. Model-agnostic contract
 

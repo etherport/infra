@@ -71,7 +71,10 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   kubeconfig_path=<temp kubeconfig → another CP>`. Patch **cp1 LAST** (etcd leader +
   endpoint); verify etcd quorum (`etcdctl endpoint health --cluster`, `/etc/etcd.env`
   has the certs) between each. Full technique: session-log 2026-06-24 cont.7.
-- **UDM/UniFi changes:** the `paultyng/unifi` TF provider covers networks/reservations/
+- **UDM/UniFi changes:** the **`ubiquiti-community/unifi` 0.41.25** TF provider (migrated off archived
+  paultyng 2026-07-03 via state-rm+import — its schema is a REWRITE: nested `dhcp_server{}`, `vlan`,
+  `unifi_client` not `unifi_user`, imports by MAC; use `UNIFI_API_KEY` locally — rapid logins trip the
+  UDM rate-limiter; the fork FIXED paultyng's PUT-400 bug) covers networks/reservations/
   port-forwards; zone-based firewall + DNS live in **`infra/ansible/playbooks/udm-firewall.yml`**
   (drives the internal `/proxy/network/v2/api/...`). **Always `--check --diff` first**
   and only apply if the diff is exactly your change (the playbook full-reconciles).
@@ -203,7 +206,12 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
 - **kubespray `cluster.yml`/`--tags=cilium` breaks Cilium** by chowning `/opt/cni/bin`
   to `kube_owner` (`kube`); Cilium's `mount-cgroup` (root, `drop:[ALL]`, no DAC_OVERRIDE)
   then can't write there → `Init:CrashLoopBackOff` on the **next agent restart** (latent
-  until then). **Run kubespray ONLY via `infra/kubespray/kubespray.sh`** — it auto-runs
+  until then). **Run kubespray ONLY via `infra/kubespray/kubespray.sh`** (now from the **devbox**: venv
+  `~/.kubespray-venv`, `KUBESPRAY_SSH_KEY=~/.ssh/id_homelab_cert` — the wrapper default is the removed
+  static key; run long upgrades in **detached tmux**, harness background tasks get killed; version
+  overrides past the shipped checksums = the SCALAR e.g. `containerd_archive_checksum`, role vars beat
+  inventory dicts; `--limit` retries must NOT include already-upgraded CPs — kubeadm re-apply fails +
+  leaves them cordoned; pre-arm a cue-db PDB drain watch on its CURRENT node) — it auto-runs
   `pre-flight.yml` afterward to restore `root:root`. Real run path (venv, `--tags=cilium,download`)
   + full incident: `docs/runbooks/cilium-cni-dir-owner.md`. Cilium is **Helm-managed**
   (release `cilium`/kube-system), **not** Flux.
@@ -321,6 +329,17 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   **allowlist-limited** (`PROCESS_EXEC/EXIT` excluded — that's the ~1.1M-events/day firehose) to spare
   single-binary Loki; **don't widen `tetragon.exportAllowList`** or you flood it. README:
   `platform/kubernetes/tetragon/README.md`.
+
+- **WireGuard HA (pod-primary) + the VRRP/PVE-firewall landmine.** VIP `10.10.201.20` floats
+  between the K8s WG pod (prio 150, `preempt_delay 300`, promotion gated on wg health) and the
+  **vpn-fallback** VM (prio 100; starts wg0 only on promotion — ~9s takeover, drilled 2026-07-03).
+  ⚠️ **A default-deny PVE VM firewall silently breaks VRRP** (IP proto 112 is not a "port" — M77's
+  DROP made vpn-fallback deaf to the pod's adverts → persistent VIP SPLIT-BRAIN + ARP-race blackhole
+  of all UDM-routed AWS traffic). vpn-fallback now has an explicit proto-112 allow; when adding
+  default-deny to ANY host, enumerate the control-plane protocols it participates in (VRRP, IGMP,
+  etc.), not just TCP/UDP service ports. Symptom: keepalived logs "forcing new election" every second
+  + both nodes hold the VIP; clients then need `ip neigh flush` (stale ARP). Also: the pod's HOST_IP
+  script must exclude the VIP (a startup race CrashLooped it for 20h — fixed 07-03).
 
 ## 6. Maintenance rules (keep this memory alive)
 
