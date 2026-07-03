@@ -187,8 +187,14 @@ spec:
               ip rule del fwmark 100 table wg0_return 2>/dev/null || true
               ip rule add fwmark 100 table wg0_return prio 99
 
-              # Also add source-based rule for local host responses
-              HOST_IP=$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+              # Also add source-based rule for local host responses.
+              # ⚠️ head -1 + VIP-exclude (2026-07-03): eth0 can carry BOTH the host IP
+              # and the keepalived VIP 10.10.201.20 (hostNetwork; keepalived in this
+              # pod claims the VIP before this script runs when it wins startup).
+              # Without this, HOST_IP became two IPs -> malformed `ip rule` ->
+              # CrashLoopBackOff -> VIP SPLIT-BRAIN with vpn-fallback (w1 held .20
+              # with no wg0 = partial blackhole of all AWS-private traffic).
+              HOST_IP=$(ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '^10\.10\.201\.20$' | head -n1)
               ip rule del from $HOST_IP to 10.254.0.0/24 table wg0_return 2>/dev/null || true
               ip rule add from $HOST_IP to 10.254.0.0/24 table wg0_return prio 97
 
