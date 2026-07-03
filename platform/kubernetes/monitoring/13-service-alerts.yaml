@@ -93,3 +93,24 @@ spec:
           annotations:
             summary: "cloudflared has ZERO edge connections — all external ingress is down"
             description: "No tunnel connections from any replica for 5m. Every externally-published service (incl. CF Access apps + cue) is unreachable from outside. Check: kubectl -n cloudflared get pods + logs; Cloudflare status page."
+    - name: credential-expiry.rules
+      rules:
+        # 2026-07-03 sweep gap #2: hard-expiry creds (M92 dispatch PAT + the 3 CF
+        # Access service tokens). Fed weekly by .github/workflows/
+        # credential-expiry-check.yml -> pushgateway job "credential-expiry".
+        - alert: CredentialExpirySoon
+          expr: (credential_expiry_timestamp_seconds - time()) < 30*24*3600
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Credential {{ $labels.credential }} expires in <30 days"
+            description: "{{ $labels.credential }} expires at {{ $value | humanizeTimestamp }}. Rotate BEFORE expiry: the dispatch PAT gates ALL Terraform ops (M82); CF service tokens gate Alexa->HA / HealthKit ingest / the cue health probe. Rotation: GH -> settings/tokens (fine-grained); CF tokens -> terraform taint the token resource + apply + update the consumer secret."
+        - alert: CredentialExpiryCheckStale
+          expr: absent(credential_expiry_check_last_run_timestamp_seconds) or (time() - credential_expiry_check_last_run_timestamp_seconds) > 8*24*3600
+          for: 6h
+          labels:
+            severity: warning
+          annotations:
+            summary: "The weekly credential-expiry check has not reported in >8 days"
+            description: "credential-expiry-check.yml (Mondays, lifecycle runner) has not pushed metrics. Expiry blindness returns silently - check the workflow runs."

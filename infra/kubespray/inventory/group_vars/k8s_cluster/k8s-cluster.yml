@@ -1,6 +1,7 @@
 ---
-# Kubernetes version - must match what's currently deployed on control plane
-# API server is v1.34.2, upgrading nodes to match
+# Kubernetes version — v1.35.0 running fleet-wide (all 8 nodes) since the
+# 2026-07-02 upgrade-cluster.yml run. Keep in sync with what's deployed; bump
+# + rerun upgrade-cluster.yml (from the devbox, detached tmux) to upgrade.
 kube_version: 1.35.0
 
 # Kubernetes configuration dirs and system namespace.
@@ -369,7 +370,7 @@ persistent_volumes_enabled: false
 event_ttl_duration: "1h0m0s"
 
 ## Automatically renew K8S control plane certificates on first Monday of each month
-auto_renew_certificates: false
+auto_renew_certificates: true  # 2026-07-03 sweep: kubeadm 1y certs died-with-the-train risk — monthly renew timer (installs on next kubespray run)
 # First Monday of each month
 # auto_renew_certificates_systemd_calendar: "Mon *-*-1,2,3,4,5,6,7 03:00:00"
 
