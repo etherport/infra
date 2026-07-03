@@ -229,6 +229,30 @@ This file foregrounds open/in-progress/gated work._
 ### 🟡 M129. Enable local TS exit nodes — k8s-homelab-router APPROVED; vpn-fallback advertising (owner console-approval pending)
 - **Owner ask 2026-07-02.** Only `vpn-aws` currently "offers exit node". **k8s-homelab-router ALREADY advertises exitNode** in git (`platform/kubernetes/tailscale/connector/connector.yaml` `exitNode: true`; live Connector `ISEXITNODE=true`) — it just isn't **approved** as an exit node in the TS admin console (an advertised exit node must be admin-approved before clients can use it). **ACTION (console, user — no TS API key on the agent):** Machines → `k8s-homelab-router` → Edit route settings → approve **Exit node**. The **local** (vpn-fallback) exit node is blocked on **L32** (Tailscale is uninstalled there — reinstall first, then advertise `--advertise-exit-node` + approve). No repo change needed for the k8s one. **Effort: S (console).**
 
+### ⏳ H46. Dead-man's switch — the ENTIRE alert path is in-cluster and unmonitored
+- **2026-07-03 Opus 4.8 gap analysis #1 (verified):** `Watchdog` routes to `null`; the only human channel is SES email from the in-cluster Alertmanager; even `DocDriftAuditStale` rides the same pipeline. If Prometheus/AM/the cluster/SES dies → SILENCE. **Fix options:** (a) healthchecks.io ping from a Watchdog webhook receiver (needs owner account), or (b) fully self-hosted: a systemd timer on the AWS edge box queries the Alertmanager API for Watchdog over the tunnel and raises a CloudWatch alarm on absence (the box has a CW role; CW→SNS→email is already proven in external-monitoring). Prefer (b). **Effort: S-M. Tier: H.**
+
+### ⏳ M130. PVE host config + the single Ceph mon store have NO backup
+- **Gap #4 (verified):** nothing backs up `/etc/pve`, the firewall residue, or `/var/lib/ceph` (mon store.db/keyrings/monmap). pve boot-disk loss = rebuild the storage backend from memory; mon-store loss = objectstore-tool archaeology. **Fix:** nightly timer on pve tarring `/etc/pve` + mon keyrings/monmap → offsite (UNAS or S3 — decide channel) + a "pve total loss" section in disaster-recovery.md. Orthogonal to L1. **Effort: S. Tier: M-H.**
+
+### ⏳ M131. kube-apiserver audit logs: enabled but local-only, unshipped, unwatched
+- **Gap #5 (verified):** `kubernetes_audit: true` writes CP-local (30d/10 files) — no Alloy scrape, no Loki rules. Detection covers network (Hubble) + runtime (Tetragon) but is blind at the API layer (secret reads, RBAC grants, pods/exec); logs die with the node. **Fix:** Alloy hostPath match on CPs → Loki scoped retention_stream (hubble-audit pattern) + 1-2 ruler rules. **Effort: M. Tier: M.**
+
+### ⏳ M132. Criticals have exactly ONE human channel (SES email)
+- **Gap #6:** precedent: ~4k alert mails eaten by a junk filter for a week (2026-05-22). **Fix:** push receiver on severity=critical — self-hosted ntfy behind Traefik or Pushover. Pairs with H46. **Effort: S + a service/account decision. Tier: M.**
+
+### ⏳ M133. SSH-cert RENEWAL staleness unmonitored (StepCADown covers only the CA process)
+- **Gap #7 (verified):** host certs 30d/renew-at-7d; the devbox 13h user cert renews via a timer with no success metric — a renewal failure while the CA is UP walks hosts silently toward SSH lockout. **Fix:** textfile-collector not-after metric per host + devbox renew-timer success timestamp + a <5d rule. **Effort: S. Tier: M.**
+
+### ⏳ M134. DMARC is p=none with NO rua — zero enforcement, zero visibility
+- **Gap #8 (verified):** etherport.net `_dmarc` = `"v=DMARC1; p=none;"` with no reports destination — and the estate's most plausible phish is a forged approval/alert email (the M94 S3-delete approval flow IS email). **Designed fix:** (1) rua target `dmarc@etherport.net` needs a homelab-side SES receipt rule (mirror personal-web's fwd_graham pattern: S3 prefix + extend the email-forward Lambda mapping — INBOUND_MAIL rule set is homelab-owned) or an external aggregator (+authorization TXT). (2) `rua=` into the CF `_dmarc` var. (3) After 2-4 weeks of reports: p=none → quarantine → reject on the sending zones. **Effort: S-M. Tier: M.**
+
+### ⏳ L35. Credential inventory + rotation cadence for the never-expiring statics
+- **Gap #10+#12:** age key (4 holders, never rotated), PVE/CF/UDM tokens, STEP_JWK_PASSWORD, SES SMTP, technitium/grafana admin — no born-on dates, no cadence; also the etcd secretbox key (enabled ✓ but static since install, on the CP disks it protects). **Fix:** `docs/reference/credential-inventory.md` (holder/born-on/last-rotated) + annual reminder + the etcd key-rotation procedure. Complements the NEW credential-expiry-check workflow (hard-expiry creds now metered). **Effort: S. Tier: L-M.**
+
+### ⏳ L36. PSA: path from enforce=baseline to restricted for the easy namespaces
+- **Gap #11:** many workloads already carry hardened securityContexts. **Fix:** add warn=restricted+audit=restricted labels (keep enforce=baseline), harvest violations, promote clean namespaces one at a time. **Effort: M. Tier: L.**
+
 ### ⏳ M124. WAN path-loss waves — instrumented, not yet root-caused
 - **State 2026-07-02:** NOT the box (ENA counters 0 post-resize; 274 scrape flaps in 12h anyway), NOT MTU (20/20 large-payload when calm; wg 1420 both ends), NOT SG/fail2ban/egress-IP. Waves hit BOTH the wg-tunnel and public paths; 90-min mtr windows when calm show 0% loss on every hop incl. control ⇒ **ISP/WAN-side, intermittent, hours-scale**. Continuous detector = `AWSReplicaHostFlapping` (fires during waves). **Next:** when it fires, capture mtr from BOTH ends immediately (runbook-able; consider auto-capture triggered by the alert), correlate wave timestamps against ISP/UDM WAN events (dual-WAN failover logs?). **Effort: M (mostly waiting for a wave).**
 
