@@ -54,8 +54,8 @@ spec:
               memory: 64Mi
       volumes:
         - name: config
-          configMap:
-            name: blackbox-exporter-config
+          secret:
+            secretName: blackbox-exporter-config
 ---
 apiVersion: v1
 kind: Service

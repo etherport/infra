@@ -3,6 +3,6 @@ kind: Kustomization
 namespace: blackbox-exporter
 resources:
   - 00-namespace.yaml
-  - 01-configmap.yaml
+  - 01-config-secret.sops.yaml
   - 02-deployment.yaml
   - 03-probes.yaml

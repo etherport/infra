@@ -89,7 +89,7 @@ metadata:
 spec:
   jobName: blackbox-appliance
   interval: 30s
-  module: http_2xx_insecure
+  module: http_2xx_cf_token
   prober:
     url: blackbox-exporter.blackbox-exporter.svc.cluster.local:9115
   targets:
