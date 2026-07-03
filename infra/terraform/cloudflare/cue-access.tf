@@ -26,21 +26,39 @@ resource "cloudflare_zero_trust_access_service_token" "cue_healthkit" {
   duration   = "8760h" # 1y
 }
 
+// Service token for the in-cluster blackbox /health probe (CF Security Insight
+// 2026-07-03: "Overprovisioned Access Policies" — the old policy was
+// bypass+everyone, which disables ALL edge protections on the path). The probe
+// now authenticates like any zero-trust client. Values land in the blackbox
+// config secret (platform/kubernetes/blackbox-exporter) via `terraform output`.
+resource "cloudflare_zero_trust_access_service_token" "cue_health_probe" {
+  account_id = var.cloudflare_account_id
+  name       = "cue-health-probe"
+  duration   = "8760h" # 1y
+}
+
 // 1. /health -> BYPASS (public, unauthenticated liveness probe)
 resource "cloudflare_zero_trust_access_application" "cue_health" {
   account_id           = var.cloudflare_account_id
-  name                 = "Cue — /health (public)"
+  name                 = "Cue — /health (service token)"
   domain               = "cue.etherport.net/health"
   type                 = "self_hosted"
   app_launcher_visible = false
-  allowed_idps         = [var.google_idp_id]
+  # non_identity policy: header-auth requests must not bounce to the IdP.
+  auto_redirect_to_identity = false
+  allowed_idps              = [var.google_idp_id]
 
   policies = [
     {
-      name       = "Public bypass (liveness)"
-      decision   = "bypass"
+      // Was bypass+everyone (CF Insight "Overprovisioned", 2026-07-03). The only
+      // legitimate external client is the in-cluster blackbox probe -> service
+      // token. non_identity = evaluate the token headers without an IdP bounce.
+      name       = "Health probe (service token)"
+      decision   = "non_identity"
       precedence = 1
-      include    = [{ everyone = {} }]
+      include = [{
+        service_token = { token_id = cloudflare_zero_trust_access_service_token.cue_health_probe.id }
+      }]
     }
   ]
 }
