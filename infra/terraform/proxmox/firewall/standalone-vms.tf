@@ -159,6 +159,20 @@ resource "proxmox_virtual_environment_firewall_rules" "vpn_fallback" {
     log     = "nolog"
     comment = "WireGuard to AWS. STAGE 2: scope source to the AWS VPN peer public IP."
   }
+  rule {
+    # VRRP (IP proto 112) from the Servers VLAN — WITHOUT this, vpn-fallback can
+    # never HEAR the K8s WG pod's higher-priority adverts and refuses to yield the
+    # VIP -> persistent split-brain (both hold 10.10.201.20; ARP-race blackhole of
+    # all UDM-routed AWS traffic). Root-caused 2026-07-03: M77's default-deny
+    # (2026-06-28) silently broke VRRP convergence; the first real failover exposed
+    # it. Its own adverts always went OUT (output ACCEPT) — asymmetric.
+    type    = "in"
+    action  = "ACCEPT"
+    proto   = "112"
+    source  = "10.10.201.0/24"
+    log     = "nolog"
+    comment = "VRRP adverts from the K8s WG pod (keepalived) - split-brain fix 2026-07-03"
+  }
 }
 
 # ---- gh-runner (1003): outbound-only CI runner — baseline only ---------------
