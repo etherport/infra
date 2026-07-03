@@ -43,6 +43,12 @@ resource "cloudflare_dns_record" "spf_mail_stopthecastle" {
 // rollback) and note it in the tracker. Requires the token scope
 // "Zone: Bot Management: Edit" (owner adding).
 resource "cloudflare_bot_management" "etherport" {
-  zone_id    = var.cloudflare_zone_id
+  zone_id = var.cloudflare_zone_id
+  # enable_js (JavaScript Detections) is a hard prerequisite — the API rejects
+  # fight_mode while it's off ("cannot enable Fight_Mode while EnableJS is
+  # disabled", learned 2026-07-03). JS detection only injects into HTML
+  # responses, so the API/machine paths (cue, HealthKit, HA) are untouched by
+  # the injection itself; BFM challenge behavior is the thing to watch.
+  enable_js  = true
   fight_mode = true
 }
