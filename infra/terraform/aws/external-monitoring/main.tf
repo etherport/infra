@@ -190,6 +190,7 @@ resource "aws_cloudwatch_metric_alarm" "composite" {
 # fires through AWS (CW->SNS->email), fully OUTSIDE the cluster's alert path.
 # =============================================================================
 resource "aws_cloudwatch_metric_alarm" "watchdog_deadman" {
+  provider            = aws.us_east_1 # the alerts SNS topic lives here (R53 requirement); bonus: region-independent of the cluster
   alarm_name          = "wind-watchdog-deadman"
   alarm_description   = "The in-cluster alert pipeline heartbeat (Prometheus Watchdog -> Alertmanager -> CW) has gone SILENT. Prometheus/Alertmanager/the cluster/the publisher is down - in-cluster email alerts CANNOT be trusted right now. Check: kubectl -n monitoring get pods; the watchdog-deadman CronJob logs."
   namespace           = "Wind/Deadman"

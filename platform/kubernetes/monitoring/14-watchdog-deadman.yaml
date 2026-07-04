@@ -1,7 +1,7 @@
 # H46 dead-man's switch (2026-07-03 sweep gap #1). Every 5 min: ask Alertmanager
 # whether the Prometheus `Watchdog` alert (the always-firing pipeline canary that
 # previously routed to null) is ACTIVE — and only then publish
-# Wind/Deadman:WatchdogSeen=1 to CloudWatch via IRSA. The CW alarm
+# Wind/Deadman:WatchdogSeen=1 to CloudWatch (us-east-1 — where the alerts SNS topic lives; also region-independent of the cluster) via IRSA. The CW alarm
 # `wind-watchdog-deadman` (infra/terraform/aws/external-monitoring) treats
 # missing/0 as breaching → SNS → email, entirely OUTSIDE the cluster's own
 # alert path. Dying with the cluster is the point: silence = alarm.
@@ -46,7 +46,7 @@ spec:
                       --namespace Wind/Deadman \
                       --metric-name WatchdogSeen \
                       --value 1 \
-                      --region us-west-2
+                      --region us-east-1
                     echo "heartbeat published"
                   else
                     echo "Watchdog NOT firing in Alertmanager — publishing nothing (alarm will breach)"
