@@ -303,7 +303,7 @@ resource "aws_iam_role_policy" "irsa" {
 # but the cloudwatch:namespace condition pins it to Wind/Deadman.
 resource "aws_iam_role_policy" "cloudwatch_read_putmetric" {
   name = "wind-deadman-putmetric"
-  role = aws_iam_role.cloudwatch_read.id
+  role = aws_iam_role.irsa["cloudwatch-read"].id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
