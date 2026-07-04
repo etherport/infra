@@ -15,6 +15,17 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-03 — backups 5×HeadObjectFailed: NOT multipart ETags — the sync-output parser split on " to " inside filenames
+
+Owner relayed the infra agent's overnight diagnosis ("multipart uploads have non-MD5 ETags, so verify-one.sh can never validate them") for the FAILED `backups` run `20260703T081003Z`. **That mechanism doesn't exist in this code** — verify-one.sh never touches ETags (it HEADs with `--checksum-mode ENABLED` and compares `ChecksumSHA256`), `checksumUnavailable` is non-fatal by design, and the SAME run successfully verified 12 multipart-sized (>8 MB) files. Read the actual report:
+
+- **Real cause:** `filesFailed=5`, every one `HeadObjectFailed` with *"**Bucket** name must match the regex"* and a recorded key of `/archive.wind.etherport.net/objects/…` (bucket glued into the key, leading slash). The transfer-list parser split each `upload: <local> to s3://<dest>` line at the **first bare `" to "`** (`s3_part="${rest#* to }"`) — and all 5 files (OneDrive/WSP client docs) contain `" to "` **in the filename** ("…Cheapest **to** Cards…", "When It Comes **to**…", "Intro **to** Cap Structure", 2× "Ultimate Guide **to** Debt…"). Garbage bucket → HEAD refused → verify_status=failed ×5 → FAILED. Latent since the original parser; first triggered 07-03 because these files were newly uploaded. The `checksumUnavailable: 5` was the same 5 records (no dest checksum obtainable), and sizes 284 KB–79 MB — three of five aren't even multipart-sized.
+- **Fix (`sync-and-verify.sh` upload+copy branches):** split on the **full `" to s3://"` separator** (last occurrence). This is provably unambiguous for local→S3 lines: a POSIX path component can't contain `/`, so `" to s3://"` can never occur inside the local path or the key. Unit-tested with the three real failing filenames + multiple-`" to "` + copy-line cases (6/6).
+- **Verified the 5 objects live** (HEAD): exact size match to the report and `ChecksumSHA256` present on all — incl. the 79 MB mp4 (full-object SHA256; the newer aws-cli in the image writes full-object rather than composite checksums for multipart — verification handles both). Data was always intact (matches the infra agent's byte-completeness check); only verification's addressing was broken.
+- **NB for future triage:** the report's `path` field shows `../src/…` — the CLI prints source paths relative to the pod's `/work` cwd; harmless (script resolves them from `/work`).
+
+---
+
 ## 2026-07-02 — v0.1.7/v0.1.8 deployed; EAGAIN root cause PROVEN (NAS-held sparsebundle locks); orphans fixed
 
 **What:** deployed the review release + closed two long-running mysteries.

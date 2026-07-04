@@ -942,9 +942,14 @@ TOTAL_FILES=0
 while IFS= read -r line; do
   if [[ "$line" == upload:* ]]; then
     rest="${line#upload: }"
-    # Split on the last occurrence of " to s3://"
-    local_part="${rest%% to s3://*}"
-    s3_part="${rest#* to }"   # starts with s3://...
+    # Split on the FULL separator " to s3://" — never on bare " to ", which can
+    # occur inside a filename ("Ultimate Guide to …", "When It Comes to …") and
+    # mangled the bucket/key → HeadObject "bucket name must match the regex" →
+    # 5 false verification failures on 2026-07-03 (backups/OneDrive docs).
+    # " to s3://" is unambiguous: a POSIX path component can't contain "/", so
+    # the double slash can never occur inside the local path or the key.
+    local_part="${rest% to s3://*}"          # everything before the separator
+    s3_part="s3://${rest##* to s3://}"       # everything after it
 
     # Parse s3_part into bucket + key
     s3_noscheme="${s3_part#s3://}"
@@ -990,8 +995,9 @@ while IFS= read -r line; do
 
   elif [[ "$line" == copy:* ]]; then
     # In our use-case we don't expect s3->s3 copies, but capture the destination anyway.
-    # Format: copy: s3://src to s3://dst
-    dst="${line##* to }"
+    # Format: copy: s3://src to s3://dst — split on the full " to s3://"
+    # separator (a bare " to " can occur inside a key; see the upload branch).
+    dst="s3://${line##* to s3://}"
     s3_noscheme="${dst#s3://}"
     s3_bucket="${s3_noscheme%%/*}"
     s3_key="${s3_noscheme#*/}"
