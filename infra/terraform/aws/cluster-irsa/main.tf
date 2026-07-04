@@ -129,6 +129,9 @@ locals {
         # service-status-report (monitoring) sends its daily email via SES API on
         # this role (it does not read CloudWatch; reuses the role for the SES grant).
         "system:serviceaccount:monitoring:service-status-report",
+        # watchdog-deadman (monitoring) publishes the H46 heartbeat metric
+        # (cloudwatch:PutMetricData, Wind/Deadman namespace only).
+        "system:serviceaccount:monitoring:watchdog-deadman",
       ]
       policy = jsonencode({
         Version = "2012-10-17"
