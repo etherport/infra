@@ -180,3 +180,26 @@ resource "aws_cloudwatch_metric_alarm" "composite" {
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
 }
+
+# =============================================================================
+# H46 dead-man's switch (2026-07-03). The in-cluster watchdog-deadman CronJob
+# (platform/kubernetes/monitoring/14-watchdog-deadman.yaml) publishes
+# Wind/Deadman:WatchdogSeen=1 every 5 min ONLY when the Prometheus Watchdog
+# alert is actively firing in Alertmanager. If the cluster, Prometheus,
+# Alertmanager, or the publisher dies -> the metric goes missing -> this alarm
+# fires through AWS (CW->SNS->email), fully OUTSIDE the cluster's alert path.
+# =============================================================================
+resource "aws_cloudwatch_metric_alarm" "watchdog_deadman" {
+  alarm_name          = "wind-watchdog-deadman"
+  alarm_description   = "The in-cluster alert pipeline heartbeat (Prometheus Watchdog -> Alertmanager -> CW) has gone SILENT. Prometheus/Alertmanager/the cluster/the publisher is down - in-cluster email alerts CANNOT be trusted right now. Check: kubectl -n monitoring get pods; the watchdog-deadman CronJob logs."
+  namespace           = "Wind/Deadman"
+  metric_name         = "WatchdogSeen"
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 3
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+}

@@ -298,6 +298,23 @@ resource "aws_iam_role_policy" "irsa" {
 # their emails via the SES API (boto3 / aws CLI) on the cloudwatch-read role —
 # replacing static SES SMTP creds (email-transport consolidation). Same v1 SendEmail
 # Resource:"*" caveat as s3-sync.
+# H46 (2026-07-03): the watchdog-deadman CronJob publishes a heartbeat metric.
+# Scoped to the custom namespace only — PutMetricData cannot be resource-scoped,
+# but the cloudwatch:namespace condition pins it to Wind/Deadman.
+resource "aws_iam_role_policy" "cloudwatch_read_putmetric" {
+  name = "wind-deadman-putmetric"
+  role = aws_iam_role.cloudwatch_read.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["cloudwatch:PutMetricData"]
+      Resource = "*"
+      Condition = { StringEquals = { "cloudwatch:namespace" = "Wind/Deadman" } }
+    }]
+  })
+}
+
 resource "aws_iam_role_policy" "cloudwatch_read_ses" {
   name = "wind-irsa-cloudwatch-read-ses"
   role = aws_iam_role.irsa["cloudwatch-read"].id

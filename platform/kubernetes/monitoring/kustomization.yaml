@@ -28,7 +28,8 @@ resources:
   - 12-loki-rules-dns-sync.yaml
   # L24 Phase 4: scrape MetalLB (FRR) speaker BGP metrics (silent-outage alert below).
   - 12-metallb-bgp-monitor.yaml
-  - 13-service-alerts.yaml   # M113: CNPG-down / cert-expiry / authentik / cloudflared coverage
+  - 13-service-alerts.yaml
+  - 14-watchdog-deadman.yaml   # M113: CNPG-down / cert-expiry / authentik / cloudflared coverage
   - comprehensive-alerts.yaml
   - dns-health-alerts.yaml
   - grafana-admin-secret.sops.yaml

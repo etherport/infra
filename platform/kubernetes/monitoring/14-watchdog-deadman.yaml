@@ -1,0 +1,73 @@
+# H46 dead-man's switch (2026-07-03 sweep gap #1). Every 5 min: ask Alertmanager
+# whether the Prometheus `Watchdog` alert (the always-firing pipeline canary that
+# previously routed to null) is ACTIVE — and only then publish
+# Wind/Deadman:WatchdogSeen=1 to CloudWatch via IRSA. The CW alarm
+# `wind-watchdog-deadman` (infra/terraform/aws/external-monitoring) treats
+# missing/0 as breaching → SNS → email, entirely OUTSIDE the cluster's own
+# alert path. Dying with the cluster is the point: silence = alarm.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: watchdog-deadman
+  namespace: monitoring
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: watchdog-deadman
+  namespace: monitoring
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 120
+      ttlSecondsAfterFinished: 900
+      template:
+        spec:
+          serviceAccountName: watchdog-deadman
+          restartPolicy: Never
+          securityContext: { runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: { type: RuntimeDefault } }
+          containers:
+            - name: heartbeat
+              # official aws-cli image, tag-pinned (Kyverno disallow-latest).
+              image: public.ecr.aws/aws-cli/aws-cli:2.32.14
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  AM=http://monitoring-kube-prometheus-alertmanager.monitoring.svc:9093
+                  # Watchdog actively firing in AM = the whole Prom->AM pipeline works.
+                  if curl -sf "$AM/api/v2/alerts?filter=alertname%3D%22Watchdog%22&active=true" | grep -q '"Watchdog"'; then
+                    aws cloudwatch put-metric-data \
+                      --namespace Wind/Deadman \
+                      --metric-name WatchdogSeen \
+                      --value 1 \
+                      --region us-west-2
+                    echo "heartbeat published"
+                  else
+                    echo "Watchdog NOT firing in Alertmanager — publishing nothing (alarm will breach)"
+                    exit 1
+                  fi
+              env:
+                - { name: AWS_ROLE_ARN, value: "arn:aws:iam::830881980142:role/wind-irsa-cloudwatch-read" }
+                - { name: AWS_WEB_IDENTITY_TOKEN_FILE, value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token" }
+                - { name: HOME, value: "/tmp" }   # M75 gotcha: aws-cli cache needs a writable HOME at uid 1000
+              resources:
+                requests: { cpu: 10m, memory: 64Mi }
+                limits: { cpu: 200m, memory: 128Mi }
+              securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } }
+              volumeMounts:
+                - { name: aws-iam-token, mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount, readOnly: true }
+          volumes:
+            # M75 IRSA: projected SA token (aud sts.amazonaws.com) for web identity.
+            - name: aws-iam-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      audience: sts.amazonaws.com
+                      expirationSeconds: 3600
+                      path: token
