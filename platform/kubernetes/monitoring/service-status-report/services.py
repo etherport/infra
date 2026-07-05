@@ -35,7 +35,9 @@ SERVICES = [
     ("Core platform", "cert-manager cainjector","deployment", "cert-manager",   "cert-manager-cainjector"),
     ("Core platform", "Authentik server",       "deployment", "authentik",      "authentik-server"),
     ("Core platform", "Authentik worker",       "deployment", "authentik",      "authentik-worker"),
-    ("Core platform", "Authentik Redis",        "deployment", "authentik",      "authentik-redis"),
+    # NB Authentik dropped its bundled Redis at 2025.10 (H44 upgrade) — the
+    # deployment no longer exists, so this row rendered a permanent "unknown".
+    # Removed 2026-07-05.
 
     # GitOps
     ("GitOps", "Flux helm-controller",         "deployment", "flux-system",    "helm-controller"),
@@ -59,7 +61,7 @@ SERVICES = [
 
     # Storage / data
     ("Storage / data", "CNPG operator",         "deployment", "cnpg-system", "cnpg-cloudnative-pg"),
-    ("Storage / data", "Ceph CSI provisioner",  "deployment", "default",     "csi-rbdplugin-provisioner"),
+    ("Storage / data", "Ceph CSI provisioner",  "deployment", "ceph-csi",    "csi-rbdplugin-provisioner"),
 
     # DNS
     ("DNS", "Technitium DNS", "statefulset", "dns", "technitium"),

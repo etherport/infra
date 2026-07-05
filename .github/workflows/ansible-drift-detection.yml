@@ -116,12 +116,42 @@ jobs:
           path: /tmp/drift-${{ matrix.playbook }}.log
           retention-days: 14
 
-      - name: Report drift status (daily email rollup)
-        if: always()
+      # NB the daily-email drift-status ConfigMap write is NOT done here: this job
+      # runs inside the `ansible-runner` container (no sudo/kubectl), so the
+      # report-drift-status action's kubectl-install fallback fails silently (the
+      # `|| echo ::warning` swallowed it → ansible-udm-firewall / ansible-usw-acls
+      # rendered a permanent "unknown" in the daily email). The write moved to the
+      # dedicated `report-status` job below, which runs on the lifecycle HOST (no
+      # container → kubectl present), keyed off each leg's drift artifact.
+      # (Fixed 2026-07-05.)
+
+  report-status:
+    # Write the daily-email drift-status ConfigMap. Runs on the lifecycle runner
+    # WITHOUT a container (unlike `check`), so kubectl/sudo exist for the
+    # report-drift-status action. Derives each playbook's status from its drift
+    # artifact (uploaded by `check` only on drift): present → 1, absent → 0.
+    name: Write drift-status ConfigMap
+    needs: [check]
+    if: always()
+    runs-on: [self-hosted, lifecycle]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: artifacts
+          pattern: drift-*
+        continue-on-error: true
+      - name: udm-firewall → drift-status
         uses: ./.github/actions/report-drift-status
         with:
-          detector: ansible-${{ matrix.playbook }}
-          status: ${{ steps.drift.outputs.drifted == 'true' && '1' || '0' }}
+          detector: ansible-udm-firewall
+          status: ${{ hashFiles('artifacts/drift-udm-firewall/**') != '' && '1' || '0' }}
+          jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}
+      - name: usw-acls → drift-status
+        uses: ./.github/actions/report-drift-status
+        with:
+          detector: ansible-usw-acls
+          status: ${{ hashFiles('artifacts/drift-usw-acls/**') != '' && '1' || '0' }}
           jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}
 
   report:
