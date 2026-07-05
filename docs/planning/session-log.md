@@ -15,6 +15,57 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-05 — morning triage: Cilium MTU black hole (gpu1) + daily-email false "outages" → 0
+
+**Prompt:** "review the ai advisor alerts over the last 24 hours or so and resolve issues.
+we still have service outages being reported on the daily update email, too, so investigate those."
+
+**1. AI-advisor / overnight alert storm → Cilium MTU black hole on gpu1.**
+`nvidia-dcgm-exporter` TargetDown + node-feature-discovery worker crashlooping (40+ restarts)
+on `k8s-gpu1`, pod `1/1 Running` and serving locally (scrape *timed out*, not refused) → a
+classic small-works/large-fails signature. Root cause: gpu1 hosts the K8s `wireguard` pod, whose
+`wg0`/`wg1` host interfaces are MTU **1420**. After the M123 K8s-upgrade reboot, cilium-agent's MTU
+**auto-detect** (`MTU: 0`) latched onto 1420 instead of eth0's jumbo 9000 → `cilium_wg0` came up at
+**1340** → apiserver-ClusterIP TLS + dcgm scrape responses black-holed, while node-health probes
+(small packets) stayed green so Cilium reported healthy. Fix: `helm upgrade cilium
+--reset-then-reuse-values --set MTU=9000 --set policyAuditMode=false` (+ rollout restart) — the
+runbook's documented `--reuse-values` template-nil landmine + policyAuditMode re-assert. Verified
+gpu1 `cilium_wg0`=8905, dcgm `up=1`, NFD restarts frozen, BGP 8/8, encrypt=Wireguard, enforce
+preserved. **Pinned `cilium_mtu: "9000"`** in both inventory mirrors so a future kubespray cilium
+run can't revert to auto-detect. NEW runbook `docs/runbooks/cilium-mtu-wireguard-blackhole.md`.
+Commit `c3c3891`.
+
+**2. Daily-email "service outages" → all false; email 4-unknown/mislabelled → 0.**
+Ran the report with `STDOUT_ONLY=1` (one-off Job): "3 down, 1 degraded, **4 unknown**". Decomposed:
+- **3 Mac-mini/cairn rows** (Mac-mini host + cairn agent *down*, iCloud backups *degraded*) — ONE
+  root cause, and it's real: every iCloud category fails `destination base not reachable:
+  /Volumes/Backups/Graham/iCloud`; photos also can't mount `/Volumes/Personal-Drive`
+  (`smb://graham@sequoia…` = the UNAS). `mini_health` shows `nas` flipping 1→0 at 07-05 01:10 —
+  downstream of **today's UNAS nvme0 APST controller-hang** (the cache-recurrence loop). SSH'd the
+  UNAS: fully healthy NOW (md4 `[2/2] [UU]`, `/dev/nvme0` present, smbd up, uptime 13d/no reboot) —
+  so the mini's SMB session is wedged ("reattach failed — NOT retrying, rapid reattach wedges the
+  disk-image subsystem"). **Needs a mini-local remount/reboot — agent can't SSH the mini.** messages
+  still succeeds (local chat.db, not the NAS). User notified.
+- **4 "unknown" = pure noise, all fixed:** (a) *Authentik Redis* — Authentik dropped bundled Redis
+  at 2025.10/H44, deployment gone → removed from `services.py`. (b) *Ceph CSI provisioner* — moved
+  namespace `default`→`ceph-csi` ~3d ago → fixed the target. (c/d) *UDM-firewall + L3-switch-ACL
+  drift detectors* — never wrote their `drift-status` ConfigMap key. Root cause: the ansible-drift
+  `check` matrix job runs inside the `ansible-runner` **container** (dash, no sudo/kubectl), so the
+  `report-drift-status` action's kubectl-install fallback failed silently (swallowed by
+  `|| echo ::warning`). Moved the write to a dedicated `report-status` job on the lifecycle **host**
+  (no container → kubectl present), keyed off each leg's drift artifact; backfilled both keys live
+  (clean). Regenerated the dashboard from `services.py` (59 panels). Re-ran the report: **3 down, 1
+  degraded, 0 unknown, 46 healthy** — the only reds are now genuine.
+- **cloud-tag-drift = down** (the 3rd "down") = pre-existing hygiene, NOT an outage: 228/292 AWS
+  resources lack `ManagedBy=terraform` — ~75 structurally untaggable/AWS-predefined (allowlist), the
+  rest IaC-managed stacks missing `default_tags`. Filed **M135**; left firing (hiding it would mask
+  real drift).
+
+**Commits:** `c3c3891` (MTU fix + runbook), `56163e8` (services.py + ansible-drift workflow +
+dashboard). Tracker: M135 filed; 07-05 triage bullet in Recently-completed.
+**Next:** user to remount/reboot the mini to clear the cairn NAS backup outage; M135 default_tags
+rollout when convenient.
+
 ## 2026-07-03 — backups 5×HeadObjectFailed: NOT multipart ETags — the sync-output parser split on " to " inside filenames
 
 Owner relayed the infra agent's overnight diagnosis ("multipart uploads have non-MD5 ETags, so verify-one.sh can never validate them") for the FAILED `backups` run `20260703T081003Z`. **That mechanism doesn't exist in this code** — verify-one.sh never touches ETags (it HEADs with `--checksum-mode ENABLED` and compares `ChecksumSHA256`), `checksumUnavailable` is non-fatal by design, and the SAME run successfully verified 12 multipart-sized (>8 MB) files. Read the actual report:
