@@ -2,7 +2,15 @@
 # Log-level
 # cilium_debug: false
 
-# cilium_mtu: ""
+# Pin the device MTU explicitly (2026-07-05): auto-detect (0) picks the WRONG
+# interface on whichever node hosts the K8s WireGuard pod — it latches onto that
+# pod's wg0/wg1 (MTU 1420) instead of eth0 (9000), deriving cilium_wg0 MTU 1340
+# -> a same-works/large-fails BLACK HOLE for all pod traffic on that node (dcgm
+# scrape + NFD->apiserver timed out on gpu1). Pinning 9000 (eth0 jumbo) makes it
+# deterministic on every node. Live change was a `helm upgrade --set MTU=9000`
+# (cilium is Helm-managed); this keeps a kubespray --tags=cilium run from
+# reverting it. See docs/runbooks/cilium-mtu-wireguard-blackhole.md.
+cilium_mtu: "9000"
 # cilium_enable_ipv4: true
 # cilium_enable_ipv6: false
 
