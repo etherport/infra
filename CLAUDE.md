@@ -221,8 +221,9 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   rollout restart ds/cilium` (read only at startup), NOT a raw kubespray run. ⚠️ patch +
   rollout as SEPARATE commands (the compound one trips the auto-mode classifier). H3
   NetworkPolicy manifests in `platform/kubernetes/networkpolicies/`; enforcement is
-  **per-namespace opt-in via the `netpol.wind/enforced=true` label** — **all 5 target tiers
-  ENFORCED: `postgres`, `cue`, `dns`/Technitium, `traefik`, `monitoring`** (each allowlist
+  **per-namespace opt-in via the `netpol.wind/enforced=true` label** — **all 6 enforced tiers:
+  `postgres`, `cue`, `dns`/Technitium, `traefik`, `monitoring`, `authentik`** (the original 5 H3
+  target tiers + `authentik` added as tier 6, M115 2026-07-01 — SSO IdP; each allowlist
   built+verified from Hubble/audit data, 0 drops). **All unlabeled namespaces stay allow-all.**
   (dns query ports open to `all`, `:5380` admin in-cluster only; traefik + monitoring egress
   permissive — `cluster` any-port + enumerated `world` ports — so scrapes/routes never cut;

@@ -4,11 +4,13 @@ Default-deny + per-tier allowlists for the `wind` cluster. Closes H3 (the larges
 internal-segmentation gap: today Cilium is allow-all, so a compromised pod has
 unrestricted lateral movement). Detailed plan: `docs/planning/archive/hardening-plan-2026-06-10.md` §H3.
 
-> ✅ **ENFORCING — ALL 5 TARGET TIERS (since 2026-06-23).** Cilium `policy-audit-mode` is
+> ✅ **ENFORCING — 6 TIERS.** Cilium `policy-audit-mode` is
 > **OFF** — these policies enforce (real drops). Enforced tiers (labeled
 > `netpol.wind/enforced=true`): **`postgres`** (1), **`cue`** (2), **`dns`/Technitium** (3),
-> **`traefik`** (4), **`monitoring`** (5) — each allowlist built+verified from Hubble/audit
-> data (0 drops post-flip). **All unlabeled namespaces remain allow-all.** This closes H3.
+> **`traefik`** (4), **`monitoring`** (5) — the 5 H3 target tiers, enforcing since 2026-06-23 —
+> plus **`authentik`** (6, the SSO IdP; M115, added 2026-07-01). Each allowlist built+verified
+> from Hubble/audit data (0 drops post-flip). **All unlabeled namespaces remain allow-all.** The
+> original 5 tiers closed H3; authentik (tier 6) extended enforcement to the crown-jewel IdP.
 >
 > ⚠️ **Audit is a single GLOBAL switch.** To add the NEXT tier you must briefly flip audit
 > back ON, observe + build that namespace's allowlist, then flip OFF again — see "Adding a
@@ -88,11 +90,17 @@ that order). `kube-system`, `flux-system`, `wireguard` (hostNetwork → node ide
   egress `:5432` intra (CNPG replication) + `:443` to `world` (barman backups to S3).
   cue-api uses its **own** `cue-db` in ns `cue`, NOT this cluster. **Enforce-ready.**
 - `11-tier-cue.yaml`, `12-tier-dns.yaml`, `13-tier-traefik.yaml`, `14-tier-monitoring.yaml`
-  — the remaining four tiers (CNP `cue-tier`/`dns-tier`/`traefik-tier`/`monitoring-tier`),
+  — the remaining four H3 tiers (CNP `cue-tier`/`dns-tier`/`traefik-tier`/`monitoring-tier`),
   each allowlist written from that namespace's Phase-1 audit data, not guessed. See
   "Current state" below for the per-tier specifics.
+- `15-tier-authentik.yaml` — **tier 6, the SSO IdP** (CNP `authentik-tier`; M115, added
+  2026-07-01 via the audit-toggle workflow). Ingress `:9000` (container port; svc `:80` DNATs
+  to it) from `traefik` (all logins/OIDC/forward-auth) + `blackbox-exporter` (AuthentikDown
+  probe) + intra-ns (worker↔server outpost, redis); egress `postgres` `:5432` + SES SMTP
+  `world` `:587` (recovery/invite mail) + intra-ns. Deliberately **no `world` :443** (update
+  check/analytics/gravatar all disabled).
 
-## Current state (2026-06-28)
+## Current state (2026-07-01)
 
 Enforcing. `cilium_policy_audit_mode: false`. Enforced tiers:
 - **`postgres`** (`10-tier-postgres.yaml`) — verified 0 AUDIT over 7d before the flip;
@@ -121,6 +129,12 @@ Enforcing. `cilium_policy_audit_mode: false`. Enforced tiers:
   :9091/:3100/:514 (push/logs/syslog) + kube-apiserver (operator webhook). Verified via
   the audit toggle: 0 would-be-drops over 24h incl. periodic paths (391 AM notifications,
   0 failed) → audit OFF. (Labelled via `clusters/wind/namespace-pss-labels.yaml`.)
+
+- **`authentik`** (`15-tier-authentik.yaml`) — **tier 6, the SSO IdP** (M115, added
+  2026-07-01 via the audit toggle). Ingress `:9000` from `traefik` (logins/OIDC/forward-auth)
+  + `blackbox-exporter` (probe) + intra-ns; egress `postgres` `:5432` + SES `world` `:587` +
+  intra-ns (redis). No `world` :443 (update check/analytics/avatars disabled). Validated
+  under audit → 0 would-be-drops → audit OFF.
 
 All other namespaces are unlabeled = allow-all.
 

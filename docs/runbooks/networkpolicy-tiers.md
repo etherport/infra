@@ -15,7 +15,8 @@ DNS + kube-apiserver + host/remote-node probes, `allow-monitoring-scrape` = ingr
 from the `monitoring` ns) **plus** that tier's own allowlist (`1x-tier-<ns>.yaml`).
 Everything else is dropped. Unlabelled namespaces are unaffected (allow-all).
 
-**Enforced tiers (2026-06):** `postgres`, `cue`, `dns`, `traefik`, `monitoring` (all 5 enforced).
+**Enforced tiers:** `postgres`, `cue`, `dns`, `traefik`, `monitoring` (the 5 H3 target tiers,
+2026-06), plus **`authentik`** (tier 6, M115 2026-07-01 — the SSO IdP) — **6 enforced tiers**.
 Never label `kube-system`, `flux-system`, `wireguard`, `metallb-system`.
 
 > ⚠️ **`dns` tier has OFF-CLUSTER egress deps — keep them.** `dns-sync-watcher` does an hourly
