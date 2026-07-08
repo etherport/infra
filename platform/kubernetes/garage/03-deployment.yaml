@@ -30,6 +30,42 @@ spec:
         - name: garage
           image: dxflrs/garage:v2.3.0
           command: ["/garage", "-c", "/etc/garage.toml", "server"]
+          # Idempotent bootstrap in-pod (local RPC → node ID auto-discovered, so
+          # it's DR-safe on a fresh metadata volume AND a no-op once configured —
+          # the layout/key/bucket persist in the RBD metadata PVC). Everything is
+          # `|| true` + bounded wait so a hiccup never CrashLoops the server.
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    i=0
+                    until /garage -c /etc/garage.toml status >/dev/null 2>&1 || [ $i -ge 60 ]; do
+                      i=$((i+1)); sleep 2
+                    done
+                    if /garage -c /etc/garage.toml status 2>/dev/null | grep -q 'NO ROLE ASSIGNED'; then
+                      N=$(/garage -c /etc/garage.toml status 2>/dev/null | awk '/NO ROLE ASSIGNED/{print $1}')
+                      /garage -c /etc/garage.toml layout assign -z dc1 -c 1T "$N" || true
+                      /garage -c /etc/garage.toml layout apply --version 1 || true
+                    fi
+                    /garage -c /etc/garage.toml key import --yes -n velero "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" 2>/dev/null || true
+                    /garage -c /etc/garage.toml bucket create velero 2>/dev/null || true
+                    /garage -c /etc/garage.toml bucket allow --read --write --owner velero --key velero 2>/dev/null || true
+          env:
+            # velero's S3 key (GK.../secret) for the postStart `key import`. Same
+            # creds velero's BSL uses. Garage server itself ignores these vars.
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: garage-velero-creds
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: garage-velero-creds
+                  key: AWS_SECRET_ACCESS_KEY
           ports:
             - name: s3
               containerPort: 3900
