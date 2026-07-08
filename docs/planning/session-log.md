@@ -15,6 +15,33 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-08 — AWS cost deep-dive: velero Kopia egress → Garage local-primary repo (M136 + M137)
+
+**Prompts:** "aws costs not returning to normal, forecast going up"; build daily cost reporting; the durable
+fix; "why is the forecast higher than last month… nothing hidden?"
+
+**Root cause (M137):** the S3 spike was **`DataTransfer-Out` (egress), not storage/requests** — 453 GB in
+7 days, forecast $75→$160. Found via **claude-admin Cost Explorer** (key the user pastes on request; NOT in
+SOPS — `terraform-homelab` is DENIED ce:*/cloudwatch:*/s3:ListBucketVersions). Per-bucket via CloudWatch S3
+`BytesDownloaded` request-metrics (enable per bucket ~$0.30/metric/mo, DISABLE after) → caught a **6.46 GB
+velero-bucket burst**. Mechanism: Kopia **full maintenance `"rewriting contents from short packs"`**
+downloads repo content from S3 to repack, ×20 per-ns repos; the M123 upgrade made a short-pack backlog →
+egress spike (decaying 87→30 GB/day). June was storage-dominated (one-time archive-bucket fill before
+Deep-Archive transition); July is egress. Nothing hidden — archive/iCloud storage is flat.
+
+**M136 (daily cost reporting) — DONE/LIVE:** `aws-cost-exporter` CronJob (IRSA cloudwatch-read + new
+`ReadCostExplorer` grant) → pushgateway → Grafana "AWS Cost" dashboard + Cost section in the daily email +
+alerts (`AWSCostForecastHigh`/`AWSServiceDailyCostSpike`/`AWSCostExporterStale`).
+
+**M137 (durable fix) — Phase 1+2 DONE + verified:** MinIO rejected NAS NFS ("insufficient drives online").
+Switched to **Garage** (LMDB metadata on a 10Gi Ceph-RBD PVC + data blocks on the NAS/NFS, uid/gid 988).
+Cut velero default BSL → Garage, S3 → read-only. **Full PVC round-trip byte-verified.** ⚠️ velero wedged
+from rapid test-backup churn → fixed via `helm uninstall` + Flux `reconcile.fluxcd.io/forceAt` reinstall
+(GOTCHAS in M137: helm-CLI-uninstall desyncs helm-controller cache; stale S3 BSL kept default:true; backups
+hang InProgress a few min post-reinstall then complete). **Phase 3 TODO:** rclone Garage→S3 DR +
+Deep-Archive lifecycle + Garage-down alert. Files: `platform/kubernetes/{garage,monitoring/aws-cost-exporter}/`,
+`clusters/wind/helm-releases/velero.yaml`.
+
 ## 2026-07-05 — morning triage: Cilium MTU black hole (gpu1) + daily-email false "outages" → 0
 
 **Prompt:** "review the ai advisor alerts over the last 24 hours or so and resolve issues.
