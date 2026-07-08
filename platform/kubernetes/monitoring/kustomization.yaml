@@ -40,3 +40,5 @@ resources:
   - hubble-servicemonitor.yaml
   - dashboards
   - service-status-report
+  - aws-cost-exporter
+  - 15-aws-cost-alerts.yaml

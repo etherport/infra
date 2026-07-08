@@ -132,6 +132,12 @@ locals {
         # watchdog-deadman (monitoring) publishes the H46 heartbeat metric
         # (cloudwatch:PutMetricData, Wind/Deadman namespace only).
         "system:serviceaccount:monitoring:watchdog-deadman",
+        # aws-cost-exporter (monitoring) reads Cost Explorer + Budgets daily and
+        # pushes cost metrics to pushgateway (M136 — daily cost visibility so an
+        # egress/usage spike surfaces in Grafana + the daily email, not just the
+        # single monthly budget-forecast email). Runs as the service-status-report
+        # SA below; the Cost Explorer / Budgets grant lives in ReadCostExplorer.
+        "system:serviceaccount:monitoring:aws-cost-exporter",
       ]
       policy = jsonencode({
         Version = "2012-10-17"
@@ -154,6 +160,22 @@ locals {
               "arn:aws:logs:*:*:log-group:CloudWatchAgent*",
               "arn:aws:logs:*:*:log-group:CloudWatchAgent*:log-stream:*",
             ]
+          },
+          {
+            # M136 daily cost reporting: read-only Cost Explorer + Budgets. CE has
+            # no resource-level ARNs (actions are account-wide, Resource must be "*").
+            # ce:GetCostAndUsage is billed $0.01/request — the exporter makes ONE
+            # CE call/day (+ one free Budgets call), so ~$0.30/mo.
+            Sid    = "ReadCostExplorer"
+            Effect = "Allow"
+            Action = [
+              "ce:GetCostAndUsage",
+              "ce:GetCostForecast",
+              "ce:GetDimensionValues",
+              "budgets:ViewBudget",
+              "budgets:DescribeBudget",
+            ]
+            Resource = "*"
           },
         ]
       })

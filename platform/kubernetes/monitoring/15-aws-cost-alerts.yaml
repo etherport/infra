@@ -1,0 +1,74 @@
+# AWS cost alerts (M136) — in-cluster complements to the single AWS-side monthly
+# budget email. Source metrics come from the aws-cost-exporter CronJob (pushed to
+# Pushgateway daily). The motivating incident: an S3 DataTransfer-Out spike ran
+# ~a week (forecast $75→$160) and was caught only by a manual console check —
+# because the ONLY signal was the once-a-month budget-forecast email. These give
+# per-service, next-day visibility.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: aws-cost-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: aws-cost
+      rules:
+        - alert: AWSCostForecastHigh
+          # AWS's forecasted month-end spend exceeds the configured budget. Mirrors
+          # the AWS Budgets FORECASTED>100% email but lands in the same Alertmanager
+          # pipeline (so it's visible in-cluster + the daily email), and fires while
+          # there's still runway to act.
+          expr: aws_cost_forecast_usd > aws_cost_budget_usd
+          for: 30m
+          labels:
+            severity: warning
+            component: cost
+            namespace: monitoring
+          annotations:
+            summary: "AWS forecast ${{ $value | humanize }} exceeds the monthly budget"
+            description: |
+              aws_cost_forecast_usd (${{ with query "aws_cost_forecast_usd" }}{{ . | first | value | humanize }}{{ end }})
+              is above aws_cost_budget_usd. Check the "AWS Cost" Grafana dashboard for
+              the per-service breakdown and aws_cost_service_spike_ratio for what's
+              driving it. Investigate with the claude-admin Cost Explorer access.
+
+        - alert: AWSServiceDailyCostSpike
+          # A single service's most-recent-day spend is >2x its trailing-7-day
+          # average (the exporter only emits the ratio once the service clears a
+          # $2/day absolute floor, so cent-level noise never fires this). This is
+          # the signal that would have caught the S3 egress spike on day 1.
+          expr: aws_cost_service_spike_ratio > 2
+          for: 15m
+          labels:
+            severity: warning
+            component: cost
+            namespace: monitoring
+          annotations:
+            summary: "AWS {{ $labels.service }} daily cost is {{ $value | humanize }}x its 7-day average"
+            description: |
+              {{ $labels.service }} spent well above its trailing-7-day average
+              yesterday (ratio {{ $value | humanize }}x). A sustained spike projects
+              into a large month-end overage. See the "AWS Cost" dashboard
+              (aws_cost_service_yesterday_usd vs aws_cost_service_trailing7_avg_usd)
+              and drill into the usage type via Cost Explorer.
+
+        - alert: AWSCostExporterStale
+          # Dead-man: the exporter pushes daily (05:30 PT). >30h of silence means the
+          # cost pipeline is blind — without this, a broken exporter would silently
+          # freeze the dashboard + email cost section at stale values.
+          expr: time() - max(aws_cost_exporter_last_success_timestamp_seconds) > 108000
+          for: 1h
+          labels:
+            severity: warning
+            component: cost
+            namespace: monitoring
+          annotations:
+            summary: "aws-cost-exporter hasn't reported in >30h — cost visibility is stale"
+            description: |
+              aws_cost_exporter_last_success_timestamp_seconds hasn't advanced in
+              >30h (cadence 24h). The daily CronJob monitoring/aws-cost-exporter is
+              failing (IRSA/CE permission, Pushgateway, or boto3 install). Check its
+              last Job logs; the Grafana cost dashboard + email section are frozen
+              until it recovers.

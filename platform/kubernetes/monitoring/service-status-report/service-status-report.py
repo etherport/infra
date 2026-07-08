@@ -379,7 +379,88 @@ def render_alert_block():
       </div>"""
 
 
+def _labeled(query, label="service"):
+    """Return [(label_value, float), ...] for a labeled Prometheus vector."""
+    out = []
+    for r in prom_query(query) or []:
+        try:
+            out.append((r["metric"].get(label, "?"), float(r["value"][1])))
+        except (KeyError, ValueError, IndexError):
+            continue
+    return out
+
+
+def render_cost_block():
+    """AWS cost section (M136) — MTD, forecast vs budget, top services, spikes.
+
+    Reads the aws_cost_* gauges the aws-cost-exporter pushes to Pushgateway. If
+    the exporter is stale/missing (no data), renders a muted 'unavailable' note
+    rather than nothing, so a broken cost pipeline is itself visible."""
+    last = first_value(prom_query("aws_cost_exporter_last_success_timestamp_seconds"))
+    mtd = first_value(prom_query("aws_cost_mtd_usd"))
+    forecast = first_value(prom_query("aws_cost_forecast_usd"))
+    budget = first_value(prom_query("aws_cost_budget_usd"))
+    yday = first_value(prom_query("aws_cost_yesterday_usd"))
+
+    # Stale (>30h) or never-pushed → show a muted note (matches AWSCostExporterStale).
+    if last is None or (NOW_PT.timestamp() - last) > 108000:
+        return """
+      <div class="section-label">Cost (AWS)</div>
+      <div class="alerts-box"><div class="alert-summary" style="padding:12px 14px;">
+        Cost data unavailable — aws-cost-exporter hasn't reported recently.
+      </div></div>"""
+
+    def money(v):
+        return f"${v:,.2f}" if v is not None else "—"
+
+    # Forecast tone vs budget.
+    f_tone = "tone-ok"
+    if budget and forecast:
+        if forecast > budget:
+            f_tone = "tone-err"
+        elif forecast > 0.8 * budget:
+            f_tone = "tone-warn"
+
+    # Top-3 services by MTD.
+    top = sorted(_labeled("aws_cost_service_mtd_usd"), key=lambda kv: -kv[1])[:3]
+    top_html = ""
+    if top:
+        rows = "".join(
+            f'<tr><td class="svc-cell"><div class="svc-name">{html_escape(s)}</div></td>'
+            f'<td class="svc-counts mono">{money(v)}</td></tr>'
+            for s, v in top
+        )
+        top_html = f"""
+        <table class="svc-table" role="presentation"><tbody>{rows}</tbody></table>"""
+
+    # Spikes: any service whose yesterday >2x its 7-day average.
+    spikes = [(s, r) for s, r in _labeled("aws_cost_service_spike_ratio") if r > 2]
+    spikes.sort(key=lambda kv: -kv[1])
+    spike_html = ""
+    if spikes:
+        lis = "".join(
+            f'<li class="alert-row alert-warn"><span class="alert-name">{html_escape(s)} '
+            f'<span class="alert-qual mono">{r:.1f}× 7-day avg</span></span></li>'
+            for s, r in spikes[:4]
+        )
+        spike_html = f"""
+      <div class="alerts-box"><div class="alert-group">
+        <div class="alert-sev-label sev-warn">daily cost spikes</div>
+        <ul class="alert-list">{lis}</ul>
+      </div></div>"""
+
+    return f"""
+      <div class="section-label">Cost (AWS)</div>
+      <div class="summary-grid">
+        <div class="metric"><div class="metric-label">Month-to-date</div><div class="metric-value">{money(mtd)}</div></div>
+        <div class="metric {f_tone}"><div class="metric-label">Forecast</div><div class="metric-value">{money(forecast)}</div></div>
+        <div class="metric"><div class="metric-label">Budget</div><div class="metric-value">{money(budget)}</div></div>
+        <div class="metric"><div class="metric-label">Yesterday</div><div class="metric-value">{money(yday)}</div></div>
+      </div>{top_html}{spike_html}"""
+
+
 alerts_block = render_alert_block()
+cost_block = render_cost_block()
 
 html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -574,6 +655,7 @@ html = f"""<!DOCTYPE html>
     <div class="metric{' tone-err' if counts['down'] else ''}"><div class="metric-label">Down</div><div class="metric-value">{counts['down']}</div></div>
     <div class="metric{' tone-mut' if counts['unknown'] else ''}"><div class="metric-label">Unknown</div><div class="metric-value">{counts['unknown']}</div></div>
   </div>
+{cost_block}
 {alerts_block}
 
   <div class="section-label">Services</div>
@@ -618,6 +700,18 @@ plain = (
     f"Down: {counts['down']}\n"
     f"Unknown: {counts['unknown']}\n"
 )
+_c_mtd = first_value(prom_query("aws_cost_mtd_usd"))
+_c_fc = first_value(prom_query("aws_cost_forecast_usd"))
+_c_bud = first_value(prom_query("aws_cost_budget_usd"))
+if _c_mtd is not None or _c_fc is not None:
+    plain += (
+        f"\nAWS cost: MTD ${_c_mtd:.2f}" if _c_mtd is not None else "\nAWS cost:"
+    )
+    if _c_fc is not None:
+        plain += f", forecast ${_c_fc:.2f}"
+    if _c_bud is not None:
+        plain += f" (budget ${_c_bud:.0f})"
+    plain += "\n"
 if firing:
     plain += "\nFiring alerts:\n"
     for a in firing:

@@ -1,0 +1,74 @@
+# aws-cost-exporter (M136) — daily AWS cost → Pushgateway.
+# Reads Cost Explorer + Budgets via IRSA (role wind-irsa-cloudwatch-read trusts
+# the aws-cost-exporter SA) and pushes cost gauges the Grafana "AWS Cost"
+# dashboard and the daily service-status email both read. Script lives in a
+# ConfigMap (no image build) — same pattern as service-status-report.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: aws-cost-exporter
+  namespace: monitoring
+spec:
+  # 05:30 PT — ~30m before the 06:00 service-status email so it reads fresh
+  # numbers. CE data itself lags ~a day, so once/day is the right cadence
+  # (and keeps the ce:GetCostAndUsage spend at ~$0.30/mo).
+  schedule: "30 5 * * *"
+  timeZone: "America/Los_Angeles"
+  suspend: false
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 90000
+      template:
+        spec:
+          serviceAccountName: aws-cost-exporter
+          restartPolicy: Never
+          containers:
+            - name: exporter
+              image: python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1 # {"$imagepolicy": "flux-system:python-slim"}
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "-c", "pip install --quiet boto3 && python3 /work/aws-cost-exporter.py"]
+              env:
+                - name: PUSHGATEWAY
+                  value: "pushgateway.monitoring.svc.cluster.local:9091"
+                - name: BUDGET_NAME
+                  value: "homelab-monthly"
+                - name: AWS_ACCOUNT_ID
+                  value: "830881980142"
+                # Cost Explorer + Budgets are global; their endpoint is us-east-1.
+                - name: COST_REGION
+                  value: "us-east-1"
+                # IRSA: role wind-irsa-cloudwatch-read (ReadCostExplorer statement).
+                - name: AWS_REGION
+                  value: "us-east-1"
+                - name: AWS_ROLE_ARN
+                  value: "arn:aws:iam::830881980142:role/wind-irsa-cloudwatch-read"
+                - name: AWS_WEB_IDENTITY_TOKEN_FILE
+                  value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
+              volumeMounts:
+                - name: script
+                  mountPath: /work
+                - name: aws-iam-token
+                  mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 96Mi
+                limits:
+                  memory: 192Mi
+          volumes:
+            - name: script
+              configMap:
+                name: aws-cost-exporter-script
+                defaultMode: 0755
+            - name: aws-iam-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      audience: sts.amazonaws.com
+                      expirationSeconds: 3600
+                      path: token

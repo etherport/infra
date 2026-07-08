@@ -1,0 +1,102 @@
+---
+# Grafana dashboard for AWS cost (M136). Reads the aws_cost_* gauges the
+# aws-cost-exporter CronJob pushes to Pushgateway (scraped into Prometheus).
+# Provisioned via the grafana-dashboards sidecar (label grafana_dashboard: "1").
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aws-cost-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  aws-cost.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "graphTooltip": 1,
+      "tags": ["aws", "cost", "finops"],
+      "title": "AWS Cost",
+      "uid": "aws-cost",
+      "schemaVersion": 41,
+      "time": { "from": "now-30d", "to": "now" },
+      "refresh": "30m",
+      "panels": [
+        {
+          "type": "stat", "title": "Month-to-date spend",
+          "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "refId": "A", "expr": "aws_cost_mtd_usd", "datasource": { "type": "prometheus", "uid": "prometheus" } } ],
+          "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 2, "color": { "mode": "fixed", "fixedColor": "blue" } } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+        },
+        {
+          "type": "gauge", "title": "Forecast month-end (vs budget)",
+          "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "refId": "A", "expr": "aws_cost_forecast_usd", "datasource": { "type": "prometheus", "uid": "prometheus" } } ],
+          "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 2,
+            "max": 200,
+            "thresholds": { "mode": "absolute", "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 60 },
+              { "color": "red", "value": 75 } ] } } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "showThresholdMarkers": true }
+        },
+        {
+          "type": "stat", "title": "Monthly budget",
+          "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "refId": "A", "expr": "aws_cost_budget_usd", "datasource": { "type": "prometheus", "uid": "prometheus" } } ],
+          "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 0, "color": { "mode": "fixed", "fixedColor": "purple" } } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" }
+        },
+        {
+          "type": "stat", "title": "Spend yesterday",
+          "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "refId": "A", "expr": "aws_cost_yesterday_usd", "datasource": { "type": "prometheus", "uid": "prometheus" } } ],
+          "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 2, "color": { "mode": "fixed", "fixedColor": "text" } } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" }
+        },
+        {
+          "type": "timeseries", "title": "Daily spend trend (builds forward)",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "refId": "A", "expr": "aws_cost_yesterday_usd", "legendFormat": "daily spend", "datasource": { "type": "prometheus", "uid": "prometheus" } } ],
+          "fieldConfig": { "defaults": { "unit": "currencyUSD", "custom": { "drawStyle": "bars", "fillOpacity": 40 } } }
+        },
+        {
+          "type": "timeseries", "title": "Per-service spike ratio (yesterday ÷ 7-day avg)",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "refId": "A", "expr": "aws_cost_service_spike_ratio", "legendFormat": "{{service}}", "datasource": { "type": "prometheus", "uid": "prometheus" } } ],
+          "fieldConfig": { "defaults": { "unit": "none", "decimals": 2,
+            "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 2 } ] },
+            "custom": { "drawStyle": "line", "lineWidth": 2, "thresholdsStyle": { "mode": "line" } } } }
+        },
+        {
+          "type": "bargauge", "title": "Month-to-date spend by service",
+          "gridPos": { "h": 9, "w": 12, "x": 0, "y": 13 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "refId": "A", "expr": "sort_desc(aws_cost_service_mtd_usd)", "legendFormat": "{{service}}", "instant": true, "datasource": { "type": "prometheus", "uid": "prometheus" } } ],
+          "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 2, "color": { "mode": "continuous-BlPu" } } },
+          "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "type": "table", "title": "Yesterday vs 7-day avg by service",
+          "gridPos": { "h": 9, "w": 12, "x": 12, "y": 13 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "refId": "A", "expr": "aws_cost_service_yesterday_usd", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "prometheus" } },
+            { "refId": "B", "expr": "aws_cost_service_trailing7_avg_usd", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "prometheus" } }
+          ],
+          "transformations": [
+            { "id": "merge", "options": {} },
+            { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true, "exported_job": true },
+              "renameByName": { "service": "Service", "Value #A": "Yesterday $", "Value #B": "7-day avg $" } } }
+          ],
+          "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 2 } }
+        }
+      ]
+    }

@@ -9,3 +9,4 @@ resources:
   - hubble-flows.yaml
   - photos-export.yaml
   - icloud-backups.yaml
+  - aws-cost.yaml
