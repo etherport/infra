@@ -37,8 +37,8 @@ spec:
                     --config /config/rclone.conf \
                     --fast-list --transfers 8 --checkers 16 \
                     --stats 1m --stats-log-level NOTICE
-                  printf 'velero_dr_sync_last_success_timestamp_seconds %s\n' "$(date +%s)" \
-                    | wget -q -O- --post-data=@- "http://${PG}/metrics/job/velero_dr_sync" >/dev/null 2>&1 || true
+                  printf 'velero_dr_sync_last_success_timestamp_seconds %s\n' "$(date +%s)" > /tmp/m.prom
+                  wget -q -O- --post-file=/tmp/m.prom "http://${PG}/metrics/job/velero_dr_sync" >/dev/null 2>&1 || true
                   echo "[dr] done"
               env:
                 # IRSA (wind-irsa-velero) for the s3 remote's env_auth.
