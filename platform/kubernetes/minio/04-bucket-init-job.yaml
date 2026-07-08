@@ -38,6 +38,11 @@ spec:
               mc mb --ignore-existing local/velero
               mc ls local
               echo "bucket ready: velero"
+          env:
+            # mc writes its config to $HOME/.mc; the pod runs as uid 988 which
+            # can't write "/" → set a writable HOME (same gotcha as the IRSA CLIs).
+            - name: HOME
+              value: /tmp
           envFrom:
             - secretRef:
                 name: minio-credentials
