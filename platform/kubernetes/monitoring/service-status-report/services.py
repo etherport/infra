@@ -91,6 +91,10 @@ SERVICES = [
     ("Apps", "Plex",           "deployment", "plex",            "plex"),
     ("Apps", "Ollama",         "deployment", "ollama",          "ollama"),
     ("Apps", "Cue API",        "deployment", "cue",             "cue-api"),
+    # Public endpoint reachability (blackbox HTTPS probe) — complements the
+    # in-cluster deployment check above. Lives under Apps, not Appliances (it's
+    # not a physical appliance like UDM/Protect/UNAS). Moved 2026-07-08.
+    ("Apps", "Cue API (public)", "probe", "blackbox-exporter", "cue-api"),
 
     # External edge — node_exporter on the standalone PVE VMs + AWS VMs, via the
     # `external-nodes` scrape job (01-external-scrape-config.yaml). Fleet is 6 local
@@ -119,5 +123,4 @@ SERVICES = [
     ("Appliances", "UDM",      "probe", "blackbox-exporter", "udm"),
     ("Appliances", "Protect",  "probe", "blackbox-exporter", "protect"),
     ("Appliances", "UNAS",     "probe", "blackbox-exporter", "unas"),
-    ("Appliances", "Cue API (public)", "probe", "blackbox-exporter", "cue-api"),
 ]

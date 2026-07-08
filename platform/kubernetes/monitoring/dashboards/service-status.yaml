@@ -4469,13 +4469,144 @@ data:
         },
         {
           "id": 44,
+          "title": "Cue API (public)",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 65
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "1": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "2": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "3": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "4": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "5": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "6": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "7": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "8": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "9": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "10": {
+                      "text": "UP",
+                      "color": "green"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "DOWN",
+                      "color": "red"
+                    }
+                  }
+                },
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {
+                      "text": "UNKNOWN",
+                      "color": "orange"
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "probe_success{appliance=\"cue-api\"}",
+              "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 45,
           "title": "",
           "type": "text",
           "gridPos": {
             "h": 2,
             "w": 24,
             "x": 0,
-            "y": 65
+            "y": 69
           },
           "options": {
             "mode": "markdown",
@@ -4483,532 +4614,8 @@ data:
           }
         },
         {
-          "id": 45,
-          "title": "dns-fallback",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 0,
-            "y": 67
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "1": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "2": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "3": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "4": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "5": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "6": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "7": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "8": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "9": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "10": {
-                      "text": "UP",
-                      "color": "green"
-                    }
-                  }
-                },
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "DOWN",
-                      "color": "red"
-                    }
-                  }
-                },
-                {
-                  "type": "special",
-                  "options": {
-                    "match": "null",
-                    "result": {
-                      "text": "UNKNOWN",
-                      "color": "orange"
-                    }
-                  }
-                }
-              ],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "red",
-                    "value": null
-                  },
-                  {
-                    "color": "green",
-                    "value": 1
-                  }
-                ]
-              },
-              "unit": "none"
-            },
-            "overrides": []
-          },
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "center",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "value_and_name",
-            "wideLayout": true
-          },
-          "pluginVersion": "11.0.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "expr": "up{job=\"external-nodes\",instance=~\"dns-fallback.*\"}",
-              "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
-              "refId": "A"
-            }
-          ]
-        },
-        {
           "id": 46,
-          "title": "vpn-fallback",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 6,
-            "y": 67
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "1": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "2": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "3": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "4": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "5": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "6": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "7": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "8": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "9": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "10": {
-                      "text": "UP",
-                      "color": "green"
-                    }
-                  }
-                },
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "DOWN",
-                      "color": "red"
-                    }
-                  }
-                },
-                {
-                  "type": "special",
-                  "options": {
-                    "match": "null",
-                    "result": {
-                      "text": "UNKNOWN",
-                      "color": "orange"
-                    }
-                  }
-                }
-              ],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "red",
-                    "value": null
-                  },
-                  {
-                    "color": "green",
-                    "value": 1
-                  }
-                ]
-              },
-              "unit": "none"
-            },
-            "overrides": []
-          },
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "center",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "value_and_name",
-            "wideLayout": true
-          },
-          "pluginVersion": "11.0.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "expr": "up{job=\"external-nodes\",instance=~\"vpn-fallback.*\"}",
-              "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
-              "refId": "A"
-            }
-          ]
-        },
-        {
-          "id": 47,
-          "title": "gh-runner",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 12,
-            "y": 67
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "1": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "2": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "3": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "4": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "5": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "6": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "7": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "8": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "9": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "10": {
-                      "text": "UP",
-                      "color": "green"
-                    }
-                  }
-                },
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "DOWN",
-                      "color": "red"
-                    }
-                  }
-                },
-                {
-                  "type": "special",
-                  "options": {
-                    "match": "null",
-                    "result": {
-                      "text": "UNKNOWN",
-                      "color": "orange"
-                    }
-                  }
-                }
-              ],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "red",
-                    "value": null
-                  },
-                  {
-                    "color": "green",
-                    "value": 1
-                  }
-                ]
-              },
-              "unit": "none"
-            },
-            "overrides": []
-          },
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "center",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "value_and_name",
-            "wideLayout": true
-          },
-          "pluginVersion": "11.0.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "expr": "up{job=\"external-nodes\",instance=~\"gh-runner.*\"}",
-              "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
-              "refId": "A"
-            }
-          ]
-        },
-        {
-          "id": 48,
-          "title": "devbox",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 18,
-            "y": 67
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "1": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "2": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "3": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "4": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "5": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "6": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "7": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "8": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "9": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "10": {
-                      "text": "UP",
-                      "color": "green"
-                    }
-                  }
-                },
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "DOWN",
-                      "color": "red"
-                    }
-                  }
-                },
-                {
-                  "type": "special",
-                  "options": {
-                    "match": "null",
-                    "result": {
-                      "text": "UNKNOWN",
-                      "color": "orange"
-                    }
-                  }
-                }
-              ],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "red",
-                    "value": null
-                  },
-                  {
-                    "color": "green",
-                    "value": 1
-                  }
-                ]
-              },
-              "unit": "none"
-            },
-            "overrides": []
-          },
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "center",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "value_and_name",
-            "wideLayout": true
-          },
-          "pluginVersion": "11.0.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "expr": "up{job=\"external-nodes\",instance=~\"devbox.*\"}",
-              "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
-              "refId": "A"
-            }
-          ]
-        },
-        {
-          "id": 49,
-          "title": "vpn-aws",
+          "title": "dns-fallback",
           "type": "stat",
           "datasource": {
             "type": "prometheus",
@@ -5131,7 +4738,400 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "up{job=\"external-nodes\",instance=~\"vpn-aws.*\"}",
+              "expr": "up{job=\"external-nodes\",instance=~\"dns-fallback.*\"}",
+              "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 47,
+          "title": "vpn-fallback",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 71
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "1": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "2": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "3": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "4": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "5": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "6": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "7": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "8": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "9": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "10": {
+                      "text": "UP",
+                      "color": "green"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "DOWN",
+                      "color": "red"
+                    }
+                  }
+                },
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {
+                      "text": "UNKNOWN",
+                      "color": "orange"
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "up{job=\"external-nodes\",instance=~\"vpn-fallback.*\"}",
+              "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 48,
+          "title": "gh-runner",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 71
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "1": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "2": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "3": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "4": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "5": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "6": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "7": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "8": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "9": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "10": {
+                      "text": "UP",
+                      "color": "green"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "DOWN",
+                      "color": "red"
+                    }
+                  }
+                },
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {
+                      "text": "UNKNOWN",
+                      "color": "orange"
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "up{job=\"external-nodes\",instance=~\"gh-runner.*\"}",
+              "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 49,
+          "title": "devbox",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 71
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "1": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "2": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "3": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "4": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "5": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "6": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "7": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "8": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "9": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "10": {
+                      "text": "UP",
+                      "color": "green"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "DOWN",
+                      "color": "red"
+                    }
+                  }
+                },
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {
+                      "text": "UNKNOWN",
+                      "color": "orange"
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "up{job=\"external-nodes\",instance=~\"devbox.*\"}",
               "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
               "refId": "A"
             }
@@ -5139,13 +5139,144 @@ data:
         },
         {
           "id": 50,
+          "title": "vpn-aws",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 75
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "1": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "2": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "3": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "4": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "5": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "6": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "7": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "8": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "9": {
+                      "text": "UP",
+                      "color": "green"
+                    },
+                    "10": {
+                      "text": "UP",
+                      "color": "green"
+                    }
+                  }
+                },
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "DOWN",
+                      "color": "red"
+                    }
+                  }
+                },
+                {
+                  "type": "special",
+                  "options": {
+                    "match": "null",
+                    "result": {
+                      "text": "UNKNOWN",
+                      "color": "orange"
+                    }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "pluginVersion": "11.0.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "up{job=\"external-nodes\",instance=~\"vpn-aws.*\"}",
+              "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 51,
           "title": "",
           "type": "text",
           "gridPos": {
             "h": 2,
             "w": 24,
             "x": 0,
-            "y": 75
+            "y": 79
           },
           "options": {
             "mode": "markdown",
@@ -5153,7 +5284,7 @@ data:
           }
         },
         {
-          "id": 51,
+          "id": 52,
           "title": "Mac mini host",
           "type": "stat",
           "datasource": {
@@ -5164,7 +5295,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 77
+            "y": 81
           },
           "fieldConfig": {
             "defaults": {
@@ -5284,7 +5415,7 @@ data:
           ]
         },
         {
-          "id": 52,
+          "id": 53,
           "title": "cairn agent",
           "type": "stat",
           "datasource": {
@@ -5295,7 +5426,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 6,
-            "y": 77
+            "y": 81
           },
           "fieldConfig": {
             "defaults": {
@@ -5415,7 +5546,7 @@ data:
           ]
         },
         {
-          "id": 53,
+          "id": 54,
           "title": "iCloud backups",
           "type": "stat",
           "datasource": {
@@ -5426,7 +5557,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 12,
-            "y": 77
+            "y": 81
           },
           "fieldConfig": {
             "defaults": {
@@ -5546,14 +5677,14 @@ data:
           ]
         },
         {
-          "id": 54,
+          "id": 55,
           "title": "",
           "type": "text",
           "gridPos": {
             "h": 2,
             "w": 24,
             "x": 0,
-            "y": 81
+            "y": 85
           },
           "options": {
             "mode": "markdown",
@@ -5561,7 +5692,7 @@ data:
           }
         },
         {
-          "id": 55,
+          "id": 56,
           "title": "UDM",
           "type": "stat",
           "datasource": {
@@ -5572,7 +5703,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 83
+            "y": 87
           },
           "fieldConfig": {
             "defaults": {
@@ -5692,7 +5823,7 @@ data:
           ]
         },
         {
-          "id": 56,
+          "id": 57,
           "title": "Protect",
           "type": "stat",
           "datasource": {
@@ -5703,7 +5834,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 6,
-            "y": 83
+            "y": 87
           },
           "fieldConfig": {
             "defaults": {
@@ -5823,7 +5954,7 @@ data:
           ]
         },
         {
-          "id": 57,
+          "id": 58,
           "title": "UNAS",
           "type": "stat",
           "datasource": {
@@ -5834,7 +5965,7 @@ data:
             "h": 4,
             "w": 6,
             "x": 12,
-            "y": 83
+            "y": 87
           },
           "fieldConfig": {
             "defaults": {
@@ -5954,137 +6085,6 @@ data:
           ]
         },
         {
-          "id": 58,
-          "title": "Cue API (public)",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 18,
-            "y": 83
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "1": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "2": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "3": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "4": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "5": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "6": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "7": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "8": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "9": {
-                      "text": "UP",
-                      "color": "green"
-                    },
-                    "10": {
-                      "text": "UP",
-                      "color": "green"
-                    }
-                  }
-                },
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "DOWN",
-                      "color": "red"
-                    }
-                  }
-                },
-                {
-                  "type": "special",
-                  "options": {
-                    "match": "null",
-                    "result": {
-                      "text": "UNKNOWN",
-                      "color": "orange"
-                    }
-                  }
-                }
-              ],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "red",
-                    "value": null
-                  },
-                  {
-                    "color": "green",
-                    "value": 1
-                  }
-                ]
-              },
-              "unit": "none"
-            },
-            "overrides": []
-          },
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "center",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "value_and_name",
-            "wideLayout": true
-          },
-          "pluginVersion": "11.0.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus"
-              },
-              "expr": "probe_success{appliance=\"cue-api\"}",
-              "legendFormat": "{{deployment}}{{statefulset}}{{daemonset}}{{instance}}",
-              "refId": "A"
-            }
-          ]
-        },
-        {
           "id": 59,
           "title": "Firing alerts",
           "type": "table",
@@ -6096,7 +6096,7 @@ data:
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 88
+            "y": 92
           },
           "fieldConfig": {
             "defaults": {

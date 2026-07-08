@@ -70,7 +70,7 @@ jobs:
           set -euo pipefail
           # Positive SELECT of ALL resources + their tags, excluding Config's own
           # meta resource types (they can't carry our tag and would be pure noise).
-          EXPR="SELECT resourceId, resourceType, awsRegion, accountId, tags WHERE resourceType NOT IN ('AWS::Config::ResourceCompliance', 'AWS::Config::ConformancePackCompliance', 'AWS::Config::ConfigurationRecorder')"
+          EXPR="SELECT resourceId, resourceName, arn, resourceType, awsRegion, accountId, tags WHERE resourceType NOT IN ('AWS::Config::ResourceCompliance', 'AWS::Config::ConformancePackCompliance', 'AWS::Config::ConfigurationRecorder')"
           NEXT=""; : > all.ndjson
           while : ; do
             if [ -z "$NEXT" ]; then
@@ -88,15 +88,40 @@ jobs:
             [ -z "$NEXT" ] && break
           done
 
-          # ALLOWLIST: resource types that are AWS-managed / legitimately can't carry
-          # the marker (extend after the first live run — default VPC sec-groups, etc.).
-          ALLOW='["AWS::EC2::NatGateway"]'
+          # ALLOWLIST: resource TYPES that are AWS-managed / AWS-predefined / can't
+          # carry a user tag (aliases, associations, account-level settings, service
+          # defaults, Config's system Keyspaces, etc.). These will NEVER have our
+          # marker, so counting them is pure noise.
+          ALLOW='[
+            "AWS::EC2::NatGateway",
+            "AWS::EC2::SubnetRouteTableAssociation",
+            "AWS::EC2::VPCBlockPublicAccessOptions",
+            "AWS::EC2::NetworkInterface",
+            "AWS::EC2::DHCPOptions",
+            "AWS::EC2::NetworkInsightsPath",
+            "AWS::KMS::Alias",
+            "AWS::CodeDeploy::DeploymentConfig",
+            "AWS::AppConfig::DeploymentStrategy",
+            "AWS::ECS::CapacityProvider",
+            "AWS::Route53Resolver::ResolverRuleAssociation",
+            "AWS::Route53Resolver::ResolverRule",
+            "AWS::ResourceExplorer2::Index",
+            "AWS::AccessAnalyzer::Analyzer",
+            "AWS::S3::StorageLens",
+            "AWS::SSM::ManagedInstanceInventory",
+            "AWS::Cassandra::Keyspace",
+            "AWS::Athena::WorkGroup"
+          ]'
 
-          # Absence filter: keep rows whose tags array has NO {ManagedBy: terraform}
-          # AND whose type isn't allowlisted.
+          # Absence filter: keep rows that are NOT tagged with {ManagedBy: terraform},
+          # dropping (a) allowlisted types, and (b) genuinely AWS-managed resources
+          # inside taggable types — service-linked IAM roles (arn .../aws-service-role/...)
+          # and AWS-managed policies (arn arn:aws:iam::aws:policy/...). Those are AWS's,
+          # not ours, and can't carry the marker.
           jq -s --argjson allow "$ALLOW" --arg k "$MARKER_KEY" --arg v "$MARKER_VAL" '
             [ .[]
               | select( (.resourceType as $t | $allow | index($t)) | not )
+              | select( (.arn // "") | test("(:role/aws-service-role/|^arn:aws:iam::aws:policy/)") | not )
               | select( ([ .tags[]? | select(.key==$k and .value==$v) ] | length) == 0 )
             ]' all.ndjson > untagged.json
 
