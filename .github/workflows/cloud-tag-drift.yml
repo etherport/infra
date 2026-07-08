@@ -110,7 +110,8 @@ jobs:
             "AWS::S3::StorageLens",
             "AWS::SSM::ManagedInstanceInventory",
             "AWS::Cassandra::Keyspace",
-            "AWS::Athena::WorkGroup"
+            "AWS::Athena::WorkGroup",
+            "AWS::IAM::Group"
           ]'
 
           # Absence filter: keep rows that are NOT tagged with {ManagedBy: terraform},
@@ -123,6 +124,10 @@ jobs:
               | select( (.resourceType as $t | $allow | index($t)) | not )
               | select( (.arn // "") | test("(:role/aws-service-role/|^arn:aws:iam::aws:policy/)") | not )
               | select( (.resourceType == "AWS::KMS::Key" and (.configuration.keyManager == "AWS")) | not )
+              # Intentionally-manual resources carry ManagedBy=manual (e.g. the
+              # terraform-homelab bootstrap IAM policies — TF needs an identity to
+              # run, so its own IAM is hand-created). Not drift; exclude them.
+              | select( ([ .tags[]? | select(.key=="ManagedBy" and .value=="manual") ] | length) == 0 )
               | select( ([ .tags[]? | select(.key==$k and .value==$v) ] | length) == 0 )
             ]' all.ndjson > untagged.json
 
