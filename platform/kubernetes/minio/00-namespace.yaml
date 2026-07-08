@@ -1,0 +1,20 @@
+---
+# MinIO — local S3-compatible object store that serves as velero's PRIMARY
+# backup repository (M137). Its /data lives on an NFS share from the NAS
+# (sequoia:/var/nfs/shared/VeleroBackup, 22 TB free), so velero's Kopia backups
+# AND repo-maintenance run against the NAS over the local network instead of S3.
+# This kills the S3 DataTransfer-Out egress (the maintenance "rewriting contents
+# from short packs" reads that cost forecast $75→$160) and uses ZERO pve NVMe
+# (the ceph-rbd pool is size=2 with <800 GiB usable — too small for a 400 GB repo).
+# S3 becomes offsite DR only (batched rclone → Deep Archive).
+#
+# PSS baseline: MinIO runs as a non-root distroless-ish server; baseline is the
+# right floor (it needs no privileged/hostPath — only an NFS volume).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minio
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/audit: baseline

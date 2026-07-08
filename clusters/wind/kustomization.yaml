@@ -18,6 +18,12 @@ resources:
   - ../../platform/kubernetes/cert-manager-issuer
   # Storage
   - ../../platform/kubernetes/storage/ceph-csi
+  # MinIO — velero primary backup repo on the NAS over NFS (M137). Kills the S3
+  # egress from Kopia repo-maintenance + uses zero pve NVMe. DISABLED until the
+  # operator creates the UniFi Drive share `VeleroBackup` (else MinIO CrashLoops
+  # on the missing NFS mount → alert storm). Uncomment AFTER the share exists;
+  # see platform/kubernetes/minio/README.md.
+  # - ../../platform/kubernetes/minio
   # Cluster utilities
   - ../../platform/kubernetes/auto-remediation
   # H32: confined cross-namespace RBAC for the remediation-controller (PVC delete +
