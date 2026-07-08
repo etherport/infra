@@ -75,6 +75,26 @@ resource "aws_s3_bucket_lifecycle_configuration" "velero" {
       expired_object_delete_marker = true
     }
   }
+
+  # M137 Phase 3: offsite DR mirror of the LOCAL Garage velero repo lands under
+  # `dr/` (weekly rclone from Garage on the NAS). Transition to Deep Archive after
+  # 30 days — NOT sooner: the Kopia repo churns (maintenance rewrites blocks), and
+  # rclone --delete removes GC'd objects; a 30-day delay keeps short-lived churned
+  # objects in Standard so they never incur Deep Archive's 180-day early-deletion
+  # penalty. Objects that survive 30 days are stable → cheap in Deep Archive.
+  rule {
+    id     = "DR mirror to Deep Archive"
+    status = "Enabled"
+
+    filter {
+      prefix = "dr/"
+    }
+
+    transition {
+      days          = 30
+      storage_class = "DEEP_ARCHIVE"
+    }
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "velero" {

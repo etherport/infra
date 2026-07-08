@@ -1,0 +1,40 @@
+# rclone remotes for the DR sync. `garage` = the local Garage repo (static GK key,
+# read-only use); `s3` = AWS via IRSA (env_auth uses the projected web-identity
+# token + AWS_ROLE_ARN). Only the Garage key is secret; SOPS-encrypted.
+apiVersion: v1
+kind: Secret
+metadata:
+    name: velero-dr-rclone-config
+    namespace: backups
+type: Opaque
+stringData:
+    rclone.conf: ENC[AES256_GCM,data:MrS7As13l9FaIXTSAJyHbD7IPyXcFj5xwhK4m/23XFTsLAm4c9B3RvfcfTorfdwomMANOLI+kgbDiIeyRNuxazqJVD1qXVSKZvbPlYbTVv7B7VJ7S3V3JlRnVI8HTScA24E8hRxZ2CDv0xEFJE9LwUOj1cBSFT86ADZqT2Dmul90kW4rrX9Xegd45waSS8T8EPrZuGOYjSjydMMvbkEODryjcDsTiATWG344KPJyuHc2HH1DoaB16opNM3krktAi4cpFE9Aklx1cKHfsHJITxtLlM2wfxDwjrbmk3fW4Lf8yQ+9ad5nR5/oAZ999J4pIk4DAZ2bgei2oppCDg4ms9ciU7apIDU2Ky18goiJQfXmkryTKIBdDhffJ9hx9nPp3gqyvcsPMDTokNX8NLg==,iv:fjpnDHQQlcwTPgp0KH0N53FrFgPlRO0P7ZfpQLgE93A=,tag:6jjClYhWbSsn1YluBYFlyw==,type:str]
+sops:
+    kms: []
+    gcp_kms: []
+    azure_kv: []
+    hc_vault: []
+    age:
+        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB5UDU4WTVFQ1ZVVDdFNWNP
+            MVlvQkMwM3EwTDBPSm1zMXptVm1ROHRCWXc0CnI1anRuZ2E0VFNDSXZ3QUhmNlVy
+            aGZiR3NEUHROYlJ2NGhsaFU0NTJJVzgKLS0tIFZvQklIaENyQjdVb0J5ajhjU2Uw
+            YzVGaWdaRjRGMFdnMmxqTzZMbTEvWW8KTc+Rub1w1pRV/0T0DVHvAG6dIXji0gch
+            6SCdOxdZtpmfoHNhimON619uTclGxgCIDMNGKBrSBKWUpMqYTgPHTg==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBLVitoa2xkT1ZJdW1hb0o3
+            WXg3dG9lcDM3NkV4L2prN1JIdUxybEJzMFVnCmhoNFZ6dm4wSk5hTWI5bi9NN2cv
+            QjJLRzlWbHhUSHdaSk9Cdld6V1FBd1kKLS0tIGN1TzFSYVd3aTZQNGtsZlE0SGJX
+            c1ViRktZQ3VhY0haK3ZwOU5xWm4rZHMK5JCTy37rHvGX6XX2uoBkcZeVsHNs+QOE
+            zpdHsnBFipp5eT1BJkPsehEyAxVjZOPN9ZsXjnOGwyFB4aHf7VVa3Q==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-07-08T12:15:41Z"
+    mac: ENC[AES256_GCM,data:wwhSm7qTNlip2BxUqb3513FFottxm5Wuf1o27Y4rg6+3k8lBeqZ0uXLUeEgOBkCd5EEE4TVAwmSGFxcoMtrQ8qSZeRjnvnK81rPK7LDqwLzj4CHwcFthscUMecMdgMcIdb3FHNynOwfSdc+0lX/+OyGuNH7gzXoJt8GgPLy7cVc=,iv:dJlTcHlK+XlrSj1F7DX1FYScyg2BR3e5VF44HuZGBiM=,tag:tTzllS6u9PhiRGaMB/3VLg==,type:str]
+    pgp: []
+    encrypted_regex: ^(data|stringData)$
+    version: 3.9.4

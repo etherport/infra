@@ -1,0 +1,45 @@
+---
+# M137 alerts: Garage (the velero PRIMARY repo) down = all velero backups fail;
+# and the weekly DR sync going stale = no fresh offsite copy.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: velero-garage-dr-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: velero-garage-dr
+      rules:
+        - alert: GarageRepoDown
+          # Garage is velero's primary backup repo. If it's down, EVERY velero
+          # backup fails (data on the NAS is unreachable via its S3 API).
+          expr: kube_deployment_status_replicas_available{namespace="garage",deployment="garage"} == 0
+          for: 10m
+          labels:
+            severity: critical
+            component: backup
+            namespace: garage
+          annotations:
+            summary: "Garage down — velero's primary backup repo is unavailable"
+            description: |
+              deployment garage/garage has 0 available replicas for >10m. All velero
+              backups/restores fail while it's down (Kopia repo on the NAS is
+              unreachable). Check the pod: kubectl -n garage describe deploy garage;
+              the NFS mount (sequoia:/var/nfs/shared/VeleroBackup) or the RBD
+              metadata PVC is the usual culprit.
+        - alert: VeleroDRSyncStale
+          # Weekly Garage->S3 Deep Archive DR sync hasn't succeeded in >8 days.
+          expr: time() - max(velero_dr_sync_last_success_timestamp_seconds) > 691200
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "velero DR sync (Garage->S3 Deep Archive) stale >8d"
+            description: |
+              velero_dr_sync_last_success_timestamp_seconds hasn't advanced in >8d
+              (weekly cadence). New velero backups have no fresh offsite copy in S3.
+              Check the backups/velero-dr-sync CronJob's last Job logs (rclone/IRSA).

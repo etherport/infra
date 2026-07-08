@@ -109,6 +109,8 @@ resources:
   - ../../platform/kubernetes/backups/approval-server      # CF-Access delete-approval service
   # Velero backup schedules
   - ../../platform/kubernetes/backups/velero/schedules
+  # M137 Phase 3: weekly Garage->S3 Deep Archive DR of the velero repo + Garage-down alert
+  - ../../platform/kubernetes/velero-dr
   # LLM Services
   - ../../platform/kubernetes/ollama
   # VPN / Remote Access

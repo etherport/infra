@@ -1,0 +1,74 @@
+---
+# M137 Phase 3: weekly offsite DR of the LOCAL Garage velero repo → S3 Deep Archive.
+# rclone reads Garage (S3 API on the NAS, local/free) and mirrors to
+# s3://velero.wind.etherport.net/dr/ (IRSA write). --delete keeps it a true mirror;
+# the bucket lifecycle transitions dr/ to Deep Archive after 30 days. Uploads to S3
+# are FREE ingress — this reintroduces NO egress (unlike a velero S3 BSL, whose
+# maintenance downloaded from S3). Pushes a last-success metric for VeleroDRSyncStale.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: velero-dr-sync
+  namespace: backups
+spec:
+  schedule: "0 3 * * 0"          # Sundays 03:00 (after the nightly velero backups)
+  timeZone: "America/Los_Angeles"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 172800
+      template:
+        spec:
+          serviceAccountName: velero-dr-sync
+          restartPolicy: Never
+          containers:
+            - name: rclone
+              image: rclone/rclone:1.74.3@sha256:623378ad0ff3ebd5cebf77720843c0e02edfe46e2d5b5ac6bed54c6371780dfb
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  PG="pushgateway.monitoring.svc.cluster.local:9091"
+                  echo "[dr] rclone sync garage:velero -> s3:velero.wind.etherport.net/dr/"
+                  rclone sync garage:velero s3:velero.wind.etherport.net/dr/ \
+                    --config /config/rclone.conf \
+                    --fast-list --transfers 8 --checkers 16 \
+                    --stats 1m --stats-log-level NOTICE
+                  printf 'velero_dr_sync_last_success_timestamp_seconds %s\n' "$(date +%s)" \
+                    | wget -q -O- --post-data=@- "http://${PG}/metrics/job/velero_dr_sync" >/dev/null 2>&1 || true
+                  echo "[dr] done"
+              env:
+                # IRSA (wind-irsa-velero) for the s3 remote's env_auth.
+                - name: AWS_ROLE_ARN
+                  value: "arn:aws:iam::830881980142:role/wind-irsa-velero"
+                - name: AWS_WEB_IDENTITY_TOKEN_FILE
+                  value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
+                - name: AWS_REGION
+                  value: "us-west-2"
+              volumeMounts:
+                - name: config
+                  mountPath: /config
+                  readOnly: true
+                - name: aws-iam-token
+                  mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  memory: 512Mi
+          volumes:
+            - name: config
+              secret:
+                secretName: velero-dr-rclone-config
+            - name: aws-iam-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      audience: sts.amazonaws.com
+                      expirationSeconds: 3600
+                      path: token

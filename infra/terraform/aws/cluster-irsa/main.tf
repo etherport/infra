@@ -35,7 +35,14 @@ locals {
   # scope). Policies mirror the scopes the static keys carry today.
   roles = {
     velero = {
-      subs = ["system:serviceaccount:velero:velero-server"]
+      # velero-server: the backup engine. velero-dr-sync (backups ns): the M137
+      # Phase 3 rclone job that mirrors the local Garage repo → s3://velero…/dr/
+      # (Deep Archive) for offsite DR — it writes to the SAME velero bucket, so it
+      # reuses this role's velero-bucket write grant.
+      subs = [
+        "system:serviceaccount:velero:velero-server",
+        "system:serviceaccount:backups:velero-dr-sync",
+      ]
       policy = jsonencode({
         Version = "2012-10-17"
         Statement = [
