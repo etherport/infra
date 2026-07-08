@@ -70,7 +70,7 @@ jobs:
           set -euo pipefail
           # Positive SELECT of ALL resources + their tags, excluding Config's own
           # meta resource types (they can't carry our tag and would be pure noise).
-          EXPR="SELECT resourceId, resourceName, arn, resourceType, awsRegion, accountId, tags WHERE resourceType NOT IN ('AWS::Config::ResourceCompliance', 'AWS::Config::ConformancePackCompliance', 'AWS::Config::ConfigurationRecorder')"
+          EXPR="SELECT resourceId, resourceName, arn, resourceType, awsRegion, accountId, tags, configuration.keyManager WHERE resourceType NOT IN ('AWS::Config::ResourceCompliance', 'AWS::Config::ConformancePackCompliance', 'AWS::Config::ConfigurationRecorder')"
           NEXT=""; : > all.ndjson
           while : ; do
             if [ -z "$NEXT" ]; then
@@ -122,6 +122,7 @@ jobs:
             [ .[]
               | select( (.resourceType as $t | $allow | index($t)) | not )
               | select( (.arn // "") | test("(:role/aws-service-role/|^arn:aws:iam::aws:policy/)") | not )
+              | select( (.resourceType == "AWS::KMS::Key" and (.configuration.keyManager == "AWS")) | not )
               | select( ([ .tags[]? | select(.key==$k and .value==$v) ] | length) == 0 )
             ]' all.ndjson > untagged.json
 
