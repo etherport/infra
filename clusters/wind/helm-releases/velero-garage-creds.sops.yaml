@@ -1,0 +1,41 @@
+# velero's S3 credential for the Garage BSL (M137 Phase 2). Garage doesn't do
+# IRSA, so this BSL uses an explicit static key (the imported `GK…` velero key).
+# The read-only AWS/S3 BSL keeps using IRSA (velero server/node-agent env). Format
+# is velero's `cloud` ini. SOPS-encrypted (clusters/wind age recipients).
+apiVersion: v1
+kind: Secret
+metadata:
+    name: velero-garage-creds
+    namespace: velero
+type: Opaque
+stringData:
+    cloud: ENC[AES256_GCM,data:hiAW/Y53B6O9uFekJTo1aqpqNk8FKiCCnor2IJW8cEPZFrGvbB/dks1DRp/fNZM8TloqF/2zKT4bORow0Q7mSoTQE6+CYh+ndGi9xzK2yqYJwg2dBO74n+3sAjJEN0/y0hDY6Bt01D3cAzIG/dCMx43v8qcqUWuF1RisjIQk1m/87jhiCcm4I6vjTTIoMA==,iv:Z6LcBP93L1uTUyXuZEqC/4hp8MQlkgLNxxFdaTRyAb4=,tag:9SjD784Sam6EfADyu4ik+A==,type:str]
+sops:
+    kms: []
+    gcp_kms: []
+    azure_kv: []
+    hc_vault: []
+    age:
+        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBhaGNNQ0cxNldSSG9OanB6
+            Z2NHWTJaQTMxczFnSVBWRDgxMDVVZHhpMW5jCkI1ZnFpdzljSEhTY2dkZUhlYzVt
+            S0w3MWE2SE9oZk1sYmdDemk3Rm5IN1UKLS0tIDB5MnZuKytqQU83bG11SWthUHBO
+            RGVFbUJQMTNDQUc1b0tIMFhiM2lqSFUKwtJ8w5R5wTh96iOE603Pz6Vil7rJsl02
+            X3XmhUeHen4GXYdHHyfu7QOWfZDligkqC7GSZ2ibvdnA0J6bHmyuHw==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBDMXVSclVlbXRDNWU1M29H
+            bjAwdGs0V1lFL0xQTW5Dc0ozMk1ScXh5UEVjCkkzTEIwdkY1WFhFREJCY3lOMjAv
+            RnNjckRXN0ZDMXAyZ3JpNjJ4ZGFObFEKLS0tIHBiUDExVmh5THdhRlV6YVRsaXA5
+            S1hzZGFnejN3MnE2T3JKaHZJM0NTQXcKWKPtmF45cup2fygSqvY/1lQ8snk66311
+            dWJdjv23kC8lc6Cidk8wSPHMc+x47M31dZYwejsk0/8faLmfQyYJog==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-07-08T08:30:27Z"
+    mac: ENC[AES256_GCM,data:wbW3R9lN4KRoRcysOZEhqemccjyh4uZiN398yLacqvwId6j0nTr6+4LQqYq5ULfPnmtYZi243KGXujqvYNsOZhJQ/cp5RJGthlF5L4F5TwEpZ+EcIZZ0cMwJB2Ps1fthaCrvXhtU7zvvUIEe9IcfWEk3Laa8nqOiCa25/CYpCjA=,iv:44i32eqFOKFPX09K0MeFZaVkML7cgjjau38mEr9YV14=,tag:Vc+6W8u+klxx6CszKjKm0Q==,type:str]
+    pgp: []
+    encrypted_regex: ^(data|stringData)$
+    version: 3.9.4

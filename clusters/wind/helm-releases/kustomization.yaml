@@ -10,6 +10,7 @@ resources:
   - pushgateway.yaml
   - traefik.yaml
   - velero.yaml
+  - velero-garage-creds.sops.yaml   # M137: static S3 creds for the Garage BSL
   - tailscale-operator.yaml
   - tailscale-connector.yaml
   - github-actions-runner.yaml

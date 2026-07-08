@@ -67,10 +67,34 @@ spec:
       # for NEWLY created repos; the existing 11 CRs were patched live to 24h0m0s
       # (2026-07-01). See docs/planning/session-log.md 2026-07-01 (AWS cost).
       defaultRepoMaintainFrequency: 24h
+      # M137 Phase 2 (2026-07-08): PRIMARY repo cut over to local Garage (S3 on the
+      # NAS) so backups + Kopia maintenance run over the LAN — killing the S3
+      # DataTransfer-Out egress from maintenance "rewriting contents from short
+      # packs" ($75→$160). The old AWS/S3 BSL is kept READ-ONLY (non-default) so
+      # existing restore points survive their 30-day TTL. New backups → Garage.
       backupStorageLocation:
-        - provider: aws
-          bucket: velero.wind.etherport.net
+        - name: garage
+          provider: aws
           default: true
+          bucket: velero
+          # Garage has no IRSA → explicit static key (the read-only S3 BSL below
+          # still uses IRSA via the server/node-agent env).
+          credential:
+            name: velero-garage-creds
+            key: cloud
+          config:
+            region: garage
+            s3Url: http://garage.garage.svc.cluster.local:3900
+            s3ForcePathStyle: "true"
+            # Garage/S3-compat stores reject AWS checksum-trailer uploads; disable.
+            checksumAlgorithm: ""
+        - name: default
+          provider: aws
+          default: false
+          # Read-only: keep old restore points reachable, but never write here
+          # again (no more maintenance egress on this bucket).
+          accessMode: ReadOnly
+          bucket: velero.wind.etherport.net
           config:
             region: us-west-2
       volumeSnapshotLocation:
