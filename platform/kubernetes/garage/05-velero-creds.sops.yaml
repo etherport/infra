@@ -1,0 +1,40 @@
+# The S3 access key Garage will hold for velero (imported at bootstrap) and that
+# velero's BSL uses. key-id format GK+24hex; secret 64hex. SOPS-encrypted.
+apiVersion: v1
+kind: Secret
+metadata:
+    name: garage-velero-creds
+    namespace: garage
+type: Opaque
+stringData:
+    AWS_ACCESS_KEY_ID: ENC[AES256_GCM,data:LE6TIRGB9AYABJR+Zjw7eaPnjRoD4uTiY0E=,iv:CRU+aR86TJZrg3y8P6iPoBuWACKrgWLxIsTY+Z1kDEE=,tag:s4TClNgxcZjBb6A7DgdZ1w==,type:str]
+    AWS_SECRET_ACCESS_KEY: ENC[AES256_GCM,data:3y73vtvkt75h+XMh+VmmRaoU6kfQSCpFrEgKIt8p7HBD+mqhWQR9G7PBUuTmeymDukctzjWrTmT7ESBrH8bAOQ==,iv:bTCI9W5eo4twTfVzb+L3r7DYOhRT6ebS7MGB/2b9NBM=,tag:azKW3ma+96Is4xcswhZJlw==,type:str]
+sops:
+    kms: []
+    gcp_kms: []
+    azure_kv: []
+    hc_vault: []
+    age:
+        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBGWlB2OUhCb05WWXBlZkZF
+            Z2tFMFFBRWVFTkZ0VzFPL2RXa3p2TkpkY0gwCnkyc0dhRHUwK2xFTW03UlJaZVhy
+            dURIeS8vZ21wRFc4OVBzUnIxQmJUdWcKLS0tIG9PNDdnaHlkQXRIbC9IT0JkTjNZ
+            L1RSWjd4TDEvVlVhNVhvNHVIdDc5RmMKkgzoZSepeUBaoYCxfm3yvCB12aACMAcW
+            fsUTtzuW+iIf+CUwvZSo1qZA4sdQTIET9STxxiEHkLuD+g4Lu8sLaw==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAyZ1phWkhPOHBhWWJ4Zm9o
+            R0RhYjd4bWtYdHlyR05DTW9OV0ZlRkpzZUNrCjNlOFR3SHBsL3dYOVdYWUZqM1V0
+            UzlQYXhHOTZseEZXcGwwd2hmTXg5dGsKLS0tIGl5RzNaNCtlVFhTb1B6NldVS3Js
+            ZlNuRExZS01qZ2JIRk8wanpock50NUEK4bREg/QmgFLn85s8YpBIJb9KVDbnmEUt
+            A/G+7KAokmoaaon5/QJNeegkvoqd/vpdJxI9d3KhM8P/dSzgDB+ygQ==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-07-08T07:46:24Z"
+    mac: ENC[AES256_GCM,data:OXNFOpsd0HxBbF5vHjiiL1VlzdK87jxdNxVuHVRj4AQc13E/CapuYvS2RaAdxfU9MhjcSfnTWw8aydRGQWELkj+n0Pyxcdc09Yk+Tg0G4vnfbcLw7nMEGf2ufKH76Ri/urEkLBqZphmPNR3vOhH29+lI6hqx4obDfW6TPkWLUVw=,iv:uUa7vBG/VPEbj2/9GAZOHimLMUpnQwtMc22NAF7Vp2A=,tag:7nDycSUG677GlMS0++4cLQ==,type:str]
+    pgp: []
+    encrypted_regex: ^(data|stringData)$
+    version: 3.9.4

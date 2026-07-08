@@ -1,0 +1,15 @@
+---
+# Garage metadata (LMDB) on Ceph-RBD block — LMDB needs mmap/atomic ops that NFS
+# can't provide (the reason MinIO failed). 10Gi is ample for the object→block
+# index of a ~300 GB repo. ~20Gi raw at pool size=2 = 2.5% of Ceph headroom.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: garage-metadata
+  namespace: garage
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ceph-rbd
+  resources:
+    requests:
+      storage: 10Gi

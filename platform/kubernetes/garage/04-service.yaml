@@ -1,0 +1,23 @@
+---
+# S3 API (:3900) for velero + rclone; admin (:3903) for bootstrap/metrics.
+apiVersion: v1
+kind: Service
+metadata:
+  name: garage
+  namespace: garage
+  labels:
+    app: garage
+spec:
+  type: ClusterIP
+  selector:
+    app: garage
+  ports:
+    - name: s3
+      port: 3900
+      targetPort: s3
+    - name: admin
+      port: 3903
+      targetPort: admin
+    - name: rpc
+      port: 3901
+      targetPort: rpc

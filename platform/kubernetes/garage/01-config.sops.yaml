@@ -1,0 +1,39 @@
+# Garage server config (M137). Holds rpc_secret + admin_token → SOPS-encrypted.
+# metadata_dir on the RBD PVC, data_dir on the NAS NFS mount.
+apiVersion: v1
+kind: Secret
+metadata:
+    name: garage-config
+    namespace: garage
+type: Opaque
+stringData:
+    garage.toml: ENC[AES256_GCM,data:pl99fwy5Pi+Egqvx+/eavHc0y1CwWv1Oj77B+xAbkFIFO3R4WFPrBmsfa7zlUg7hbskkwebv/3uvY9obn0ItfiNrRFLPTurj8CisvaQMSpBE3XqcRDF0oLLR1nLLNHExlmxxrI2Vjl8OB5Wuac80GEGeC1thwxmwOceEVnSnuB+XmArG9lHUpmWa12ILdoPgW0S7wlHooJhuSgKrBJ/j3B3kXZiBdeu4a4zQrWn5FbHQ4eXcMIQ9XuOiyoINCw/QN4C5yaaySpf2DACwFiPbsvxrcb2JwjcMfGddsxwMm2rYIZPYxZGR4cGYckZDRAvo9C+jRlqMAztkvoGnPZz3y7dnhuB/maOUF0yfKnk2oAJQVvJLROFtJvhIS83LpdIQo8n4bvmom7zAZXKbcVkTCQjLyXLKV830PluLFt77LbXzx+9C7iz4mhjfncx7DLRJZiOrKlFW6EGf0CGfMK1z3yLTrqdR1qxNcpnoB0tXxkY1ptY55VXNgtNsPuMMSVO6mFx1UlfsWK3tNjIc6Dxi/xK/VCUpBnh6Mhhsx4nZCFyfCg==,iv:sYTkapsHXeLpsbNJa6t3WLUrgSlb5prtMcDpAacEuxU=,tag:TI3vsSE5V/HBsA6UChv1Ew==,type:str]
+sops:
+    kms: []
+    gcp_kms: []
+    azure_kv: []
+    hc_vault: []
+    age:
+        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAzOWtpSWRldUNrUTh1NzJ2
+            RDdkSkNibS9VeWVPV2RPcmhRRkRPNjZnV1JzCnN5dGpSTFc5bStLVzY5WllxTkoy
+            b0d0Ukt6cTRpazlpNmtnWG1WMS9CSFEKLS0tIFlSNHlzTU5GQ01aYlU1VTIzSENZ
+            dVFXVWk0cWFkdWR2RFcrL2tvM01uNm8KQunT2IipLc0UEGjr+WeeJoZugnJ62/Aj
+            7Ow/duvLZmMWIhp++ClDVowfR4sZo9qvLRFchje4NHBBq6khPfw8Cw==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBCRnIvSDM0M1BkK05DMHU1
+            eFgrWU9rbGNIbmlVYjFqYnJmbFliMHhGYUZrClZJYVpxWUJWQ3BlbitCdW5jTUZO
+            NDU2QlllZnl3K3JCYm9zYVJ3aXVKY2sKLS0tIGwyTkJ0dGpEemMvMkZzcG1ZQUhj
+            c1lHcFVMekJod3Vta29mM1Zxa2NnS28KYBT+sJYs+7DRDxMVK4ROCKaI5kMuQ/0b
+            eJfRyhccAR3W30HmJ/FsaUHvpamsgpvH6BLaqwHm0937cfzYHzzetA==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-07-08T07:46:24Z"
+    mac: ENC[AES256_GCM,data:vonPWiljALeadCUhz6PZiWajpG17VNRH3HE5VmUqVY4ES0JhITLkuMgnQdynsy304MGJNim85V/8GmdxJgRRbAREMe9a37VDQq3eSEs6K1BVY6rsvazi5IobA8V2soa2GzyaKyWdYhxjy+3Esq11Kkc1CB+UmH63iDnNXkaqkno=,iv:zo2qfUpEzlOjRIWXTMq7VZ+wMFa0DN0cHnmRCdjgOSc=,tag:iBzAWO4Xnja6VPVSB+v0ug==,type:str]
+    pgp: []
+    encrypted_regex: ^(data|stringData)$
+    version: 3.9.4

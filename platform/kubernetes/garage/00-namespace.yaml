@@ -1,0 +1,15 @@
+---
+# Garage — single-node S3 server = velero's PRIMARY backup repo (M137). Chosen
+# over MinIO because MinIO's erasure backend rejects NFS ("insufficient drives
+# online"); Garage supports SPLIT storage: metadata on a small Ceph-RBD PVC
+# (block — 10Gi, ~20Gi raw, trivial) + immutable data blocks on the NAS over NFS
+# (22 TB free). Velero backups + Kopia maintenance run against the NAS over the
+# LAN → zero S3 egress. S3 is offsite DR only.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: garage
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/audit: baseline

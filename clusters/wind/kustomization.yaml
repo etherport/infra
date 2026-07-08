@@ -18,11 +18,12 @@ resources:
   - ../../platform/kubernetes/cert-manager-issuer
   # Storage
   - ../../platform/kubernetes/storage/ceph-csi
-  # MinIO — velero primary backup repo on the NAS over NFS (M137). Kills the S3
-  # egress from Kopia repo-maintenance + uses zero pve NVMe. Activated 2026-07-08
-  # once the UniFi Drive share `VeleroBackup` existed (runs as uid/gid 988 to match
-  # the share owner). See platform/kubernetes/minio/README.md.
-  - ../../platform/kubernetes/minio
+  # Garage — velero primary backup repo (M137). S3 server with SPLIT storage:
+  # metadata (LMDB) on a small Ceph-RBD PVC + data blocks on the NAS over NFS.
+  # Replaced MinIO 2026-07-08 (MinIO's erasure backend rejects NFS — "insufficient
+  # drives online"). Kills the S3 egress from Kopia repo-maintenance, ~20Gi raw
+  # NVMe for metadata only. See platform/kubernetes/garage/README.md.
+  - ../../platform/kubernetes/garage
   # Cluster utilities
   - ../../platform/kubernetes/auto-remediation
   # H32: confined cross-namespace RBAC for the remediation-controller (PVC delete +

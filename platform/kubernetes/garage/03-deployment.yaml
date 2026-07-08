@@ -1,0 +1,75 @@
+---
+# Single-node Garage. Metadata (LMDB) on the RBD PVC, data blocks on the NAS NFS.
+# Runs as uid/gid 988 to match the UniFi Drive share owner (NFS write); fsGroup
+# also chowns the fresh RBD metadata volume. Recreate strategy — the RWO metadata
+# PVC + single NFS data dir must never be held by two pods.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: garage
+  namespace: garage
+  labels:
+    app: garage
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: garage
+  template:
+    metadata:
+      labels:
+        app: garage
+    spec:
+      securityContext:
+        runAsUser: 988
+        runAsGroup: 988
+        fsGroup: 988
+      containers:
+        - name: garage
+          image: dxflrs/garage:v2.3.0
+          command: ["/garage", "-c", "/etc/garage.toml", "server"]
+          ports:
+            - name: s3
+              containerPort: 3900
+            - name: rpc
+              containerPort: 3901
+            - name: admin
+              containerPort: 3903
+          livenessProbe:
+            tcpSocket:
+              port: s3
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            tcpSocket:
+              port: s3
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/garage.toml
+              subPath: garage.toml
+              readOnly: true
+            - name: meta
+              mountPath: /meta
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: config
+          secret:
+            secretName: garage-config
+        - name: meta
+          persistentVolumeClaim:
+            claimName: garage-metadata
+        - name: data
+          nfs:
+            server: sequoia.wind.etherport.net
+            path: /var/nfs/shared/VeleroBackup
