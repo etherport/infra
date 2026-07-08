@@ -38,8 +38,8 @@ Switched to **Garage** (LMDB metadata on a 10Gi Ceph-RBD PVC + data blocks on th
 Cut velero default BSL → Garage, S3 → read-only. **Full PVC round-trip byte-verified.** ⚠️ velero wedged
 from rapid test-backup churn → fixed via `helm uninstall` + Flux `reconcile.fluxcd.io/forceAt` reinstall
 (GOTCHAS in M137: helm-CLI-uninstall desyncs helm-controller cache; stale S3 BSL kept default:true; backups
-hang InProgress a few min post-reinstall then complete). **Phase 3 TODO:** rclone Garage→S3 DR +
-Deep-Archive lifecycle + Garage-down alert. Files: `platform/kubernetes/{garage,monitoring/aws-cost-exporter}/`,
+hang InProgress a few min post-reinstall then complete). **Phase 3 DONE:** `velero-dr/` weekly rclone Garage→`s3://velero…/dr/` + Deep-Archive lifecycle @30d +
+GarageRepoDown/VeleroDRSyncStale alerts (93 objs mirrored, verified). `archive.wind`=NAS/iCloud archive, kept separate. Files: `platform/kubernetes/{garage,monitoring/aws-cost-exporter}/`,
 `clusters/wind/helm-releases/velero.yaml`.
 
 ## 2026-07-05 — morning triage: Cilium MTU black hole (gpu1) + daily-email false "outages" → 0
