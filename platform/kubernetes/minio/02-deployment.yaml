@@ -25,15 +25,14 @@ spec:
         app: minio
     spec:
       securityContext:
-        # MinIO's image runs as uid/gid 1000. fsGroup makes the NFS-mounted /data
-        # group-writable by the pod. ⚠️ The UniFi Drive NFS export must permit
-        # writes for this id (UniFi maps NFS to the share owner) — if MinIO logs
-        # permission-denied on /data at first start, adjust the share's NFS
-        # access/owner (or, worst case, set no_root_squash + runAsUser 0). Verify
-        # at activation.
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
+        # ⚠️ Run as uid/gid 988 to MATCH the UniFi Drive share owner. The NAS
+        # exports `VeleroBackup/.data` owned by 988:988 mode drwxrwx--- (verified
+        # 2026-07-08), so a pod running as any other uid gets permission-denied on
+        # /data. MinIO's static binary runs fine as an arbitrary uid. If UniFi ever
+        # changes the share owner, re-check `ls -lan` on the NAS and update these.
+        runAsUser: 988
+        runAsGroup: 988
+        fsGroup: 988
       containers:
         - name: minio
           # Renovate/Flux pin the digest; require-image-tag (Kyverno) needs a real tag.
