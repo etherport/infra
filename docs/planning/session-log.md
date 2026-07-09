@@ -45,6 +45,34 @@ bootout` a cairn agent while osxphotos is running — it orphans osxphotos (surv
 wait for the history record first. Photos being flaky post-recovery is the known best-effort
 aged-mount fragility, not the outage.
 
+## 2026-07-09 (cont.3) — M130 offsite (3-2-1) + full repo scan (drift/todo/README/runbook)
+
+**Prompt:** "finish M130, then full repo scan for config drift / update todo status / README / runbook."
+
+- **M130 offsite tier DONE + verified.** New `backups/pve-config-offsite` CronJob (velero-dr dir) NFS-mounts
+  only the tiny pve-config subdir → `s3://velero…/pve-config/`, reusing velero-dr-sync SA+IRSA+rclone
+  (no new IAM); runs as 977:988 (tarball owner) + empty-source guard; alert `PveConfigOffsiteStale`. Test
+  run uploaded 3.38MiB → confirmed in S3. pve config now full **3-2-1** (pve→NAS→S3).
+- **Repo scan:**
+  - **Live drift: NONE.** git clean, all Flux Kustomizations/HelmReleases Ready, all pods healthy, Flux
+    synced to HEAD. Drift detectors 6/7 clean; `cloud-tag-drift`=1 is the known bootstrap-IAM residual
+    (no taggable AWS resources added this session; CI run itself succeeded).
+  - **README check** (agent): fixed omissions of this session's components — ntfy in root/docs README +
+    obs sections, pve-config-backup in ansible README, pve-config-offsite in velero-dr README, pve backup
+    row in the root backups table. (auto-remediation README already current; credential-inventory indexed.)
+  - **Runbook check** (agent): fixed **1 HIGH** — disaster-recovery.md §10 backup matrix Velero row named
+    S3 (now read-only DR) + cross-ref'd §3.1 (Technitium DNS!) instead of §1.3 → dangerous in an incident;
+    corrected to Garage-primary/§1.3 + added the pve row. MEDIUM: §6.2 + playbook comment now document the
+    shipped offsite tier (comment had said "NOT done"); etcd-backup-restore + VeleroBackupFailed +
+    operations-guide updated for Garage-primary / two-BSL / ntfy 2nd channel.
+  - **Todo status:** this session's items all flipped in outstanding-work (M131/M133/L35/L36/M139/M139b/
+    M132/M130/L6/L18/L14 ✅; M134 blocked-at-receiver; M138 needs-operator; L16/M63 partial).
+
+**Session total (2026-07-09):** M131, M133, L35, L36, M139, M139b, M132, M130 (+offsite), DR drill, S3-DR-BSL
+fix, L6, L18, L14, M63(partial) — all shipped + verified; cairn/M138 alert-spam silenced; AWS egress
+confirmed decaying; full doc/runbook/README consistency pass. **Operator TODO:** ntfy app subscribe
+(`wind-critical`), mini iCloud app-password (M138), M134 apex-MX decision (handled via cue agent).
+
 ## 2026-07-09 (cont.2) — DR restore drill + fixed the offsite S3 BSL (was Unavailable)
 
 **Prompt:** "what else can we get on with?" → picked DR restore drill, reliability fixes, security
