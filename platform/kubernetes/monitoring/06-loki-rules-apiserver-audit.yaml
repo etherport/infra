@@ -45,7 +45,7 @@ data:
                   | stage="ResponseComplete"
                   | user="system:anonymous"
                   | code=~"2.."
-                  | uri!~"/healthz.*|/livez.*|/readyz.*|/version.*|/openapi.*"
+                  | uri!~"/(healthz|livez|readyz|version|openapi).*"
                   [10m]
                 )
               ) > 0
