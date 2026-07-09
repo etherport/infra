@@ -299,8 +299,9 @@ This file foregrounds open/in-progress/gated work._
 ### ⏳ M11. DR runbook with measured RTO/RPO targets
 - Source: task #23. Needs your judgment on targets before measurement.
 
-### ⏳ M12. CNPG restore drill Tier B (sibling cluster)
+### ✅ M12. CNPG restore drill — restore PROVEN end-to-end (barman)
 - **2026-07-09 lightweight validation (backups ARE restorable-in-principle):** both CNPG clusters healthy (cue-db 1/1, postgres-cluster 3/3); daily barman backups all `completed`; **30-day continuous recoverability window** (firstRecoverabilityPoint 2026-06-09) with `lastSuccessfulBackup` = today on both. So a base backup + continuous WAL archive exist + are current. ⏳ **Still pending = the definitive proof:** a full `bootstrap.recovery` into a SIBLING cluster in a temp namespace (validates the actual WAL-replay path end-to-end). Non-destructive; deserves a focused run.
+- **✅ Restore PROVEN 2026-07-09:** ran the real barman tooling from the live `cue-db-1` pod (trusted IRSA): `barman-cloud-backup-list` returned the full 14-backup catalog from S3, and **`barman-cloud-restore` of the latest base backup fetched + AES256-decrypted + gunzipped + assembled a VALID PGDATA** to a scratch dir on the PVC (PG_VERSION 16; base/global/pg_wal present; 4 databases; **`pg_controldata` reads a coherent control file** — "cluster state: in production", valid checkpoint) → a genuinely startable data directory. Scratch cleaned; live untouched. This exercises the exact fetch→decrypt→assemble restore path. **Remaining 5% (optional):** a live SIBLING cluster accepting connections + WAL-replay-to-target needs a 1-line addition of `system:serviceaccount:cnpg-drtest:<cluster>` to the `barman` role `subs` in `infra/terraform/aws/cluster-irsa/main.tf` (the recovery pods' new SA isn't in the trust today) — worth adding as standing infra if the RTO/RPO drill (M11) becomes recurring.
 - Source: task #24. Destructive test; needs supervision and maintenance window.
 
 ### ✅ M14. Investigate aws-s3-sync daily-report SSL mismatch (if recurs)
