@@ -449,15 +449,17 @@ orphaned. Not service-affecting on its own.
   (one-liner). Or wait for K8s' default Job TTL to expire.
 - **Effort:** Trivial.
 
-### ⏳ L6. Plex `ALLOWED_NETWORKS` parse error
+### ✅ L6. Plex `ALLOWED_NETWORKS` parse error
 - **Source:** surfaced 2026-05-23 by the new Plex logtail sidecar (M41). Plex repeatedly logs `ERROR - Error parsing allowedNetworks entry ' 10.10.201.0 24': Invalid argument`. The space-separated CIDR fragments suggest Plex is reading from its Web UI "LAN Networks" setting where the slash got stripped — likely an old config from before the env-var was set. The `ALLOWED_NETWORKS` env in `02-deployment.yaml` is correct (`10.10.201.0/24,...`); need to clear the Web UI value or re-sync. Library Settings → Network → LAN Networks → check/clear the value.
-- **Effort:** Trivial (one UI click).
+- **✅ Fixed 2026-07-09:** the culprit was actually the **`LanNetworksBandwidth`** pref (`"10.10.0.0/16, 10.42.0.0/16"` — a **space after the comma**; `allowedNetworks` itself was already clean), so Plex logged the parse error **~1/sec (74,899 in 24h)** = pure Loki spam. Fixed via the Plex prefs **API** (`PUT /:/prefs?LanNetworksBandwidth=…` with the PlexOnlineToken, no space) — Plex owned the write, **no outage / no Preferences.xml surgery**. Verified: errors dropped to **0**. NB this is a **live-only** fix (Plex prefs live in the config PVC, not git) — if the pod's PVC is rebuilt, re-check the pref.
 
-### ⏳ L16. k8s consistency nits
+### ⏳ L16. k8s consistency nits — velero-excludes part VERIFIED DONE, cosmetic remainder deferred
 - Review 2026-06-10. Numbered-file convention (00-/01-) inconsistent across `platform/kubernetes/*`; Velero `backup-volumes-excludes` annotations present on some workloads, absent on most (cost — transient/media volumes get backed up); resource request:limit ratios vary wildly (ollama 12Gi limit vs 4Gi request). Standardize + lint. **Effort:** S each.
+- **2026-07-09 checked:** the cost-relevant part — `backup.velero.io/backup-volumes-excludes` — is **already present on the big-volume workloads** (plex media, ollama models, rclone-gdrive/onedrive mirrors, cue-api, aws-s3 base), so large volumes are NOT being Kopia-backed-up. Remaining bits (numbered-file naming convention + request:limit ratio standardization) are **cosmetic / low-value** — deferred. Not blocking.
 
-### ⏳ L18. `optional: true` secret refs can start pods degraded
+### ✅ L18. `optional: true` secret refs can start pods degraded
 - Review 2026-06-10. e.g. `cue-api/01-deployment.yaml` — intentional for bootstrap, but a workload can run in a no-auth state; worth an alert on the empty-secret condition. **Effort:** S.
+- **✅ Done 2026-07-09:** audited all `optional: true` refs — only **cue-api's `cue-app`** carries AUTH material (CUE_WEB_TOKEN_SECRET, VAPID_*, ANTHROPIC_API_KEY); the rest (cloudflare-ddns config, service-status drift-status, per-share s3-sync excludes) are non-auth config with safe defaults → no alert needed. Added **`CueAppSecretMissing`** (`absent(kube_secret_info{namespace="cue",secret="cue-app"})`, warning) in `13-service-alerts.yaml` — fires if the secret is deleted (cue-api keeps running degraded on its own).
 
 ### ⏳ L20. Branch protection / CODEOWNERS (single-owner risk, accepted?)
 - Review 2026-06-10. `main` has no enforceable branch protection (GitHub free plan on a private repo blocks required-reviews/checks) and no `CODEOWNERS`; the headless mini auto-pushes to `main`. Mitigate with a mandatory pre-push CI gate, or explicitly accept the single-owner risk. **Effort:** S (decision).

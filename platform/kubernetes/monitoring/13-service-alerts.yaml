@@ -35,6 +35,24 @@ spec:
             summary: "CNPG cue-db is not reporting"
             description: "No cnpg_collector_up series from cue-db for 5m — Cue's database is likely down or unscrapeable. Check: kubectl -n cue get cluster,pods."
 
+    - name: optional-secrets.rules
+      rules:
+        # L18: cue-api mounts the `cue-app` secret with `optional: true` so it can
+        # boot before the secret is populated — but that secret carries AUTH material
+        # (CUE_WEB_TOKEN_SECRET, VAPID_*, ANTHROPIC_API_KEY). If it's ever deleted,
+        # cue-api keeps RUNNING in a degraded / reduced-auth state with no other
+        # signal. absent() fires if the secret vanishes (the pod won't restart on its
+        # own). Other optional refs (cloudflare-ddns config, drift-status, per-share
+        # excludes) are non-auth config with safe defaults → intentionally not alerted.
+        - alert: CueAppSecretMissing
+          expr: absent(kube_secret_info{namespace="cue",secret="cue-app"}) == 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "cue-api's optional auth secret `cue-app` is missing"
+            description: "kube_secret_info for secret cue-app in ns cue has been absent for 15m. cue-api mounts it optional:true, so it is still running but WITHOUT its auth/API material (CUE_WEB_TOKEN_SECRET etc.). Restore the secret (sops -d platform/kubernetes/cue-api/03-secret-app.sops.yaml → apply) and roll cue-api."
+
     - name: certificates.rules
       rules:
         # DURATION-AGNOSTIC by design: the primary wildcard is a Let's Encrypt
