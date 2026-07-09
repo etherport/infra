@@ -15,6 +15,31 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-09 (cont.) — ai-advisor caching+tiering (M139/M139b), ntfy 2nd channel (M132), cost check
+
+**Prompts:** cue caching already handled by the operator; "benefit to Opus for these alerts?";
+"check recent alert emails"; "do M132 + Opus tiering, cap unchanged"; "M130 cost risk?"; "M134 detail";
+"current AWS cost status / past the 24h S3-read window?".
+
+- **Alert-email spam = M138.** 14 of 20 firing alerts were the cairn/iCloud backup failure; warnings
+  don't email but every alert hits the ai-advisor webhook, which emails its own per-alert diagnosis.
+  **Silenced** `ICloudBackup*|CairnJobsFailing|MiniHealthDegraded` for 7d (AM silence, note → M138) —
+  active non-silenced is now just InfoInhibitor+Watchdog. M138 still needs the operator on the mini.
+- **M139b — tiered models.** Deep-mode → Opus 4.8, single-call → Sonnet; cap unchanged, `_add_cost`
+  per-call priced. Live.
+- **M132 — self-hosted ntfy 2nd critical channel.** New `platform/kubernetes/ntfy/`: ntfy + in-house
+  `am2ntfy` bridge (no native AM parser) + AM `severity=critical`(continue:true) route. **E2E tested**
+  (payload → bridge 204 → ntfy stored, urgent). Exposure gotcha: TS operator can't mint
+  `tag:cluster-ingress` (ACL → autogroup:owner only) → switched to `loadBalancerClass:tailscale`+`tag:k8s`
+  (cue-api pattern) → `http://ntfy.tail48f596.ts.net`, `TailscaleProxyReady`. Operator one-time: ntfy
+  app → subscribe topic `wind-critical`.
+- **AWS cost:** MTD $47, S3 yesterday $2.57 vs trailing-7 $5.30 (spike ratio 0.486 = <½) → egress fix
+  decaying hard. 07-08 was cutover day (partial egress); 07-09 is the first full day on Garage → clean
+  number lands 07-10. Forecast $161 is the naive spike-weighted extrapolation.
+
+**Next:** M138 (operator, mini app-password); M130 (pve/ceph-mon backup — cost-safe, design = pve→NAS
+NFS→existing s3-sync, no new IAM/egress; build next); M134 (DMARC rua — explained to operator).
+
 ## 2026-07-09 — Autonomous tidy-ups (M131/M133/L35/L36) + doc consistency + cairn backup finding
 
 **Prompt:** "send a sample of the current daily status email … proceed autonomously on as many
