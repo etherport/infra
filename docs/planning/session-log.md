@@ -45,6 +45,26 @@ bootout` a cairn agent while osxphotos is running — it orphans osxphotos (surv
 wait for the history record first. Photos being flaky post-recovery is the known best-effort
 aged-mount fragility, not the outage.
 
+## 2026-07-09 (cont.2) — DR restore drill + fixed the offsite S3 BSL (was Unavailable)
+
+**Prompt:** "what else can we get on with?" → picked DR restore drill, reliability fixes, security
+sweep, M130 offsite.
+
+- **DR restore drill (M11/M12 progress):** Velero-restored the `wikijs` backup from the **Garage** BSL
+  into a throwaway ns (namespaceMapping → wikijs-drtest). **Completed 34/34, 0 errors**; PVC+PV
+  recreated (Kopia data-mover ran), Deployment/Service restored (pod 0/1 — correctly blocked from the
+  prod DB by the postgres netpol). PVC restored empty because wikijs keeps content in shared postgres
+  (verified the LIVE PVC is also empty) — so a **non-empty-data proof** (technitium ns=`dns`, or a CNPG
+  barman restore = M12) remains a follow-up. Cleaned up the temp ns.
+- **Found + FIXED: the offsite S3 DR BSL was `Unavailable`.** The `default` read-only BSL read the
+  bucket ROOT, but velero-dr rclones Garage → `s3://…/dr/`, so velero rejected `dr/` as an "invalid
+  top-level directory"; also the velero-dr sync **had never run** (weekly-Sunday). Fix: `prefix: dr`
+  on the BSL (`6fa8499`) + triggered the first dr sync manually. BSL now **Available** (prefix=dr, no
+  error) — the offsite copy is a usable restore source for the first time. Initial full upload finishing
+  in the background (incremental thereafter; upload = free ingress).
+
+**Next in this batch:** reliability fixes (L18/L6/L16), security sweep (M63+L14), M130 offsite-S3 tier.
+
 ## 2026-07-09 (cont.) — ai-advisor caching+tiering (M139/M139b), ntfy 2nd channel (M132), cost check
 
 **Prompts:** cue caching already handled by the operator; "benefit to Opus for these alerts?";
