@@ -17,16 +17,15 @@
   <key>RunAtLoad</key>
   <true/>
 
-  <!-- Keep retrying ONLY while it exits non-zero (network/NAS not up yet);
-       once the mount succeeds (exit 0) launchd stops relaunching it.
-       A later mount drop is healed by the osxphotos job's preflight remount. -->
-  <key>KeepAlive</key>
-  <dict>
-    <key>SuccessfulExit</key>
-    <false/>
-  </dict>
-  <key>ThrottleInterval</key>
-  <integer>30</integer>
+  <!-- Re-run every 3 min (2026-07-09). The OLD design (RunAtLoad + KeepAlive{SuccessfulExit=false})
+       ran ONLY at login and only relaunched while FAILING — so once the mount succeeded at login it
+       never ran again, and a mid-session SMB drop was never recovered (the 2026-07-03→09 outage:
+       backups down 6 days, silent). StartInterval makes launchd re-run the idempotent script
+       periodically, so a dropped-but-re-authable mount self-heals within ~3 min. The script's auth
+       pre-check makes a periodic run safe during an AUTH outage (it bails without spamming NetAuth
+       GUI prompts). KeepAlive removed: with StartInterval, a failing run must NOT tight-loop. -->
+  <key>StartInterval</key>
+  <integer>180</integer>
 
   <key>StandardOutPath</key>
   <string>/Users/grahamsmith/Library/Logs/mount-nas.log</string>

@@ -52,6 +52,37 @@ if [ -f "${HERE}/nsmb.conf" ]; then
   fi
 fi
 
+# Reachability + AUTH pre-check (2026-07-09). This script now runs periodically (net.wind.mount-nas
+# StartInterval) so a mid-session SMB drop self-heals within minutes instead of persisting until the
+# next login (the 2026-07-03→09 outage: mount dropped, the login-only agent never re-ran, backups
+# were down 6 days). But `open smb://` on a REJECTED credential pops a NetAuth GUI prompt that hangs
+# forever headless and piles up stuck NetAuthAgent processes. So before touching `open`, probe auth
+# cheaply with `smbutil` (keychain-based, no GUI): if the SERVER rejects auth, log it distinctly and
+# BAIL — don't spam prompts. This turns a silent 6-day outage into a precise, self-clearing signal
+# (mini-health reads mount_nas rc; the moment the NAS SMB auth is restored, the next tick mounts).
+smb_reachable(){ nc -z -G3 "${SERVER}" 445 >/dev/null 2>&1; }
+# true=auth ok, 1=auth REJECTED (server up, creds refused), 2=unreachable/other
+smb_auth_state(){
+  smb_reachable || return 2
+  local out; out="$(mini_run_timeout 15 smbutil view "//${SMB_USER}@${SERVER}" 2>&1)"
+  case "$out" in
+    *"rejected the authentication"*|*"Authentication error"*) return 1 ;;
+    *) return 0 ;;   # listed shares (or a benign non-auth error) → creds accepted
+  esac
+}
+
+smb_auth_state; auth=$?
+if [ "$auth" = 2 ]; then
+  log "✗ ${SERVER} unreachable on 445 (NAS down / network) — not attempting mounts"
+  exit 1
+elif [ "$auth" = 1 ]; then
+  log "✗ ${SERVER} SMB AUTH REJECTED for ${SMB_USER} (port 445 open, creds refused). NAS SMB service"
+  log "  wedged or the credential is stale — this is NOT a mount bug. Fix NAS-side (restart the UNAS"
+  log "  SMB service / reboot the UNAS) or re-save the keychain password; do NOT retry \`open\` (it"
+  log "  spawns headless NetAuth prompts). Skipping mount attempts this tick."
+  exit 1
+fi
+
 rc=0
 for share in "${SHARES[@]}"; do
   vol="/Volumes/${share}"
