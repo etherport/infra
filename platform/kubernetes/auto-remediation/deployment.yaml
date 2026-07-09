@@ -83,6 +83,12 @@ spec:
           value: "8000"
         - name: AI_ADVISOR_MODEL
           value: "claude-sonnet-4-6"
+        # M139b: deep-mode (multi-turn tool-use root-cause + auto-execute path) runs
+        # on the stronger model for diagnosis accuracy; single-call stays on Sonnet.
+        # Cost cap unchanged ($0.50/day) — deep-mode Opus calls are priced at Opus
+        # rates in the cap math, so at cap the advisor falls back to raw-alert emails.
+        - name: AI_ADVISOR_MODEL_DEEP
+          value: "claude-opus-4-8"
         - name: EMAIL_TO
           value: "graham.m.smith@me.com"
         - name: EMAIL_FROM

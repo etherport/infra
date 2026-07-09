@@ -77,6 +77,10 @@ data:
     AI_DAILY_USD_CAP = float(os.environ.get('AI_ADVISOR_DAILY_COST_USD_CAP', '0.50'))
     AI_MAX_INPUT_TOKENS = int(os.environ.get('AI_ADVISOR_MAX_INPUT_TOKENS', '8000'))
     AI_MODEL = os.environ.get('AI_ADVISOR_MODEL', 'claude-sonnet-4-6')
+    # M139b: tiered models. Single-call (simple alerts) stays on Sonnet; deep-mode
+    # (multi-turn tool-use root-cause + the auto-execute path) uses a stronger model
+    # for diagnosis accuracy + better-calibrated confidence. Opus 4.8 by default.
+    AI_MODEL_DEEP = os.environ.get('AI_ADVISOR_MODEL_DEEP', 'claude-opus-4-8')
     ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
     EMAIL_TO = os.environ.get('EMAIL_TO', 'graham.m.smith@me.com')
     EMAIL_FROM = os.environ.get('EMAIL_FROM', 'ai-advisor@etherport.net')
@@ -97,9 +101,13 @@ data:
     AWS_VPC_CIDR_PREFIX = os.environ.get('AWS_VPC_CIDR_PREFIX', '10.10.100.')
 
     # Pricing per million tokens — keep in sync with anthropic.com/pricing.
-    # claude-sonnet-4-6: $3/M input, $15/M output.
+    # claude-sonnet-4-6: $3/M input, $15/M output (single-call mode).
     AI_PRICE_PER_M_INPUT = float(os.environ.get('AI_ADVISOR_PRICE_INPUT', '3.0'))
     AI_PRICE_PER_M_OUTPUT = float(os.environ.get('AI_ADVISOR_PRICE_OUTPUT', '15.0'))
+    # Deep-mode model pricing (claude-opus-4-8: $15/M in, $75/M out) so the daily
+    # cap stays accurate when deep-mode runs on the stronger model. (M139b)
+    AI_PRICE_PER_M_INPUT_DEEP = float(os.environ.get('AI_ADVISOR_PRICE_INPUT_DEEP', '15.0'))
+    AI_PRICE_PER_M_OUTPUT_DEEP = float(os.environ.get('AI_ADVISOR_PRICE_OUTPUT_DEEP', '75.0'))
 
     # ---- Phase 2: approve-via-email ----
     AI_PHASE2_ENABLED = os.environ.get('AI_PHASE2_ENABLED', 'false').lower() == 'true'
@@ -324,19 +332,24 @@ data:
     def _today_utc():
         return datetime.now(timezone.utc).date()
 
-    def _add_cost(input_tokens, output_tokens, cache_read=0, cache_creation=0):
+    def _add_cost(input_tokens, output_tokens, cache_read=0, cache_creation=0,
+                  price_in=None, price_out=None):
         # Prompt-cache pricing (M139): a cache READ is billed at 0.1x the input
         # rate, a cache WRITE (5-min TTL) at 1.25x. `input_tokens` from the API is
         # already the NON-cached portion (cache read/write are reported separately),
         # so include all three so the daily cap stays accurate under caching.
+        # price_in/price_out default to the single-call (Sonnet) rates; deep-mode
+        # passes the Opus rates so the cap reflects the model actually used (M139b).
+        price_in = AI_PRICE_PER_M_INPUT if price_in is None else price_in
+        price_out = AI_PRICE_PER_M_OUTPUT if price_out is None else price_out
         today = _today_utc()
         if _cost_tracker['date'] != today:
             _cost_tracker['date'] = today
             _cost_tracker['usd_spent'] = 0.0
-        cost = (input_tokens / 1_000_000) * AI_PRICE_PER_M_INPUT + \
-               (cache_read / 1_000_000) * AI_PRICE_PER_M_INPUT * 0.1 + \
-               (cache_creation / 1_000_000) * AI_PRICE_PER_M_INPUT * 1.25 + \
-               (output_tokens / 1_000_000) * AI_PRICE_PER_M_OUTPUT
+        cost = (input_tokens / 1_000_000) * price_in + \
+               (cache_read / 1_000_000) * price_in * 0.1 + \
+               (cache_creation / 1_000_000) * price_in * 1.25 + \
+               (output_tokens / 1_000_000) * price_out
         _cost_tracker['usd_spent'] += cost
         return cost
 
@@ -1634,7 +1647,7 @@ data:
 
         for turn in range(max_iter):
             body = json.dumps({
-                'model': AI_MODEL,
+                'model': AI_MODEL_DEEP,
                 'max_tokens': 2048,
                 'system': cached_system,
                 'tools': tools,
@@ -2439,7 +2452,9 @@ data:
 
         cost = _add_cost(usage.get('input_tokens', 0), usage.get('output_tokens', 0),
                          usage.get('cache_read_input_tokens', 0),
-                         usage.get('cache_creation_input_tokens', 0))
+                         usage.get('cache_creation_input_tokens', 0),
+                         price_in=(AI_PRICE_PER_M_INPUT_DEEP if deep_mode else None),
+                         price_out=(AI_PRICE_PER_M_OUTPUT_DEEP if deep_mode else None))
         _audit(
             'success',
             alertname=alert_name,
@@ -2844,6 +2859,6 @@ data:
             f"(ai_advisor={'on' if AI_ENABLED else 'off'}, "
             f"phase2={'ready' if _phase2_ready else ('toggled but unconfigured' if AI_PHASE2_ENABLED else 'off')}, "
             f"phase3={'on (opt-in via alert label)' if AI_PHASE3_ENABLED else 'off'}, "
-            f"daily_cap=${AI_DAILY_USD_CAP}, model={AI_MODEL})"
+            f"daily_cap=${AI_DAILY_USD_CAP}, model={AI_MODEL} (deep={AI_MODEL_DEEP}))"
         )
         server.serve_forever()

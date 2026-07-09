@@ -106,6 +106,11 @@ kubectl scale deployment -n auto-remediation remediation-controller --replicas=0
 - **Closed-loop verification**: every auto/approve execute is re-checked N min later; verification_failed emails the operator.
 - **Cross-session memory**: prior failed attempts on the same alertname surface in the prompt to discourage re-proposing actions that didn't work.
 - **Daily cost cap**: `AI_ADVISOR_DAILY_COST_USD_CAP=$0.50` hard ceiling; at cap, advisor silently falls back to raw-alert emails.
+- **Tiered models** (M139b): single-call (simple alerts) runs on `AI_ADVISOR_MODEL` (Sonnet 4.6);
+  deep-mode (multi-turn tool-use root-cause + the auto-execute path) runs on `AI_ADVISOR_MODEL_DEEP`
+  (Opus 4.8) for diagnosis accuracy + better-calibrated confidence. The daily cap is unchanged
+  ($0.50) and the cap math prices deep-mode calls at Opus rates, so at cap the advisor falls back to
+  raw-alert emails (i.e. fewer deep diagnoses/day, never a surprise bill).
 - **Prompt caching** (M139): deep-mode's tool-use loop caches the static `system`+`tools` prefix (~1.8k tokens) with an `ephemeral` `cache_control` breakpoint, so turns 2..N of a single alert read the prefix from cache (0.1x) instead of re-billing it. Single-call mode is left uncached (sparse calls → a cache write never read = pure 1.25x loss). The daily-cap cost math prices cache read (0.1x) + write (1.25x); per-turn `anthropic turn=… cache_r=…` log lines confirm hits.
 
 ## Alertmanager integration
