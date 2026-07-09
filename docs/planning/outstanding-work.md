@@ -300,6 +300,7 @@ This file foregrounds open/in-progress/gated work._
 - Source: task #23. Needs your judgment on targets before measurement.
 
 ### ⏳ M12. CNPG restore drill Tier B (sibling cluster)
+- **2026-07-09 lightweight validation (backups ARE restorable-in-principle):** both CNPG clusters healthy (cue-db 1/1, postgres-cluster 3/3); daily barman backups all `completed`; **30-day continuous recoverability window** (firstRecoverabilityPoint 2026-06-09) with `lastSuccessfulBackup` = today on both. So a base backup + continuous WAL archive exist + are current. ⏳ **Still pending = the definitive proof:** a full `bootstrap.recovery` into a SIBLING cluster in a temp namespace (validates the actual WAL-replay path end-to-end). Non-destructive; deserves a focused run.
 - Source: task #24. Destructive test; needs supervision and maintenance window.
 
 ### ✅ M14. Investigate aws-s3-sync daily-report SSL mismatch (if recurs)
