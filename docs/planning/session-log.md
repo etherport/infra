@@ -15,6 +15,46 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-09 — Autonomous tidy-ups (M131/M133/L35/L36) + doc consistency + cairn backup finding
+
+**Prompt:** "send a sample of the current daily status email … proceed autonomously on as many
+infra tidy-ups as possible … also do a doc consistency check."
+
+**Shipped (all committed + reconciled + verified live):**
+- **M131 — apiserver audit → Loki** (`3f05e18`, `b260ca5`). Alloy (root DS, `/var/log` hostPath) tails
+  the active `/var/log/kubernetes/audit/audit.log` (the in-container `--audit-log-path` maps there via
+  the `audit-logs` hostPath — the path is the `audit/` subdir, not the flag literal) → `job=apiserver-audit`.
+  Two loki-ruler rules (`06-loki-rules-apiserver-audit`): `ApiserverAnonymousSuccess` (critical),
+  `ApiserverForbiddenBurst`. Verified stream flowing + rules loaded. **Gotcha caught by testing against
+  live data:** LogQL label-matcher alternation only anchors the first/last branch → the per-branch
+  exclusion leaked `/livez`,`/readyz` and the critical would've fired on every probe; fixed with a
+  grouped regex ([[logql-alternation-anchoring]] memory).
+- **M133 — SSH-cert renew staleness** (`66be2c8`). `step-ssh-renew.sh` writes cert NotAfter to a
+  node_exporter textfile; alerts `DevboxSSHCertExpiringSoon` (<4h, critical→email — the on-disk metric
+  keeps serving the stale expiry when the loop stalls, so it fires ~3.5h pre-expiry) +
+  `DevboxSSHCertNoMetric`. Renew timer confirmed healthy (a scare from misreading cert PDT-vs-UTC turned
+  out fine).
+- **L36 — PSA warn/audit=restricted** on the 9 restricted-clean namespaces (`cc23092`), enforce left at
+  baseline (non-blocking regression signal). Assessment method that WORKS: `enforce=restricted
+  --dry-run=server` surfaces existing-pod violations; `warn=` dry-run does NOT (returned 0 for wireguard).
+- **L35 — credential inventory** `docs/reference/credential-inventory.md` (`4c2acb8`) — the map across 12
+  categories, cross-linked to the rotation runbook.
+- **Doc consistency** (`1cba07b`): corrected the two 2026-06-11 roadmap banners (A2/3-2-1 ✅ M137 Garage,
+  not "unbuilt/MinIO"; C2/I7 ✅ M136) + README aws-cost-exporter mention. Earlier this session the
+  velero→Garage cutover was propagated through README/PLATFORM-MANAGEMENT/disaster-recovery/aws-infrastructure.
+
+**Finding (needs operator) — M138:** sampled the daily email (triggered the real CronJob → user's inbox;
+also rendered via `STDOUT_ONLY=1`). The "3 down" is **cairn iCloud backups on the mini**: mini is up +
+pushing but self-unhealthy; **8/9 categories failing** (drive/notes/safari/messages/calendars/contacts/
+reminders/photos), only `messages_attachments` (local files) OK → almost certainly an **expired iCloud
+app-password**. The devbox can't SSH the mini (macOS, not cert-fleet) → operator must re-mint the
+app-password + check the cairn agent. Logged as **M138** (tier M-H).
+
+**State/next:** M131/M133/L35/L36 done. Batch-D items still open (operator decisions): **M132** (2nd
+critical channel ntfy/Pushover), **M134** (DMARC rua), **M130** (pve/ceph-mon backup). **M138 (cairn)
+needs the operator on the mini.** Verify tomorrow: 07-09 S3 egress near-zero; cloud-tag-drift count after
+AWS Config settles.
+
 ## 2026-07-08 — AWS cost deep-dive: velero Kopia egress → Garage local-primary repo (M136 + M137)
 
 **Prompts:** "aws costs not returning to normal, forecast going up"; build daily cost reporting; the durable
