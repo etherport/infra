@@ -191,6 +191,45 @@ spec:
             summary: "step-ca (SSH certificate authority) is not answering on :8443"
             description: "The step-ca /health probe has failed for 10m. Fleet SSH is CERT-ONLY (M76): cert renewal is broken — the devbox renew-loop (13h certs) and CI per-run certs (≤1h) will start failing on expiry. Break-glass: PVE console + IPMI 10.10.200.21. Check VM 1006: `qm status 1006` on pve, then `systemctl status step-ca` in the guest."
 
+    # Devbox SSH-cert renew loop (M133). StepCADown above catches the CA being down; this catches
+    # the CONSUMER side — the devbox renew loop stalling while the CA is healthy (user timer disabled,
+    # linger lost, SOPS/JWK broken). step-ssh-renew.sh writes the freshly-minted cert's NotAfter to a
+    # node_exporter textfile (step_ssh_cert.prom); the served value stops advancing if the loop stalls.
+    # Fleet SSH is cert-only, so an expired cert = the autonomous agent loses SSH to all 15 hosts.
+    - name: devbox-ssh-cert.rules
+      rules:
+        # Healthy floor is ~7h remaining (13h cert renewed every 6h); <4h => at least one renew cycle
+        # fully missed and heading to expiry. Critical so it routes to email with ~3.5h of runway.
+        - alert: DevboxSSHCertExpiringSoon
+          expr: step_ssh_cert_not_after_seconds{instance="devbox"} - time() < 14400
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Devbox step-ca SSH cert expires in <4h — renew loop has stalled"
+            description: >-
+              The devbox's short-lived SSH user cert has <4h left and isn't being renewed (healthy
+              floor is ~7h). Fleet SSH is CERT-ONLY (M76) — on expiry the autonomous agent loses SSH
+              to all 15 hosts. Check on the devbox (10.10.201.45): `systemctl --user status
+              step-ssh-renew.service` and `list-timers step-ssh-renew.timer`; confirm step-ca is up
+              (StepCADown) and SOPS/JWK still decrypt. Manual mint: run
+              infra/devbox/step-ssh-renew.sh.
+        # Backstop: the textfile persists on disk across reboots, so ExpiringSoon catches a stalled
+        # timer even with stale data. absent() only trips if the file was never written / deleted or
+        # node_exporter textfile is broken (devbox-down is already ExternalHostDown-critical). Warning.
+        - alert: DevboxSSHCertNoMetric
+          expr: absent(step_ssh_cert_not_after_seconds{instance="devbox"})
+          for: 8h
+          labels:
+            severity: warning
+          annotations:
+            summary: "No devbox SSH-cert expiry metric (>8h)"
+            description: >-
+              step_ssh_cert_not_after_seconds is absent — the metric isn't being produced (renew loop
+              never ran, the .prom file was deleted, or node_exporter --collector.textfile is broken
+              on the devbox). Verify step-ssh-renew has run and
+              /var/lib/node_exporter/textfile_collector/step_ssh_cert.prom exists.
+
     # VPN-specific alerts
     - name: vpn-service.rules
       rules:

@@ -108,6 +108,13 @@ So the agent SSHes to the homelab with a short-lived **step-ca cert** instead of
 standing `id_ed25519_homelab` key:
 - `step-ssh-renew.sh` — mints a 13h user cert (principals `ubuntu`,`root`) to
   `~/.ssh/id_homelab_cert` via the headless JWK provisioner (jwk_password from SOPS).
+  Also writes the cert's NotAfter to a node_exporter textfile
+  (`/var/lib/node_exporter/textfile_collector/step_ssh_cert.prom`:
+  `step_ssh_cert_not_after_seconds` + `..._renew_last_success_timestamp_seconds`) so
+  Prometheus can alert if THIS loop stalls (M133) — `devbox-ssh-cert.rules` in
+  `02-external-alerts.yaml`: `DevboxSSHCertExpiringSoon` (<4h left, **critical** →
+  email; the served expiry stops advancing when the loop stalls) + `DevboxSSHCertNoMetric`
+  (metric absent >8h, warning). `StepCADown` covers the CA side; this covers the consumer.
 - `step-ssh-renew.{service,timer}` — user units; the timer renews every 6h.
 - `devbox.yml` writes a **cert-only** `~/.ssh/config` (`id_homelab_cert` is the sole
   `IdentityFile` for homelab hosts).
