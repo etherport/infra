@@ -34,8 +34,12 @@ backup as a whole did not complete.
 2. Pull logs from the failed backup:
    `velero backup logs <name> 2>&1 | tail -100`
 3. Check BackupStorageLocation health:
-   `kubectl -n velero get backupstoragelocations` — Phase should be
-   `Available`, not `Unavailable`.
+   `kubectl -n velero get backupstoragelocations` — there are **two** (M137):
+   `garage` (the **primary**, default:true — MUST be `Available`; if not, new backups
+   fail) and `default` (the **read-only S3 DR** mirror, reads the `dr/` prefix — also
+   should be `Available`, but a failure here only affects offsite restore, not new
+   backups). Garage-Unavailable is the urgent one — check the `garage` deploy + its
+   NAS/RBD mounts (see disaster-recovery.md §1.3).
 4. Check the Velero pod itself:
    `kubectl -n velero logs deploy/velero --tail=200 | grep -iE "error|fail"`
 5. After fix, trigger a fresh run to confirm green path:

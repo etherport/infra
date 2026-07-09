@@ -11,9 +11,10 @@
 # (PveConfigBackupStale in platform/kubernetes/monitoring/02-external-alerts.yaml).
 #
 # COST: the tarball is ~3.5 MB (config only, NOT VM images) and lands on the NAS —
-# zero AWS cost, zero egress. (Offsite-S3 is a documented follow-up; landing it in
-# an s3-synced share is deliberately NOT done here to avoid syncing the giant PVE
-# VM-backup images that share the Proxmox export.)
+# zero AWS cost, zero egress. OFFSITE (3-2-1): the `backups/pve-config-offsite`
+# CronJob (platform/kubernetes/velero-dr/04-pve-config-offsite.yaml) mirrors just this
+# pve-config subdir NAS→S3 (velero…/pve-config/) — deliberately NOT via an s3-synced
+# share, to avoid syncing the giant PVE VM-backup images that share the Proxmox export.
 #
 # Apply:  ansible-playbook -i inventory/wind/inventory.ini playbooks/pve-config-backup.yml --check --diff
 #         (then without --check). Low-risk: adds a script + timer, writes only to the NAS.

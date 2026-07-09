@@ -130,7 +130,7 @@ sudo ETCDCTL_API=3 etcdctl snapshot restore /tmp/etcd-backup.db \
 
 | Type | Location | Retention |
 |------|----------|-----------|
-| Velero | S3 (velero.wind.etherport.net) | 30 days |
+| Velero | **Garage** (local S3-on-NAS) = primary (M137); S3 `velero.wind.etherport.net` = read-only DR | 30 days |
 | Etcd snapshots (CP timer) | /var/lib/etcd-snapshots | 14 days |
 | Etcd snapshots (off-host) | S3 (etcd-snapshots.wind.etherport.net) | per bucket lifecycle |
 

@@ -373,7 +373,11 @@ kubectl describe prometheusrule comprehensive-service-alerts -n monitoring
 
 ### Email Notifications
 
-Alerts are sent via AWS SES to `graham.m.smith@me.com`. Configuration:
+Alerts are sent via AWS SES to `graham.m.smith@me.com`. **`severity=critical` also
+pushes to your phone** via self-hosted **ntfy** (M132): Alertmanager → `am2ntfy` bridge →
+ntfy topic `wind-critical`, reachable tailnet-only at `http://ntfy.tail48f596.ts.net`
+(subscribe the ntfy app to that topic). Email still fires too (`continue: true`). See
+`platform/kubernetes/ntfy/README.md`. Configuration:
 
 - **AlertmanagerConfig**: `platform/kubernetes/monitoring/03-alertmanager-config.yaml`
 - **SMTP Secret**: `platform/kubernetes/monitoring/alertmanager-secret.sops.yaml`

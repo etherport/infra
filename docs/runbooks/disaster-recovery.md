@@ -538,6 +538,13 @@ cp -a /path/from/tarball/etc/pve/priv/* /etc/pve/priv/   # keyrings, tokens, TFA
 > ⚠️ The tarball contains `/etc/pve/priv` **secrets** (ceph keyrings, API tokens, the
 > pve root CA). It's `chmod 600` and lives on the trusted NAS only.
 
+**Offsite tier (3-2-1).** The `backups/pve-config-offsite` CronJob (daily 04:15,
+`platform/kubernetes/velero-dr/04-pve-config-offsite.yaml`) mirrors the NAS `pve-config/`
+dir → `s3://velero.wind.etherport.net/pve-config/` (IRSA, free ingress). If the **NAS
+is also gone**, restore from S3 instead: `aws s3 cp s3://velero.wind.etherport.net/pve-config/<latest>.tar.gz .`
+(standard storage — no Deep-Archive rehydration needed for this prefix) and follow the
+same extract steps above. Staleness alert: `PveConfigOffsiteStale`.
+
 ---
 
 ## 7. Recovery Verification Checklist
@@ -630,7 +637,8 @@ alerts that fire when any of these fail.
 
 | Workload backed up | Backup tool | Location | Schedule | Restore proc |
 |---|---|---|---|---|
-| K8s resources + PVs | Velero (per-namespace schedules) | S3 `velero.wind.etherport.net` | daily | §3.1 above |
+| K8s resources + PVs | Velero (per-namespace schedules) | **Garage** (local S3-on-NAS) = PRIMARY (M137); S3 `velero.wind.etherport.net` = **read-only DR** (`dr/` mirror, weekly, Deep Archive) | daily | §1.3 above (Garage must be Ready first) |
+| pve `/etc/pve` + Ceph MON store | `pve-config-backup.timer` (M130) + `pve-config-offsite` CronJob | NAS `/mnt/pve/sequoia-backups/pve-config/` + S3 `velero…/pve-config/` (3-2-1) | daily 03:30 / 04:15 PT | §6.2 above |
 | Postgres data | CNPG Barman (continuous WAL + nightly base) | S3 `postgres-barman.wind.etherport.net` | continuous | §9 above |
 | etcd | systemd timer on each CP node + Velero `kube-system-daily` ships /var/lib/etcd-snapshots | local + S3 | daily 02:00 PT | §1.2 above |
 | UDM controller-db + UDM core-config + Protect core-config | `unifi-backup` CronJob | S3 `infra.wind.etherport.net/unifi/` | daily 04:00 PT | UDM UI restore (Settings → System → Restore) |
