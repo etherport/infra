@@ -512,6 +512,32 @@ cd ~/code/infra/infra/terraform/proxmox/k8s-vms
 terraform apply
 ```
 
+### 6.2 pve boot-disk total loss — restore /etc/pve + the Ceph MON (M130)
+
+The daily `pve-config-backup.timer` (playbook `infra/ansible/playbooks/pve-config-backup.yml`)
+tars `/etc/pve`, `/etc/ceph`, the Ceph MON store, bootstrap keyrings + an extracted
+monmap → **`/mnt/pve/sequoia-backups/pve-config/`** on the NAS (sequoia, separate
+hardware). Keeps the last 14; `PveConfigBackupStale` alerts if a run is missed.
+
+```bash
+# On the reinstalled pve host, with the NAS re-mounted:
+LATEST=$(ls -1t /mnt/pve/sequoia-backups/pve-config/pve-config-*.tar.gz | head -1)
+tar tzf "$LATEST"                               # inspect first
+# /etc/pve is a FUSE mount (pmxcfs) — stop the service before restoring its backing store,
+# then restore config + Ceph identity:
+systemctl stop pve-cluster
+tar xzf "$LATEST" -C / etc/ceph var/lib/ceph    # ceph.conf, keyrings, MON store
+# restore /etc/pve contents into the pmxcfs backing DB per Proxmox docs (/var/lib/pve-cluster),
+# or copy individual files back after pve-cluster restart:
+systemctl start pve-cluster
+cp -a /path/from/tarball/etc/pve/priv/* /etc/pve/priv/   # keyrings, tokens, TFA, root CA
+# If the MON store is unrecoverable, rebuild the monitor from the OSDs + the saved monmap
+# (ceph-mon --mkfs -i pve --monmap <extracted monmap> --keyring <ceph.mon.keyring>).
+```
+
+> ⚠️ The tarball contains `/etc/pve/priv` **secrets** (ceph keyrings, API tokens, the
+> pve root CA). It's `chmod 600` and lives on the trusted NAS only.
+
 ---
 
 ## 7. Recovery Verification Checklist

@@ -287,3 +287,37 @@ spec:
           annotations:
             summary: "Last doc/IaC drift audit run exited non-zero (rc={{ $value }})"
             description: "doc_drift_audit_last_rc={{ $value }} on the devbox — see ~/.local/state/doc-drift-audit/*.log."
+
+    # M130: pve config + Ceph MON-store backup (daily systemd timer on pve →
+    # NAS; pve-config-backup.yml). The metric comes via node_exporter
+    # --collector.textfile from pve-config-backup.sh (instance="pve").
+    - name: pve-config-backup.rules
+      rules:
+        # No successful backup in >36h (one daily window + slack) => the timer
+        # failed, the NAS unmounted, or ceph/tar broke. Critical → email: this is
+        # the only copy of the MON store + /etc/pve off the pve boot disk.
+        - alert: PveConfigBackupStale
+          expr: time() - pve_config_backup_last_success_timestamp_seconds{instance="pve"} > 129600
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "pve config/Ceph-MON backup hasn't succeeded in >36h"
+            description: >-
+              No successful pve config + Ceph MON-store backup in >36h. pve boot-disk loss would then
+              mean rebuilding /etc/pve + the MON store from memory. Check on pve:
+              `systemctl status pve-config-backup.service`, `journalctl -u pve-config-backup`, and that
+              /mnt/pve/sequoia-backups (NAS) is mounted. Manual run: /usr/local/sbin/pve-config-backup.sh.
+        # Metric absent entirely => the backup never ran / textfile collector broken.
+        # (pve-down is already ExternalHostDown-critical.) 3d so a brief blip doesn't trip it.
+        - alert: PveConfigBackupNoMetric
+          expr: absent(pve_config_backup_last_success_timestamp_seconds{instance="pve"})
+          for: 3d
+          labels:
+            severity: warning
+          annotations:
+            summary: "No pve config-backup metric (>3d)"
+            description: >-
+              pve_config_backup_last_success_timestamp_seconds is absent — pve-config-backup.yml may
+              not be applied, or the textfile collector isn't producing it. Verify the timer + the
+              /var/lib/node_exporter/textfile_collector/pve_config_backup.prom on pve.

@@ -1,0 +1,125 @@
+---
+# M130: back up the pve host's irreplaceable config + the single Ceph MON store.
+#
+# Nothing backed up /etc/pve (cluster config + /etc/pve/priv keyrings, tokens,
+# TFA, the pve root CA) or /var/lib/ceph/mon (the MON store.db + keyring + monmap).
+# pve boot-disk loss = rebuild the storage backend from memory; MON-store loss =
+# objectstore-tool archaeology. This installs a daily systemd timer that tars the
+# critical config → the NAS (sequoia, already mounted at /mnt/pve/sequoia-backups
+# — SEPARATE hardware, so it survives a pve boot-disk death), keeps the last 14,
+# and writes a node_exporter textfile metric so a missed/failed run alerts off-box
+# (PveConfigBackupStale in platform/kubernetes/monitoring/02-external-alerts.yaml).
+#
+# COST: the tarball is ~3.5 MB (config only, NOT VM images) and lands on the NAS —
+# zero AWS cost, zero egress. (Offsite-S3 is a documented follow-up; landing it in
+# an s3-synced share is deliberately NOT done here to avoid syncing the giant PVE
+# VM-backup images that share the Proxmox export.)
+#
+# Apply:  ansible-playbook -i inventory/wind/inventory.ini playbooks/pve-config-backup.yml --check --diff
+#         (then without --check). Low-risk: adds a script + timer, writes only to the NAS.
+- name: pve config + Ceph MON-store backup
+  hosts: pve
+  become: true
+  vars:
+    backup_script: /usr/local/sbin/pve-config-backup.sh
+    nas_mount: /mnt/pve/sequoia-backups
+  tasks:
+    - name: Install the pve-config-backup script
+      ansible.builtin.copy:
+        dest: "{{ backup_script }}"
+        mode: "0750"
+        owner: root
+        group: root
+        content: |
+          #!/usr/bin/env bash
+          # M130 — tar pve/Ceph-MON config → NAS. Managed by pve-config-backup.yml.
+          set -euo pipefail
+          DEST="{{ nas_mount }}/pve-config"
+          RETAIN=14
+          TEXTFILE=/var/lib/node_exporter/textfile_collector/pve_config_backup.prom
+          # Fail loudly if the NAS isn't mounted — a silent local-only copy would
+          # defeat the whole point (it must be on separate hardware).
+          mountpoint -q "{{ nas_mount }}" || { echo "NAS {{ nas_mount }} not mounted" >&2; exit 1; }
+          mkdir -p "$DEST"
+          TS="$(date -u +%Y%m%dT%H%M%SZ)"
+          OUT="$DEST/pve-config-$TS.tar.gz"
+          TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+          # Clean monmap export (safe while the mon runs); the hot mon store.db is
+          # also tarred best-effort (rocksdb; recoverable, and the monmap+keyring
+          # are the critical static bits).
+          ceph mon getmap -o "$TMP/monmap" >/dev/null 2>&1 || echo "warn: monmap export skipped" >&2
+          # Only tar paths that exist — the ceph bootstrap-* layout varies by host
+          # (a missing path is a FATAL tar error, rc=2), so build the source list.
+          SRCS=()
+          for p in etc/pve etc/ceph var/lib/ceph/mon \
+                   var/lib/ceph/bootstrap-osd var/lib/ceph/bootstrap-mgr \
+                   var/lib/ceph/bootstrap-mds var/lib/ceph/bootstrap-rgw; do
+            [ -e "/$p" ] && SRCS+=("$p")
+          done
+          MONMAP_ARGS=()
+          [ -s "$TMP/monmap" ] && MONMAP_ARGS=(-C "$TMP" monmap)
+          set +e
+          tar --warning=no-file-changed -C / -czf "$OUT" "${SRCS[@]}" "${MONMAP_ARGS[@]}" 2>/dev/null
+          rc=$?
+          set -e
+          # tar rc 1 == "file changed as we read it" (benign for a live config); rc>=2 is fatal.
+          [ "$rc" -le 1 ] || { echo "tar failed rc=$rc" >&2; rm -f "$OUT"; exit 1; }
+          chmod 600 "$OUT"
+          gzip -t "$OUT"  # integrity gate
+          # Retention: keep the newest $RETAIN.
+          ls -1t "$DEST"/pve-config-*.tar.gz 2>/dev/null | tail -n +$((RETAIN + 1)) | xargs -r rm -f
+          # node_exporter textfile metric (atomic write) for off-box staleness alerting.
+          if [ -d "$(dirname "$TEXTFILE")" ]; then
+            now="$(date +%s)"; sz="$(stat -c%s "$OUT")"
+            tmpf="$(mktemp "${TEXTFILE}.XXXXXX")"
+            cat > "$tmpf" <<PROM
+          # HELP pve_config_backup_last_success_timestamp_seconds Unix time of the last successful pve config+MON backup.
+          # TYPE pve_config_backup_last_success_timestamp_seconds gauge
+          pve_config_backup_last_success_timestamp_seconds $now
+          # HELP pve_config_backup_size_bytes Size of the last pve config+MON backup tarball.
+          # TYPE pve_config_backup_size_bytes gauge
+          pve_config_backup_size_bytes $sz
+          PROM
+            chmod 644 "$tmpf"; mv -f "$tmpf" "$TEXTFILE"
+          fi
+          echo "pve-config-backup: wrote $OUT ($(du -h "$OUT" | cut -f1))"
+
+    - name: Install the systemd service unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/pve-config-backup.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Back up pve config + Ceph MON store to the NAS (M130)
+          After=network-online.target mnt-pve-sequoia\x2dbackups.mount
+          Wants=network-online.target
+
+          [Service]
+          Type=oneshot
+          ExecStart={{ backup_script }}
+
+    - name: Install the systemd timer (daily 03:30)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/pve-config-backup.timer
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Daily pve config + Ceph MON backup (M130)
+
+          [Timer]
+          OnCalendar=*-*-* 03:30:00
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+
+    - name: Enable + start the timer
+      ansible.builtin.systemd:
+        name: pve-config-backup.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Run one backup now to seed the metric + verify
+      ansible.builtin.command: "{{ backup_script }}"
+      changed_when: true
