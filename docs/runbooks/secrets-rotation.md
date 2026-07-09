@@ -3,6 +3,10 @@
 How to rotate the SOPS **age key** (routine + post-compromise) and the downstream
 secrets it protects. Addresses outstanding-work **H33**.
 
+> **Inventory of every credential** (what/where/consumers/blast-radius) →
+> [`../reference/credential-inventory.md`](../reference/credential-inventory.md).
+> This runbook covers *how to rotate*; that doc is the *map*.
+
 ## Blast radius — read first
 
 One age recipient (`age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g`)

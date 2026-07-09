@@ -152,6 +152,7 @@ docs/
 
 | Document | Description |
 |----------|-------------|
+| [credential-inventory.md](reference/credential-inventory.md) | **Map of every credential** — what/where-held/consumers/rotation/blast-radius (no secret values). Rotation mechanics → [secrets-rotation.md](runbooks/secrets-rotation.md) |
 | [kubectl-cheatsheet.md](reference/kubectl-cheatsheet.md) | kubectl command reference |
 | [kustomize-patterns.md](reference/kustomize-patterns.md) | Kustomize patterns and examples |
 | [node-vlan-setup.md](reference/node-vlan-setup.md) | Node VLAN configuration reference |
