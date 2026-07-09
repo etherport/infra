@@ -15,6 +15,36 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-09 — 6-day backup outage: UNAS SMB auth wedge; mount agent didn't self-heal (fixed)
+
+**Symptom:** recurring AI-advisor alerts + daily "service status down" / "cairn agent down" emails.
+**Root cause:** the UNAS's (sequoia, 10.10.209.10) **SMB authentication wedged ~07-03** — port 445
+negotiated but auth was REJECTED for graham AND guest, while NFS/S3-sync (different auth path) kept
+working and the md array was healthy. So all NAS SMB mounts failed → every cairn job "destination
+not reachable" → cairn_healthy=0 → the alerts/emails. Owner re-authed on the mini console (SAME
+password — confirming a UNAS Samba wedge, not a stale credential) → auth restored.
+**Why it lasted 6 days (the real bug):** `net.wind.mount-nas` was RunAtLoad + KeepAlive{SuccessfulExit
+=false} — ran ONLY at login, relaunched ONLY while failing. Once it succeeded at the 07-02 reboot it
+never ran again, so a later SMB drop was never re-mounted (silent).
+
+**Fixes (committed):**
+- `mount-nas` self-heals: RunAtLoad + **StartInterval=180** (re-check every 3 min), KeepAlive removed;
+  + a reachability/AUTH pre-check that logs a distinct "SMB AUTH REJECTED" and BAILS instead of
+  spamming `open smb://` (which pops headless NetAuth prompts that freeze all mounts). `60cea78`.
+- status-email "cairn agent" row → **agent LIVENESS** (heartbeat freshness, 2h) not cairn_healthy
+  (which is 0 on any job failure incl. best-effort photos misses). SMB-auth probe added to
+  mini-health.sh (`mini_health_check{check="smb_auth"}`) + **MiniSMBAuthRejected** alert so a
+  recurrence pages in ~1h with the exact remedy. `10e5d8d`.
+- Recovery: mounts restored, 7/8 jobs green (all metadata + messages 322k msgs). The
+  ICloudBackupFailed/Stale storm cleared; only CairnJobsFailing (photos) remained.
+
+**Gotcha relearned:** running `cairn run` from an agent SHELL gives false "authorization denied" on
+FDA-gated sources (chat.db/NoteStore/…) — FDA is attributed to the responsible process, which is the
+shell, not cairn.app-under-launchd. ALWAYS test via a one-shot launchd agent. And DON'T `launchctl
+bootout` a cairn agent while osxphotos is running — it orphans osxphotos (survives, unrecorded);
+wait for the history record first. Photos being flaky post-recovery is the known best-effort
+aged-mount fragility, not the outage.
+
 ## 2026-07-09 (cont.) — ai-advisor caching+tiering (M139/M139b), ntfy 2nd channel (M132), cost check
 
 **Prompts:** cue caching already handled by the operator; "benefit to Opus for these alerts?";
