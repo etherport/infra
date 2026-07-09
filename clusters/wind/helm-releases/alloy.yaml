@@ -147,6 +147,28 @@ spec:
             forward_to = [loki.write.default.receiver]
           }
 
+          // ---------- kube-apiserver audit log (M131) ----------
+          // Each CP's apiserver writes audit events to the audit-logs hostPath
+          // (--audit-log-path=/var/log/kubernetes/audit.log in-container maps to
+          //  host /var/log/kubernetes/audit/audit.log; policy apiserver-audit-policy.yaml,
+          //  100MB×10 rotation, CP-local + dies with the node). Tail the ACTIVE file
+          // only (rotated audit-*.log excluded) → Loki job=apiserver-audit for a
+          // queryable, node-loss-surviving API-layer trail (secret reads / RBAC grants
+          // / exec); loki-ruler alerts on anonymous-success + 403 bursts
+          // (06-loki-rules-apiserver-audit). File exists only on the 3 CPs; empty match
+          // on workers is fine.
+          local.file_match "apiserver_audit" {
+            path_targets = [{
+              __path__ = "/var/log/kubernetes/audit/audit.log",
+              job      = "apiserver-audit",
+            }]
+          }
+
+          loki.source.file "apiserver_audit" {
+            targets    = local.file_match.apiserver_audit.targets
+            forward_to = [loki.write.default.receiver]
+          }
+
           // ---------- Syslog receiver (UDP+TCP 514) ----------
           // RFC3164 (BSD) — what UDM-Pro, USW, USG, most home gear
           // emit by default. RFC5424 is newer but few SOHO devices

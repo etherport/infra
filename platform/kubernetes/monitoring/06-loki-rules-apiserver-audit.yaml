@@ -1,0 +1,96 @@
+---
+# LogQL alert rules for the loki-ruler — kube-apiserver audit trail (M131).
+#
+# Each control-plane apiserver writes audit events (policy
+# apiserver-audit-policy.yaml) to a CP-local hostPath that dies with the node.
+# Alloy tails the active file → Loki under job="apiserver-audit" (see
+# clusters/wind/helm-releases/alloy.yaml), giving a queryable, node-loss-surviving
+# record of API-layer activity (secret reads, RBAC grants, exec, etc.).
+#
+# The forensic TRAIL is the primary value — most triage is ad-hoc LogQL in
+# Grafana Explore, e.g. "who read secrets in the last hour":
+#   {job="apiserver-audit"} | json verb="verb", res="objectRef.resource", user="user.username"
+#   | res="secrets" | verb=~"get|list|watch" | user!~"system:.*"
+#
+# These two rules are deliberately CONSERVATIVE (high-signal, near-zero routine
+# noise) so the channel stays quiet unless something is genuinely off. Add more
+# ad-hoc as patterns emerge; don't add noisy per-admin exec/secret-read alerts
+# (the human operator does those routinely — that's what the queryable trail is
+# for). Picked up by the loki k8s-sidecar (label loki_rule="1").
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-rules-apiserver-audit
+  namespace: monitoring
+  labels:
+    loki_rule: "1"
+data:
+  apiserver-audit.yaml: |
+    groups:
+      - name: apiserver-audit
+        interval: 5m
+        rules:
+          # A request authenticated as system:anonymous that SUCCEEDED (2xx).
+          # Anonymous unauthenticated endpoints are limited to health/version
+          # probes (typically logged at None and absent here); a 2xx anonymous
+          # hit on anything else = a real authn/RBAC misconfiguration or probe.
+          # Near-zero routine noise, so `for: 0` — fire on first sighting.
+          - alert: ApiserverAnonymousSuccess
+            expr: |
+              sum by (uri) (
+                count_over_time(
+                  {job="apiserver-audit"}
+                  | json user="user.username", code="responseStatus.code", uri="requestURI", stage="stage"
+                  | __error__=""
+                  | stage="ResponseComplete"
+                  | user="system:anonymous"
+                  | code=~"2.."
+                  | uri!~"/healthz.*|/livez.*|/readyz.*|/version.*|/openapi.*"
+                  [10m]
+                )
+              ) > 0
+            for: 0m
+            labels:
+              severity: critical
+              component: audit
+              source: apiserver-audit
+            annotations:
+              summary: "Anonymous request SUCCEEDED at the kube-apiserver ({{ $labels.uri }})"
+              description: |
+                A request authenticated as system:anonymous returned 2xx on
+                {{ $labels.uri }} — anonymous access should only reach health/version
+                probes. This is either an RBAC/authn misconfiguration or an active
+                probe. Inspect in Grafana Explore (Loki):
+                  {job="apiserver-audit"} | json | user_username="system:anonymous"
+                  | line_format "{{`{{.sourceIPs}} {{.verb}} {{.requestURI}} -> {{.responseStatus_code}}`}}"
+
+          # A single user accumulating many 403 Forbidden responses in a short
+          # window = privilege probing (enumerating what they can access) or a
+          # broken/over-scoped client. Grouped by user + a high threshold so
+          # routine one-off denials never page; a real enumeration stands out.
+          - alert: ApiserverForbiddenBurst
+            expr: |
+              sum by (user) (
+                count_over_time(
+                  {job="apiserver-audit"}
+                  | json user="user.username", code="responseStatus.code", stage="stage"
+                  | __error__=""
+                  | stage="ResponseComplete"
+                  | code="403"
+                  [15m]
+                )
+              ) > 30
+            for: 5m
+            labels:
+              severity: warning
+              component: audit
+              source: apiserver-audit
+            annotations:
+              summary: "{{ $labels.user }} got {{ $value }} Forbidden responses in 15m (privilege probing?)"
+              description: |
+                User "{{ $labels.user }}" accumulated >30 HTTP 403 responses from
+                the kube-apiserver in 15m — consistent with permission enumeration
+                or a broken/over-scoped client. Inspect which resources were denied:
+                  {job="apiserver-audit"} | json | user_username="{{ $labels.user }}"
+                  | responseStatus_code="403"
+                  | line_format "{{`{{.verb}} {{.objectRef_resource}}/{{.objectRef_name}} ({{.objectRef_namespace}})`}}"

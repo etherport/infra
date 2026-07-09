@@ -11,6 +11,7 @@ resources:
   - 04-ipmi-alerts.yaml
   - 05-loki-rules-ipmi.yaml
   - 06-loki-rules-cilium-audit.yaml
+  - 06-loki-rules-apiserver-audit.yaml
   - 06-backup-alerts.yaml
   - 07-flux-monitoring.yaml
   - 08-mini-backup-ingressroutes.yaml
