@@ -219,7 +219,7 @@ Security / policy:
 
 Observability:
 ├── Prometheus (kube-prometheus-stack, replicas=2 antiAffinity)
-├── Alertmanager → SES email (+ webhook to auto-remediation)
+├── Alertmanager → SES email (+ webhook to auto-remediation; severity=critical also → ntfy phone push, M132)
 ├── Grafana (https://grafana.wind.etherport.net)
 ├── Loki (single-binary) + Alloy DaemonSet
 ├── blackbox-exporter        ICMP/HTTPS probes for UDM / Protect / UNAS

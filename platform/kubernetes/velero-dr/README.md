@@ -22,6 +22,18 @@ Garage (NAS, primary)  ──weekly rclone sync──▶  s3://velero.wind.ether
 **NB the `archive.wind.etherport.net` bucket is SEPARATE** — that's the NAS/iCloud
 offsite archive (the `s3-sync` family), not velero. Keep them distinct.
 
+## Piggybacking: pve-config offsite (M130) — `04-pve-config-offsite.yaml`
+
+A **daily** CronJob (`pve-config-offsite`) that reuses this dir's machinery — same
+`velero-dr-sync` SA + IRSA (`wind-irsa-velero`, already granted the velero bucket) +
+rclone config — to mirror the pve config/Ceph-MON backups NAS→S3. It NFS-mounts ONLY
+`/var/nfs/shared/Proxmox/Backups/pve-config` (the tiny ~3.4MB tarballs from
+`pve-config-backup.yml`, NOT the giant PVE VM-backup images) → `s3://velero…/pve-config/`.
+Runs as uid/gid `977:988` (the tarballs' NAS owner) with an **empty-source guard** (a
+failed NFS mount can't make `rclone sync` wipe the S3 copy). The velero BSL reads only
+`dr/`, so this sibling prefix is inert to velero. Alert: `PveConfigOffsiteStale` (>36h).
+Not velero data — just co-located here because it reuses the exact same auth path.
+
 ## DR restore (rare)
 Un-archive the `dr/` objects from Deep Archive (bulk retrieval ~12h) → `rclone copy
 s3:velero.wind.etherport.net/dr/ garage:velero` (or a fresh Garage) → velero restore

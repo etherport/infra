@@ -15,7 +15,7 @@ patches. Kubespray uses this directory's inventory as its single source of truth
 | UDM / UniFi | `udm-firewall.yml`, `udm-firmware-policy.yml`, `usw-acls.yml` | Drives the internal `/proxy/network/v2/api/...` (zone firewall, DNS) — **full-reconciles** |
 | devbox | `devbox.yml` | Provisions the always-on dev-session host (`10.10.201.45`) |
 | K8s nodes | `k8s-node-fixes.yml`, `k8s-node-patch.yml`, `swap.yml` | Out-of-band node fixes/patches (kubespray is the primary node IaC) |
-| Monitoring/backup | `ipmi-monitoring.yml`, `cloudwatch-agent.yml`, `etcd-backup.yml`, `etcd-defrag.yml` | Exporters + etcd daily snapshot + weekly etcd defrag (H41). Re-run the etcd-* playbooks after a CP rebuild (systemd timers, not baked into the image). |
+| Monitoring/backup | `ipmi-monitoring.yml`, `cloudwatch-agent.yml`, `etcd-backup.yml`, `etcd-defrag.yml`, `pve-config-backup.yml` | Exporters + etcd daily snapshot + weekly etcd defrag (H41). `pve-config-backup.yml` (M130) installs a daily timer tarring `/etc/pve` + the Ceph MON store → NAS (offsite S3 via the `pve-config-offsite` CronJob). Re-run the etcd-*/pve-config playbooks after a CP/pve rebuild (systemd timers, not baked into the image). |
 | Misc | `tailscale.yml`, `base.yml`, `ceph/`, `ceph-msgr2.yml` | |
 
 ## Inventory
