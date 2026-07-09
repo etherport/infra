@@ -9,7 +9,7 @@ metadata:
     # sits allow-all. Allowlist: networkpolicies/15-tier-authentik.yaml (built +
     # verified via the audit-mode procedure).
     netpol.wind/enforced: "true"
-    pod-security.kubernetes.io/audit: baseline
-    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/enforce: baseline
     # H38: internal identity provider (Authentik) — forward-auth + OIDC SSO.

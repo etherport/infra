@@ -20,6 +20,18 @@
 #   - tailscale:       operator/proxy pods need NET_ADMIN
 # tier=system wireguard stays unrestricted by design (hostNetwork+NET_ADMIN);
 # plex graduated to enforce=baseline 2026-07-01 (L27 — device-plugin GPU, not privileged).
+#
+# L36 (2026-07-09): namespaces whose LIVE pods already satisfy the `restricted`
+# PSS (verified via `kubectl label ns <ns> enforce=restricted --dry-run=server` →
+# zero existing-pod violations) graduate audit+warn to `restricted` while ENFORCE
+# stays baseline — a non-blocking early-warning so any future sub-restricted pod
+# surfaces as a warning/audit event (regression signal + a nudge toward eventual
+# enforce=restricted, like unifi-poller). enforce is deliberately NOT bumped (a
+# future baseline-but-not-restricted pod would be rejected). The nine clean today:
+# authentik, cert-manager, cloudflare-ddns, cloudflared, cnpg-system, kyverno,
+# postgres, traefik, unifi-cert-sync. (dns/cue/ollama/wikijs/backups/rclone/
+# auto-remediation/cloudwatch-to-loki are baseline-clean but NOT restricted-clean —
+# they run as root / lack seccompProfile — so they keep audit/warn=baseline.)
 ---
 apiVersion: v1
 kind: Namespace
@@ -52,8 +64,8 @@ metadata:
   name: postgres
   labels:
     tier: data
-    pod-security.kubernetes.io/audit: baseline
-    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
@@ -62,8 +74,8 @@ metadata:
   name: traefik
   labels:
     tier: data
-    pod-security.kubernetes.io/audit: baseline
-    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/enforce: baseline
     # H3 tier 4 (2026-06-22): NetworkPolicy ENFORCED (13-tier-traefik.yaml),
     # validated via the audit toggle. (Traefik ns is Helm-created; labelled here
@@ -144,8 +156,8 @@ metadata:
   name: cloudflare-ddns
   labels:
     tier: data
-    pod-security.kubernetes.io/audit: baseline
-    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
@@ -174,8 +186,8 @@ metadata:
   name: unifi-cert-sync
   labels:
     tier: data
-    pod-security.kubernetes.io/audit: baseline
-    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
@@ -200,8 +212,8 @@ metadata:
   name: cert-manager
   labels:
     tier: system
-    pod-security.kubernetes.io/audit: baseline
-    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
@@ -210,8 +222,8 @@ metadata:
   name: cnpg-system
   labels:
     tier: system
-    pod-security.kubernetes.io/audit: baseline
-    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/enforce: baseline
 ---
 # kyverno: the admission-policy engine itself (L27, 2026-07-01 — verified clean
@@ -222,8 +234,8 @@ metadata:
   name: kyverno
   labels:
     tier: system
-    pod-security.kubernetes.io/audit: baseline
-    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/enforce: baseline
 ---
 # Privileged-by-design namespaces — tier=system, no PSS enforcement.

@@ -4,4 +4,6 @@ kind: Namespace
 metadata:
   name: cloudflared
   labels:
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/enforce: baseline
