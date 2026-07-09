@@ -1,0 +1,26 @@
+---
+# Tailnet-only exposure of ntfy via the Tailscale K8s operator — point the ntfy
+# phone app at http://ntfy.<tailnet>.ts.net (tailnet tail48f596). Uses the
+# `loadBalancerClass: tailscale` + `tag:k8s` pattern (same as cue-api-ts) — NOT an
+# Ingress with tag:cluster-ingress, which the operator cannot self-mint (the ACL
+# grants tag:cluster-ingress to autogroup:owner only; tag:k8s is owned by
+# tag:k8s-operator — see infra/tailscale/policy.hujson). Raw TCP over the tailnet
+# (WireGuard-encrypted); the ClusterIP `ntfy` Service stays for the in-cluster bridge.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ntfy-ts
+  namespace: ntfy
+  annotations:
+    tailscale.com/hostname: "ntfy"      # → ntfy.tail48f596.ts.net
+    tailscale.com/tags: "tag:k8s"       # operator-mintable (owned by tag:k8s-operator)
+spec:
+  type: LoadBalancer
+  loadBalancerClass: tailscale
+  selector:
+    app: ntfy
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP

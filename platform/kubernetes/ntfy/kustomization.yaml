@@ -7,7 +7,7 @@ resources:
   - 02-pvc.yaml
   - 03-deployment.yaml
   - 04-service.yaml
-  - 05-tailscale-ingress.yaml
+  - 05-tailscale-svc.yaml
   - 10-bridge-configmap.yaml
   - 11-bridge-deployment.yaml
   - 12-bridge-service.yaml
