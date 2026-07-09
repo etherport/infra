@@ -4,9 +4,10 @@
 > B1 (audit-log→Loki), D1/D3 (Flux-validate CI, Taskfile), D4 (CI gitleaks — M60), **B2 Kyverno ✅
 > M73 (enforcing)**, **B4 Tetragon ✅ M74 (detection live)**, **B5+C3-SSO ✅ H38 (Authentik IdP)**,
 > **B8 ✅ M66 (Cilium WireGuard)**, C7/M55 unifi-poller, M15 Twilio 911, parts of D7 (M107 weekly
-> doc-drift audit). **A2 (3-2-1 offsite) is newly ACTIVE** as M111's architectural follow-up
-> (local-first primary BSL + batched Deep Archive) — see `roadmap-specs-2026-06-11.md` §A2 for the
-> spec (its us-east-1-replica shape needs revisiting: the us-east-1 spoke was decommissioned 2026-07-01).
+> doc-drift audit). **A2 (3-2-1 offsite) ✅ SHIPPED as M137 (2026-07-08)** — velero primary BSL moved
+> to local **Garage** (S3-on-NAS) + weekly `rclone` DR → Glacier Deep Archive (local-first, not the
+> us-east-1 cross-region replica this doc's §A2 originally sketched; that spoke was decommissioned
+> 2026-07-01). **C2/I7 (advisor cost) ✅ M136** (daily AWS cost → Grafana + status email).
 
 # Dev Roadmap — 2026-06-11
 

@@ -116,7 +116,8 @@ cloudwatch-to-loki · policy-baseline · cnpg (Cluster CR) ·
 home-automation · plex · rclone-gdrive · rclone-onedrive · unas-health · wikijs · ollama ·
 cue-api + cue-db (CNPG) · unifi-poller ·
 tailscale (subnet router) · wireguard · cloudflare-ddns · unifi-backup ·
-unifi-cert-sync · monitoring (alerts, dashboards, status report) ·
+unifi-cert-sync · monitoring (alerts, dashboards, status report,
+aws-cost-exporter — daily AWS cost/forecast → Grafana + status email, M136) ·
 backups (Velero schedules + 7 s3-sync shares + daily report).
 
 `clusters/wind/kustomization.yaml` is the readable index — comments

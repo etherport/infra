@@ -1,10 +1,12 @@
-> **Dated snapshot (2026-06-11; banner refreshed 2026-07-01).** Status of the three specs:
-> **B1 (audit-log→Loki) ✅ shipped**; **C2/I7 (advisor right-sizing/cost) not built** (still valid);
-> **A2 (3-2-1 offsite) NOT built and newly relevant** — it is now M111's architectural follow-up
-> (velero primary BSL → local MinIO/Ceph RGW + batched Deep Archive), though this spec's
-> us-east-1-replica design needs revisiting (the us-east-1 spoke was decommissioned 2026-07-01,
-> M110; the request-cost findings of M111 favor local-first over cross-region replication).
-> `outstanding-work.md` is the live status.
+> **Dated snapshot (2026-06-11; banner refreshed 2026-07-09).** Status of the three specs:
+> **B1 (audit-log→Loki) ✅ shipped**; **C2/I7 (advisor right-sizing/cost) ✅ shipped** as M136
+> (daily AWS cost exporter → Grafana + the daily status email); **A2 (3-2-1 offsite) ✅ SHIPPED as
+> M137 (2026-07-08)** — velero's primary BSL is now **local Garage** (S3-on-NAS: LMDB metadata on
+> Ceph-RBD + content blocks on NFS) with a weekly `rclone` DR sync → S3 `velero…/dr/` → Glacier Deep
+> Archive; this replaced the egress-heavy S3-primary design that drove the cost spike. NB the local
+> engine is **Garage, not MinIO** (MinIO's erasure backend rejects NFS — needs O_DIRECT) and it is
+> **local-first, not cross-region replication** (the us-east-1 spoke was decommissioned 2026-07-01,
+> M110). The A2 spec below is therefore historical. `outstanding-work.md` is the live status.
 
 # Roadmap implementation specs — 2026-06-11
 
