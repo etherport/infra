@@ -96,7 +96,16 @@ velero restore create cp-restore --from-backup kube-system-daily-<date>
 
 **Prerequisites:**
 - Proxmox host operational
-- Velero backups available in S3
+- **Velero's PRIMARY repo is local Garage** (M137, since 2026-07-08) — an S3 server
+  whose data lives on the NAS (`sequoia:/var/nfs/shared/VeleroBackup`) with metadata
+  on a Ceph-RBD PVC. **Garage must be reconciled + Ready before Velero can list ANY
+  post-07-08 backup** (see the Garage-dependency note in the recovery steps). Its
+  bootstrap (layout + `velero` bucket + key import) is a runbook step on a fresh
+  metadata volume — see `platform/kubernetes/garage/README.md`.
+- The old **S3 Velero BSL is READ-ONLY** and holds only pre-07-08 restore points
+  (30-day TTL) + a weekly `dr/` copy transitioned to **Glacier Deep Archive**
+  (restoring from `dr/` needs a bulk Deep-Archive rehydration, ~12h — see
+  `platform/kubernetes/velero-dr/README.md`).
 - Access to kubespray inventory
 
 **Recovery Procedure:**
@@ -119,8 +128,20 @@ cd ~/code/infra/infra/kubespray
 #    role wind-irsa-velero) — there is NO static AWS key. See
 #    docs/runbooks/irsa-workload-identity.md.
 
-# 5-6. (Velero is reconciled by Flux in step 8.) Once it's up, confirm it can
-#       reach S3 and list backups (BackupStorageLocation should be "Available").
+# 5-6. (Velero is reconciled by Flux in step 8.) ⚠️ Velero's PRIMARY repo is local
+#       Garage (M137) — it CANNOT list post-07-08 backups until Garage is Ready:
+#         a. Garage deploys via Flux (platform/kubernetes/garage/). It needs the NAS
+#            NFS share (sequoia:/var/nfs/shared/VeleroBackup) reachable + its Ceph-RBD
+#            metadata PVC bound. On a FRESH metadata volume, re-run the one-time
+#            bootstrap (layout assign/apply + `key import velero <GK…> <secret>` +
+#            `bucket create/allow velero`) per platform/kubernetes/garage/README.md.
+#         b. kubectl -n garage rollout status deploy/garage   # must be 1/1 Ready
+#         c. Then: kubectl -n velero get backupstoragelocation garage  # → Available
+#            and the `default` (S3) BSL is read-only (pre-07-08 restore points, 30d).
+#       For a restore from the OFFSITE `dr/` copy (only if both Garage AND the S3
+#       velero bucket's live objects are gone), first rehydrate the Deep-Archive
+#       objects (bulk retrieval ~12h) then rclone them into a fresh Garage — see
+#       platform/kubernetes/velero-dr/README.md.
 
 # 7. Restore in order of priority (after step 8 has brought Velero up)
 velero restore create restore-infra --from-backup infrastructure-daily-<latest>

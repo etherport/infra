@@ -332,12 +332,22 @@ infra/ansible/inventory/aws/
 - No NAT Gateway (using Internet Gateway + public IP for VPN)
 - S3-native Terraform state locking (`use_lockfile=true` — no DynamoDB table)
 - Lambda on ARM64 architecture
+- **Velero's Kopia repo moved LOCAL (Garage on the NAS, M137, 2026-07-08)** — killed
+  the S3 `DataTransfer-Out` egress from Kopia repo-maintenance (the 2026-07 forecast
+  spike $75→$160); S3 is now batched Deep-Archive DR only. See `platform/kubernetes/{garage,velero-dr}/`.
+- **Daily AWS cost reporting (M136):** `aws-cost-exporter` CronJob → Grafana "AWS Cost"
+  dashboard + a Cost section in the daily status email + `AWSCostForecastHigh`/
+  `AWSServiceDailyCostSpike` alerts (so a cost anomaly surfaces next-day, not monthly).
+- Both **default VPCs deleted** (us-west-2 + us-east-1, 2026-07-08) — unused; security + tag-hygiene.
 
 ## Backup Strategy
 
 - Configuration files in Git (this repo)
 - WireGuard keys SOPS-encrypted in `platform/wireguard/servers/` (age)
 - Technitium zones synced via GitOps from YAML files
+- **K8s backups: local-primary since M137 (2026-07-08)** — Velero's Kopia repo lives on
+  local Garage (S3-on-NAS); the AWS `velero` bucket is now **read-only DR** (pre-07-08
+  restore points, 30-day TTL) plus a weekly `rclone` `dr/` copy → Glacier Deep Archive.
 - **EC2 instances are disposable** - no snapshots needed (Terraform + Ansible can recreate)
 - **CloudWatch agent** on EC2 instances now publishes only 2 metrics
   (down from 15); host metrics moved to the Prometheus node_exporter
@@ -402,7 +412,7 @@ All AWS infrastructure is managed via Terraform under `infra/terraform/aws/`.
 | `networking/` | `aws/networking/terraform.tfstate` | VPC, subnets, route tables, IGW, security groups, NACLs |
 | `compute/` | `aws/compute/terraform.tfstate` | EC2 instances, EIPs, IAM roles, CloudWatch alarms, SNS |
 | `acm/` | `aws/acm/terraform.tfstate` | SSL/TLS certificates (us-west-2): `*.etherport.net`, `*.wind.etherport.net`, `ha.wind.etherport.net`. (Retained; no ALB consumer — HA uses in-cluster TLS.) |
-| `s3/` | `aws/s3/terraform.tfstate` | S3 buckets (velero, archive, email-fwd, `postgres-barman.wind.etherport.net` for CNPG Barman WAL/base backups). All buckets carry bucket-policy `Deny` statements on `s3:DeleteBucket` and `s3:DeleteBucketPolicy` for non-root principals. |
+| `s3/` | `aws/s3/terraform.tfstate` | S3 buckets (velero — now **read-only DR** + a `dr/` prefix on a 30-day→Deep-Archive lifecycle since M137; archive, email-fwd, `postgres-barman.wind.etherport.net` for CNPG Barman WAL/base backups). All buckets carry bucket-policy `Deny` statements on `s3:DeleteBucket` and `s3:DeleteBucketPolicy` for non-root principals. |
 | `ses/` | `aws/ses/terraform.tfstate` | SES domain/email identities + DKIM for **etherport.net only** (personal domains live in the [personal-web](https://github.com/sparked-diamond/personal-web) repo). |
 
 > No `load-balancing/`, `route53/`, or `cloudflare-personal/` modules — those were removed in

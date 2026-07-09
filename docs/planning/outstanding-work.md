@@ -230,7 +230,7 @@ This file foregrounds open/in-progress/gated work._
 ### 🟡 M129. Enable local TS exit nodes — k8s-homelab-router APPROVED; vpn-fallback advertising (owner console-approval pending)
 - **Owner ask 2026-07-02.** Only `vpn-aws` currently "offers exit node". **k8s-homelab-router ALREADY advertises exitNode** in git (`platform/kubernetes/tailscale/connector/connector.yaml` `exitNode: true`; live Connector `ISEXITNODE=true`) — it just isn't **approved** as an exit node in the TS admin console (an advertised exit node must be admin-approved before clients can use it). **ACTION (console, user — no TS API key on the agent):** Machines → `k8s-homelab-router` → Edit route settings → approve **Exit node**. The **local** (vpn-fallback) exit node is blocked on **L32** (Tailscale is uninstalled there — reinstall first, then advertise `--advertise-exit-node` + approve). No repo change needed for the k8s one. **Effort: S (console).**
 
-### ⏳ H46. Dead-man's switch — the ENTIRE alert path is in-cluster and unmonitored
+### ✅ H46. Dead-man's switch — DONE (watchdog-deadman + us-east-1 CloudWatch alarm)
 - **2026-07-03 Opus 4.8 gap analysis #1 (verified):** `Watchdog` routes to `null`; the only human channel is SES email from the in-cluster Alertmanager; even `DocDriftAuditStale` rides the same pipeline. If Prometheus/AM/the cluster/SES dies → SILENCE. **Fix options:** (a) healthchecks.io ping from a Watchdog webhook receiver (needs owner account), or (b) fully self-hosted: a systemd timer on the AWS edge box queries the Alertmanager API for Watchdog over the tunnel and raises a CloudWatch alarm on absence (the box has a CW role; CW→SNS→email is already proven in external-monitoring). Prefer (b). **Effort: S-M. Tier: H.**
 
 ### ⏳ M130. PVE host config + the single Ceph mon store have NO backup
@@ -421,7 +421,7 @@ orphaned. Not service-affecting on its own.
 - **Source:** code shipped 2026-05-24 (`AI_PHASE3_ENABLED` env, default OFF). Per the phased rollout plan in `docs/runbooks/archive/ai-advisor-phase3-enable.md`: week 1 add `ai_remediation: "auto"` label to `NodeLocalDNSHighErrorRate` only; week 2 add `CoreDNSDown`; week 3 add `TechnitiumDNSDown` + `HomeAssistantDown`; expand 1/week as comfort builds. Never include CNPG / Ceph / kube-system alerts.
 - **Effort:** Trivial per alert (one label addition). Spread across weeks for safety.
 
-### ⏳ L7. Clean up debug Jobs in `backups` namespace
+### ✅ L7. Debug Jobs in backups ns — resolved (May debris long TTL-expired; ns clean)
 - **Source:** observed during M40 tidy 2026-05-23. Six failed pods from
   `unifi-backup-test`, `unifi-backup-test2`, `unifi-backup-test3` Jobs
   remain in the `backups` namespace (created 3.5h ago during M31

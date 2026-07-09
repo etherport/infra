@@ -142,7 +142,7 @@ Full ownership matrix + restore procedures: [`disaster-recovery.md`](disaster-re
 
 | Component | Method | Frequency |
 |-----------|--------|-----------|
-| K8s workloads + PVs | Velero (per-namespace schedules) → S3 | Daily |
+| K8s workloads + PVs | Velero → local **Garage** (S3-on-NAS) primary; S3 = read-only DR + weekly Deep-Archive `dr/` (M137) | Daily |
 | Postgres (CNPG) | Barman continuous WAL + nightly base → S3 | Continuous |
 | etcd | systemd timer per CP + Velero ships /var/lib/etcd-snapshots | Daily 02:00 PT |
 | UDM + Protect config | unifi-backup CronJob → S3 | Daily 04:00 PT |

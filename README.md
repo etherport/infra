@@ -202,7 +202,9 @@ via `docs/runbooks/grafana-admin-password.md`).
 
 | What | Tool | Destination | Schedule |
 |---|---|---|---|
-| K8s resources + PVs | Velero (12 schedules) | S3 `velero.wind.etherport.net` (dedicated bucket) via Kopia | daily |
+| K8s resources + PVs | Velero (12 schedules) | **Garage** — local S3-on-NAS (`garage.garage.svc:3900`, metadata on Ceph-RBD + data on the NAS/NFS) via Kopia — **primary** (M137, 2026-07-08) | daily |
+| ↳ K8s backups — offsite DR | `rclone velero-dr-sync` | S3 `velero.wind.etherport.net/dr/` → Glacier Deep Archive | weekly (Sun) |
+| ↳ old S3 Velero repo | (read-only) | S3 `velero.wind.etherport.net` — `accessMode:ReadOnly`, pre-07-08 restore points aging out at 30-day TTL | — |
 | Postgres | CNPG Barman (WAL + base) | S3 `postgres-barman.wind.etherport.net` (dedicated bucket) | continuous + daily base |
 | etcd | systemd timer per CP + Velero `kube-system-daily` ships `/var/lib/etcd-snapshots` | local + S3 | daily 02:00 PT |
 | UDM controller-db + UDM/Protect core-config | `unifi-backup` CronJob | S3 `infra.wind.etherport.net/unifi/` | daily 04:00 PT |

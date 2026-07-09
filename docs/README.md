@@ -238,7 +238,7 @@ AI alert advisor (auto-remediation namespace):
 
 Data layer:
 ├── Ceph (external on PVE, mon 10.10.210.41 VLAN 210) + ceph-csi
-├── Velero (12 schedules) → Kopia → S3 velero.wind.etherport.net
+├── Velero (12 schedules) → Kopia → Garage (local S3-on-NAS) [primary] → weekly rclone DR → S3 velero…/dr/ Deep Archive
 ├── CNPG Barman              continuous WAL + nightly base → S3 postgres-barman.wind.etherport.net
 ├── unifi-backup CronJob     UDM controller-db + UDM/Protect core-config → S3 unifi/
 ├── s3-sync CronJobs (7)     per NAS share → per-share S3 buckets
