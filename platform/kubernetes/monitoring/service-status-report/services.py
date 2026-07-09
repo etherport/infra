@@ -110,11 +110,17 @@ SERVICES = [
     #    base.yml on both, add them to 01-external-scrape-config.yaml, then list here.
 
     # Mac mini — cairn iCloud-backup agent (M103/M105). Pushgateway metrics:
-    # mini_health_up (host), cairn_healthy (agent), cairn_backup_last_rc{job=<cat>}
-    # per backup category (0 = last run ok). See gen-dashboard "Mac mini — iCloud
-    # backups" + 10-icloud-backups-alerts.yaml.
+    # mini_health_up (host), cairn_heartbeat_timestamp_seconds (agent liveness),
+    # cairn_backup_last_rc{job=<cat>} per backup category (0 = last run ok). See
+    # gen-dashboard "Mac mini — iCloud backups" + 10-icloud-backups-alerts.yaml.
+    # NB "cairn agent" tracks AGENT LIVENESS (heartbeat freshness, 2h — same as the
+    # CairnAgentDead alert), NOT cairn_healthy: cairn_healthy is 0 whenever ANY job's
+    # last run failed, so it read "agent down" during a backup outage AND on every
+    # best-effort photos miss even though the agent was alive. Backup SUCCESS is the
+    # separate "iCloud backups" rollup row below.
     ("Mac mini (cairn)", "Mac mini host",      "mini_metric",  "mini_health", "mini_health_up"),
-    ("Mac mini (cairn)", "cairn agent",        "mini_metric",  "cairn_health", "cairn_healthy"),
+    ("Mac mini (cairn)", "cairn agent",        "mini_metric",  "cairn_health",
+        '(time() - max(cairn_heartbeat_timestamp_seconds{instance="mini"}) < bool 7200)'),
     ("Mac mini (cairn)", "iCloud backups",     "mini_backup_rollup", "cairn", "cairn_backup_last_rc"),
 
     # Appliances (probed via blackbox-exporter HTTPS — see

@@ -27,6 +27,20 @@ agents_ok=$([ "${loaded}" -eq "${#EXPECT[@]}" ] && echo 1 || echo 0)
 nas_ok=1
 for v in /Volumes/Backups /Volumes/Personal-Drive; do nas_readable "$v" || nas_ok=0; done
 
+# 2b. SMB AUTH probe — diagnostic split of nas_ok (2026-07-09). When the shares aren't readable,
+#     distinguish a REJECTED credential (server up on 445, auth refused — the 2026-07-03→09 UNAS
+#     Samba wedge that took backups down 6 days) from NAS-down/unreachable. Only probes when the
+#     mount is already unhealthy (a readable share implies auth is fine), so the healthy path stays
+#     a cheap no-op. smb_auth=0 means specifically "auth rejected" → the MiniSMBAuthRejected alert
+#     fires with the exact remedy (restart UNAS SMB / re-save keychain) instead of blending into the
+#     generic "jobs failing" noise. Uses `smbutil view` (keychain-based, no GUI prompt).
+smb_auth=1
+if [ "${nas_ok}" = 0 ] && nc -z -G3 sequoia.wind.etherport.net 445 >/dev/null 2>&1; then
+  case "$(mini_run_timeout 15 smbutil view //graham@sequoia.wind.etherport.net 2>&1)" in
+    *"rejected the authentication"*|*"Authentication error"*) smb_auth=0 ;;
+  esac
+fi
+
 # 3. SMB tuning actually installed where the kernel reads it.
 nsmb_ok=$(cmp -s "${HERE}/nsmb.conf" /etc/nsmb.conf 2>/dev/null && echo 1 || echo 0)
 
@@ -43,6 +57,7 @@ mini_health_last_check_timestamp_seconds ${now}
 # TYPE mini_health_check gauge
 mini_health_check{check=\"agents_loaded\"} ${agents_ok}
 mini_health_check{check=\"nas_readable\"} ${nas_ok}
+mini_health_check{check=\"smb_auth\"} ${smb_auth}
 mini_health_check{check=\"nsmb_applied\"} ${nsmb_ok}
 # TYPE mini_health_agents_loaded gauge
 mini_health_agents_loaded ${loaded}
@@ -52,7 +67,7 @@ mini_health_agents_expected ${#EXPECT[@]}
 mini_health_disk_free_bytes ${disk_free}
 "
 if curl -fsS --max-time 10 --data-binary "${body}" "${PUSHGATEWAY}/metrics/job/mini_health/instance/mini" >/dev/null 2>&1; then
-  echo "$(date '+%F %T') mini-health: pushed (up=${up} agents=${loaded}/${#EXPECT[@]} nas=${nas_ok} nsmb=${nsmb_ok} free=$(( disk_free/1024/1024/1024 ))G)"
+  echo "$(date '+%F %T') mini-health: pushed (up=${up} agents=${loaded}/${#EXPECT[@]} nas=${nas_ok} smb_auth=${smb_auth} nsmb=${nsmb_ok} free=$(( disk_free/1024/1024/1024 ))G)"
 else
   echo "$(date '+%F %T') mini-health: push FAILED (mini can't reach ${PUSHGATEWAY} — VIP/route?)"
 fi

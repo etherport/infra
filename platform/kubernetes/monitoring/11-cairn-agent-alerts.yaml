@@ -60,6 +60,26 @@ spec:
               (nothing auto-starts until unlock). If cairn's heartbeat is ALSO stale, it's the
               host/session; if only this one, net.wind.mini-health specifically is broken.
 
+        - alert: MiniSMBAuthRejected
+          # mini-health's smb_auth probe = 0 only when the UNAS is up on 445 but REJECTS the mini's
+          # SMB credential (the 2026-07-03→09 outage: UNAS Samba auth wedged → backups down 6 days,
+          # buried in generic "jobs failing" noise). Distinct + fast so a recurrence is unambiguous.
+          expr: min(mini_health_check{check="smb_auth",instance="mini"}) == 0
+          for: 20m
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "mini→UNAS SMB auth REJECTED — NAS SMB service wedged or credential stale"
+            description: |
+              mini_health_check{check="smb_auth"}=0 for >20m: sequoia (UNAS) answers on 445 but
+              refuses the mini's SMB credential, so no NAS share can mount and all cairn backups
+              fail. This is NAS-side, not a mount bug. Fix: restart the UNAS SMB service / reboot
+              the UNAS, OR re-save the graham SMB password on the mini console (Finder → Connect to
+              Server → smb://sequoia.wind.etherport.net). mount-nas re-checks every 3 min and mounts
+              automatically once auth is restored.
+
         - alert: MiniHealthDegraded
           # mini-health.sh's own rollup: expected agents not loaded, NAS unreadable, nsmb.conf
           # drift, or low disk. Warning: the specific failing check is in the mini_health_*
