@@ -43,3 +43,20 @@ spec:
               velero_dr_sync_last_success_timestamp_seconds hasn't advanced in >8d
               (weekly cadence). New velero backups have no fresh offsite copy in S3.
               Check the backups/velero-dr-sync CronJob's last Job logs (rclone/IRSA).
+        - alert: PveConfigOffsiteStale
+          # M130 offsite tier: daily NAS->S3 mirror of the pve config/MON backups
+          # hasn't succeeded in >36h (the NAS copy = PveConfigBackupStale; this is
+          # the offsite tier on top).
+          expr: time() - max(pve_config_offsite_last_success_timestamp_seconds) > 129600
+          for: 1h
+          labels:
+            severity: warning
+            component: backup
+            namespace: backups
+          annotations:
+            summary: "pve config offsite S3 mirror stale >36h"
+            description: |
+              pve_config_offsite_last_success_timestamp_seconds hasn't advanced in >36h
+              (daily cadence). The pve config/MON backup still exists on the NAS
+              (PveConfigBackupStale covers that) but has no fresh OFFSITE copy in S3.
+              Check the backups/pve-config-offsite CronJob's last Job logs (rclone/IRSA/NFS).

@@ -1,0 +1,104 @@
+---
+# M130 offsite tier (3-2-1): mirror the tiny pve config/Ceph-MON backups from the
+# NAS → S3 so they survive a NAS loss too. The daily pve-config-backup.timer (see
+# infra/ansible/playbooks/pve-config-backup.yml) tars ~3.4MB into the NAS at
+# /var/nfs/shared/Proxmox/Backups/pve-config; this CronJob NFS-mounts ONLY that
+# subdir (NOT the giant PVE VM-backup images that share the Proxmox export) and
+# rclones it to s3://velero.wind.etherport.net/pve-config/.
+#
+# Reuses the velero-dr machinery — same `velero-dr-sync` SA (IRSA wind-irsa-velero,
+# already granted the velero bucket), same rclone config (the `s3` remote) — so NO
+# new IAM. The velero BSL reads only the `dr/` prefix, so this sibling prefix is
+# inert to velero. Uploads are FREE ingress (no egress reintroduced). ~50MB total
+# (14 retained) → standard-storage cost is negligible; no lifecycle needed.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pve-config-offsite
+  namespace: backups
+spec:
+  schedule: "15 4 * * *"          # daily 04:15 PT — after the pve NAS backup (03:30)
+  timeZone: "America/Los_Angeles"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 172800
+      template:
+        spec:
+          serviceAccountName: velero-dr-sync
+          restartPolicy: Never
+          # The tarballs are owned 977:988 on the NAS (the pve→NFS mapping); run as
+          # that uid/gid so rclone can read them.
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 977
+            runAsGroup: 988
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: rclone
+              image: rclone/rclone:1.74.3@sha256:623378ad0ff3ebd5cebf77720843c0e02edfe46e2d5b5ac6bed54c6371780dfb
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  PG="pushgateway.monitoring.svc.cluster.local:9091"
+                  # GUARD: never mirror an EMPTY source — a failed NFS mount would
+                  # otherwise make `rclone sync` DELETE the S3 copy. Abort if empty.
+                  if [ -z "$(ls -A /nfs 2>/dev/null)" ]; then
+                    echo "[pve-offsite] /nfs is empty (NFS mount failed?) — aborting to protect S3" >&2
+                    exit 1
+                  fi
+                  echo "[pve-offsite] rclone sync /nfs -> s3:velero.wind.etherport.net/pve-config/"
+                  rclone sync /nfs s3:velero.wind.etherport.net/pve-config/ \
+                    --config /config/rclone.conf \
+                    --transfers 4 --checkers 8 \
+                    --stats 1m --stats-log-level NOTICE
+                  printf 'pve_config_offsite_last_success_timestamp_seconds %s\n' "$(date +%s)" > /tmp/m.prom
+                  wget -q -O- --post-file=/tmp/m.prom "http://${PG}/metrics/job/pve_config_offsite" >/dev/null 2>&1 || true
+                  echo "[pve-offsite] done"
+              env:
+                - name: AWS_ROLE_ARN
+                  value: "arn:aws:iam::830881980142:role/wind-irsa-velero"
+                - name: AWS_WEB_IDENTITY_TOKEN_FILE
+                  value: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
+                - name: AWS_REGION
+                  value: "us-west-2"
+              volumeMounts:
+                - name: config
+                  mountPath: /config
+                  readOnly: true
+                - name: aws-iam-token
+                  mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+                  readOnly: true
+                - name: nfs-src
+                  mountPath: /nfs
+                  readOnly: true
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  memory: 256Mi
+          volumes:
+            - name: config
+              secret:
+                secretName: velero-dr-rclone-config
+            - name: aws-iam-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      audience: sts.amazonaws.com
+                      expirationSeconds: 3600
+                      path: token
+            - name: nfs-src
+              nfs:
+                server: sequoia.wind.etherport.net
+                path: /var/nfs/shared/Proxmox/Backups/pve-config
