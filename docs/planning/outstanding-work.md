@@ -302,7 +302,8 @@ This file foregrounds open/in-progress/gated work._
 ### ⏳ M12. CNPG restore drill Tier B (sibling cluster)
 - Source: task #24. Destructive test; needs supervision and maintenance window.
 
-### ⏳ M14. Investigate aws-s3-sync daily-report SSL mismatch (if recurs)
+### ✅ M14. Investigate aws-s3-sync daily-report SSL mismatch (if recurs)
+- **✅ Closed 2026-07-09:** not recurred — 0 SSL/TLS/x509 errors in the `backups` namespace over the last 7d (Loki). "Only act if it recurs" → nothing to act on; close.
 - Source: task #25. Only act if it recurs.
 - **Note on ID:** the *archived* outstanding-work-2026-05-16.md used M14 for a UDM WireGuard cleanup item; some older cross-references (e.g. `docs/architecture/firewall-zones.md`) still point at that older meaning. To disambiguate, that WireGuard cleanup is now M42 (below). The two are unrelated.
 
@@ -324,7 +325,8 @@ orphaned. Not service-affecting on its own.
 - **Action (cadence = on each UniFi Network upgrade; the API only changes with releases — a time-based cron is the wrong tool, it'd expire):** re-probe those endpoints; if one now returns/accepts the BGP config, write `udm-bgp.yml` (the `udm-firewall.yml` pattern) and promote the UDM BGP to full IaC.
 - **Effort:** S to recheck; M to build the playbook once an endpoint exists.
 
-### ⏳ M35. Wire dns-aws public IP as 3rd DHCP DNS resolver
+### ✅ M35. Wire a public IP as 3rd DHCP DNS resolver
+- **✅ Done (verified 2026-07-09):** the tertiary resolver is LIVE on all 7 tenant VLANs — `dns_servers = [10.10.201.5, 10.10.201.6, 44.240.60.80]` in the fork `infra/terraform/unifi/networks.tf` AND confirmed on the live UDM (Management/Servers/Clients/IoT/vSAN/Unifi/Ceph). NB the IP is the M110 consolidated edge `44.240.60.80` (vpn-aws, runs Technitium), NOT the destroyed dns-aws `52.40.219.113` this entry originally named. Cutover landed via M110 (direct API PUT) + M125 (nested dhcp_server schema).
 - **Source:** user ask 2026-05-23. Rationale: with `.5` (Technitium cluster VIP) primary + `.6` (dns-fallback VM) secondary, any combined outage of both the K8s cluster + the on-prem fallback + the AWS WG tunnel leaves clients with no DNS. Wiring dns-aws's public IP (currently `52.40.219.113`, the EIP of the dns-aws EC2 instance) as a 3rd DHCP DNS gives clients a path over the public internet even when the tunnel is down.
 - **Already in place:** the `dns_server` SG on AWS allows port 53 TCP+UDP from the homelab WAN IPs (`66.215.210.75` + `47.159.189.5`), kept in sync with `wan1`/`wan2.wind.etherport.net` Route53 records by the dns-restrict-ip Lambda. So clients reaching `52.40.219.113:53` from the homelab WAN will succeed.
 - **Fix:** for each tenant VLAN with DHCP DNS set to `.5/.6` today (Management, Servers, Clients, IoT, vSAN, Ceph, Unifi per M25 audit §1.6), add `52.40.219.113` as a 3rd entry. UDM UI per-network or via the `paultyng/unifi` TF provider if codifying. Skip Guest (already uses public DNS by design).
@@ -419,7 +421,8 @@ orphaned. Not service-affecting on its own.
 ### ⏳ L1. Proxmox HA cluster expansion
 - Source: `archive/outstanding-work-2026-05-16.md` L1. Blocked on adding a 2nd PVE node.
 
-### ⏳ L3. EIP → FQDN conversion debt (hardcoded ephemeral IP audit follow-up)
+### ✅ L3. EIP → FQDN conversion debt (hardcoded ephemeral IP audit follow-up)
+- **✅ Swept 2026-07-09:** both flagged live-config EIPs are already resolved — the wireguard `vpn-use1` peer (`35.169.37.16`) was removed in M110 (Endpoint is now `44.240.60.80`), and the dns-aws `52.40.219.113` was superseded by `44.240.60.80` (M110/M125). A broad repo sweep of `platform/clusters/infra` found NO dangling hardcoded ephemeral EIPs in live config; remaining `52.40.219.113` hits are all historical docs/comments. (DHCP `dns_servers` must be IPs, not FQDNs, so `44.240.60.80` — a deliberately-kept stable EIP — is the correct terminal value there, not an FQDN.)
 - **Source:** `docs/planning/archive/hardcoded-ephemeral-ip-audit-2026-05-23.md`. Several places still hardcode AWS Elastic IPs that *could* rotate if recreated: `vpn-use1` endpoint `35.169.37.16` in `platform/kubernetes/wireguard/03-deployment.yaml`, dns-aws `52.40.219.113` in M35 plan, etc. Convert each to a Route53 FQDN + DNS lookup at peer/config render time so an EIP swap doesn't require a code change.
 - **Effort:** S per site, M overall.
 
