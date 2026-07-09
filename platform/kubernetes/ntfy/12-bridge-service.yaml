@@ -1,0 +1,15 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: am2ntfy
+  namespace: ntfy
+  labels:
+    app: am2ntfy
+spec:
+  selector:
+    app: am2ntfy
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

@@ -24,6 +24,8 @@ resources:
   # drives online"). Kills the S3 egress from Kopia repo-maintenance, ~20Gi raw
   # NVMe for metadata only. See platform/kubernetes/garage/README.md.
   - ../../platform/kubernetes/garage
+  # M132: self-hosted ntfy — 2nd critical-alert channel (phone via Tailscale)
+  - ../../platform/kubernetes/ntfy
   # Cluster utilities
   - ../../platform/kubernetes/auto-remediation
   # H32: confined cross-namespace RBAC for the remediation-controller (PVC delete +

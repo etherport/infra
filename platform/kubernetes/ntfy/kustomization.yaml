@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ntfy
+resources:
+  - 00-namespace.yaml
+  - 01-config.yaml
+  - 02-pvc.yaml
+  - 03-deployment.yaml
+  - 04-service.yaml
+  - 05-tailscale-ingress.yaml
+  - 10-bridge-configmap.yaml
+  - 11-bridge-deployment.yaml
+  - 12-bridge-service.yaml

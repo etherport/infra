@@ -1,0 +1,17 @@
+---
+# M132: self-hosted ntfy — a SECOND critical-alert channel beyond SES email
+# (precedent: ~4k alert mails eaten by a junk filter for a week, 2026-05-22; and
+# the cairn backup failure that only surfaced when the operator noticed the daily
+# email). Alertmanager severity=critical → am2ntfy bridge → ntfy → phone (over
+# Tailscale, no public endpoint). Unlabeled ns = allow-all netpol + PSS baseline;
+# tailnet is the trust boundary (ntfy can't do Authentik forward-auth — the app
+# subscribes programmatically, same rationale as HA/Plex staying ungated).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ntfy
+  labels:
+    tier: system
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/enforce: baseline

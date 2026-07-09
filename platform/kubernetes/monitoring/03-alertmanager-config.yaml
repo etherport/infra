@@ -37,6 +37,15 @@ spec:
       # this commit, all 22 remediation rules were dormant).
       - receiver: auto-remediation
         continue: true
+      # M132: push severity=critical to the self-hosted ntfy (2nd channel → phone
+      # via Tailscale) through the am2ntfy bridge. continue:true so criticals ALSO
+      # still email via the severity=critical → email-alerts route below (ntfy is
+      # additive, not a replacement). Placed before email-alerts (which is terminal).
+      - matchers:
+          - name: severity
+            value: critical
+        receiver: ntfy-critical
+        continue: true
       # InfoInhibitor from kube-state-metrics — silent by design
       - matchers:
           - name: alertname
@@ -58,6 +67,11 @@ spec:
       webhookConfigs:
         - url: http://remediation-webhook.auto-remediation.svc.cluster.local:8080/webhook
           sendResolved: false
+    # M132: severity=critical → am2ntfy bridge → ntfy → phone (Tailscale).
+    - name: ntfy-critical
+      webhookConfigs:
+        - url: http://am2ntfy.ntfy.svc.cluster.local:8080/
+          sendResolved: true
     - name: email-alerts
       emailConfigs:
         - to: graham.m.smith@me.com

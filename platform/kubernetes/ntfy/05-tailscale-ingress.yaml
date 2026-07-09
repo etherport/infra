@@ -1,0 +1,23 @@
+---
+# Expose ntfy to your Tailscale devices only (no public endpoint). The operator
+# assigns https://ntfy.<tailnet>.ts.net (tailnet tail48f596 → ntfy.tail48f596.ts.net)
+# — point the ntfy phone app at that URL and subscribe to the topic. Mirrors the
+# auto-remediation approval-ingress pattern (tag:cluster-ingress, added to the
+# tailnet ACL for K8s-operator ingresses).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ntfy
+  namespace: ntfy
+  annotations:
+    tailscale.com/tags: "tag:cluster-ingress"
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: ntfy
+      port:
+        number: 80
+  tls:
+    - hosts:
+        - ntfy

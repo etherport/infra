@@ -1,0 +1,21 @@
+---
+# ntfy server config. Listens on :8080 (non-privileged → runs as non-root).
+# base-url is the Tailscale MagicDNS hostname the operator assigns to the
+# 05-tailscale-ingress (ntfy.<tailnet>.ts.net) — the URL you point the ntfy
+# phone app at. Auth is left open WITHIN the tailnet (the tailnet is the trust
+# boundary; there is no public endpoint) and the topic name is non-obvious.
+# Add token/user auth later if the tailnet ever fronts untrusted devices.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ntfy-config
+  namespace: ntfy
+data:
+  server.yml: |
+    base-url: "https://ntfy.tail48f596.ts.net"
+    listen-http: ":8080"
+    cache-file: "/var/cache/ntfy/cache.db"
+    cache-duration: "72h"
+    behind-proxy: true
+    auth-default-access: "read-write"
+    log-level: "info"

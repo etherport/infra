@@ -1,0 +1,14 @@
+---
+# ntfy message cache (SQLite). Small; survives restarts so queued critical
+# notifications aren't lost across a pod bounce.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ntfy-cache
+  namespace: ntfy
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: ceph-rbd
+  resources:
+    requests:
+      storage: 1Gi

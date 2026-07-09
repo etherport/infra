@@ -1,0 +1,62 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: am2ntfy
+  namespace: ntfy
+  labels:
+    app: am2ntfy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: am2ntfy
+  template:
+    metadata:
+      labels:
+        app: am2ntfy
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: am2ntfy
+          image: python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1
+          command: ["python3", "/scripts/am2ntfy.py"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: NTFY_URL
+              value: "http://ntfy.ntfy.svc.cluster.local"
+            - name: NTFY_TOPIC
+              value: "wind-critical"
+            - name: LISTEN_PORT
+              value: "8080"
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: script
+          configMap:
+            name: am2ntfy-script
