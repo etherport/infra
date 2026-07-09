@@ -17,6 +17,17 @@ spec:
       containers:
       - name: controller
         image: python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1 # {"$imagepolicy": "flux-system:python-slim"}
+        # M63: conservative container hardening. The controller runs kubectl/paramiko/
+        # boto3/pip — all userspace, no privilege escalation or Linux caps needed — so
+        # these are safe. Deliberately NOT runAsNonRoot/readOnlyRootFilesystem: the
+        # command does `pip install` into the image at startup (needs a writable rootfs)
+        # and runs as the image's root; narrowing the user is a separate, riskier change.
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          seccompProfile:
+            type: RuntimeDefault
         command:
         - /bin/bash
         - -c
