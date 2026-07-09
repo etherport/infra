@@ -91,10 +91,17 @@ spec:
         - name: default
           provider: aws
           default: false
-          # Read-only: keep old restore points reachable, but never write here
-          # again (no more maintenance egress on this bucket).
+          # Read-only OFFSITE DR mirror. Reads the `dr/` prefix — the velero-dr
+          # CronJob rclones the local Garage repo → s3://…/dr/ (weekly). Without the
+          # prefix this BSL read the bucket ROOT and velero rejected the `dr/`
+          # subdir as an "invalid top-level directory" → BSL stuck Unavailable
+          # (2026-07-09). Pointing it at `dr/` makes the offsite copy a valid,
+          # usable restore source if Garage is ever lost. (The pre-cutover restore
+          # points at the bucket root are transitional — 30-day TTL — and redundant
+          # with Garage + this mirror.)
           accessMode: ReadOnly
           bucket: velero.wind.etherport.net
+          prefix: dr
           config:
             region: us-west-2
       volumeSnapshotLocation:
