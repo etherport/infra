@@ -71,13 +71,30 @@ smb_auth_state(){
   esac
 }
 
+# Stale-mount cleanup MUST precede the auth probe (2026-07-11 incident). A dead kernel SMB
+# session — held alive by mounted-but-unresponsive shares (e.g. after a NAS wedge/reboot) —
+# poisons smbutil, which then reports "Authentication error" WITHOUT a single session-setup
+# reaching the NAS (verified server-side at smbd debug3: TCP connects, zero auth attempts).
+# The old order (auth gate first) therefore DEADLOCKED: the gate bailed on the phantom
+# rejection every tick, and the force-unmount that would have cleared the wedge sat
+# unreachable below it. Unmount stale shares FIRST so the probe runs on a fresh session;
+# a rejection AFTER this cleanup is then genuinely server-side (NAS SMB / credential).
+for share in "${SHARES[@]}"; do
+  vol="/Volumes/${share}"
+  if mount | grep -qF " on ${vol} " && ! nas_share_ready "${vol}"; then
+    log "⚠ ${share}: mounted but UNRESPONSIVE (stale) — force-unmounting BEFORE the auth probe"
+    [ "${share}" = "Personal-Drive" ] && hdiutil detach -force "${ATTACH_VOL}" >/dev/null 2>&1
+    diskutil unmount force "${vol}" >/dev/null 2>&1 || true
+  fi
+done
+
 smb_auth_state; auth=$?
 if [ "$auth" = 2 ]; then
   log "✗ ${SERVER} unreachable on 445 (NAS down / network) — not attempting mounts"
   exit 1
 elif [ "$auth" = 1 ]; then
-  log "✗ ${SERVER} SMB AUTH REJECTED for ${SMB_USER} (port 445 open, creds refused). NAS SMB service"
-  log "  wedged or the credential is stale — this is NOT a mount bug. Fix NAS-side (restart the UNAS"
+  log "✗ ${SERVER} SMB AUTH REJECTED for ${SMB_USER} (port 445 open, creds refused, and stale mounts"
+  log "  were already cleared this tick — so this is a REAL server-side rejection). Fix NAS-side (restart the UNAS"
   log "  SMB service / reboot the UNAS) or re-save the keychain password; do NOT retry \`open\` (it"
   log "  spawns headless NetAuth prompts). Skipping mount attempts this tick."
   exit 1

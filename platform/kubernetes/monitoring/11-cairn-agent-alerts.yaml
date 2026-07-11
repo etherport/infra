@@ -77,11 +77,17 @@ spec:
             summary: "mini→UNAS SMB auth REJECTED — NAS SMB service wedged or credential stale"
             description: |
               mini_health_check{check="smb_auth"}=0 for >20m: sequoia (UNAS) answers on 445 but
-              refuses the mini's SMB credential, so no NAS share can mount and all cairn backups
-              fail. This is NAS-side, not a mount bug. Fix: restart the UNAS SMB service / reboot
-              the UNAS, OR re-save the graham SMB password on the mini console (Finder → Connect to
-              Server → smb://sequoia.wind.etherport.net). mount-nas re-checks every 3 min and mounts
-              automatically once auth is restored.
+              the mini's SMB session-setup fails, so no NAS share can mount and all cairn backups
+              fail. TWO known causes (2026-07-11 incident): (1) NAS-side — UNAS Samba wedged
+              (high load / dm-cache D-state pileup); fix = reboot the UNAS (runbook
+              unas-nvme-cache-apst-hang.md). (2) MINI-side — stale dead mounts poison the macOS
+              SMB client, which fakes "Authentication error" without any packet reaching the NAS;
+              mount-nas (>= 2026-07-11) force-unmounts stale shares before probing, so if this
+              alert persists on a current script it's genuinely (1) or a stale credential
+              (re-save via Finder → ⌘K → smb://sequoia.wind.etherport.net). Disambiguate from the
+              devbox: `smbclient -N -L //10.10.209.10 -m SMB3` — "Anonymous login successful"
+              proves the NAS SMB stack is fine → mini-side. mount-nas re-checks every 3 min and
+              mounts automatically once cleared.
 
         - alert: MiniHealthDegraded
           # mini-health.sh's own rollup: expected agents not loaded, NAS unreadable, nsmb.conf
