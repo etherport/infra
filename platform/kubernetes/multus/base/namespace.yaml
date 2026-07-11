@@ -2,3 +2,8 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: multus-system
+  labels:
+    # L-1 (2026-07-11): tier marker per the M72 PSA model. Multus is applied
+    # out-of-band (not Flux-reconciled) — mirror label changes live with
+    # `kubectl label ns multus-system tier=system`.
+    tier: system # CNI meta-plugin DS: privileged + hostPath by design

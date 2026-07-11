@@ -268,3 +268,21 @@ metadata:
   name: flux-system
   labels:
     pod-security.kubernetes.io/enforce: baseline
+---
+# L-1 (2026-07-11): privileged infra namespaces that slipped the M72 sweep get the
+# tier=system marker (house style for privileged infra — tetragon/wireguard precedent;
+# no PSA labels since their workloads are legitimately privileged and baseline would
+# warn on every pod).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: velero
+  labels:
+    tier: system  # node-agent DaemonSet: privileged hostPath (kopia FS backups)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gpu-operator-system
+  labels:
+    tier: system  # driver/toolkit containers: privileged host access by design

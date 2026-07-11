@@ -1,0 +1,13 @@
+# Codifies the metallb-system namespace + its PSA labels in git (L-1, 2026-07-11).
+# The namespace previously existed only via HelmRelease createNamespace with the
+# privileged PSS trio set live-only during the L24 FRR migration. speaker needs
+# hostNetwork + NET_ADMIN, so privileged is correct and explicit here.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: metallb-system
+  labels:
+    tier: system
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
