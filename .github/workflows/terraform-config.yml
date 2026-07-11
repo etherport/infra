@@ -89,6 +89,10 @@ jobs:
       - name: Comment PR with Plan
         if: github.event_name == 'pull_request'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          # ref via env, not ${{ }} interpolation — a crafted branch name
+          # containing ` or ${ would otherwise execute inside the JS template literal
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         with:
           script: |
             const fs = require('fs');
@@ -107,7 +111,7 @@ jobs:
 
             </details>
 
-            *Triggered by @${{ github.actor }} on \`${{ github.event.pull_request.head.ref }}\`*`;
+            *Triggered by @${{ github.actor }} on \`${process.env.HEAD_REF}\`*`;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
