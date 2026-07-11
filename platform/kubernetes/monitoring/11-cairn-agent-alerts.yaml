@@ -67,7 +67,10 @@ spec:
           expr: min(mini_health_check{check="smb_auth",instance="mini"}) == 0
           for: 20m
           labels:
-            severity: warning
+            # critical (2026-07-11): a rejected credential = EVERY backup down. It recurred ~2 days
+            # after the first fix (UNAS Samba wedges periodically), and at `warning` it emailed
+            # nobody — a total-outage signal must page. 20m `for` keeps it off a transient blip.
+            severity: critical
             component: backup
             namespace: backups
           annotations:
