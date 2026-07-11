@@ -266,7 +266,15 @@ This file foregrounds open/in-progress/gated work._
 ### ⏳ M134. DMARC is p=none with NO rua — zero enforcement, zero visibility
 - **Gap #8 (verified):** etherport.net `_dmarc` = `"v=DMARC1; p=none;"` with no reports destination — and the estate's most plausible phish is a forged approval/alert email (the M94 S3-delete approval flow IS email). **Designed fix:** (1) rua target `dmarc@etherport.net` needs a homelab-side SES receipt rule (mirror personal-web's fwd_graham pattern: S3 prefix + extend the email-forward Lambda mapping — INBOUND_MAIL rule set is homelab-owned) or an external aggregator (+authorization TXT). (2) `rua=` into the CF `_dmarc` var. (3) After 2-4 weeks of reports: p=none → quarantine → reject on the sending zones. **Effort: S-M. Tier: M.**
 
-### ⏳ M140. AWS TF CI: PR-triggered `plan` assumes the same PowerUserAccess role as apply
+### ✅ M140. AWS TF CI: PR-triggered `plan` assumes the same PowerUserAccess role as apply
+- **✅ Done 2026-07-11 (dd7192c; applied via the new `terraform-github-oidc.yml`, run 29158373005):**
+  `gh-actions-terraform-plan` role live — trust `repo:…:pull_request` only; ReadOnlyAccess + tfstate
+  read + `*.tflock`-only writes + Deny on backup object-data / Secrets Manager / SSM SecureString /
+  KMS decrypt (mirrors the M71 RA plan scope; verified no stack uses secret data sources). Main role
+  trust now `refs/heads/main` only; 15 AWS workflows select the role by event (ternary); the
+  github-oidc stack got its own plan/apply workflow (was bootstrap-only). Residual documented
+  in-code: a PR plan can still read state-resident plaintext secrets — inherent to "can run plan".
+  ⏳ Watch the next Renovate PR to confirm plans go green under the new role.
 - **Found 2026-07-11 (repo audit M-1):** the `gh-actions-terraform` role trusts `repo:…:pull_request`
   (github-oidc/main.tf:74-82) AND carries `PowerUserAccess` (:100-102) — every AWS TF workflow uses
   this one role for both PR plan and dispatch apply. A PR-authored branch (or supply-chain PR) can

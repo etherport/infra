@@ -51,8 +51,23 @@ system-prompt text — client UI is authoritative; the prompt nameplate doesn't 
 mid-session switch). Unconfirmed AWS SNS sub (`homelab-external-monitoring-alerts`, 07-08 email)
 flagged to operator.
 
-**Next:** M140 (read-only plan role TF), L37/L38, M138 iCloud app-password (operator), ntfy app
-subscribe (operator), M12 recurring-drill trust-line (optional).
+**Next:** L37/L38, M138 iCloud app-password (operator), ntfy app subscribe (operator), M12
+recurring-drill trust-line (optional), watch the next Renovate PR plans green under the M140 role.
+
+**Same day (cont.) — Cue TestFlight infra + M140 executed:**
+- **Cue iOS edge ingress (option A) LIVE + e2e-verified** (`decaa17`, CF apply 29158098682): new
+  `cue-ios` CF Access service token (TF resource, values via `terraform output` → handed out-of-band);
+  the MAIN Access app now carries a second `non_identity` policy (either-policy admits) +
+  `auto_redirect_to_identity=false` (required for header-auth evaluation; humans get one extra click).
+  Verified with worst-case curl: token → through CF Access **and BFM** → Fastify app-401; no token →
+  302 SSO. **No WAF skip needed.** Option B (api.cue subdomain, no Access) noted, not built.
+- **`CUE_APPLE_BUNDLE_ID=net.etherport.cue` live** (`c09ff92`): sops-set into cue-app; pods rolled
+  GitOps-natively via a pod-template `cue.wind/config-rev` annotation bump (no kubectl rollout —
+  image-automation SSA strips it anyway); verified via `printenv` in the new pods.
+- **Google OAuth clients**: console-only (no API) — operator instructions delivered (iOS client →
+  `CUE_GOOGLE_CLIENT_ID` + reversed-ID URL scheme; separate Web client → `CUE_GOOGLE_WEB_CLIENT_ID`).
+- **M140 built + APPLIED** (`dd7192c`, apply 29158373005) — see the M140 entry.
+- NB: local throwaway AWS creds were rendered for `terraform output` (cue-ios secret) and removed after.
 
 ## 2026-07-09 — 6-day backup outage: UNAS SMB auth wedge; mount agent didn't self-heal (fixed)
 
