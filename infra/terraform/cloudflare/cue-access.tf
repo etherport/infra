@@ -27,6 +27,20 @@ resource "cloudflare_zero_trust_access_service_token" "cue_healthkit" {
   duration   = "8760h" # 1y
 }
 
+// Service token for the NATIVE iOS app (TestFlight, 2026-07-11). A bare
+// URLSession cannot complete interactive CF Access Google SSO, so the app
+// sends CF-Access-Client-Id/-Secret on every request (same model as the
+// healthkit exporter). The token only clears the EDGE — cue's own web-auth
+// guard (device token / CF JWT) is the identity layer, so the token alone
+// grants nothing. Values are handed to the app owner out-of-band (iOS
+// Release xcconfig); the server needs no new env for this.
+// Rotate: taint + apply, then update the app build config.
+resource "cloudflare_zero_trust_access_service_token" "cue_ios" {
+  account_id = var.cloudflare_account_id
+  name       = "cue-ios"
+  duration   = "8760h" # 1y
+}
+
 // Service token for the in-cluster blackbox /health probe (CF Security Insight
 // 2026-07-03: "Overprovisioned Access Policies" — the old policy was
 // bypass+everyone, which disables ALL edge protections on the path). The probe
@@ -93,7 +107,13 @@ resource "cloudflare_zero_trust_access_application" "cue_healthkit" {
   ]
 }
 
-// 3. everything else -> ALLOW cue testers (Google SSO, 24h session)
+// 3. everything else -> EITHER Google SSO (humans) OR the cue-ios service
+//    token (the native app) — CF Access admits a request that satisfies ANY
+//    policy. auto_redirect_to_identity flipped to false 2026-07-11: a
+//    header-auth (non_identity) request must be EVALUATED, not bounced to the
+//    IdP (same reason as the /health + /ingest/healthkit apps above). Humans
+//    now see the Access login page with the single Google button — one extra
+//    click vs the old instant redirect; unavoidable while one app serves both.
 resource "cloudflare_zero_trust_access_application" "cue" {
   account_id                = var.cloudflare_account_id
   name                      = "Cue"
@@ -101,7 +121,7 @@ resource "cloudflare_zero_trust_access_application" "cue" {
   type                      = "self_hosted"
   session_duration          = "24h"
   app_launcher_visible      = true
-  auto_redirect_to_identity = true
+  auto_redirect_to_identity = false
   allowed_idps              = [var.google_idp_id]
 
   policies = [
@@ -110,6 +130,18 @@ resource "cloudflare_zero_trust_access_application" "cue" {
       decision   = "allow"
       precedence = 1
       include    = [for e in var.cue_tester_emails : { email = { email = e } }]
+    },
+    {
+      // Native iOS app (TestFlight): whole-app scope is the simplest CORRECT
+      // scope — the app's own device-token guard is the real per-user gate,
+      // the edge token only proves "our app, not the internet" (mirrors
+      // /ingest/healthkit's two-layer model).
+      name       = "iOS app (service token)"
+      decision   = "non_identity"
+      precedence = 2
+      include = [{
+        service_token = { token_id = cloudflare_zero_trust_access_service_token.cue_ios.id }
+      }]
     }
   ]
 }
@@ -118,6 +150,17 @@ resource "cloudflare_zero_trust_access_application" "cue" {
 output "cue_cf_access_aud" {
   description = "CUE_CF_ACCESS_AUD — the Cue SSO Access app audience (AUD) tag."
   value       = cloudflare_zero_trust_access_application.cue.aud
+}
+
+output "cue_ios_service_token_client_id" {
+  description = "CF-Access-Client-Id for the native iOS app (TestFlight)."
+  value       = cloudflare_zero_trust_access_service_token.cue_ios.client_id
+}
+
+output "cue_ios_service_token_client_secret" {
+  description = "CF-Access-Client-Secret for the iOS app — `terraform output -raw cue_ios_service_token_client_secret`. Hand to the app owner (xcconfig); never commit."
+  value       = cloudflare_zero_trust_access_service_token.cue_ios.client_secret
+  sensitive   = true
 }
 
 output "cue_healthkit_service_token_client_id" {
