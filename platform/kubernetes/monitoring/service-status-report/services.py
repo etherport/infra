@@ -118,7 +118,15 @@ SERVICES = [
     # last run failed, so it read "agent down" during a backup outage AND on every
     # best-effort photos miss even though the agent was alive. Backup SUCCESS is the
     # separate "iCloud backups" rollup row below.
-    ("Mac mini (cairn)", "Mac mini host",      "mini_metric",  "mini_health", "mini_health_up"),
+    # NB2 (2026-07-11, same lesson as NB): "Mac mini host" is HOST LIVENESS (push-
+    # heartbeat freshness, 2h), NOT mini_health_up — that gauge is the agents+NAS
+    # ROLLUP, so every NAS-mount outage (07-03→09 wedge, 07-10→11 dm-cache wedge)
+    # emailed "mini host offline" while the mini was up and pushing every 15 min.
+    # Mount health gets its own honest row ("NAS mounts") below.
+    ("Mac mini (cairn)", "Mac mini host",      "mini_metric",  "mini_health",
+        '(time() - max(mini_health_last_check_timestamp_seconds{instance="mini"}) < bool 7200)'),
+    ("Mac mini (cairn)", "NAS mounts (SMB)",   "mini_metric",  "mini_health",
+        'min(mini_health_check{check="nas_readable",instance="mini"})'),
     ("Mac mini (cairn)", "cairn agent",        "mini_metric",  "cairn_health",
         '(time() - max(cairn_heartbeat_timestamp_seconds{instance="mini"}) < bool 7200)'),
     ("Mac mini (cairn)", "iCloud backups",     "mini_backup_rollup", "cairn", "cairn_backup_last_rc"),
