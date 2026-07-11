@@ -31,7 +31,9 @@ local Docker build — CI is the source of truth.
   **optional** `envFrom` so the pod is healthy before it's fully populated. Keys:
   `ANTHROPIC_API_KEY`, `CUE_WEB_TOKEN_SECRET`, `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`
   / `VAPID_SUBJECT` (Web Push), `CUE_HEALTHKIT_CF_CLIENT_ID` / `CUE_HEALTHKIT_CF_CLIENT_SECRET`
-  (the CF Access service token for `/ingest/healthkit`), `CUE_GOOGLE_PLACES_KEY` (Places API
+  (the CF Access service token for `/ingest/healthkit`), `CUE_APPLE_BUNDLE_ID`
+  (`net.etherport.cue` — enables apple-identity.ts Sign-in-with-Apple verification;
+  added 2026-07-11), `CUE_GOOGLE_PLACES_KEY` (Places API
   (New) key for **Find-food**, provisioned by `infra/terraform/google/`; the feature is **live** —
   `CUE_FIND_FOOD: 'true'` is set inline in `01-deployment.yaml`). Add/update a value with, e.g.:
     ```bash
@@ -57,7 +59,12 @@ origin; **Cloudflare Access gates per path** (`infra/terraform/cloudflare/cue-ac
   sends the `CF-Access-Client-*` headers — the old public bypass+everyone policy
   was replaced 2026-07-03, so `/health` is no longer anonymous)
 - `/ingest/healthkit` → **service token** (the Apple Health Auto Export client; `CF-Access-Client-*`)
-- everything else → **Google SSO**, allow-list = `var.cue_tester_emails`
+- everything else → **Google SSO** (allow-list = `var.cue_tester_emails`) **OR the
+  `cue-ios` service token** (2026-07-11, TestFlight): the native app can't do
+  interactive SSO, so the main Access app carries a second `non_identity` policy;
+  either policy admits. The token only clears the edge — the app's device-token
+  guard is the identity layer. Token values live in TF state (`terraform output
+  -raw cue_ios_service_token_client_secret`), handed to the iOS build out-of-band.
 
 The app additionally verifies the injected `Cf-Access-Jwt-Assertion` JWT
 (`CUE_CF_ACCESS_*`) and maps the email → Cue user. **Telegram is retired**, so the old
