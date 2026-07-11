@@ -115,6 +115,20 @@ for share in "${SHARES[@]}"; do
     diskutil unmount force "${vol}" >/dev/null 2>&1 || true
   fi
 
+  # THROTTLE re-opens (2026-07-11): when a previous `open` is pending a NetAuth confirmation
+  # (macOS asks a GUI "confirm saved password" after any failed session — the recurring desktop
+  # state), every 3-min tick used to stack ANOTHER "Connecting to…" + credential dialog on the
+  # console (observed: 14 queued confirmations). One unanswered open per share per 15 min is
+  # enough — the mount comes up the moment the human confirms (or auth heals), and the next tick
+  # picks it up.
+  stamp="${TMPDIR:-/tmp}/.mount-nas.open.${share}"
+  if [ -f "${stamp}" ] && [ $(( $(date +%s) - $(stat -f %m "${stamp}" 2>/dev/null || echo 0) )) -lt 900 ]; then
+    log "… ${share}: an \`open\` from a previous tick is still unanswered (<15 min — NetAuth confirmation pending on the console?) — NOT stacking another"
+    rc=1
+    continue
+  fi
+  touch "${stamp}"
+
   log "mounting ${share} via open smb://${SERVER}/${share}"
   open "smb://${SMB_USER}@${SERVER}/${share}"
 
@@ -123,6 +137,7 @@ for share in "${SHARES[@]}"; do
     sleep 2
     if nas_share_ready "${vol}"; then
       log "▶ ${share}: mounted + responsive at ${vol} (after $((i * 2))s)"
+      rm -f "${stamp}"   # success → clear the open-throttle
       mounted=true
       break
     fi
