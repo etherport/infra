@@ -1,16 +1,16 @@
-name: Email Forward Terraform
+name: GitHub OIDC Terraform
 
 on:
   push:
     branches: [main]
     paths:
-      - 'infra/terraform/aws/email-forward/**'
-      - '.github/workflows/terraform-email-forward.yml'
+      - 'infra/terraform/aws/github-oidc/**'
+      - '.github/workflows/terraform-github-oidc.yml'
   pull_request:
     branches: [main]
     paths:
-      - 'infra/terraform/aws/email-forward/**'
-      - '.github/workflows/terraform-email-forward.yml'
+      - 'infra/terraform/aws/github-oidc/**'
+      - '.github/workflows/terraform-github-oidc.yml'
   workflow_dispatch:
     inputs:
       action:
@@ -26,18 +26,18 @@ on:
 # on 2026-07-01 — a killed run also left a stale .tflock for 2 weeks).
 # cancel-in-progress stays false: never kill a mid-flight apply.
 concurrency:
-  group: tf-email-forward
+  group: tf-github-oidc
   cancel-in-progress: false
 
 permissions:
   contents: read
-  id-token: write   # H29 OIDC
   pull-requests: write
+  id-token: write   # H29: mint the GitHub OIDC token to assume the AWS role
 
 env:
   TF_VERSION: '1.14.3'
   AWS_REGION: us-west-2
-  WORKING_DIR: infra/terraform/aws/email-forward
+  WORKING_DIR: infra/terraform/aws/github-oidc
 
 jobs:
   terraform:
@@ -56,7 +56,7 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6
         with:
           role-to-assume: ${{ github.event_name == 'pull_request' && 'arn:aws:iam::830881980142:role/gh-actions-terraform-plan' || 'arn:aws:iam::830881980142:role/gh-actions-terraform' }} # M140: PRs plan read-only
@@ -92,7 +92,7 @@ jobs:
             const plan = fs.readFileSync('${{ env.WORKING_DIR }}/plan_output.txt', 'utf8');
             const outcome = '${{ steps.plan_pr.outcome }}';
 
-            const body = `## Email Forward Terraform Plan
+            const body = `## GitHub OIDC Terraform Plan
 
             **Result:** ${outcome === 'success' ? '✅ Success' : '❌ Failed'}
 
@@ -117,7 +117,7 @@ jobs:
       - name: Terraform Plan (Push)
         if: github.event_name == 'push'
         run: |
-          echo "## Email Forward Changes" >> $GITHUB_STEP_SUMMARY
+          echo "## GitHub OIDC Changes" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           terraform plan -var="aws_profile=" -input=false -no-color 2>&1 | head -100 >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -136,7 +136,7 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          echo "## Email Forward Terraform Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## GitHub OIDC Terraform Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Action**: ${{ github.event.inputs.action || 'plan' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY

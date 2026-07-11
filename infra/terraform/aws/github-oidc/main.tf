@@ -57,7 +57,9 @@ resource "aws_iam_openid_connect_provider" "github" {
   ]
 }
 
-# Trust policy: only GitHub Actions for THIS repo, on main or any pull_request.
+# Trust policy: only GitHub Actions for THIS repo, on MAIN ONLY (M140,
+# 2026-07-11): `pull_request` moved to the read-only PLAN role below — a
+# PR-authored branch must never hold a PowerUser session during "plan".
 data "aws_iam_policy_document" "trust" {
   statement {
     effect  = "Allow"
@@ -76,7 +78,6 @@ data "aws_iam_policy_document" "trust" {
       variable = "token.actions.githubusercontent.com:sub"
       values = [
         "repo:${local.repo}:ref:refs/heads/main",
-        "repo:${local.repo}:pull_request",
       ]
     }
   }
@@ -105,6 +106,113 @@ resource "aws_iam_role_policy_attachment" "poweruser" {
 resource "aws_iam_role_policy_attachment" "iam" {
   role       = aws_iam_role.gh_actions_terraform.name
   policy_arn = aws_iam_policy.gh_actions_terraform_iam.arn
+}
+
+# ---------------------------------------------------------------------------
+# M140 (2026-07-11): read-only PLAN role for pull_request-triggered runs.
+# PR plans execute PR-authored HCL (data sources, `external` provider) — under
+# the old single-role model that ran with PowerUserAccess. This role mirrors
+# the M71 Roles-Anywhere plan/debug scope: broad READ (ReadOnlyAccess) for
+# plan refresh, tfstate read + lockfile-only writes, and Denies on the
+# high-value exfiltration paths (backup-bucket object data, Secrets Manager,
+# SSM SecureString, KMS decrypt). No stack uses aws_secretsmanager/aws_ssm
+# data sources (verified 2026-07-11), so the Deny can't break a legit plan.
+# ⚠️ RESIDUAL (same as M71): plan needs the state, and TF state stores
+# PLAINTEXT secrets — a malicious PR can still read state-resident secrets.
+# That is an inherent cost of "can run plan"; the win is no WRITE capability
+# and no Secrets-Manager/backup-data reach.
+# ---------------------------------------------------------------------------
+
+locals {
+  tfstate_bucket = "terraform.wind.etherport.net"
+}
+
+data "aws_iam_policy_document" "trust_plan" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+    condition {
+      test     = "StringLike"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:${local.repo}:pull_request"]
+    }
+  }
+}
+
+resource "aws_iam_role" "gh_actions_terraform_plan" {
+  name                 = "gh-actions-terraform-plan"
+  description          = "Read-only terraform PLAN role for pull_request-triggered CI (M140). PowerUser stays on the main/dispatch role."
+  assume_role_policy   = data.aws_iam_policy_document.trust_plan.json
+  max_session_duration = 3600
+}
+
+resource "aws_iam_role_policy_attachment" "plan_readonly" {
+  role       = aws_iam_role.gh_actions_terraform_plan.name
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+}
+
+data "aws_iam_policy_document" "plan_tfstate" {
+  # State read everywhere in the bucket (plan needs the current state).
+  statement {
+    sid       = "TfStateRead"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["arn:aws:s3:::${local.tfstate_bucket}/*"]
+  }
+  # S3-native locking (use_lockfile): plan takes the lock (Put) and releases
+  # it (Delete) — scoped to `*.tflock` ONLY, so a PR plan can never write or
+  # delete actual state objects.
+  statement {
+    sid       = "TfStateLockRW"
+    effect    = "Allow"
+    actions   = ["s3:PutObject", "s3:DeleteObject"]
+    resources = ["arn:aws:s3:::${local.tfstate_bucket}/*.tflock"]
+  }
+  statement {
+    sid       = "TfStateList"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket", "s3:GetBucketLocation"]
+    resources = ["arn:aws:s3:::${local.tfstate_bucket}"]
+  }
+  # Deny object-DATA reads outside the state bucket (incl. the versioned
+  # backup buckets' s3:GetObjectVersion bypass). Enumerated actions, not
+  # s3:Get*, so bucket-config reads (GetBucketPolicy/Versioning/…) that plan
+  # refresh needs keep working. (Deny beats the ReadOnlyAccess Allow.)
+  statement {
+    sid           = "DenyObjectDataReads"
+    effect        = "Deny"
+    actions       = ["s3:GetObject", "s3:GetObjectVersion", "s3:GetObjectTorrent", "s3:GetObjectVersionTorrent"]
+    not_resources = ["arn:aws:s3:::${local.tfstate_bucket}/*"]
+  }
+  # Secret / parameter / KMS reads — flat Deny (mirrors M71's RA scope).
+  statement {
+    sid    = "DenySecretAndKmsDecrypt"
+    effect = "Deny"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:BatchGetSecretValue",
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "ssm:GetParametersByPath",
+      "kms:Decrypt",
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "plan_tfstate" {
+  name   = "tfstate-plan-and-deny-data-reads"
+  role   = aws_iam_role.gh_actions_terraform_plan.id
+  policy = data.aws_iam_policy_document.plan_tfstate.json
 }
 
 # ---------------------------------------------------------------------------
