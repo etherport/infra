@@ -6,7 +6,7 @@ Home Assistant deployment with multi-VLAN support for device discovery.
 
 ## Overview
 
-- **Container**: Official Home Assistant container (ghcr.io/home-assistant/home-assistant:stable)
+- **Container**: Official Home Assistant container (`ghcr.io/home-assistant/home-assistant`, version-tag + digest-pinned in the deployment; Renovate bumps it)
 - **Storage**: Ceph RBD PVC for config persistence
 - **Networking**: Multus CNI for multi-VLAN access
 - **Ingress**: Traefik with automatic SSL via Cloudflare

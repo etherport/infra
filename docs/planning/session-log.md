@@ -15,6 +15,45 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-11 — UNAS wedge incident (M141) + full repo review (drift/audit/docs) + fix batch
+
+**Prompt:** "current repo review… best practice, missing hardening to-dos, doc/readme review, config
+drift, overall infra errors (advisor emails)" → then live incident response → "push everything".
+
+**Incident (M141, the advisor-email source):** `MiniSMBAuthRejected` firing since 07-10 ~00:30.
+NOT auth, NOT the NVMe bus-drop: the UNAS kernel wedged in **dm-cache** (kworkers D-state 15h+,
+load avg 437, SLUB vmap_area exhaustion) — smbd accepted auth then hung in I/O. Operator rebooted
+via console (05:12): clean in 3.5 min, arrays clean, no rebuild; Garage + both velero BSLs
+revalidated instantly. **Post-reboot twist:** the mini kept reporting `smb_auth=0` — proven
+(smbd debug3 + tcpdump: zero session-setups on the wire; anonymous SMB3 from the devbox OK) to be
+the mini's own dead kernel SMB session faking "Authentication error", which mount-nas's
+auth-gate-first ordering turned into a **deadlock** (bail before its own force-unmount). Fixed
+`5729808`: stale-mount cleanup precedes the auth probe; alert text now documents both causes +
+the `smbclient -N -L //10.10.209.10 -m SMB3` disambiguation. ⏳ At entry time the mini hadn't yet
+pulled/cleared — watcher running; remaining mini step: `git pull` (or the manual force-unmount).
+NB: UNAS SSH rate-limits rapid connections (bursts pass, then SYN-drops) — use a ControlMaster mux.
+
+**Repo review (3 agents — full digest in the conversation; actions below):**
+- **Drift: essentially none.** Flux==HEAD, 17/17 HelmRelease pins exact, kubectl-diff clean
+  (SOPS false-positives only), IRSA issuer/audiences hold, Cilium enforcing+WG on. ONE real find →
+  **M142 technitium-1 credential divergence, FIXED live** (re-created `graham`, job re-run green —
+  it had been failing silently since ~06-22 and t1 was still at 365-day log retention).
+- **Audit:** 2 medium (M-1 → **M140** PR-plan PowerUser role, open; M-2 head.ref injection →
+  **fixed**, 13 workflows, env-var indirection), 2 low (L-1 PSA labels → **fixed**: velero +
+  gpu-operator-system via pss-labels patch, metallb-system codified as 00-namespace.yaml,
+  multus-system source + live label since it's applied out-of-band; L-2 automount → **L37**).
+  V-1 (grafana allow_sign_up vs Authentik binding) → **L38**.
+- **Docs:** README component catalog +authentik/garage/velero-dr, +metrics-server in the HelmRelease
+  list, pre-commit hook path corrected, home-automation README digest-pin wording. docs index clean.
+
+**Also:** operator asked to confirm the session model ("Fable 5" on device vs the stale "Opus 4.8"
+system-prompt text — client UI is authoritative; the prompt nameplate doesn't update on a
+mid-session switch). Unconfirmed AWS SNS sub (`homelab-external-monitoring-alerts`, 07-08 email)
+flagged to operator.
+
+**Next:** M140 (read-only plan role TF), L37/L38, M138 iCloud app-password (operator), ntfy app
+subscribe (operator), M12 recurring-drill trust-line (optional).
+
 ## 2026-07-09 — 6-day backup outage: UNAS SMB auth wedge; mount agent didn't self-heal (fixed)
 
 **Symptom:** recurring AI-advisor alerts + daily "service status down" / "cairn agent down" emails.

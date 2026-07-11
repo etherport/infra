@@ -98,7 +98,7 @@ list it in the cluster kustomization.
 **Helm releases** (`clusters/wind/helm-releases/`):
 cert-manager · cnpg (postgres operator) · gpu-operator · kured ·
 kube-prometheus-stack (`monitoring.yaml`) · loki (single-binary) ·
-alloy (log collector + syslog ingester) · pushgateway · traefik ·
+alloy (log collector + syslog ingester) · pushgateway · metrics-server · traefik ·
 velero · tailscale-operator + tailscale-connector ·
 github-actions-runner · kyverno (admission policy — both guardrails enforcing, M73) ·
 tetragon (observe-only eBPF runtime detection, M74) ·
@@ -111,6 +111,9 @@ directly, not Flux** (release `cilium`/kube-system, upgraded from the devbox —
 `docs/runbooks/cilium-upgrade.md`).
 
 **Kustomization-only** (no Helm): technitium · ceph-csi ·
+authentik (SSO IdP + forward-auth, H38/M115) ·
+garage (velero primary backup S3 — metadata on RBD, blocks on NAS NFS, M137) ·
+velero-dr (weekly Garage→S3 Deep Archive mirror + pve-config offsite, M137/M130) ·
 auto-remediation (+ auto-remediation-rbac) · cloudflared · blackbox-exporter ·
 cloudwatch-to-loki · policy-baseline · cnpg (Cluster CR) ·
 home-automation · plex · rclone-gdrive · rclone-onedrive · unas-health · wikijs · ollama ·
@@ -262,8 +265,8 @@ sops <file>     # decrypts to your $EDITOR, re-encrypts on save
 ```
 
 `*.sops.yaml.template` files are unencrypted scaffolds — copy to
-`*.sops.yaml` and populate. Pre-commit hook
-(`scripts/pre-commit/sops-encryption-check`) rejects any plaintext
+`*.sops.yaml` and populate. Pre-commit hook `sops-encryption-check`
+(`scripts/pre-commit/check-sops-encryption.sh`) rejects any plaintext
 `*.sops.yaml`.
 
 Setup: `docs/setup/secrets/SOPS-SETUP.md`. 1Password CLI bridges:

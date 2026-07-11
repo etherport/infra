@@ -241,6 +241,10 @@ This file foregrounds open/in-progress/gated work._
 - **2026-07-09 investigation:** the CF `_dmarc` rua record is trivial (this repo), BUT self-hosted receiving is **blocked**: `etherport.net` has **no inbound MX** — the only MX is `mail.etherport.net → feedback-smtp.us-west-2.amazonses.com` (SES *feedback*, not `inbound-smtp`), and there is **no `aws_ses_receipt_rule` in this repo** (they live in the personal-web repo per the email-forward comment). Self-hosted reporting therefore needs (1) an **apex MX `etherport.net → inbound-smtp.us-west-2.amazonaws.com`** — an EMAIL-CRITICAL change on a live mail domain — + (2) a SES receipt rule → S3 (`dmarc/` prefix), likely coordinated with personal-web. **Not done unilaterally.** Operator decision needed: confirm the apex-MX won't disrupt current etherport.net mail, and whether the receipt rule lands here or in personal-web. Then rua record + p=none→quarantine→reject ramp.
 
 ### 🟡 M138. cairn iCloud backups broadly FAILING on the mini — needs operator (the daily "3 down")
+- **Update 2026-07-11:** distinct from (and compounded by) M141 — the UNAS wedge took the SMB
+  *destination* down 07-10→11 (now fixed); this item remains the iCloud *source* auth failure
+  (app-specific password), still operator-gated. Re-check the category RCs once the mounts are
+  back and the app-password is re-minted.
 - **Found 2026-07-09** while sampling the daily status email ("3 down"): the Mac mini is **up and actively pushing** metrics (`mini_health_last_check` ~14 min old) but `mini_health_up=0`/`cairn_healthy=0`, and **8 of 9 cairn backup categories are failing** (`cairn_backup_last_rc=1`): `drive, notes, safari, messages, calendars, contacts, reminders, photos` — only **`messages_attachments` (rc=0)** succeeds. Last successes **~51–150h** stale. **Diagnostic pattern:** the ONE passing category reads LOCAL files; all 8 failing ones hit the **iCloud API** → almost certainly an **expired iCloud app-specific password / de-authed session** (`icloud_app_password` in the ops bundle) — or a post-OS-update TCC/keychain break. **Blocked:** the devbox cannot SSH to the mini (macOS user, not on the cert-only fleet — `Permission denied (publickey)`), so this needs the operator on the mini: check the cairn agent logs + re-mint the iCloud app-password (appleid.apple.com → App-Specific Passwords) and update it in 1P/SOPS. Runbook: `docs/runbooks/cairn-deployment.md` (M103). **Tier: M-H (data protection).**
 
 ### ✅ M131. kube-apiserver audit logs: enabled but local-only, unshipped, unwatched
@@ -261,6 +265,42 @@ This file foregrounds open/in-progress/gated work._
 
 ### ⏳ M134. DMARC is p=none with NO rua — zero enforcement, zero visibility
 - **Gap #8 (verified):** etherport.net `_dmarc` = `"v=DMARC1; p=none;"` with no reports destination — and the estate's most plausible phish is a forged approval/alert email (the M94 S3-delete approval flow IS email). **Designed fix:** (1) rua target `dmarc@etherport.net` needs a homelab-side SES receipt rule (mirror personal-web's fwd_graham pattern: S3 prefix + extend the email-forward Lambda mapping — INBOUND_MAIL rule set is homelab-owned) or an external aggregator (+authorization TXT). (2) `rua=` into the CF `_dmarc` var. (3) After 2-4 weeks of reports: p=none → quarantine → reject on the sending zones. **Effort: S-M. Tier: M.**
+
+### ⏳ M140. AWS TF CI: PR-triggered `plan` assumes the same PowerUserAccess role as apply
+- **Found 2026-07-11 (repo audit M-1):** the `gh-actions-terraform` role trusts `repo:…:pull_request`
+  (github-oidc/main.tf:74-82) AND carries `PowerUserAccess` (:100-102) — every AWS TF workflow uses
+  this one role for both PR plan and dispatch apply. A PR-authored branch (or supply-chain PR) can
+  execute arbitrary HCL (data sources, `external` provider) with a live PowerUser session during
+  "plan", and TF state holds plaintext secrets. H43 fixed the *self-hosted in-network* side only.
+  **Fix:** dedicated read-only plan role for the `:pull_request` trust sub; keep PowerUser bound to
+  `refs/heads/main` + workflow_dispatch. Companion finding M-2 (unsafe `head.ref` interpolation into
+  `github-script` in 13 TF workflows — the co-located injection sink) was **fixed same day** via
+  env-var indirection. **Effort: S-M (TF github-oidc stack + 13 workflow role refs). Tier: M.**
+
+### ✅ M141. UNAS dm-cache kernel wedge — ~30h total mini-backup outage (2026-07-10→11) + mount-nas deadlock fix
+- **Incident:** sequoia wedged ~07-10 00:30 (NOT the NVMe bus-drop variant: both SSDs present, md4
+  `[UU]`) — dm-cache kworkers in permanent D-state, load avg 437, SLUB vmap_area exhaustion; smbd
+  accepted auth but sessions hung in I/O → the mini probe reported `smb_auth=0` → all cairn SMB
+  backups down. Server-side proof gathered live (smbd logs, D-state census, tcpdump). Operator
+  rebooted via console 07-11 ~05:12: clean 3.5-min recovery, no rebuild needed, all arrays clean;
+  Garage/velero BSLs revalidated instantly.
+- **Second bug found during recovery:** the mini's dead kernel SMB session (held by stale mounts)
+  poisoned `smbutil`, which faked "Authentication error" WITHOUT any packet reaching the NAS
+  (proven at smbd debug3 + pcap: TCP connects, zero session-setups; anonymous SMB3 from the devbox
+  succeeded) — and mount-nas's auth-gate-first ordering deadlocked: bail on the phantom rejection,
+  never reach its own force-unmount. **Fixed `5729808`:** stale-mount cleanup now precedes the auth
+  probe; MiniSMBAuthRejected alert text documents both causes + the smbclient disambiguation.
+  (The a33ab9f severity bump to critical, made by the overnight session, was correct and kept.)
+
+### ✅ M142. technitium-1 admin credential diverged from the `technitium-admin` secret (~06-22)
+- **Found 2026-07-11 (drift check):** technitium-1 had re-initialized on pre-rename state during the
+  June Ceph incident — it still had only the old `admin` user (secret password), no `graham` user,
+  and a stale server name — so the weekly `technitium-set-log-retention` CronJob failed silently for
+  3 weeks (`Invalid username or password for user: graham`; TTL erased the failed Jobs). DNS serving
+  itself was unaffected. **Fixed live:** created `graham` (Administrators) on technitium-1 via the
+  API as `admin`, verified login on both replicas, re-ran the job — `[technitium-1] updated
+  maxLogFileDays=365→7, maxStatFileDays=365→90` (it had also missed the retention hardening).
+  ⏳ Residual: no alert covers this CronJob's success — candidate for a kube-state `job_failed` rule.
 
 ### ✅ L35. Credential inventory + rotation cadence for the never-expiring statics
 - **Gap #10+#12:** age key (4 holders, never rotated), PVE/CF/UDM tokens, STEP_JWK_PASSWORD, SES SMTP, technitium/grafana admin — no born-on dates, no cadence; also the etcd secretbox key (enabled ✓ but static since install, on the CP disks it protects). **Fix:** `docs/reference/credential-inventory.md` (holder/born-on/last-rotated) + annual reminder + the etcd key-rotation procedure. Complements the NEW credential-expiry-check workflow (hard-expiry creds now metered). **Effort: S. Tier: L-M.**
@@ -416,6 +456,20 @@ orphaned. Not service-affecting on its own.
 - **Caveats:** Apple **2FA session expires** every ~weeks→months → periodic interactive re-auth via VNC. Sleep disabled (`SleepDisabled`/`sleep 0`). Sparsebundle-on-SMB remains the architecture (owner is remote, no SSD option) — hardened SMB + login-time attach make it robust; **robust alt if it ever recurs: external APFS SSD on the mini**, or the sudo-only deeper levers (system-wide `/etc/nsmb.conf` + raised `net.smb.fs.kern_*_deadtimer` so a stall pauses I/O instead of erroring into APFS). **Effort:** M (tail + verify).
 
 ## LOW
+
+### ⏳ L37. `automountServiceAccountToken: false` sweep — newer workloads (extends L26)
+- **Found 2026-07-11 (repo audit L-2):** garage, ntfy (server + bridge), cue-api, rclone-gdrive,
+  cloudwatch-to-loki, and the backups/aws-s3 base cronjob still auto-mount a usable SA token they
+  never use (IRSA workloads use a separately-projected token, so disabling the default mount is
+  safe). L26 covered only the 6 older workloads. Mechanical; each is a pod-template change →
+  rolling restart, so batch with other touches (garage = velero primary, restart when quiet).
+
+### ⏳ L38. Verify the Authentik `grafana` app policy binding actually gates `allow_sign_up`
+- **Found 2026-07-11 (repo audit V-1):** Grafana OIDC has `allow_sign_up: true` (+
+  `skip_org_role_sync`), so any Authentik user who can get a token self-provisions a Grafana
+  account (Viewer). Safe ONLY if the Authentik `grafana` application has a restricting
+  group/policy binding in `40-blueprints.yaml`. Confirm the binding exists; otherwise add one or
+  set `allow_sign_up: false`. **Effort: XS.**
 
 ### 🟡 L30. Infra PDBs DONE 2026-07-01 (coredns/cilium-operator/csi-provisioner, minAvailable 1, selectors verified, live). **velero cluster-admin deliberately KEPT** — restore must create arbitrary resources incl. RBAC; scoping it risks silently breaking DR. Documented decision; close unless posture changes.
 - Drains can momentarily evict both replicas of cluster DNS; velero needs broad-but-not-cluster-admin. (#20.) **Effort: S.**
