@@ -54,7 +54,21 @@ flagged to operator.
 **Next:** L37/L38, M138 iCloud app-password (operator), ntfy app subscribe (operator), M12
 recurring-drill trust-line (optional), watch the next Renovate PR plans green under the M140 role.
 
-**Same day (cont.) — Cue TestFlight infra + M140 executed:**
+**2026-07-12 (cont.) — status-email fixes: mini "offline" row + cloud-tag-drift (M143):**
+- **Mini host row** (`7afbe35`): "Mac mini host" was wired to `mini_health_up` = agents AND
+  nas_readable rollup → every NAS outage read as "host offline". Now push-heartbeat freshness +
+  a separate honest "NAS mounts (SMB)" row; live-verified host=1/mounts=0 mid-outage; dashboard
+  regenerated.
+- **cloud-tag-drift (M143)** — see the tracker entry for the full 4-class breakdown. Headlines:
+  ~13 were detector false positives (AWS Config CIs omit tags for alarms/events-rules; SES rule
+  sets untaggable) → allowlisted `4bde045`; 24 hand-made bootstrap IAM/S3 tagged ManagedBy=manual
+  (new `aws-tag-manual.yml` CI workflow for the TagPolicy/TagRole perms the local key lacks);
+  ~14 belong to the personal-web repo (public-web-vpc family — no default_tags there; handoff
+  prompt delivered); external-monitoring re-applied to resurrect the never-confirmed SNS email
+  subscription (operator: click the new confirmation email). 10/11 stack plans were "No changes" —
+  disproved the "just re-apply" theory; TF-managed resources were already tagged live.
+
+**Same day (2026-07-11 cont.) — Cue TestFlight infra + M140 executed:**
 - **Cue iOS edge ingress (option A) LIVE + e2e-verified** (`decaa17`, CF apply 29158098682): new
   `cue-ios` CF Access service token (TF resource, values via `terraform output` → handed out-of-band);
   the MAIN Access app now carries a second `non_identity` policy (either-policy admits) +

@@ -310,6 +310,29 @@ This file foregrounds open/in-progress/gated work._
   maxLogFileDays=365→7, maxStatFileDays=365→90` (it had also missed the retention hardening).
   ⏳ Residual: no alert covers this CronJob's success — candidate for a kube-state `job_failed` rule.
 
+### 🟡 M143. cloud-tag-drift red for weeks — 51 flagged; root causes found, homelab side fixed
+- **Investigated 2026-07-12** (status email "Cloud tags" row down since the detector shipped). NOT
+  one bootstrap residual — 51 resources in FOUR classes:
+  1. **Config-blind false positives (~13, FIXED):** AWS Config configuration items carry NO tag
+     data for `AWS::CloudWatch::Alarm` / `AWS::Events::Rule` (verified tagged `ManagedBy=terraform`
+     live while flagged for weeks); `AWS::SES::ReceiptRuleSet` supports no tags; the per-region
+     `default` EventBus can't be TF-managed → all four types allowlisted with reasons (`4bde045`).
+  2. **Hand-made bootstrap (24, FIXED):** 9 IAM users + 2 S3 buckets (terraform-state,
+     packer-autoinstall) tagged `ManagedBy=manual` via the local key; 9 policies + 4 roles needed
+     `iam:TagPolicy/TagRole` (local key lacks it) → new **`aws-tag-manual.yml`** dispatch workflow
+     (fixed modes: map-ids / tag-manual, charset-validated) runs them under the CI role. M75 orphans
+     (`velero-backup`, `kubernetes-s3-backup` + `VeleroBackupPolicy`/`s3-backup-kubernetes-policy`)
+     additionally tagged `Status=m75-orphan-pending-delete`; `w3tc` `legacy-pending-delete`.
+  3. **personal-web repo resources (~14, CROSS-REPO):** `public-web-vpc` family, default NACL,
+     us-east-1 KMS key, `INBOUND_MAIL` — that repo's provider has no `default_tags`. Handoff prompt
+     delivered to the operator for the personal-web agent.
+  4. **Stale SNS sub (bonus, FIXED):** external-monitoring re-applied → recreates the never-confirmed
+     `email_backup` SNS subscription (07-08) — ⏳ operator must click the new confirmation email.
+- 10/11 owning-stack plans were "No changes" — the re-apply theory was WRONG; tags were already
+  live where TF manages them. ⏳ Residual: detector goes fully green only after (a) AWS Config
+  re-records the IAM tag changes (≤24h) and (b) personal-web applies its default_tags. Delete
+  decisions pending operator: w3tc, 2× DataSync role+policy pairs, M75 orphan users.
+
 ### ✅ L35. Credential inventory + rotation cadence for the never-expiring statics
 - **Gap #10+#12:** age key (4 holders, never rotated), PVE/CF/UDM tokens, STEP_JWK_PASSWORD, SES SMTP, technitium/grafana admin — no born-on dates, no cadence; also the etcd secretbox key (enabled ✓ but static since install, on the CP disks it protects). **Fix:** `docs/reference/credential-inventory.md` (holder/born-on/last-rotated) + annual reminder + the etcd key-rotation procedure. Complements the NEW credential-expiry-check workflow (hard-expiry creds now metered). **Effort: S. Tier: L-M.**
 - **✅ Done 2026-07-09 (4c2acb8):** `docs/reference/credential-inventory.md` — the consolidated MAP (what/where-held/consumers/rotation/blast-radius) across 12 categories, built from the live `*.sops.yaml` set + ops bundle; cross-linked with secrets-rotation.md (mechanics) + indexed. Born-on/last-rotated dates + the etcd secretbox key-rotation procedure are a follow-up (the inventory notes it stays static since install).
