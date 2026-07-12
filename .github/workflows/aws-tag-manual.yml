@@ -1,0 +1,71 @@
+# One-off IAM tagging for intentionally-manual bootstrap resources (cloud-tag-drift
+# hygiene). The local terraform-homelab key can iam:TagUser but NOT TagPolicy/TagRole,
+# and claude-admin is read-only — so ManagedBy=manual stamps on hand-created IAM
+# policies/roles must run under the CI role (its gh-actions-terraform-iam policy
+# carries the IAM management surface). Two fixed modes, no free-form commands:
+#   map-ids    — print RoleId/PolicyId -> name for every customer role/policy, so a
+#                cloud-tag-drift report's opaque AROA/ANPA ids can be resolved.
+#   tag-manual — tag the given typed names ManagedBy=manual. Item format:
+#                "policy:NAME" or "role:NAME", comma-separated. Names are validated
+#                against a conservative charset; anything else is rejected.
+name: AWS Tag Manual (IAM)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'map-ids (list id->name) or tag-manual'
+        required: true
+        type: choice
+        options: [map-ids, tag-manual]
+      items:
+        description: 'tag-manual only: comma-separated policy:NAME / role:NAME'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  id-token: write # H29 OIDC
+
+env:
+  AWS_REGION: us-west-2
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.1.1
+        with:
+          role-to-assume: arn:aws:iam::830881980142:role/gh-actions-terraform
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Map ids to names
+        if: github.event.inputs.mode == 'map-ids'
+        run: |
+          echo "## Customer IAM roles"
+          aws iam list-roles --query 'Roles[?!contains(Arn, `aws-service-role`)].[RoleId,RoleName]' --output text
+          echo "## Customer IAM policies"
+          aws iam list-policies --scope Local --query 'Policies[].[PolicyId,PolicyName]' --output text
+
+      - name: Tag manual
+        if: github.event.inputs.mode == 'tag-manual'
+        env:
+          ITEMS: ${{ github.event.inputs.items }}
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra LIST <<< "$ITEMS"
+          for item in "${LIST[@]}"; do
+            kind="${item%%:*}"; name="${item#*:}"
+            # conservative charset — reject anything shell-meaningful
+            if ! [[ "$name" =~ ^[A-Za-z0-9+=,.@_./-]+$ ]]; then
+              echo "REJECT invalid name: $name"; exit 1
+            fi
+            case "$kind" in
+              policy) aws iam tag-policy --policy-arn "arn:aws:iam::830881980142:policy/${name}" \
+                        --tags Key=ManagedBy,Value=manual && echo "tagged policy $name" ;;
+              role)   aws iam tag-role --role-name "$name" \
+                        --tags Key=ManagedBy,Value=manual && echo "tagged role $name" ;;
+              *)      echo "REJECT unknown kind: $kind"; exit 1 ;;
+            esac
+          done

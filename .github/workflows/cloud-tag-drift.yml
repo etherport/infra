@@ -92,7 +92,19 @@ jobs:
           # carry a user tag (aliases, associations, account-level settings, service
           # defaults, Config's system Keyspaces, etc.). These will NEVER have our
           # marker, so counting them is pure noise.
+          #
+          # 2026-07-12 additions — types whose AWS CONFIG configuration items OMIT
+          # tags entirely, so the marker is INVISIBLE to this detector even when the
+          # live resource is correctly tagged (verified: alarms + events rules were
+          # tagged ManagedBy=terraform live but flagged for weeks):
+          #   AWS::CloudWatch::Alarm, AWS::Events::Rule — CI carries no tag data.
+          #   AWS::Events::EventBus — the per-region `default` bus can't be TF-managed.
+          #   AWS::SES::ReceiptRuleSet — SES rule sets don't support tags at all.
           ALLOW='[
+            "AWS::CloudWatch::Alarm",
+            "AWS::Events::Rule",
+            "AWS::Events::EventBus",
+            "AWS::SES::ReceiptRuleSet",
             "AWS::EC2::NatGateway",
             "AWS::EC2::SubnetRouteTableAssociation",
             "AWS::EC2::VPCBlockPublicAccessOptions",
