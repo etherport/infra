@@ -54,6 +54,26 @@ flagged to operator.
 **Next:** L37/L38, M138 iCloud app-password (operator), ntfy app subscribe (operator), M12
 recurring-drill trust-line (optional), watch the next Renovate PR plans green under the M140 role.
 
+**2026-07-13 — advisor "node saturation" alert: one I/O storm, four alerts, one real bug found:**
+- **NodeSystemSaturation** (02:48–03:28, w1+gpu1, load/core 12+, resolved): NOT CPU — D-state I/O
+  stall from the nightly **velero kopia-maintenance** window against the new Garage repo (first heavy
+  pass post-M137; kopia maintain jobs concentrate on w1/gpu1). 7-day history clean → one-off burst,
+  no action; watch for recurrence before tuning.
+- **Collateral, all same root:** wireguard pod on w1 killed at exactly 03:28 (1s liveness probe
+  timed out during the stall) → restart init runs dpkg/debconf → **TetragonCredFileAccess**
+  (/etc/shadow via dpkg-preconfigure = benign apt behavior) + **CPUThrottlingHigh**. VPN verified
+  recovered (wg0 up, VIP re-preempted). Possible hardening: bump the wireguard probe
+  timeoutSeconds (1s is stall-fragile).
+- **KubeJobFailed (rclone/onedrive-sync)**: DeadlineExceeded — pod couldn't start for ~40 min in
+  the same congestion window, then synced in 30s; every later run green. Failed Job object left
+  for the operator to delete (or ages out of the alert).
+- **REAL BUG — the 11-day CiliumNetpolDropFlow flapper decoded:** postgres→postgres **:8000**
+  POLICY_DENIED ~17k/day since 07-02 — CNPG 1.30 (H45c ladder) instances query each other's
+  instance-manager status API, which the postgres tier never allowed (only cnpg-system→:8000).
+  Silent degradation of peer/failover health checks. **Fixed `949fe59`** (intra-ns :8000
+  ingress+egress), applied + verified live. Lesson: an operator upgrade can change a tier's
+  traffic matrix — re-audit tier allowlists after operator majors.
+
 **2026-07-12 (cont.) — status-email fixes: mini "offline" row + cloud-tag-drift (M143):**
 - **Mini host row** (`7afbe35`): "Mac mini host" was wired to `mini_health_up` = agents AND
   nas_readable rollup → every NAS outage read as "host offline". Now push-heartbeat freshness +
