@@ -18,7 +18,7 @@ metadata:
   name: postgres-tier
   namespace: postgres
 spec:
-  description: "postgres allowlist: ingress :5432 (cnpg-system/wikijs/intra) + :8000 (cnpg-system instance-mgr) + :9187 (monitoring); egress :5432 (intra replication) + :443 world (S3 barman backups)."
+  description: "postgres allowlist: ingress :5432 (cnpg-system/wikijs/intra) + :8000 (cnpg-system + intra instance-mgr) + :9187 (monitoring); egress :5432/:8000 (intra replication + peer status) + :443 world (S3 barman backups)."
   endpointSelector: {}
   ingress:
     # App consumers + intra-cluster replication peers reach postgres on :5432.
@@ -36,9 +36,16 @@ spec:
         - ports:
             - { port: "5432", protocol: TCP }
     # CNPG operator polls each instance's instance-manager status API on :8000.
+    # 2026-07-13: + intra-namespace — since the H45c operator ladder (CNPG 1.30),
+    # INSTANCES also query each other's :8000 (peer status, e.g. replicas checking
+    # the primary's wal-archive/readiness). Missing allow = ~17k POLICY_DENIED/day
+    # (postgres-cluster-N -> postgres-cluster-M :8000), the 11-day
+    # CiliumNetpolDropFlow flapper — silent degradation of failover health checks.
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: cnpg-system
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: postgres
       toPorts:
         - ports:
             - { port: "8000", protocol: TCP }
@@ -59,6 +66,8 @@ spec:
       toPorts:
         - ports:
             - { port: "5432", protocol: TCP }
+            # peer instance-manager status API (CNPG 1.30+, see ingress note)
+            - { port: "8000", protocol: TCP }
     # barman-cloud WAL archiving + base backups to S3 (archive/postgres-barman
     # bucket) over HTTPS. `world` = external; could be tightened to S3 CIDRs or
     # toFQDNs later, but world:443 matches the observed backup egress.
