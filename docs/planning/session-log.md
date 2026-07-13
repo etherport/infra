@@ -67,6 +67,13 @@ recurring-drill trust-line (optional), watch the next Renovate PR plans green un
   prompt delivered); external-monitoring re-applied to resurrect the never-confirmed SNS email
   subscription (operator: click the new confirmation email). 10/11 stack plans were "No changes" —
   disproved the "just re-apply" theory; TF-managed resources were already tagged live.
+- **M143 endgame (same day):** web agent refuted the personal-web premise (default_tags were always
+  there) → the public-web-vpc family was ORPHANED WordPress-era networking, verified empty, and
+  **torn down** (12 resources) with operator approval; IAM fossils deleted (w3tc, velero-backup,
+  kubernetes-s3-backup users; DataSync role+policy pairs; VeleroBackupPolicy,
+  s3-backup-kubernetes-policy, S3_stopthecastle — the last two needed a policy-VERSION purge, now
+  in `delete-fossils`). KMS key kept+tagged (snapshot-encryption risk). M75 orphan-key residual now
+  2-of-4 done. Detector green expected after AWS Config re-records (≤24h).
 
 **Same day (2026-07-11 cont.) — Cue TestFlight infra + M140 executed:**
 - **Cue iOS edge ingress (option A) LIVE + e2e-verified** (`decaa17`, CF apply 29158098682): new

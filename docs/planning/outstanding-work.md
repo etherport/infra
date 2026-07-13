@@ -74,7 +74,7 @@ Open residuals are noted inline; they are the only open work in this section.
 - ✅ **M103** (2026-06-25/26) — cairn native iCloud backup agent: cutover + CI signed release done; bash suite retired. Repo: [sparked-diamond/cairn](https://github.com/sparked-diamond/cairn); runbook `docs/runbooks/cairn-deployment.md`.
 - ✅ **H30** (2026-06-24) — supply chain: 111 Actions SHA-pinned, SOPS checksum-verified, all 13 ImagePolicies digest-pinned (in-house `:main` + cue-api `:latest` accepted for now — do NOT "fix" cue-api).
 - ✅ **M82** (2026-06-24) — Terraform is CI-only; devbox dropped standing AWS/PVE creds (dispatches via the M92 PAT).
-- ✅ **M75** (2026-06-24) — IRSA in-cluster AWS workload identity; all workloads migrated, **no static AWS keys in etcd** — ⏳ residual: deactivate/remove the 4 orphaned dedicated IAM keys via their TF stacks (NOT the H29 `terraform-homelab` key).
+- ✅ **M75** (2026-06-24) — IRSA in-cluster AWS workload identity; all workloads migrated, **no static AWS keys in etcd** — ⏳ residual: deactivate/remove the 4 orphaned dedicated IAM keys (NOT the H29 `terraform-homelab` key) — **2 of 4 DONE 2026-07-12** (`velero-backup` + `kubernetes-s3-backup` users/keys/policies deleted, M143); `barman-postgres` + `etcd-backup` remain (etcd-backup is the deliberate host-level static, M71).
 - ✅ **M101** (2026-06-24) — VM auto-update gaps closed (devbox managed, full patch policy, node patch path).
 - ✅ **M102** (2026-06-24) — Cue public internet access + Web Push.
 - ✅ **M42** (2026-06-24) — UDM WireGuard cleanup + Vpn-zone tightened to admin ports.
@@ -310,7 +310,17 @@ This file foregrounds open/in-progress/gated work._
   maxLogFileDays=365→7, maxStatFileDays=365→90` (it had also missed the retention hardening).
   ⏳ Residual: no alert covers this CronJob's success — candidate for a kube-state `job_failed` rule.
 
-### 🟡 M143. cloud-tag-drift red for weeks — 51 flagged; root causes found, homelab side fixed
+### ✅ M143. cloud-tag-drift red for weeks — 51 flagged; root-caused + resolved
+- **✅ Teardown executed 2026-07-12 (operator-approved "delete all 5"):** the web agent disproved
+  the personal-web premise — its providers ALWAYS had default_tags; the `public-web-vpc` family was
+  **orphaned console-era WordPress networking** (verified EMPTY: 0 instances/ENIs/endpoints/EIPs) →
+  **deleted** (VPC + IGW + 4 subnets + 3 RTs + 2 SGs, 12 resources). IAM fossils **deleted**: users
+  `w3tc`/`velero-backup`/`kubernetes-s3-backup` (+ keys + inline policies, local key), 2× DataSync
+  role+`service-role/` policy pairs, `VeleroBackupPolicy`, `s3-backup-kubernetes-policy`,
+  `S3_stopthecastle` (via `aws-tag-manual.yml delete-fossils` — hardcoded one-shot; needed a
+  non-default policy-VERSION purge first, now handled). us-east-1 KMS key **kept** (may protect old
+  encrypted snapshots) + tagged manual — console review at leisure. ⏳ Green pending only AWS
+  Config re-record (≤24h); check the next daily detector run.
 - **Investigated 2026-07-12** (status email "Cloud tags" row down since the detector shipped). NOT
   one bootstrap residual — 51 resources in FOUR classes:
   1. **Config-blind false positives (~13, FIXED):** AWS Config configuration items carry NO tag
