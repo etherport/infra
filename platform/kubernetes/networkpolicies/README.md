@@ -85,9 +85,11 @@ that order). `kube-system`, `flux-system`, `wireguard` (hostNetwork → node ide
   from host/remote-node entities (node-exporter/Prometheus pods are hostNetwork here).
 - `10-tier-postgres.yaml` — first concrete tier (Phase 2 lead), CNP `postgres-tier`.
   **Allowlist refined 2026-06-22 from audit data** so it covers every observed flow
-  (postgres now AUDITs nothing): ingress `:5432` from `cnpg-system`/`wikijs`/intra +
-  `:8000` from `cnpg-system` (operator→instance-manager) + `:9187` from `monitoring`;
-  egress `:5432` intra (CNPG replication) + `:443` to `world` (barman backups to S3).
+  (postgres now AUDITs nothing): ingress `:5432` from `cnpg-system`/`wikijs`/`authentik`/intra +
+  `:8000` from `cnpg-system` + intra (operator→instance-manager; intra-ns added 2026-07-13
+  `949fe59` — CNPG 1.30 instances query each other's instance-manager status API) +
+  `:9187` from `monitoring`; egress `:5432`/`:8000` intra (CNPG replication + peer status) +
+  `:443` to `world` (barman backups to S3).
   cue-api uses its **own** `cue-db` in ns `cue`, NOT this cluster. **Enforce-ready.**
 - `11-tier-cue.yaml`, `12-tier-dns.yaml`, `13-tier-traefik.yaml`, `14-tier-monitoring.yaml`
   — the remaining four H3 tiers (CNP `cue-tier`/`dns-tier`/`traefik-tier`/`monitoring-tier`),

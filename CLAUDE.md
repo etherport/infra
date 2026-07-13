@@ -100,7 +100,7 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   2026-06-18). No FileVault gate → sessions auto-resume on reboot (systemd user unit
   `claude-sessions.service` + `loginctl enable-linger`; per-repo tmux running
   `claude --continue`, see `infra/devbox/`). **Has:** `kubectl` (cluster-admin),
-  `sops`+age, `git`, `claude`, `terraform` 1.15.5 + `aws` CLI, `helm` v3.19 (~/.local/bin — added 2026-07-02; cilium upgrades run from the devbox now, values snapshot in docs/reference/snapshots/).
+  `sops`+age, `git`, `claude`, `terraform` 1.15.5 + `aws` CLI, `helm` v3.19 (/usr/local/bin — added 2026-07-02; cilium upgrades run from the devbox now, values snapshot in docs/reference/snapshots/).
   ✅ **TF is CI-only (M82, decided 2026-06-24): the devbox holds NO standing AWS/PVE creds.**
   Every TF stack runs via a GitHub Actions workflow (AWS via OIDC; proxmox/unifi/cloudflare
   on the self-hosted `lifecycle` runner with PVE/CF/UDM creds as **GH secrets**) — incl. the
@@ -169,7 +169,7 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   layer looks identical from the client: (1) **UDM zone firewall** (custom zones default
   intra-zone BLOCK; Trusted=201, Management=200); (2) **PVE host firewall** (H37 default-deny
   — keep its FOUR allows: mgmt, Ceph storage-VLAN, IPMI, node_exporter); (3) **Cilium NetworkPolicy tiers**
-  (5 enforced; allow CONTAINER not service ports); (4) **CF Access (edge) + Authentik
+  (6 enforced; allow CONTAINER not service ports); (4) **CF Access (edge) + Authentik
   forward-auth (internal apps)**. Each is detailed below. Tell **timeout** (firewall SYN
   drop) from **refused** (dead process) to localize fast.
 - **MetalLB is BGP-only, not L2** (M18/M36). Traefik VIP = `10.10.201.70`. Raw ICMP to

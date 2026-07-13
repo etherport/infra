@@ -5,7 +5,13 @@ Velero is our Kubernetes backup solution for disaster recovery and data protecti
 ## Overview
 
 - **Purpose**: Automated backup of Kubernetes resources and persistent volumes
-- **Storage**: S3 bucket `velero.wind.etherport.net` (us-west-2)
+- **Storage** (two `BackupStorageLocation`s since M137, 2026-07):
+  - **`garage` — the default BSL.** In-cluster Garage S3 (`platform/kubernetes/garage/`),
+    bucket `velero`, endpoint `http://garage.garage.svc.cluster.local:3900`. All scheduled
+    backups land here (local-first 3-2-1).
+  - **`default` — AWS S3, `accessMode: ReadOnly`.** Bucket `velero.wind.etherport.net`
+    (us-west-2), prefix `dr/` — populated by the weekly `velero-dr` Garage→S3 mirror
+    (`platform/kubernetes/velero-dr/`), used only to restore when Garage is lost.
 - **Method**: File-system backup using Kopia
 - **Backup Frequency**: Daily at 2 AM
 - **Retention**: 30 days (`monitoring-daily`: 7 days)
@@ -16,7 +22,11 @@ Velero is our Kubernetes backup solution for disaster recovery and data protecti
   the flag only applies to newly-created `BackupRepository` CRs, so existing CRs were
   patched live (`kubectl patch backuprepository -n velero … maintenanceFrequency=24h0m0s`)
   on 2026-07-01. See `docs/planning/session-log.md` 2026-07-01 (AWS cost investigation).
-- **Credentials**: IRSA — assumes IAM role `wind-irsa-velero` via `AssumeRoleWithWebIdentity` + a projected SA token (no static-key secret). See [docs/runbooks/irsa-workload-identity.md](../../../../docs/runbooks/irsa-workload-identity.md).
+- **Credentials**: the `garage` BSL uses the static secret `velero-garage-creds`
+  (SOPS: `clusters/wind/helm-releases/velero-garage-creds.sops.yaml` — Garage has no
+  AWS IAM). AWS access (the `default` BSL) stays IRSA — role `wind-irsa-velero` via
+  `AssumeRoleWithWebIdentity` + a projected SA token, no static AWS key. See
+  [docs/runbooks/irsa-workload-identity.md](../../../../docs/runbooks/irsa-workload-identity.md).
 
 ## Architecture
 
@@ -25,12 +35,12 @@ Velero is our Kubernetes backup solution for disaster recovery and data protecti
 │   Kubernetes    │
 │    Cluster      │
 │                 │
-│  ┌──────────┐   │     ┌──────────────┐
-│  │  Velero  │───┼────▶│  S3 Bucket   │
-│  │  Server  │   │     │   velero.    │
-│  └──────────┘   │     │ wind.ether-  │
-│       │         │     │  port.net    │
-│  ┌──────────┐   │     └──────────────┘
+│  ┌──────────┐   │     ┌──────────────┐             ┌───────────────┐
+│  │  Velero  │───┼────▶│ Garage (S3)  │──weekly────▶│  AWS S3       │
+│  │  Server  │   │     │ in-cluster   │  velero-dr  │  velero.wind. │
+│  └──────────┘   │     │ bucket velero│  mirror     │ etherport.net │
+│       │         │     └──────────────┘             │ /dr (RO BSL)  │
+│  ┌──────────┐   │                                  └───────────────┘
 │  │   Node   │   │
 │  │  Agents  │   │
 │  └──────────┘   │
@@ -128,11 +138,11 @@ velero server + node-agent set **resource `requests` only, no limits** (in
 
 ### Prerequisites
 
-1. **S3 Bucket**
-   - Name: `velero.wind.etherport.net`
-   - Region: `us-west-2`
-   - Versioning: Enabled
-   - Encryption: SSE-S3
+1. **Object storage**
+   - **Garage (primary, default BSL)**: in-cluster Garage S3 (`platform/kubernetes/garage/`),
+     bucket `velero`, static creds secret `velero-garage-creds`.
+   - **AWS S3 (offsite DR, ReadOnly BSL)**: `velero.wind.etherport.net`, `us-west-2`,
+     versioning Enabled, SSE-S3 — written by the weekly `velero-dr` mirror, not by Velero.
 
 2. **IAM Role (IRSA)**
    - Role: `wind-irsa-velero` (account `830881980142`)
@@ -421,8 +431,9 @@ Location: `clusters/wind/helm-releases/velero.yaml` (Flux-managed; the live
 Helm values live inline here — the `values.yaml` in this dir is legacy).
 
 Key settings:
-- S3 bucket configuration
-- IRSA auth (`credentials.useSecret=false`)
+- Two `backupStorageLocation`s: `garage` (default, in-cluster Garage, secret
+  `velero-garage-creds`) + `default` (AWS S3 `dr/` prefix, `accessMode: ReadOnly`)
+- IRSA auth for AWS (`credentials.useSecret=false`)
 - Plugin configuration (AWS plugin only, CSI built-in)
 - Node agent settings (Kopia)
 - Kubectl image version override

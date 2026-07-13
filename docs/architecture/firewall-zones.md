@@ -198,7 +198,6 @@ Groups: `DNS-Servers` (addr, 2 IPs), `DNS-Ports` (port, 53), `Twilio Signal IPs`
 | `Twilio-SIP` | **TCP 5061** | **10.10.201.40** (asterisk-sbc SIP bridge) | `infra/ansible/playbooks/asterisk-sbc.yml` |
 | `Twilio-Media-Signal` | **UDP 10000-20000** | **10.10.201.40** (asterisk-sbc media) | `asterisk-sbc.yml` |
 | `Wireguard Local` | TCP+UDP 9821 | 10.10.201.20 (VIP) | `platform/wireguard/README.md` |
-| `Wireguard Travel` | UDP 9820 | 10.10.201.20 | **Disabled** (`enabled=false`) — should be deleted. |
 
 ---
 
@@ -240,7 +239,9 @@ by design. **Default/199** and **Security/205** are empty (205 = the open M104 s
    M104 step: set the Name Server to `.5`/`.6` (UI). Tracked: **M104**.
 2. **Internal → Hotspot is Allow All** — Servers VLAN can reach guest devices. Low risk; intent was Deny.
 3. **LTE WAN still configured** — failover priority 4, never carried traffic. Slated for removal.
-4. **`Wireguard Travel` port-forward `enabled=false`** but still present — delete.
+4. ~~`Wireguard Travel` port-forward `enabled=false` but still present~~ — **resolved**:
+   absent from the live port-forward list (verified 2026-07-13; only Twilio-SIP,
+   Twilio-Media-Signal, Wireguard Local remain).
 5. **Legacy Twilio user rules + the dead 205→201 switch ACL** — vestigial; cleanup candidates (above).
 6. **devbox → `10.10.100.10:53` hairpin is dropped BY DESIGN** (zone policy; zero IaC drift) — a
    Servers/201 host cannot query the AWS edge-box Technitium via the tunnel hairpin. The DNS-failover

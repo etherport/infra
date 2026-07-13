@@ -36,7 +36,10 @@ on the NAS at ~90 MB/s, metadata on RBD.
 ## Access
 
 - S3 endpoint (in-cluster): `http://garage.garage.svc.cluster.local:3900`, region `garage`, bucket `velero`.
-- velero/rclone creds: `garage-velero-creds` secret (`AWS_ACCESS_KEY_ID` = the `GK…` key). Server config (rpc_secret/admin_token): `garage-config`.
+- velero/rclone creds: the same `GK…` key lives in **two secrets** — `garage-velero-creds`
+  (ns `garage`, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` form) and `velero-garage-creds`
+  (ns `velero`, `cloud` ini form — the secret velero's `garage` BSL actually references).
+  Server config (rpc_secret/admin_token): `garage-config`.
 
 ## Rollout
 

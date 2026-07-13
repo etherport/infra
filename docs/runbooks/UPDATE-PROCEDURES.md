@@ -220,8 +220,10 @@ gh pr list --label renovate
 - **A PR open >2 weeks** → merge or close. Stale Renovate PRs accumulate merge
   conflicts and stop being useful.
 
-**Current Helm releases tracked** (17 HelmRelease files in
-`clusters/wind/helm-releases/`; list live with `kubectl get helmrelease -A`):
+**Current Helm releases tracked** (files in `clusters/wind/helm-releases/`; list
+live with `kubectl get helmrelease -A` — note the live names differ in two spots:
+`github-actions-runner.yaml` materializes as the `arc-controller` + `arc-runner-homelab`
+HRs, and `tailscale-connector.yaml` is a Flux Kustomization, not a HelmRelease):
 alloy, cert-manager, cnpg, github-actions-runner, gpu-operator, kured, kyverno,
 loki, metallb, metrics-server, monitoring, pushgateway, tailscale-connector,
 tailscale-operator, tetragon, traefik, velero.
