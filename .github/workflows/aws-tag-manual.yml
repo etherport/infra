@@ -14,10 +14,10 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'map-ids (list id->name) or tag-manual'
+        description: 'map-ids (list id->name), tag-manual, or delete-fossils'
         required: true
         type: choice
-        options: [map-ids, tag-manual]
+        options: [map-ids, tag-manual, delete-fossils]
       items:
         description: 'tag-manual only: comma-separated policy:NAME / role:NAME'
         required: false
@@ -48,6 +48,27 @@ jobs:
           echo "## Customer IAM policies"
           aws iam list-policies --scope Local --query 'Policies[].[PolicyId,PolicyName]' --output text
 
+      - name: Delete fossils (2026-07-12 one-shot, operator-approved list — HARDCODED)
+        if: github.event.inputs.mode == 'delete-fossils'
+        run: |
+          # Operator approved 2026-07-12 ("delete all 5"): dead WordPress/DataSync-era
+          # IAM. Users w3tc/velero-backup/kubernetes-s3-backup were already deleted
+          # with the local key; these 2 roles + 3 policies need the CI role's
+          # ManageIAMRoles/ManageIAMPolicies. NO inputs are honored here — the list
+          # is fixed so this mode can never delete anything else. Idempotent:
+          # NoSuchEntity is treated as already-done.
+          set -uo pipefail
+          del() { "$@" 2>err.txt && echo "OK: $*" || { grep -q NoSuchEntity err.txt && echo "already gone: $*" || { cat err.txt; exit 1; }; }; }
+          del aws iam detach-role-policy --role-name AWSDataSyncS3BucketAccess-backup.grahamsmith.net --policy-arn arn:aws:iam::830881980142:policy/service-role/AWSDataSyncS3BucketAccess-backup.grahamsmith.net
+          del aws iam delete-role --role-name AWSDataSyncS3BucketAccess-backup.grahamsmith.net
+          del aws iam delete-policy --policy-arn arn:aws:iam::830881980142:policy/service-role/AWSDataSyncS3BucketAccess-backup.grahamsmith.net
+          del aws iam detach-role-policy --role-name AWSDataSyncS3BucketAccess-vmbackup.grahamsmith.net --policy-arn arn:aws:iam::830881980142:policy/service-role/AWSDataSyncS3BucketAccess-vmbackup.grahamsmith.net
+          del aws iam delete-role --role-name AWSDataSyncS3BucketAccess-vmbackup.grahamsmith.net
+          del aws iam delete-policy --policy-arn arn:aws:iam::830881980142:policy/service-role/AWSDataSyncS3BucketAccess-vmbackup.grahamsmith.net
+          del aws iam delete-policy --policy-arn arn:aws:iam::830881980142:policy/VeleroBackupPolicy
+          del aws iam delete-policy --policy-arn arn:aws:iam::830881980142:policy/s3-backup-kubernetes-policy
+          del aws iam delete-policy --policy-arn arn:aws:iam::830881980142:policy/S3_stopthecastle
+
       - name: Tag manual
         if: github.event.inputs.mode == 'tag-manual'
         env:
@@ -66,6 +87,9 @@ jobs:
                         --tags Key=ManagedBy,Value=manual && echo "tagged policy $name" ;;
               role)   aws iam tag-role --role-name "$name" \
                         --tags Key=ManagedBy,Value=manual && echo "tagged role $name" ;;
+              # kms item format: kms:REGION/KEY-ID
+              kms)    aws kms tag-resource --region "${name%%/*}" --key-id "${name#*/}" \
+                        --tags TagKey=ManagedBy,TagValue=manual && echo "tagged kms $name" ;;
               *)      echo "REJECT unknown kind: $kind"; exit 1 ;;
             esac
           done
