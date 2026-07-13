@@ -65,8 +65,18 @@ jobs:
           del aws iam detach-role-policy --role-name AWSDataSyncS3BucketAccess-vmbackup.grahamsmith.net --policy-arn arn:aws:iam::830881980142:policy/service-role/AWSDataSyncS3BucketAccess-vmbackup.grahamsmith.net
           del aws iam delete-role --role-name AWSDataSyncS3BucketAccess-vmbackup.grahamsmith.net
           del aws iam delete-policy --policy-arn arn:aws:iam::830881980142:policy/service-role/AWSDataSyncS3BucketAccess-vmbackup.grahamsmith.net
+          # delete-policy removes only the default version — non-default versions
+          # must be purged first (bit on s3-backup-kubernetes-policy, DeleteConflict).
+          purge_versions() {
+            for v in $(aws iam list-policy-versions --policy-arn "$1" \
+                         --query 'Versions[?IsDefaultVersion==`false`].VersionId' --output text 2>/dev/null); do
+              del aws iam delete-policy-version --policy-arn "$1" --version-id "$v"
+            done
+          }
           del aws iam delete-policy --policy-arn arn:aws:iam::830881980142:policy/VeleroBackupPolicy
+          purge_versions arn:aws:iam::830881980142:policy/s3-backup-kubernetes-policy
           del aws iam delete-policy --policy-arn arn:aws:iam::830881980142:policy/s3-backup-kubernetes-policy
+          purge_versions arn:aws:iam::830881980142:policy/S3_stopthecastle
           del aws iam delete-policy --policy-arn arn:aws:iam::830881980142:policy/S3_stopthecastle
 
       - name: Tag manual
