@@ -335,7 +335,9 @@ resource "unifi_network" "guest" {
     stop        = "10.10.206.254"
     leasetime   = 86400
     dns_enabled = true
-    dns_servers = ["1.1.1.1", "8.8.8.8"]
+    # 3 entries — matches live + firewall-zones.md (the old 2-entry list was a
+    # masked mismatch; 8.8.4.4 was configured UDM-side all along).
+    dns_servers = ["1.1.1.1", "8.8.8.8", "8.8.4.4"]
   }
 
 

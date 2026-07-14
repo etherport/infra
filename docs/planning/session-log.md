@@ -54,6 +54,19 @@ flagged to operator.
 **Next:** L37/L38, M138 iCloud app-password (operator), ntfy app subscribe (operator), M12
 recurring-drill trust-line (optional), watch the next Renovate PR plans green under the M140 role.
 
+**2026-07-14 (cont.) — doc-drift-audit manual-review items resolved (3/3):**
+- **M91 kernel citation:** re-verified on live `6.8.0-134-generic` (node SSH) — `i6300esb` still
+  absent, M91 stays blocked; CLAUDE.md re-anchored + "re-check per kernel bump" note (`badd590`).
+- **WG /29 vs /30:** live wg0 = `/29`; the UDM route is deliberately `/30` (covers in-use .1/.2;
+  .3-.6 were the M110-retired regionals). Both docs now cross-reference the layering (`badd590`).
+- **Guest VLAN DNS — REAL drift found + fixed (`5c027dd`):** TF/docs say guests get public
+  resolvers by design; live `dhcpd_dns_enabled` was FALSE (guests resolved via the gateway) and
+  plan said "No changes" — NOT a provider blind spot but the paultyng-era
+  `ignore_changes=[dhcp_server]` mask hiding real drift for months. Converged live via direct UDM
+  API PUT (operator-approved; verified true + 1.1.1.1/8.8.8.8/8.8.4.4), removed the mask so TF
+  owns the block again; verification plan dispatched (expect 0-diff). Remaining masks on
+  clients/vsan/ceph = audit candidates — diff live networkconf vs .tf first (memory updated).
+
 **2026-07-14 — the "security" advisor email decoded + the nightly stall is now a pattern (M144):**
 - TetragonCredFileAccess (10:29Z email) = the wireguard pod's restart apt-init reading /etc/shadow
   via dpkg-preconfigure — benign, same as 07-13. But it was a NEW pod: the ~03:00-03:30
