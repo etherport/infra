@@ -236,7 +236,13 @@ spec:
                 - -c
                 - "ip link show wg0 && ip link show wg1"
             periodSeconds: 10
-            failureThreshold: 3
+            # 2026-07-14: default 1s exec timeout + threshold 3 killed the pod two
+            # nights running during the ~03:00-03:30 kopia-maintenance I/O stall on
+            # w1 (the exec fork blocked in D-state — NOT a wg failure) → nightly
+            # VIP-failover churn + TetragonCredFileAccess noise from the restart's
+            # apt init. wg interfaces don't degrade slowly — probe generously.
+            timeoutSeconds: 10
+            failureThreshold: 6 # 6*10s: outlive a transient I/O stall
           readinessProbe:
             exec:
               command:
@@ -244,7 +250,8 @@ spec:
                 - -c
                 - "wg show wg0 && wg show wg1"
             periodSeconds: 10
-            failureThreshold: 3
+            timeoutSeconds: 10 # see livenessProbe note
+            failureThreshold: 6
           resources:
             requests:
               memory: "128Mi"
