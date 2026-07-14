@@ -16,7 +16,7 @@ spec:
       serviceAccountName: remediation-controller
       containers:
       - name: controller
-        image: python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1 # {"$imagepolicy": "flux-system:python-slim"}
+        image: python:3.14-slim@sha256:d3400aa122fa42cf0af0dbe8ec3091b047eac5c8f7e3539f7135e86d855dc015 # {"$imagepolicy": "flux-system:python-slim"}
         # M63: conservative container hardening. The controller runs kubectl/paramiko/
         # boto3/pip — all userspace, no privilege escalation or Linux caps needed — so
         # these are safe. Deliberately NOT runAsNonRoot/readOnlyRootFilesystem: the
