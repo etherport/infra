@@ -152,7 +152,7 @@ its sole enforcement.
 | Destination | Purpose | Next-hop |
 |-------------|---------|----------|
 | 10.10.100.0/22 | AWS Environment | 10.10.201.20 (vpn-fallback/keepalived VIP on Servers/201) |
-| 10.255.255.0/30 | WireGuard tunnel endpoint (AWS) | same |
+| 10.255.255.0/30 | WireGuard tunnel endpoint (AWS). NB the wg INTERFACE prefix is `/29` (vpn-wireguard.md) — this route is deliberately narrower, covering the in-use `.1`/`.2` pair; widen if peers beyond `.3` return (M110 retired them) | same |
 | 10.254.0.0/24 | WireGuard client tunnel | same |
 
 Each route is carried **once**, `gateway_type=default`, `gateway_device = Windroute` (the UDM) — there is

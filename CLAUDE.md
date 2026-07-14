@@ -292,8 +292,9 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   k8s-vms VMs carry `lifecycle { ignore_changes = [watchdog] }` to suppress it. The device is now
   attached host-side via `qm set <vmid> --watchdog model=i6300esb,action=reset` (PVE API; surfaces in
   the guest as a PCI device on the VM's next COLD start) — **BUT the watchdog still does NOT work: the
-  `i6300esb` kernel module is ABSENT from the node kernel** (`6.8.0-124-generic` has only `softdog` +
-  `wdat_wdt`; even `linux-modules-extra` lacks it), so `/dev/watchdog0` never appears and the guest
+  `i6300esb` kernel module is ABSENT from the node kernel** (re-verified on `6.8.0-134-generic`
+  2026-07-14 — still only `softdog` + `wdat_wdt`; re-check `modinfo i6300esb` after each kernel
+  bump), so `/dev/watchdog0` never appears and the guest
   daemon is inert. **The hardware watchdog has never armed; it's BLOCKED pending the module** (M91). Do
   NOT add a `modprobe i6300esb` task — it FATALs the k8s-node-fixes playbook. **Verify a kernel module
   exists before attaching watchdog devices + rebooting nodes** (this lesson cost ~7 reboots + 3

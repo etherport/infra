@@ -82,7 +82,7 @@ A cleanup daemon runs on all worker nodes to remove orphaned wg0 interfaces when
 
 | Network | CIDR | Purpose |
 |---------|------|---------|
-| 10.255.255.0/29 | Site-to-site tunnel | Multi-endpoint tunnel (vpn-aws=.1, homelab=.2, regional=.3-.6) |
+| 10.255.255.0/29 | Site-to-site tunnel | Interface prefix is /29 (verified live on wg0, 2026-07-14): vpn-aws=.1, homelab=.2; .3-.6 were reserved for the regional endpoints retired in M110. NB the **UDM static route is deliberately narrower — `/30`** (see firewall-zones.md) — which covers the in-use .1/.2 pair; widen it if tunnel peers beyond .3 ever return. |
 | 10.254.0.0/24 | Remote access | Mobile/roaming client VPN |
 | 10.10.192.0/19 | Local homelab | All local VLANs (10.10.192.0 - 10.10.223.255) |
 | 10.10.100.0/22 | AWS networks | AWS VPC and related (10.10.100.0 - 10.10.103.255) |
