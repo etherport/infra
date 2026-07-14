@@ -54,6 +54,17 @@ flagged to operator.
 **Next:** L37/L38, M138 iCloud app-password (operator), ntfy app subscribe (operator), M12
 recurring-drill trust-line (optional), watch the next Renovate PR plans green under the M140 role.
 
+**2026-07-14 — the "security" advisor email decoded + the nightly stall is now a pattern (M144):**
+- TetragonCredFileAccess (10:29Z email) = the wireguard pod's restart apt-init reading /etc/shadow
+  via dpkg-preconfigure — benign, same as 07-13. But it was a NEW pod: the ~03:00-03:30
+  kopia-maintenance I/O stall killed wireguard a SECOND night (and DeadlineExceeded'd gdrive-sync,
+  after onedrive-sync the night before; node_exporter scrapes went dark mid-window). 07-13's
+  "one-off" verdict invalidated → M144. Symptom fixes shipped + applied: wireguard probe
+  timeout/threshold (`c5231ad`, rolled + VPN verified), rclone deadlines 90m (`ee7f17f`).
+  Root decision deferred pending 2-3 nights' observation. GH Actions checked same day: healthy
+  (only the 2 known already-fixed aws-tag-manual failures); tag-drift 51→38, remainder all
+  already-deleted/tagged items pending the DAILY-mode Config recorder (by design, ~$2/mo).
+
 **2026-07-13 — advisor "node saturation" alert: one I/O storm, four alerts, one real bug found:**
 - **NodeSystemSaturation** (02:48–03:28, w1+gpu1, load/core 12+, resolved): NOT CPU — D-state I/O
   stall from the nightly **velero kopia-maintenance** window against the new Garage repo (first heavy

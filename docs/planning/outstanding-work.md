@@ -343,6 +343,19 @@ This file foregrounds open/in-progress/gated work._
   re-records the IAM tag changes (≤24h) and (b) personal-web applies its default_tags. Delete
   decisions pending operator: w3tc, 2× DataSync role+policy pairs, M75 orphan users.
 
+### 🟡 M144. Nightly ~03:00-03:30 kopia-maintenance I/O stall — recurring collateral (2 nights)
+- **Pattern (07-13 + 07-14):** velero kopia repo maintenance against Garage (data on sequoia NFS;
+  cache on node disk/Ceph) D-state-stalls w1/gpu1 for ~30-40 min nightly — severe enough that
+  node_exporter scrapes go dark mid-window. Collateral so far: wireguard pod killed 2 nights
+  (1s-probe timeout → VIP churn + a benign-but-scary TetragonCredFileAccess email each morning from
+  the restart's dpkg/apt init), rclone sync jobs DeadlineExceeded 2 nights (onedrive then gdrive).
+- **✅ Symptom fixes shipped 2026-07-14:** wireguard probes timeoutSeconds 10 / failureThreshold 6
+  (`c5231ad`); rclone job deadlines 3000→5400s (`ee7f17f`). These make the window survivable.
+- **⏳ Root:** decide whether to (a) accept the hardened status quo, (b) throttle/spread the kopia
+  maintenance jobs (velero repoMaintenanceJobConfigs resources; kopia has no ionice knob via velero),
+  or (c) move maintenance off the busy window. Watch 2-3 more nights first — if the stall stays
+  ≤40 min with no new collateral, (a) is fine.
+
 ### ✅ L35. Credential inventory + rotation cadence for the never-expiring statics
 - **Gap #10+#12:** age key (4 holders, never rotated), PVE/CF/UDM tokens, STEP_JWK_PASSWORD, SES SMTP, technitium/grafana admin — no born-on dates, no cadence; also the etcd secretbox key (enabled ✓ but static since install, on the CP disks it protects). **Fix:** `docs/reference/credential-inventory.md` (holder/born-on/last-rotated) + annual reminder + the etcd key-rotation procedure. Complements the NEW credential-expiry-check workflow (hard-expiry creds now metered). **Effort: S. Tier: L-M.**
 - **✅ Done 2026-07-09 (4c2acb8):** `docs/reference/credential-inventory.md` — the consolidated MAP (what/where-held/consumers/rotation/blast-radius) across 12 categories, built from the live `*.sops.yaml` set + ops bundle; cross-linked with secrets-rotation.md (mechanics) + indexed. Born-on/last-rotated dates + the etcd secretbox key-rotation procedure are a follow-up (the inventory notes it stays static since install).
