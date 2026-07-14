@@ -19,7 +19,13 @@ spec:
       # Bound a hung run to under the hourly cadence — with concurrencyPolicy:
       # Forbid, a permanently-hung run would block every future tick until the
       # 25h staleness alert. 50min frees the slot before the next hour.
-      activeDeadlineSeconds: 3000
+      # 2026-07-14: 3000s (50m) couldn't absorb the nightly ~03:00-03:30
+      # kopia-maintenance I/O stall — a pod that can't START for ~40m then
+      # syncs in seconds still blew the JOB deadline (retries don't help;
+      # activeDeadlineSeconds caps the whole Job). 2 nightly KubeJobFailed
+      # in 2 days (onedrive 07-13, gdrive 07-14). 90m rides it out; the
+      # hourly cadence + concurrencyPolicy:Forbid keeps overlap safe.
+      activeDeadlineSeconds: 5400
       ttlSecondsAfterFinished: 90000 # 25h — matches gdrive-sync
       template:
         metadata:

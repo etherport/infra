@@ -19,7 +19,13 @@ spec:
       # forever would block EVERY future tick until only the 25h staleness alert
       # caught it; 50min guarantees the slot frees before the next hour. Steady-
       # state incremental syncs finish in minutes.
-      activeDeadlineSeconds: 3000
+      # 2026-07-14: 3000s (50m) couldn't absorb the nightly ~03:00-03:30
+      # kopia-maintenance I/O stall — a pod that can't START for ~40m then
+      # syncs in seconds still blew the JOB deadline (retries don't help;
+      # activeDeadlineSeconds caps the whole Job). 2 nightly KubeJobFailed
+      # in 2 days (onedrive 07-13, gdrive 07-14). 90m rides it out; the
+      # hourly cadence + concurrencyPolicy:Forbid keeps overlap safe.
+      activeDeadlineSeconds: 5400
       # GC Job records after 25h. Bumped from 1h on 2026-05-23 — 1h
       # was too aggressive when a daily-reporting tool needed to
       # enumerate the last 24h of runs. Failed-job noise is handled
