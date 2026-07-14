@@ -347,15 +347,14 @@ resource "unifi_network" "guest" {
   internet_access   = true
 
   lifecycle {
-    # dhcp_dns was in ignore_changes — the paultyng provider didn't READ the
-    # field back for purpose=guest, causing a perpetual plan diff. Live UDM
-    # state keeps the values.
-    # M125: dhcp_dns is now nested → the WHOLE dhcp_server attribute is
-    # ignored (note this also masks range/leasetime drift). The fork fixed
-    # the paultyng read/write bugs, so this entry is a REMOVAL CANDIDATE:
-    # drop it and confirm the plan stays clean.
+    # 2026-07-14: `dhcp_server` REMOVED from ignore_changes. The paultyng-era
+    # mask silently hid a REAL drift for months: live `dhcpd_dns_enabled` was
+    # false (guests got the gateway as resolver, defeating the public-DNS-only
+    # design above) while plan said "No changes". Found by the weekly doc-drift
+    # audit; live converged to this config 2026-07-14 via a direct UDM API PUT
+    # (networkconf 60915b81…, verified). TF now owns the block again — a future
+    # UI-side change to the DHCP range/DNS shows up as a plan diff, as intended.
     ignore_changes = [
-      dhcp_server,
       # M125: see unifi_network.default for the dropped dhcp_v6_*/ipv6_* list.
       ipv6_interface_type,
     ]
