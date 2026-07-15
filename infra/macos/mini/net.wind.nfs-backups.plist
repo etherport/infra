@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>net.wind.nfs-backups</string>
+
+  <!-- ROOT LaunchDaemon (not a user LaunchAgent): the export is `secure` so the mount
+       needs a reserved source port (resvport), and /Volumes mountpoint management needs
+       root. Runs headlessly from boot — no login session required, unlike the SMB path. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/grahamsmith/code/infra/infra/macos/mini/nfs-mount-backups.sh</string>
+  </array>
+
+  <!-- Mount at boot, then re-verify every 3 min (idempotent + silent when healthy) —
+       same self-heal cadence as net.wind.mount-nas, minus the auth theater. -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>180</integer>
+
+  <!-- The script writes its own log; these catch bash-level errors only. -->
+  <key>StandardOutPath</key>
+  <string>/Users/grahamsmith/Library/Logs/nfs-backups.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/grahamsmith/Library/Logs/nfs-backups.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

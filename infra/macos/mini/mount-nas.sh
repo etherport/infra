@@ -1,10 +1,10 @@
 #!/bin/bash
-# Ensure the NAS SMB shares needed by the iCloud backup pipeline are mounted at
+# Ensure the NAS SMB share(s) needed by the iCloud backup pipeline are mounted at
 # their standard /Volumes/<share> paths. Idempotent — safe to re-run any time.
 #
 #   /Volumes/Personal-Drive  — holds the Photos library APFS sparsebundle (M79)
-#   /Volumes/Backups         — export target; the k8s aws-s3-sync "backups" share
-#                              reads this same NAS share over NFS and ships it to S3
+#   (/Volumes/Backups is NFS now — net.wind.nfs-backups LaunchDaemon, Phase 1 2026-07-11;
+#    see nfs-mount-backups.sh. This script no longer touches it.)
 #
 # Uses `open smb://` (what Finder does) rather than `mount_smbfs` to a custom path:
 # macOS auto-mounts SMB shares under /Volumes/<share>, and mounting the same share
@@ -18,7 +18,11 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER="sequoia.wind.etherport.net"
 SMB_USER="graham"
-SHARES=(Personal-Drive Backups)
+# Backups moved to NFS (Phase 1, 2026-07-11): mounted by the ROOT LaunchDaemon
+# net.wind.nfs-backups (nfs-mount-backups.sh) — host-ACL auth, no keychain/NetAuth, so
+# the "SMB session died → console click required" class can't touch it. Only the
+# Photos-library share (sparsebundle backing) remains on SMB pending Phase 2.
+SHARES=(Personal-Drive)
 # The Photos library sparsebundle lives on Personal-Drive; attach it after mounting so
 # /Volumes/PhotosLib is present at login (without this, Photos/osxphotos can't find the
 # library after a reboot — the "PhotosLib cannot be found" failure, 2026-06-19).

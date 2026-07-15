@@ -51,6 +51,30 @@ Reload after editing the plist: `launchctl bootout gui/$(id -u)/net.wind.mount-n
 - Runs at login, exits 0 once mounted, doesn't keep polling. If a mount later drops, **cairn's own
   `open smb://` self-heal** remounts it before each run (no longer dependent on this agent's timing).
 
+## `net.wind.nfs-backups` — Backups over NFS (Phase 1, 2026-07-11)
+
+`/Volumes/Backups` is mounted over **NFS** by a ROOT LaunchDaemon (`nfs-mount-backups.sh`,
+RunAtLoad + every 3 min), replacing the SMB mount. Why: SMB's failure mode is *interactive* —
+after any abnormal session end (UNAS Samba wedge, NAS reboot), macOS NetAuth demands a console
+click to reuse the saved password, which on a headless box means a dead mount until a human
+shows up (the 2026-07-03→09 and 07-10→11 outages). NFS auth is **host-based** (the mini's IP
+in the UNAS export ACL — already present) — no keychain, no NetAuth, no dialogs, ever. The
+k8s s3-sync read this same export over NFS through every SMB outage without a hiccup.
+
+- Export: `sequoia:/var/nfs/shared/Backups` (rw, `all_squash,anonuid=977` → uid mapping moot;
+  `secure` → mount needs `resvport`, hence root). Fallback path in the script if the friendly
+  path stops resolving: the literal `/volume/<uuid>/.srv/.unifi-drive/Backups/.data`.
+- Mount opts: `soft,intr,nolocks` — a NAS outage FAILS I/O rather than hanging cairn on its
+  run lock (cairn's rsync writes are temp+rename, resumable; no byte-range locks needed).
+- The script never leaves a bare `/Volumes/Backups` dir behind (an empty local dir would pass
+  cairn's dest gate and mirror onto the mini's disk) — mkdir just before mount, rmdir on fail.
+- **One-time install (sudo):** `sudo infra/macos/mini/install-nfs-backups.sh` — installs the
+  plist, replaces any SMB mount, verifies. Rollback steps in the installer header.
+- Log: `~/Library/Logs/nfs-backups.log` (silent when healthy). mini-health gauges it as
+  `mini_health_check{check="nfs_daemon"}` once the plist is installed.
+- `mount-nas.sh` now handles **Personal-Drive only** (sparsebundle backing — Phase 2 will
+  evaluate moving it too).
+
 ## SMB tuning (`/etc/nsmb.conf`) — one-time root install
 
 The kernel SMB client tuning ([`nsmb.conf`](nsmb.conf): `notify_off`, SMB2/3-only) **must** live at

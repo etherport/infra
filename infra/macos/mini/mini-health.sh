@@ -41,6 +41,15 @@ if [ "${nas_ok}" = 0 ] && nc -z -G3 sequoia.wind.etherport.net 445 >/dev/null 2>
   esac
 fi
 
+# 2c. Backups-NFS daemon loaded (system domain — Phase 1, 2026-07-11). Gated on the plist
+#     being installed so a not-yet-cutover mini doesn't read degraded; once installed, an
+#     unloaded daemon = no Backups self-heal = degrade.
+if [ -f /Library/LaunchDaemons/net.wind.nfs-backups.plist ]; then
+  nfsd_ok=$(launchctl print system/net.wind.nfs-backups >/dev/null 2>&1 && echo 1 || echo 0)
+else
+  nfsd_ok=1
+fi
+
 # 3. SMB tuning actually installed where the kernel reads it.
 nsmb_ok=$(cmp -s "${HERE}/nsmb.conf" /etc/nsmb.conf 2>/dev/null && echo 1 || echo 0)
 
@@ -48,7 +57,7 @@ nsmb_ok=$(cmp -s "${HERE}/nsmb.conf" /etc/nsmb.conf 2>/dev/null && echo 1 || ech
 disk_free="$(df -k / 2>/dev/null | awk 'NR==2{print $4*1024}')"; [ -n "${disk_free}" ] || disk_free=0
 
 # Rollup: the things that would BLOCK a backup.
-up=$([ "${agents_ok}" = 1 ] && [ "${nas_ok}" = 1 ] && echo 1 || echo 0)
+up=$([ "${agents_ok}" = 1 ] && [ "${nas_ok}" = 1 ] && [ "${nfsd_ok}" = 1 ] && echo 1 || echo 0)
 
 body="# TYPE mini_health_up gauge
 mini_health_up ${up}
@@ -58,6 +67,7 @@ mini_health_last_check_timestamp_seconds ${now}
 mini_health_check{check=\"agents_loaded\"} ${agents_ok}
 mini_health_check{check=\"nas_readable\"} ${nas_ok}
 mini_health_check{check=\"smb_auth\"} ${smb_auth}
+mini_health_check{check=\"nfs_daemon\"} ${nfsd_ok}
 mini_health_check{check=\"nsmb_applied\"} ${nsmb_ok}
 # TYPE mini_health_agents_loaded gauge
 mini_health_agents_loaded ${loaded}
