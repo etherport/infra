@@ -15,6 +15,23 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-11 (cont.) — mini session housekeeping: auto-start/resume + move to the cairn repo
+
+**What:** two owner asks after the session crash forced a manual console resume.
+1. **`net.wind.claude-session` LaunchAgent** (infra `2c8e7301`): runs `resume-claude-sessions.sh`
+   every 2 min — recreates the tmux session at login/boot AND re-sends `claude --continue` when
+   the pane sits at a bare shell (crash-resume). Script rewritten: the mini runs ONE session now
+   (tmux `cairn`); the stale infra/cue/personal-web list was pre-M81. mini-health EXPECT watches
+   the agent. Installed + verified live (session `cairn` created, claude started).
+2. **Session moved to `~/code/cairn`** (its primary subject; tidier vs the devbox's infra
+   session). Prepared: cairn `CLAUDE.md` (cairn `59a3cd7` — launchd-not-shell, TCC, best-effort
+   photos, storage plumbing, repo relationship), `.claude/settings.json` whitelists
+   `/Users/grahamsmith/code/infra` via permissions.additionalDirectories (mini-local infra work
+   stays in-scope; cluster/TF work stays with the devbox agent), project memory seeded (cairn
+   history + RC-UUID-collision + handoff-open-items: NFS Phase 1 sudo install, Phase 2 locking
+   test, drive/CloudDocs red, alert silences to ~07-16). NO session .jsonl copied (RC UUID
+   collision). The old infra-rooted mini session winds down once the owner confirms the new one.
+
 ## 2026-07-11 — UNAS wedge incident (M141) + full repo review (drift/audit/docs) + fix batch
 
 **Prompt:** "current repo review… best practice, missing hardening to-dos, doc/readme review, config
