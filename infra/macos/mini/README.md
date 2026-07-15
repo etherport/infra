@@ -107,7 +107,19 @@ creator (already run — the bundle exists). `mount-nas.sh` attaches it at login
 library inside the volume, "Use as System Photo Library", "Download Originals to this Mac") is the
 one-time prerequisite — see the cairn deploy runbook.
 
-## `resume-claude-sessions.sh` — restore the Claude Code tmux sessions
+## `net.wind.claude-session` — auto-start/auto-resume the Claude Code session
+
+The mini's dev session (tmux **`cairn`**, working dir `~/code/cairn`; the infra repo is an
+additional directory in its settings) is kept alive by a LaunchAgent running
+`resume-claude-sessions.sh` every 2 min: recreates a missing tmux session at login/boot and
+re-sends `claude --continue` into a pane whose claude crashed (pane sitting at a bare shell).
+Attach: `tmux attach -t cairn` · detach: `Ctrl-b d` · log: `~/Library/Logs/claude-session.log`.
+Install: `cp net.wind.claude-session.plist ~/Library/LaunchAgents/ && launchctl bootstrap
+gui/$(id -u) ~/Library/LaunchAgents/net.wind.claude-session.plist`. Never migrate a session by
+copying .jsonl files (RC session-UUID collision). Old manual use ('restore after reboot') still
+works: just run the script.
+
+## `resume-claude-sessions.sh` — (legacy heading; see net.wind.claude-session above)
 
 Re-creates the Claude Code tmux sessions on the mini after a reboot (separate sessions per project,
 each running `claude --continue`). **Idempotent** — skips any session already running.

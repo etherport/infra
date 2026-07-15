@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>net.wind.claude-session</string>
+
+  <!-- Auto-start the mini's Claude Code tmux session at login (the mini auto-logs-in
+       after the FileVault unlock) and auto-resume it after a crash: the script runs
+       every 2 min and (a) recreates a missing tmux session, (b) re-launches claude in
+       a pane that's sitting at a bare shell. Idempotent + silent when healthy. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/grahamsmith/code/infra/infra/macos/mini/resume-claude-sessions.sh</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>120</integer>
+
+  <!-- claude lives in ~/.local/bin (pipx/fnm-managed PATHs don't exist in the launchd
+       context); tmux via Homebrew. send-keys runs in the pane's interactive shell, so
+       only tmux itself needs to resolve here. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/grahamsmith/Library/Logs/claude-session.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/grahamsmith/Library/Logs/claude-session.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>
