@@ -4,7 +4,7 @@ metadata:
   name: infrastructure-daily
   namespace: velero
 spec:
-  schedule: "20 4 * * *"   # M119: staggered (was 4:00 sharp with others)
+  schedule: "0 6 * * *"   # M145: heavy/light interleave, 30-min spacing (light)
   template:
     includedNamespaces:
       - cloudflare-ddns

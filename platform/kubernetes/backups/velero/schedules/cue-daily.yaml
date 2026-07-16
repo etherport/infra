@@ -4,7 +4,7 @@ metadata:
   name: cue-daily
   namespace: velero
 spec:
-  schedule: "0 3 * * *"
+  schedule: "30 2 * * *"   # M145: heavy/light interleave, 30-min spacing (heavy (db+media))
   template:
     includedNamespaces:
       - cue

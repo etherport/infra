@@ -4,7 +4,7 @@ metadata:
   name: wikijs-daily
   namespace: velero
 spec:
-  schedule: "36 3 * * *"   # M119: staggered (was 3:00 sharp with others)
+  schedule: "0 4 * * *"   # M145: heavy/light interleave, 30-min spacing (light)
   template:
     includedNamespaces:
     - wikijs

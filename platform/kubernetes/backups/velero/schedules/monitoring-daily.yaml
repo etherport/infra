@@ -4,7 +4,7 @@ metadata:
   name: monitoring-daily
   namespace: velero
 spec:
-  schedule: "40 4 * * *"   # M119: staggered (was 4:00 sharp with others)
+  schedule: "30 4 * * *"   # M145: heavy/light interleave, 30-min spacing (heavy (prometheus TSDB))
   template:
     includedNamespaces:
       - monitoring

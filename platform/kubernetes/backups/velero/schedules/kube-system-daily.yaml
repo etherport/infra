@@ -4,7 +4,7 @@ metadata:
   name: kube-system-daily
   namespace: velero
 spec:
-  schedule: "12 3 * * *"   # M119: staggered (was 3:00 sharp with others)
+  schedule: "30 3 * * *"   # M145: heavy/light interleave, 30-min spacing (heavy — kopia hits the CONTROL-PLANE disks (etcd co-tenant))
   template:
     includedNamespaces:
       - kube-system

@@ -4,7 +4,7 @@ metadata:
   name: critical-apps-daily
   namespace: velero
 spec:
-  schedule: "0 2 * * *"
+  schedule: "0 1 * * *"   # M145: heavy/light interleave, 30-min spacing (light)
   template:
     includedNamespaces:
       - home-automation

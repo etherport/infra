@@ -4,7 +4,7 @@ metadata:
   name: traefik-daily
   namespace: velero
 spec:
-  schedule: "20 2 * * *"   # M119: staggered (was 2:00 sharp with others)
+  schedule: "0 2 * * *"   # M145: heavy/light interleave, 30-min spacing (light)
   template:
     includedNamespaces:
       - traefik

@@ -4,7 +4,7 @@ metadata:
   name: ollama-daily
   namespace: velero
 spec:
-  schedule: "0 5 * * *"
+  schedule: "30 6 * * *"   # M145: heavy/light interleave, 30-min spacing (heavy (model files))
   template:
     includedNamespaces:
       - ollama
