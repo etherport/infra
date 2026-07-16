@@ -71,6 +71,20 @@ flagged to operator.
 **Next:** L37/L38, M138 iCloud app-password (operator), ntfy app subscribe (operator), M12
 recurring-drill trust-line (optional), watch the next Renovate PR plans green under the M140 role.
 
+**2026-07-16 (cont.3) — advisor email 2 real bugs fixed + Alertmanager email themed:**
+- Operator screenshot showed the advisor email with **two bugs**: (1) `AI Advisor &middot; …` — the
+  eyebrow/footer passed literal HTML entities into `_render_email` fields that html-escape them →
+  double-escaped → shown literally. Fixed by using Unicode `·`/`—` (pass through html_escape).
+  (2) The advisor email lacked the `.term/.titlebar/.screen` chrome the other 3 have — the CSS was
+  defined but `_render_email` never emitted the markup. Wired the titlebar+screen+prompt. `d53b368`.
+- **Alertmanager `email-alerts` themed (the operator's "yes do alertmanager"):** the plain critical-
+  alert email is AM's OWN receiver (default template), separate from the advisor. Authored a
+  terminal-theme Go-template `html:` on the emailConfigs (reuses the shared palette; per-alert cards
+  with severity tags). **Validated the Go template in a golang container (parse+execute, 6302 bytes)
+  BEFORE deploying** — it's on the critical-alert path. Deployed + fired a synthetic CRITICAL test:
+  advisor email sent, AM email sent (`alertmanager_notifications_total{integration=email}` +1,
+  0 failed, 0 template-exec errors). 6h repeatInterval suppressed the 2nd test (expected).
+
 **2026-07-16 (cont.2) — email redesign round-3 (+ weekly drift email) + the "advisor didn't format" bug:**
 - Round-3 from the design agent: trivial CSS polish over round-2 for the 3 status/alert emails
   (flexbox .ring, daily-report row layout) + the weekly drift email (send-audit-email.py) newly
