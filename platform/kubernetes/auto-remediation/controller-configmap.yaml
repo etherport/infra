@@ -1917,7 +1917,21 @@ data:
         parts.append('<meta name="supported-color-schemes" content="light dark">')
         parts.append('<title>' + html_escape(title) + '</title>')
         parts.append('<style>' + _EMAIL_CSS + '</style></head>')
-        parts.append('<body><div class="wrap">')
+        # Terminal chrome (2026-07-16): match the status/drift/backup emails. The
+        # CSS for .term/.titlebar/.screen/.prompt was already defined but unused.
+        parts.append('<body><div class="wrap"><div class="term">')
+        parts.append(
+            '<div class="titlebar">'
+            '<span class="dots"><i class="d-r"></i><i class="d-a"></i><i class="d-g"></i></span>'
+            '<span class="brand"><span class="ring"><i></i></span><b>etherport</b>'
+            '<em>· advisor</em></span>'
+            '<span class="tb-spacer"></span></div>')
+        parts.append('<div class="screen">')
+        parts.append(
+            '<div class="prompt"><span class="p-user">advisor@etherport</span>'
+            '<span class="p-punc">:</span><span class="p-path">~</span>'
+            '<span class="p-punc">$</span> diagnose --alert '
+            + html_escape(title) + '<span class="cursor"></span></div>')
         parts.append('<p class="eyebrow">' + html_escape(eyebrow) + '</p>')
         parts.append('<h1>' + html_escape(title) + '</h1>')
         if subhead:
@@ -1945,11 +1959,12 @@ data:
             )
         parts.append('<div class="footer">')
         if footer_extra:
-            parts.append(footer_extra + ' &middot; ')
+            parts.append(footer_extra + ' · ')
         parts.append(
             'Audit log: <code>kubectl -n auto-remediation logs deploy/remediation-controller | grep ai_advisor</code>'
         )
-        parts.append('</div></div></body></html>')
+        # close: footer, screen, term, wrap
+        parts.append('</div></div></div></div></body></html>')
         return ''.join(parts)
 
     def _send_email(subject, body, html_body=None):
@@ -2283,7 +2298,7 @@ data:
             f"`ai_remediation: auto` opt-in if it's not auto-fixable.\n"
         )
         _fail_html = _render_email(
-            eyebrow='AI Advisor &middot; Verification FAILED',
+            eyebrow='AI Advisor · Verification FAILED',
             title=entry['alertname'],
             subhead=f"{entry['action_type']} ran {AI_VERIFY_DELAY_MIN}min ago but the alert is still firing",
             status_pill_html='<span class="pill pill-err"><span class="dot"></span>Action didn\'t work</span>',
@@ -2383,7 +2398,7 @@ data:
                 f"Raw alert below.\n\n{json.dumps(alert, indent=2, default=str)}"
             )
             _cap_html = _render_email(
-                eyebrow='AI Advisor &middot; Unavailable',
+                eyebrow='AI Advisor · Unavailable',
                 title=alert_name,
                 subhead=f"Daily cost cap of ${AI_DAILY_USD_CAP} reached. Diagnosis skipped.",
                 status_pill_html='<span class="pill pill-warn"><span class="dot"></span>Cap reached</span>',
@@ -2400,7 +2415,7 @@ data:
                     ('Resets', 'UTC midnight'),
                 ],
                 raw_alert=alert,
-                footer_extra='Cooldown enforced &mdash; same alertname will not re-notify for 15min',
+                footer_extra='Cooldown enforced — same alertname will not re-notify for 15min',
             )
             _send_email(
                 subject=f"[Etherport AI Advisor: unavailable] {alert_name}",
@@ -2434,7 +2449,7 @@ data:
                 f"{json.dumps(alert, indent=2, default=str)}"
             )
             _err_html = _render_email(
-                eyebrow='AI Advisor &middot; Error',
+                eyebrow='AI Advisor · Error',
                 title=alert_name,
                 subhead='Anthropic API call failed. The alert is shown raw below.',
                 status_pill_html='<span class="pill pill-err"><span class="dot"></span>API error</span>',
@@ -2447,7 +2462,7 @@ data:
                     'path is unaffected.</p></div>'
                 ),
                 raw_alert=alert,
-                footer_extra='Cooldown enforced &mdash; same alertname will not re-notify for 15min',
+                footer_extra='Cooldown enforced — same alertname will not re-notify for 15min',
             )
             _send_email(
                 subject=f"[Etherport AI Advisor: error] {alert_name}",
@@ -2556,7 +2571,7 @@ data:
                 f"Raw alert payload:\n{json.dumps(alert, indent=2, default=str)[:2000]}"
             )
             _exec_html = _render_email(
-                eyebrow='AI Advisor &middot; Auto-executed' if ok else 'AI Advisor &middot; Auto-execute FAILED',
+                eyebrow='AI Advisor · Auto-executed' if ok else 'AI Advisor · Auto-execute FAILED',
                 title=alert_name,
                 subhead=clean['human_summary'],
                 status_pill_html=(
@@ -2582,7 +2597,7 @@ data:
                     ('Daily spend', f"${_cost_tracker['usd_spent']:.4f} / ${AI_DAILY_USD_CAP}"),
                 ],
                 raw_alert=alert,
-                footer_extra='Phase 3 autonomous &mdash; receipt only, no approval needed',
+                footer_extra='Phase 3 autonomous — receipt only, no approval needed',
             )
             _send_email(
                 subject=f"[Etherport AI Advisor: AUTO-{atype}] {alert_name}",
@@ -2680,7 +2695,7 @@ data:
                 '</p>'
             )
 
-        _eyebrow = 'AI Advisor &middot; ' + ('Action proposed' if action_type != 'noop' else 'Diagnosis only')
+        _eyebrow = 'AI Advisor · ' + ('Action proposed' if action_type != 'noop' else 'Diagnosis only')
         _subhead = clean['human_summary']
         _meta = [
             ('Confidence', f"{clean['confidence']:.0%}"),
@@ -2745,7 +2760,7 @@ data:
                         '<span class="dot"></span>' + html_escape(pill_text) + '</span>'
                     )
                 page = _render_email(
-                    eyebrow='AI Advisor &middot; Approval result',
+                    eyebrow='AI Advisor · Approval result',
                     title=title,
                     subhead=body,
                     status_pill_html=pill_html,
