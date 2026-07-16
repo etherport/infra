@@ -475,9 +475,8 @@ html = f"""<!DOCTYPE html>
   .d-r {{ background:var(--dot-r); }} .d-a {{ background:var(--dot-a); }} .d-g {{ background:var(--dot-g); }}
   .brand {{ margin:0 auto; display:inline-flex; align-items:center; gap:8px; font-size:12.5px; }}
   .ring {{ width:15px; height:15px; border:2px solid var(--ok); border-radius:50%;
-    display:inline-block; position:relative; box-sizing:border-box; vertical-align:middle; }}
-  .ring i {{ width:4px; height:4px; border-radius:50%; background:var(--ok);
-    position:absolute; top:3px; left:3px; }}
+    display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; vertical-align:middle; }}
+  .ring i {{ width:4px; height:4px; border-radius:50%; background:var(--ok); }}
   .brand b {{ font-weight:600; color:var(--text); }}
   .brand em {{ font-style:normal; color:var(--dim); }}
   .tb-spacer {{ width:47px; }}

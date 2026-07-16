@@ -21,6 +21,7 @@ import re
 import smtplib
 import ssl
 import sys
+from datetime import datetime
 from email.message import EmailMessage
 
 _MDLINK = re.compile(r"\[([^\]]+)\]\((https?://[^\s)]+)\)")
@@ -29,43 +30,72 @@ _BOLD = re.compile(r"\*\*([^*]+)\*\*")
 _ITALIC = re.compile(r"(?<![\w*])[_*]([^_*\n]+)[_*](?![\w*])")
 _CODE = re.compile(r"`([^`]+)`")
 
+_MONO = 'ui-monospace,SFMono-Regular,Menlo,"JetBrains Mono",monospace'
+_SANS = '-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif'
+
 _CSS = """
-:root{--bg:#f6f7f9;--surface:#fff;--text:#0f172a;--text-muted:#64748b;--border:#e5e7eb;
---border-soft:#eef0f3;--accent:#1f2937;--ok:#047857;--ok-bg:#ecfdf5;--warn:#b45309;
---warn-bg:#fffbeb;--err:#b91c1c;--err-bg:#fef2f2;--muted:#6b7280;--muted-bg:#f3f4f6;--btn-go:#2d8f4d}
-@media (prefers-color-scheme:dark){:root{--bg:#0b1220;--surface:#131c2e;--text:#e8eaf0;
---text-muted:#94a3b8;--border:#243049;--border-soft:#1b2538;--accent:#f1f5f9;--ok:#34d399;
---ok-bg:rgba(16,185,129,.12);--warn:#fbbf24;--warn-bg:rgba(217,119,6,.15);--err:#f87171;
---err-bg:rgba(220,38,38,.16);--muted:#94a3b8;--muted-bg:rgba(148,163,184,.12)}}
-body{margin:0;padding:0;background:var(--bg);color:var(--text);
+:root{color-scheme:light dark;
+--page:#e7e8ec;--surface:#f7f7f2;--border:#dedcd0;--titlebar:#eeece2;
+--text:#26241d;--prose:#6b6a5f;--dim:#8a897e;--dim2:#c9c5b6;--leader:#cfcdbc;
+--ok:#2f8f52;--cyan:#2a7d8c;--warn:#9a6100;--err:#a5342a;
+--dot-r:#c9483d;--dot-a:#c08a1e;--dot-g:#2f8f52}
+@media (prefers-color-scheme:dark){:root{
+--page:#05070b;--surface:#0a0e14;--border:#1b232e;--titlebar:#0d1219;
+--text:#e6edf3;--prose:#8a93a0;--dim:#6b7888;--dim2:#3a4553;--leader:#2a3542;
+--ok:#46c46a;--cyan:#5ac2d4;--warn:#e0a53a;--err:#f4685c;
+--dot-r:#f4685c;--dot-a:#e0a53a;--dot-g:#46c46a}}
+body{margin:0;padding:0;background:var(--page);color:var(--text);
 font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
-font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
-.wrap{max-width:720px;margin:0 auto;padding:36px 20px 56px}
-.eyebrow{font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:.12em;
-text-transform:uppercase;margin:0 0 10px}
-h1{font-size:23px;font-weight:700;letter-spacing:-.015em;margin:0 0 6px;color:var(--accent)}
-.subhead{color:var(--text-muted);font-size:14px;margin:0 0 20px}
-.pill{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;
-font-size:13px;font-weight:600;line-height:1;margin:0 0 24px}
-.pill .dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
-.pill-ok{background:var(--ok-bg);color:var(--ok)}.pill-warn{background:var(--warn-bg);color:var(--warn)}
-.pill-err{background:var(--err-bg);color:var(--err)}.pill-muted{background:var(--muted-bg);color:var(--muted)}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 22px;margin:0 0 16px}
-h2.sec{font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;
-letter-spacing:.07em;margin:0 0 12px}
-p{margin:0 0 12px}p:last-child{margin-bottom:0}
-ul{margin:0;padding:0;list-style:none}
-li{margin:0 0 14px;padding:0 0 0 18px;position:relative}li:last-child{margin-bottom:0}
-li:before{content:"";position:absolute;left:2px;top:9px;width:5px;height:5px;border-radius:50%;background:var(--text-muted)}
-code{background:var(--muted-bg);padding:2px 6px;border-radius:4px;font-size:13px;
-font-family:"SF Mono","Monaco",Menlo,Consolas,monospace}
-a{color:#0969da}em{font-style:italic;color:var(--text-muted)}
-.btn-wrap{margin:9px 0 2px}
-.btn{display:inline-block;padding:9px 18px;background:var(--btn-go);color:#fff;font-weight:600;
-font-size:13px;border-radius:6px;text-decoration:none;line-height:1.2}
-.footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--border-soft);
-font-size:12px;color:var(--text-muted)}
-.footer code{font-size:11px}
+-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
+.wrap{max-width:600px;margin:0 auto;padding:28px 16px 46px}
+.term{background:var(--surface);border:1px solid var(--border);border-radius:11px;overflow:hidden}
+.titlebar{display:flex;align-items:center;padding:11px 16px;background:var(--titlebar);
+border-bottom:1px solid var(--border);font-family:ui-monospace,SFMono-Regular,Menlo,"JetBrains Mono",monospace}
+.dots{display:flex;gap:7px}
+.dots i{width:11px;height:11px;border-radius:50%;display:inline-block}
+.d-r{background:var(--dot-r)}.d-a{background:var(--dot-a)}.d-g{background:var(--dot-g)}
+.brand{margin:0 auto;display:inline-flex;align-items:center;gap:8px;font-size:12.5px}
+.ring{width:15px;height:15px;border:2px solid var(--ok);border-radius:50%;
+display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;vertical-align:middle}
+.ring i{width:4px;height:4px;border-radius:50%;background:var(--ok)}
+.brand b{font-weight:600;color:var(--text)}
+.brand em{font-style:normal;color:var(--dim)}
+.tb-spacer{width:47px}
+.screen{padding:24px 26px 28px;font-family:ui-monospace,SFMono-Regular,Menlo,"JetBrains Mono",monospace;font-size:13px;line-height:1.7}
+.prompt{margin:0 0 20px;color:var(--text);word-break:break-all}
+.p-user{color:var(--ok)}.p-punc{color:var(--dim)}.p-path{color:var(--cyan)}
+.cursor{display:inline-block;width:8px;height:15px;background:var(--text);margin-left:4px;vertical-align:-2px;animation:blink 1.1s step-end infinite}
+@keyframes blink{50%{opacity:0}}
+h1{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
+font-size:24px;font-weight:700;letter-spacing:-.02em;color:var(--text);margin:0 0 5px}
+.subhead{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
+color:var(--prose);font-size:14px;line-height:1.5;margin:0 0 16px}
+.status-line{font-size:14px;margin:0 0 24px}
+.status-line i{width:9px;height:9px;border-radius:50%;background:currentColor;display:inline-block;margin-right:8px;vertical-align:middle}
+.t-ok{color:var(--ok)}.t-warn{color:var(--warn)}.t-err{color:var(--err)}.t-muted{color:var(--dim)}
+.card{margin:0}
+h2.sec{font-family:ui-monospace,SFMono-Regular,Menlo,"JetBrains Mono",monospace;
+font-size:11px;font-weight:400;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin:22px 0 10px}
+h2.sec:before{content:"── "}
+p{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
+color:var(--text);font-size:14.5px;line-height:1.62;margin:0 0 12px}p:last-child{margin-bottom:0}
+ul{margin:0 0 16px;padding:0;list-style:none}
+li{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
+color:var(--text);font-size:14px;line-height:1.55;margin:0 0 10px;padding-left:20px;position:relative}li:last-child{margin-bottom:0}
+li:before{content:"▸";position:absolute;left:2px;top:0;color:var(--cyan);
+font-family:ui-monospace,SFMono-Regular,Menlo,"JetBrains Mono",monospace}
+code{background:var(--titlebar);border:1px solid var(--border);padding:1px 5px;border-radius:4px;font-size:12.5px;
+font-family:ui-monospace,SFMono-Regular,Menlo,"JetBrains Mono",monospace;color:var(--warn)}
+a{color:var(--cyan);text-decoration:underline}
+em{font-style:italic;color:var(--prose)}
+strong{font-weight:700;color:var(--text)}
+.btn-wrap{margin:10px 0 2px}
+.btn{display:inline-block;padding:10px 16px;color:var(--ok);border:1px solid var(--ok);background:rgba(70,196,106,.08);
+font-weight:700;font-size:13px;border-radius:6px;text-decoration:none;line-height:1.2;
+font-family:ui-monospace,SFMono-Regular,Menlo,"JetBrains Mono",monospace}
+.footer{margin-top:24px;font-size:11px;color:var(--dim2);
+font-family:ui-monospace,SFMono-Regular,Menlo,"JetBrains Mono",monospace}
+.footer code{font-size:11px;background:none;border:none;padding:0;color:var(--dim)}
 """
 
 
@@ -166,25 +196,32 @@ _SUBHEAD = {
 
 
 def _render(status: str, body_md: str) -> str:
-    cls, label = _PILL.get(status, ("pill-muted", "Audit ran"))
+    tone, state = _STATE.get(status, ("t-muted", "AUDIT RAN"))
     subhead = _SUBHEAD.get(status, "Weekly live-anchored doc/IaC drift audit.")
     body_html = _md_to_html(body_md)
+    now = datetime.now().strftime("%a %b %-d %H:%M")
     return (
         '<!DOCTYPE html><html><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1.0">'
         '<meta name="color-scheme" content="light dark">'
         '<meta name="supported-color-schemes" content="light dark">'
         '<title>Doc/IaC drift — weekly audit</title>'
-        f"<style>{_CSS}</style></head><body><div class='wrap'>"
-        '<p class="eyebrow">Homelab &middot; Doc / IaC Drift Audit</p>'
+        f"<style>{_CSS}</style></head><body><div class='wrap'><div class='term'>"
+        '<div class="titlebar">'
+        '<span class="dots"><i class="d-r"></i><i class="d-a"></i><i class="d-g"></i></span>'
+        '<span class="brand"><span class="ring"><i></i></span><b>etherport</b><em>&middot; drift</em></span>'
+        '<span class="tb-spacer"></span></div>'
+        '<div class="screen">'
+        '<div class="prompt"><span class="p-user">alerts@etherport</span><span class="p-punc">:</span>'
+        '<span class="p-path">~</span><span class="p-punc">$</span> drift audit --since last-week'
+        '<span class="cursor"></span></div>'
         '<h1>Weekly doc / IaC drift audit</h1>'
         f'<p class="subhead">{html.escape(subhead)}</p>'
-        f'<span class="pill {cls}"><span class="dot"></span>{html.escape(label)}</span>'
+        f'<div class="status-line {tone}"><i></i>{state}</div>'
         f'<div class="card">{body_html}</div>'
-        '<div class="footer">Live-anchored audit on the devbox &middot; full log: '
-        '<code>~/.local/state/doc-drift-audit/</code> &middot; tracked in the '
-        '<code>doc-drift</code> GitHub issue.</div>'
-        "</div></body></html>"
+        f'<div class="footer">— generated {now} PT · devbox · log '
+        '<code>~/.local/state/doc-drift-audit/</code> · doc-drift issue —</div>'
+        "</div></div></div></body></html>"
     )
 
 

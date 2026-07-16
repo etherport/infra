@@ -443,10 +443,10 @@ for execution in sorted_executions:
     tasks_html_parts.append(f"""
         <div class="lrow">
             <span class="l-name">{share.title()}</span>
-            <span class="l-detail">{_detail}{(' · ' + _win) if _win else ''}</span>
             <span class="leader"></span>
             <span class="tag {_tag_tone}">{_tag_text}</span>
-        </div>""")
+        </div>
+        <div class="xdetail">{_detail}{(' · ' + _win) if _win else ''}</div>""")
 
 tasks_html = '\n'.join(tasks_html_parts) if tasks_html_parts else \
     '<div class="empty">No executions in this window.</div>'
@@ -501,9 +501,8 @@ html = f"""<!DOCTYPE html>
   .d-r {{ background:var(--dot-r); }} .d-a {{ background:var(--dot-a); }} .d-g {{ background:var(--dot-g); }}
   .brand {{ margin:0 auto; display:inline-flex; align-items:center; gap:8px; font-size:12.5px; }}
   .ring {{ width:15px; height:15px; border:2px solid var(--ok); border-radius:50%;
-    display:inline-block; position:relative; box-sizing:border-box; vertical-align:middle; }}
-  .ring i {{ width:4px; height:4px; border-radius:50%; background:var(--ok);
-    position:absolute; top:3px; left:3px; }}
+    display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; vertical-align:middle; }}
+  .ring i {{ width:4px; height:4px; border-radius:50%; background:var(--ok); }}
   .brand b {{ font-weight:600; color:var(--text); }}
   .brand em {{ font-style:normal; color:var(--dim); }}
   .tb-spacer {{ width:47px; }}
@@ -526,9 +525,9 @@ html = f"""<!DOCTYPE html>
   .kvline .v {{ color:var(--text); }}
   .kvline .sep {{ color:var(--dim2); }}
   .t-ok {{ color:var(--ok); }} .t-warn {{ color:var(--warn); }} .t-err {{ color:var(--err); }}
-  .lrow {{ display:flex; align-items:center; gap:8px; font-size:13px; margin:0 0 6px; }}
-  .l-name {{ color:var(--text); flex:none; min-width:64px; }}
-  .l-detail {{ color:var(--dim); }}
+  .lrow {{ display:flex; align-items:center; gap:8px; font-size:13px; margin:0 0 3px; }}
+  .l-name {{ color:var(--text); flex:none; }}
+  .xdetail {{ color:var(--dim); font-size:12.5px; margin:-2px 0 13px; }}
   .leader {{ flex:1; border-bottom:1px dotted var(--leader); transform:translateY(-4px); }}
   .tag {{ white-space:nowrap; }}
   .empty {{ color:var(--dim); font-size:13px; }}
