@@ -71,6 +71,22 @@ flagged to operator.
 **Next:** L37/L38, M138 iCloud app-password (operator), ntfy app subscribe (operator), M12
 recurring-drill trust-line (optional), watch the next Renovate PR plans green under the M140 role.
 
+**2026-07-16 (cont.2) — email redesign round-3 (+ weekly drift email) + the "advisor didn't format" bug:**
+- Round-3 from the design agent: trivial CSS polish over round-2 for the 3 status/alert emails
+  (flexbox .ring, daily-report row layout) + the weekly drift email (send-audit-email.py) newly
+  themed. Applied `ec12096`. **Caught + fixed a real bug (`b444218`) via a live test send BEFORE
+  shipping:** the drift-email rename left the lookup dict as `_PILL` (old `pill-*` values) while
+  `_render` referenced `_STATE` with `t-*` values → NameError on every send. Renamed + revalued.
+- **Why the operator saw "unformatted advisor emails":** NOT the advisor — its success path uses
+  `_render_email` (verified, and the real success-path HTML rendered themed). The unthemed alert
+  emails are **Alertmanager's own `email-alerts` receiver** (03-alertmanager-config.yaml:76): for
+  severity=critical, AM sends its DEFAULT-template HTML email in ADDITION to the advisor's
+  diagnosis + ntfy. The design agent never touched AM's template (it's a Go template in
+  emailConfigs, not one of the 4 generators). **⏳ Offered to theme the AM email-alerts template to
+  match — operator decision (it's a new artifact + touches the critical-alert path).**
+- All 4 test emails fired live + verified sent (status/advisor/daily-report/drift). Rendered the
+  real advisor success email + drift email and sent to the operator for visual confirmation.
+
 **2026-07-16 (cont.) — email redesign (all 3 status/alert emails) + test sends:**
 - Design agent delivered a terminal/monospace theme as 3 modified source files (not images):
   `service-status-report.py`, auto-remediation `remediate.py` (`_render_email`), `daily-report.sh`.
