@@ -71,6 +71,25 @@ flagged to operator.
 **Next:** L37/L38, M138 iCloud app-password (operator), ntfy app subscribe (operator), M12
 recurring-drill trust-line (optional), watch the next Renovate PR plans green under the M140 role.
 
+**2026-07-16 (cont.) — email redesign (all 3 status/alert emails) + test sends:**
+- Design agent delivered a terminal/monospace theme as 3 modified source files (not images):
+  `service-status-report.py`, auto-remediation `remediate.py` (`_render_email`), `daily-report.sh`.
+  **Verified presentation-only** before applying: controller had 0 python-logic-line diffs; a
+  subagent audited the 2 data-script diffs and confirmed all queries / kubectl-AWS calls /
+  service+row sets (all 51 status rows render) / health logic / subject / recipients / SES-send
+  are byte-identical (outside the redesigned HTML region). One intentional design reduction: the
+  per-service `kind · namespace/target` sub-line is dropped from status rows (data still collected).
+  Rendered the status email against live Prometheus (`STDOUT_ONLY=1`) + a sample advisor email to
+  verify visually + email-safety (inline CSS, no external assets) before shipping. Committed `c7f2bcd`.
+- **Deploy paths differ:** the 2 configmaps deploy via Flux (status-report configMapGenerator;
+  advisor needs a controller restart to reload remediate.py — done); `daily-report.sh` is baked
+  into `ghcr.io/…/aws-s3-sync:main` → the push auto-triggered the image build (path-filtered), and
+  the CronJob's `:main`+Always-pull means the next run uses it.
+- **All 3 test emails fired live + verified sent:** status-report (manual Job → SES), advisor (temp
+  always-firing PrometheusRule `EmailRedesignTest` → AM → advisor diagnosed noop → SES; rule removed
+  immediately — the advisor's `_alert_still_firing` guard queries Prometheus so a hand-POSTed webhook
+  is skipped, hence the real-rule approach), daily-report (manual Job off the rebuilt image → SES).
+
 **2026-07-16 — overnight alert cluster = M144 escalated to etcd-leader loss (M145, fixed):**
 - The "concerning security" note the operator flagged: the overnight advisor emails weren't a
   breach — they were a single I/O cascade at 07-15 03:29 PDT (the nightly velero window):
