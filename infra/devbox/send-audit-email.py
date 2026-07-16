@@ -183,10 +183,10 @@ def _md_to_html(body: str) -> str:
     return "".join(out)
 
 
-_PILL = {
-    "clean": ("pill-ok", "Clean — no drift"),
-    "drift": ("pill-warn", "Review needed"),
-    "error": ("pill-err", "Audit error"),
+_STATE = {
+    "clean": ("t-ok", "CLEAN — NO DRIFT"),
+    "drift": ("t-warn", "REVIEW NEEDED"),
+    "error": ("t-err", "AUDIT ERROR"),
 }
 _SUBHEAD = {
     "clean": "Docs + IaC match live state this week.",
