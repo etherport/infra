@@ -71,6 +71,21 @@ flagged to operator.
 **Next:** L37/L38, M138 iCloud app-password (operator), ntfy app subscribe (operator), M12
 recurring-drill trust-line (optional), watch the next Renovate PR plans green under the M140 role.
 
+**2026-07-16 — overnight alert cluster = M144 escalated to etcd-leader loss (M145, fixed):**
+- The "concerning security" note the operator flagged: the overnight advisor emails weren't a
+  breach — they were a single I/O cascade at 07-15 03:29 PDT (the nightly velero window):
+  **etcdNoLeader on cp1 ~4 min** + NodeSystemSaturation (cp2/w1) + TargetDown +
+  AlertmanagerFailedToSendAlerts + a mini SMB timeout. Root: 5 backups packed into 03:00-03:48
+  with node-agent kopia running on the control-plane nodes → kube-system-daily saturated cp1/cp2
+  disk → etcd fsync stall (shared Ceph). Fix `0861852`: 12 velero schedules re-spread to 30-min
+  interleaved heavy/light, 01:00-06:30 (see M145). Applied + live-verified.
+- Cluster healthy now (8/8 Ready, quorum never actually lost — cp2/cp3 held leader). Cost of the
+  cascade: nil (all self-resolved). The two MiniSMBAuthRejected criticals self-healed (mount-nas
+  fix); NAS contention should ease with the spread.
+- Separately: the operator's "new email designs" for the update + weekly-drift emails — the only
+  recent design artifacts on disk are CUE-app designs in the cue repo scratchpad, NOT infra
+  update-email designs; asked the operator for the location/attachment. Not implemented pending that.
+
 **2026-07-14 (cont.) — doc-drift-audit manual-review items resolved (3/3):**
 - **M91 kernel citation:** re-verified on live `6.8.0-134-generic` (node SSH) — `i6300esb` still
   absent, M91 stays blocked; CLAUDE.md re-anchored + "re-check per kernel bump" note (`badd590`).

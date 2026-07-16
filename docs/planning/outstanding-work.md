@@ -343,6 +343,23 @@ This file foregrounds open/in-progress/gated work._
   re-records the IAM tag changes (≤24h) and (b) personal-web applies its default_tags. Delete
   decisions pending operator: w3tc, 2× DataSync role+policy pairs, M75 orphan users.
 
+### 🟡 M144/M145. Nightly backup I/O contention — ESCALATED to etcd-leader loss (fix shipped)
+- **M145 (2026-07-16): the nightly stall now hits the CONTROL PLANE.** Overnight 07-15 03:29 PDT,
+  etcd on cp1 lost its leader for ~4 min (cp2/cp3 kept quorum, API endpoint = cp1 briefly degraded)
+  + NodeSystemSaturation (cp2 8.5, w1 22 load/core) + TargetDown + AlertmanagerFailedToSendAlerts +
+  a mini SMB timeout — one cascade, one cause. Root: the M119 stagger still packed 5 backups into
+  03:00-03:48 at 12-min spacing (each kopia FS-backup runs 15-25 min → 3-4 overlap), and
+  **node-agent kopia runs on the control-plane nodes too**, so `kube-system-daily` (03:12) saturated
+  cp1/cp2 disk → etcd fsync stall on the shared Ceph pool.
+- **✅ Fix shipped `0861852` (applied + live-verified):** widened all 12 velero schedules to 30-min
+  spacing across 01:00-06:30 and **interleaved heavy/light** so no two heavy backups (or
+  kube-system, the etcd co-tenant) run within 30 min — peak concurrency ~4 → ~1-2. Supersedes the
+  M144 symptom-hardening (wireguard probes `c5231ad`, rclone deadlines `ee7f17f`), which stay.
+- **⏳ Watch:** confirm 2-3 clean nights (no etcdNoLeader / saturation). If a single heavy backup
+  still runs >30 min and overlaps, either widen further or cap velero node-agent upload concurrency
+  (helm values — riskier). The MiniSMBAuthRejected transients (07-15 01:28/02:58, self-healed via
+  the mount-nas fix) should also ease as Garage-NFS peak write load drops.
+
 ### 🟡 M144. Nightly ~03:00-03:30 kopia-maintenance I/O stall — recurring collateral (2 nights)
 - **Pattern (07-13 + 07-14):** velero kopia repo maintenance against Garage (data on sequoia NFS;
   cache on node disk/Ceph) D-state-stalls w1/gpu1 for ~30-40 min nightly — severe enough that
