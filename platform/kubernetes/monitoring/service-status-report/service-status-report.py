@@ -293,27 +293,33 @@ elif counts["unknown"] > 0:
 else:
     overall_class, overall_text = "ok",   f"All {counts['up']} healthy"
 
+# Terminal headline + uppercase state + dot tone for the 2a layout.
+def _plural(n):
+    return "" if n == 1 else "s"
+if counts["down"] > 0:
+    overall_head, overall_state, overall_tone = f"{counts['down']} service{_plural(counts['down'])} down", "DOWN", "err"
+elif counts["degraded"] > 0:
+    overall_head, overall_state, overall_tone = f"{counts['degraded']} service{_plural(counts['degraded'])} degraded", "DEGRADED", "warn"
+elif counts["unknown"] == total and total > 0:
+    overall_head, overall_state, overall_tone = "All services unknown", "UNKNOWN", "muted"
+elif counts["unknown"] > 0:
+    overall_head, overall_state, overall_tone = f"{counts['unknown']} service{_plural(counts['unknown'])} unknown", "UNKNOWN", "muted"
+else:
+    overall_head, overall_state, overall_tone = "All systems healthy", "HEALTHY", "ok"
+
 
 # ---- build HTML ----------------------------------------------------------
 
-def render_status_pill(status):
-    """Compact pill — same idiom as the s3-sync report."""
-    mapping = {
-        "up":       ("ok",   "up"),
-        "degraded": ("warn", "degraded"),
-        "down":     ("err",  "down"),
-        "unknown":  ("muted","unknown"),
-    }
-    cls, label = mapping[status]
-    return f'<span class="pill pill-{cls}"><span class="dot"></span>{label}</span>'
-
+_SVC_TAG = {
+    "up":       ("[ ok ]", "t-ok"),
+    "degraded": ("[warn]", "t-warn"),
+    "down":     ("[fail]", "t-err"),
+    "unknown":  ("[ ?? ]", "t-muted"),
+}
 
 service_rows_html = []
 for category in sorted(by_category.keys()):
     services = by_category[category]
-    # category order: alphabetical for stability, but External edge last
-    # by adding a sort key prefix below
-
     # Sort: down → degraded → unknown → up, then by name
     order = {"down": 0, "degraded": 1, "unknown": 2, "up": 3}
     services.sort(key=lambda s: (order[s["status"]], s["name"].lower()))
@@ -324,59 +330,40 @@ for category in sorted(by_category.keys()):
             counts_text = f'{s["ready"]}/{s["desired"]}'
         else:
             counts_text = "—"
-
-        meta = html_escape(f'{s["kind"]} · {s["namespace"]}/{s["target"]}')
-
+        tag_text, tag_tone = _SVC_TAG[s["status"]]
         rows.append(f"""
-              <tr>
-                <td class="svc-cell">
-                  <div class="svc-name">{html_escape(s['name'])}</div>
-                  <div class="svc-meta mono">{meta}</div>
-                </td>
-                <td class="svc-counts mono">{counts_text}</td>
-                <td class="svc-status">{render_status_pill(s['status'])}</td>
-              </tr>""")
+        <div class="lrow">
+          <span class="l-name">{html_escape(s['name'])}</span>
+          <span class="leader"></span>
+          <span class="l-count">{counts_text}</span>
+          <span class="tag {tag_tone}">{tag_text}</span>
+        </div>""")
 
-    service_rows_html.append(f"""
-      <div class="category">
-        <div class="category-head">{html_escape(category)}</div>
-        <table class="svc-table" role="presentation">
-          <tbody>{''.join(rows)}
-          </tbody>
-        </table>
-      </div>""")
+    service_rows_html.append(
+        f'<div class="catblock"><div class="cat"># {html_escape(category)}</div>{"".join(rows)}</div>')
 
 
 def render_alert_block():
     if not firing:
         return ""
-    blocks = []
+    tag_map = {"critical": ("[crit]", "t-err"), "warning": ("[warn]", "t-warn"), "info": ("[info]", "t-cyan")}
+    rows = []
     for sev in ("critical", "warning", "info"):
         items = firing_by_sev.get(sev, [])
         if not items:
             continue
-        sev_class = {"critical": "err", "warning": "warn", "info": "muted"}.get(sev, "muted")
-        lis = []
+        tag_text, tag_tone = tag_map.get(sev, ("[info]", "t-cyan"))
         for a in items:
             qual = html_escape(a["instance"]) if a["instance"] else ""
-            qual_html = f' <span class="alert-qual mono">{qual}</span>' if qual else ""
+            qual_html = f' <span class="a-qual">{qual}</span>' if qual else ""
             summary = html_escape(a["summary"]) if a["summary"] else ""
-            summary_html = f'<div class="alert-summary">{summary}</div>' if summary else ""
-            lis.append(f"""
-              <li class="alert-row alert-{sev_class}">
-                <span class="alert-name">{html_escape(a['alertname'])}{qual_html}</span>
-                {summary_html}
-              </li>""")
-        blocks.append(f"""
-          <div class="alert-group">
-            <div class="alert-sev-label sev-{sev_class}">{sev} ({len(items)})</div>
-            <ul class="alert-list">{''.join(lis)}
-            </ul>
-          </div>""")
-    return f"""
-      <div class="section-label">Firing alerts</div>
-      <div class="alerts-box">{''.join(blocks)}
-      </div>"""
+            summary_html = f'<div class="a-summary">{summary}</div>' if summary else ""
+            rows.append(
+                f'<div class="arow"><span class="tag {tag_tone}">{tag_text}</span> '
+                f'<span class="a-name">{html_escape(a["alertname"])}</span>{qual_html}{summary_html}</div>'
+            )
+    return ('<div class="rule">── FIRING ───────────────────────</div>'
+            '<div class="firing">' + ''.join(rows) + '</div>')
 
 
 def _labeled(query, label="service"):
@@ -402,61 +389,50 @@ def render_cost_block():
     budget = first_value(prom_query("aws_cost_budget_usd"))
     yday = first_value(prom_query("aws_cost_yesterday_usd"))
 
+    _rule = '<div class="rule">── COST · AWS ───────────────────────</div>'
+
     # Stale (>30h) or never-pushed → show a muted note (matches AWSCostExporterStale).
     if last is None or (NOW_PT.timestamp() - last) > 108000:
-        return """
-      <div class="section-label">Cost (AWS)</div>
-      <div class="alerts-box"><div class="alert-summary" style="padding:12px 14px;">
-        Cost data unavailable — aws-cost-exporter hasn't reported recently.
-      </div></div>"""
+        return _rule + '<div class="kvline" style="color:var(--dim)">cost data unavailable — aws-cost-exporter stale</div>'
 
     def money(v):
         return f"${v:,.2f}" if v is not None else "—"
 
     # Forecast tone vs budget.
-    f_tone = "tone-ok"
+    f_tone = "t-ok"
     if budget and forecast:
         if forecast > budget:
-            f_tone = "tone-err"
+            f_tone = "t-err"
         elif forecast > 0.8 * budget:
-            f_tone = "tone-warn"
+            f_tone = "t-warn"
 
-    # Top-3 services by MTD.
+    line = (f'mtd <span class="v">{money(mtd)}</span><span class="sep">  ·  </span>'
+            f'forecast <span class="{f_tone}">{money(forecast)}</span>'
+            f'<span class="sep">/{money(budget)}</span><span class="sep">  ·  </span>'
+            f'yday <span class="v">{money(yday)}</span>')
+
+    # Top-3 services by MTD → compact dim line.
     top = sorted(_labeled("aws_cost_service_mtd_usd"), key=lambda kv: -kv[1])[:3]
     top_html = ""
     if top:
-        rows = "".join(
-            f'<tr><td class="svc-cell"><div class="svc-name">{html_escape(s)}</div></td>'
-            f'<td class="svc-counts mono">{money(v)}</td></tr>'
-            for s, v in top
-        )
-        top_html = f"""
-        <table class="svc-table" role="presentation"><tbody>{rows}</tbody></table>"""
+        parts = '<span class="sep">  ·  </span>'.join(
+            f'{html_escape(s)} <span class="v">{money(v)}</span>' for s, v in top)
+        top_html = f'<div class="kvline kvline-sub">top {parts}</div>'
 
     # Spikes: any service whose yesterday >2x its 7-day average.
     spikes = [(s, r) for s, r in _labeled("aws_cost_service_spike_ratio") if r > 2]
     spikes.sort(key=lambda kv: -kv[1])
     spike_html = ""
     if spikes:
-        lis = "".join(
-            f'<li class="alert-row alert-warn"><span class="alert-name">{html_escape(s)} '
-            f'<span class="alert-qual mono">{r:.1f}× 7-day avg</span></span></li>'
+        rows = "".join(
+            f'<div class="arow"><span class="tag t-warn">[warn]</span> '
+            f'<span class="a-name">{html_escape(s)}</span> '
+            f'<span class="a-qual">{r:.1f}× 7-day avg</span></div>'
             for s, r in spikes[:4]
         )
-        spike_html = f"""
-      <div class="alerts-box"><div class="alert-group">
-        <div class="alert-sev-label sev-warn">daily cost spikes</div>
-        <ul class="alert-list">{lis}</ul>
-      </div></div>"""
+        spike_html = f'<div class="firing">{rows}</div>'
 
-    return f"""
-      <div class="section-label">Cost (AWS)</div>
-      <div class="summary-grid">
-        <div class="metric"><div class="metric-label">Month-to-date</div><div class="metric-value">{money(mtd)}</div></div>
-        <div class="metric {f_tone}"><div class="metric-label">Forecast</div><div class="metric-value">{money(forecast)}</div></div>
-        <div class="metric"><div class="metric-label">Budget</div><div class="metric-value">{money(budget)}</div></div>
-        <div class="metric"><div class="metric-label">Yesterday</div><div class="metric-value">{money(yday)}</div></div>
-      </div>{top_html}{spike_html}"""
+    return _rule + f'<div class="kvline">{line}</div>{top_html}{spike_html}'
 
 
 alerts_block = render_alert_block()
@@ -472,196 +448,110 @@ html = f"""<!DOCTYPE html>
 <title>{html_escape(REPORT_TITLE)}</title>
 <style>
   :root {{
-    --bg: #f6f7f9;
-    --surface: #ffffff;
-    --text: #0f172a;
-    --text-muted: #64748b;
-    --border: #e5e7eb;
-    --border-soft: #eef0f3;
-    --ok: #047857;       --ok-bg: #ecfdf5;
-    --warn: #b45309;     --warn-bg: #fffbeb;
-    --err: #b91c1c;      --err-bg: #fef2f2;
-    --muted: #6b7280;    --muted-bg: #f3f4f6;
-    --accent: #1f2937;
+    color-scheme: light dark;
+    --page: #e7e8ec; --surface: #f7f7f2; --border: #dedcd0; --titlebar: #eeece2;
+    --text: #26241d; --prose: #6b6a5f; --dim: #8a897e; --dim2: #c9c5b6; --leader: #cfcdbc;
+    --ok: #2f8f52; --cyan: #2a7d8c; --warn: #9a6100; --err: #a5342a;
+    --dot-r: #c9483d; --dot-a: #c08a1e; --dot-g: #2f8f52;
   }}
   @media (prefers-color-scheme: dark) {{
     :root {{
-      --bg: #0b1220;
-      --surface: #131c2e;
-      --text: #e8eaf0;
-      --text-muted: #94a3b8;
-      --border: #243049;
-      --border-soft: #1b2538;
-      --ok: #34d399;     --ok-bg: rgba(16,185,129,0.12);
-      --warn: #fbbf24;   --warn-bg: rgba(217,119,6,0.15);
-      --err: #f87171;    --err-bg: rgba(220,38,38,0.16);
-      --muted: #94a3b8;  --muted-bg: rgba(148,163,184,0.12);
-      --accent: #f1f5f9;
+      --page: #05070b; --surface: #0a0e14; --border: #1b232e; --titlebar: #0d1219;
+      --text: #e6edf3; --prose: #8a93a0; --dim: #6b7888; --dim2: #3a4553; --leader: #2a3542;
+      --ok: #46c46a; --cyan: #5ac2d4; --warn: #e0a53a; --err: #f4685c;
+      --dot-r: #f4685c; --dot-a: #e0a53a; --dot-g: #46c46a;
     }}
   }}
-  body {{
-    margin: 0; padding: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
-    font-size: 15px;
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-    -webkit-text-size-adjust: 100%;
-  }}
-  .wrap {{ max-width: 720px; margin: 0 auto; padding: 36px 20px 56px; }}
-  .eyebrow {{
-    font-size: 11px; font-weight: 600;
-    color: var(--text-muted);
-    letter-spacing: 0.12em; text-transform: uppercase;
-    margin: 0 0 10px;
-  }}
-  h1 {{
-    font-size: 26px; font-weight: 700; letter-spacing: -0.015em;
-    margin: 0 0 6px; color: var(--accent);
-  }}
-  .subhead {{ color: var(--text-muted); font-size: 14px; margin: 0 0 22px; }}
-  .pill {{
-    display: inline-flex; align-items: center; gap: 7px;
-    padding: 5px 11px; border-radius: 999px;
-    font-size: 13px; font-weight: 500; line-height: 1;
-  }}
-  .pill .dot {{
-    width: 7px; height: 7px; border-radius: 50%; background: currentColor;
-    display: inline-block;
-  }}
-  .pill-ok    {{ background: var(--ok-bg);    color: var(--ok);    }}
-  .pill-warn  {{ background: var(--warn-bg);  color: var(--warn);  }}
-  .pill-err   {{ background: var(--err-bg);   color: var(--err);   }}
-  .pill-muted {{ background: var(--muted-bg); color: var(--muted); }}
-  .hero-status {{ margin: 0 0 32px; }}
-  .section-label {{
-    font-size: 11px; font-weight: 600;
-    color: var(--text-muted);
-    letter-spacing: 0.1em; text-transform: uppercase;
-    margin: 18px 0 10px;
-  }}
-  .summary-grid {{
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-    margin: 0 0 28px;
-  }}
-  @media (max-width: 520px) {{
-    .summary-grid {{ grid-template-columns: repeat(2, 1fr); }}
-  }}
-  .metric {{
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 16px;
-  }}
-  .metric-label {{
-    font-size: 11px; color: var(--text-muted);
-    text-transform: uppercase; letter-spacing: 0.06em;
-    margin: 0 0 6px;
-  }}
-  .metric-value {{
-    font-size: 22px; font-weight: 600; line-height: 1.15;
-    color: var(--accent); font-variant-numeric: tabular-nums;
-  }}
-  .metric.tone-ok   .metric-value {{ color: var(--ok);    }}
-  .metric.tone-warn .metric-value {{ color: var(--warn);  }}
-  .metric.tone-err  .metric-value {{ color: var(--err);   }}
-  .metric.tone-mut  .metric-value {{ color: var(--muted); }}
-  .category {{
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    margin: 0 0 14px;
-    overflow: hidden;
-  }}
-  .category-head {{
-    font-size: 13px; font-weight: 600;
-    padding: 12px 18px;
-    border-bottom: 1px solid var(--border-soft);
-    background: linear-gradient(180deg, var(--surface) 0%, var(--border-soft) 100%);
-  }}
-  .svc-table {{
-    width: 100%; border-collapse: collapse;
-  }}
-  .svc-table td {{
-    padding: 10px 18px;
-    border-top: 1px solid var(--border-soft);
-    vertical-align: middle;
-  }}
-  .svc-table tr:first-child td {{ border-top: none; }}
-  .svc-cell {{ width: 60%; }}
-  .svc-name {{ font-weight: 500; color: var(--text); font-size: 14px; }}
-  .svc-meta {{ color: var(--text-muted); font-size: 11px; margin-top: 2px; word-break: break-all; }}
-  .svc-counts {{ text-align: right; color: var(--text-muted); font-size: 13px; width: 60px; }}
-  .svc-status {{ text-align: right; white-space: nowrap; }}
-  .mono {{
+  body {{ margin:0; padding:0; background:var(--page); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; -webkit-text-size-adjust:100%; }}
+  .wrap {{ max-width: 600px; margin: 0 auto; padding: 28px 16px 46px; }}
+  .term {{ background:var(--surface); border:1px solid var(--border); border-radius:11px; overflow:hidden; }}
+  .titlebar {{ display:flex; align-items:center; padding:11px 16px; background:var(--titlebar);
+    border-bottom:1px solid var(--border);
+    font-family: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace; }}
+  .dots {{ display:flex; gap:7px; }}
+  .dots i {{ width:11px; height:11px; border-radius:50%; display:inline-block; }}
+  .d-r {{ background:var(--dot-r); }} .d-a {{ background:var(--dot-a); }} .d-g {{ background:var(--dot-g); }}
+  .brand {{ margin:0 auto; display:inline-flex; align-items:center; gap:8px; font-size:12.5px; }}
+  .ring {{ width:15px; height:15px; border:2px solid var(--ok); border-radius:50%;
+    display:inline-block; position:relative; box-sizing:border-box; vertical-align:middle; }}
+  .ring i {{ width:4px; height:4px; border-radius:50%; background:var(--ok);
+    position:absolute; top:3px; left:3px; }}
+  .brand b {{ font-weight:600; color:var(--text); }}
+  .brand em {{ font-style:normal; color:var(--dim); }}
+  .tb-spacer {{ width:47px; }}
+  .screen {{ padding:24px 26px 28px;
     font-family: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace;
-    font-variant-numeric: tabular-nums;
-  }}
-  .alerts-box {{
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 14px 18px 16px;
-    margin: 0 0 24px;
-  }}
-  .alert-group + .alert-group {{ margin-top: 14px; }}
-  .alert-sev-label {{
-    font-size: 11px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.08em;
-    margin: 0 0 8px;
-  }}
-  .sev-err {{ color: var(--err); }}
-  .sev-warn {{ color: var(--warn); }}
-  .sev-muted {{ color: var(--muted); }}
-  .alert-list {{ margin: 0; padding: 0; list-style: none; }}
-  .alert-row {{
-    padding: 8px 10px;
-    border-radius: 8px;
-    margin-bottom: 4px;
-    background: var(--border-soft);
-  }}
-  .alert-row.alert-err  {{ background: var(--err-bg);  }}
-  .alert-row.alert-warn {{ background: var(--warn-bg); }}
-  .alert-name {{ font-weight: 500; font-size: 14px; }}
-  .alert-qual {{ color: var(--text-muted); font-size: 12px; margin-left: 6px; }}
-  .alert-summary {{ color: var(--text-muted); font-size: 12px; margin-top: 2px; }}
-  .footer {{
-    margin-top: 36px;
-    padding-top: 18px;
-    border-top: 1px solid var(--border);
-    font-size: 12px;
-    color: var(--text-muted);
-    text-align: center;
-  }}
+    font-size:13px; line-height:1.7; }}
+  .prompt {{ margin:0 0 20px; color:var(--text); word-break:break-all; }}
+  .p-user {{ color:var(--ok); }} .p-punc {{ color:var(--dim); }} .p-path {{ color:var(--cyan); }}
+  .cursor {{ display:inline-block; width:8px; height:15px; background:var(--text);
+    margin-left:4px; vertical-align:-2px; animation: blink 1.1s step-end infinite; }}
+  @keyframes blink {{ 50% {{ opacity:0; }} }}
+  h1 {{ font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
+    font-size:26px; font-weight:700; letter-spacing:-0.02em; color:var(--text); margin:0 0 5px; }}
+  .meta {{ font-size:12px; color:var(--dim); margin:0 0 18px; }}
+  .status-line {{ font-size:14px; margin:0 0 24px; }}
+  .status-line i {{ width:9px; height:9px; border-radius:50%; background:currentColor;
+    display:inline-block; margin-right:8px; vertical-align:middle; }}
+  .rule {{ color:var(--dim); font-size:11px; letter-spacing:0.14em; margin:0 0 10px; }}
+  .sgrid {{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:0 0 24px; }}
+  .cell {{ border:1px solid var(--border); border-radius:6px; padding:11px 12px; }}
+  .cell .num {{ font-size:23px; font-weight:700; font-variant-numeric:tabular-nums; }}
+  .cell .lab {{ font-size:10px; letter-spacing:0.1em; color:var(--dim); }}
+  .kvline {{ font-size:13px; color:var(--prose); margin:0 0 24px; }}
+  .kvline-sub {{ margin-top:-16px; }}
+  .kvline .v {{ color:var(--text); }}
+  .kvline .sep {{ color:var(--dim2); }}
+  .cat {{ color:var(--cyan); font-size:12px; margin:0 0 8px; }}
+  .catblock {{ margin:0 0 16px; }}
+  .lrow {{ display:flex; align-items:center; gap:8px; font-size:13px; margin:0 0 6px; }}
+  .l-name {{ color:var(--text); flex:none; }}
+  .l-count {{ color:var(--dim); }}
+  .leader {{ flex:1; border-bottom:1px dotted var(--leader); transform:translateY(-4px); }}
+  .tag {{ white-space:nowrap; }}
+  .firing {{ margin:0 0 24px; }}
+  .arow {{ font-size:13px; margin:0 0 10px; }}
+  .a-name {{ color:var(--text); }}
+  .a-qual {{ color:var(--dim); font-size:12px; }}
+  .a-summary {{ font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
+    color:var(--prose); font-size:13px; padding-left:52px; margin-top:2px; }}
+  .t-ok {{ color:var(--ok); }} .t-warn {{ color:var(--warn); }} .t-err {{ color:var(--err); }}
+  .t-cyan {{ color:var(--cyan); }} .t-muted {{ color:var(--dim); }}
+  .t-strong {{ color:var(--text); }} .t-dim {{ color:var(--dim2); }}
+  .footer {{ margin-top:24px; color:var(--dim2); font-size:11px; }}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="eyebrow">Homelab · status</div>
-  <h1>{html_escape(REPORT_TITLE)}</h1>
-  <p class="subhead">{NOW_PT.strftime('%a %b %-d, %H:%M')} PT</p>
+  <div class="term">
+    <div class="titlebar">
+      <span class="dots"><i class="d-r"></i><i class="d-a"></i><i class="d-g"></i></span>
+      <span class="brand"><span class="ring"><i></i></span><b>etherport</b><em>· status</em></span>
+      <span class="tb-spacer"></span>
+    </div>
+    <div class="screen">
+      <div class="prompt"><span class="p-user">alerts@etherport</span><span class="p-punc">:</span><span class="p-path">~</span><span class="p-punc">$</span> status<span class="cursor"></span></div>
 
-  <div class="hero-status">
-    <span class="pill pill-{overall_class}"><span class="dot"></span>{html_escape(overall_text)}</span>
-  </div>
+      <h1>{html_escape(overall_head)}</h1>
+      <p class="meta">// {NOW_PT.strftime('%a %b %-d %H:%M')} PT · {len(SERVICES)} services</p>
+      <div class="status-line t-{overall_tone}"><i></i>{overall_state} · {total} services</div>
 
-  <div class="section-label">Summary</div>
-  <div class="summary-grid">
-    <div class="metric tone-ok"><div class="metric-label">Healthy</div><div class="metric-value">{counts['up']}</div></div>
-    <div class="metric{' tone-warn' if counts['degraded'] else ''}"><div class="metric-label">Degraded</div><div class="metric-value">{counts['degraded']}</div></div>
-    <div class="metric{' tone-err' if counts['down'] else ''}"><div class="metric-label">Down</div><div class="metric-value">{counts['down']}</div></div>
-    <div class="metric{' tone-mut' if counts['unknown'] else ''}"><div class="metric-label">Unknown</div><div class="metric-value">{counts['unknown']}</div></div>
-  </div>
+      <div class="rule">── SUMMARY ──────────────────────────</div>
+      <div class="sgrid">
+        <div class="cell"><div class="num t-ok">{counts['up']:02d}</div><div class="lab">HEALTHY</div></div>
+        <div class="cell"><div class="num {'t-warn' if counts['degraded'] else 't-dim'}">{counts['degraded']:02d}</div><div class="lab">DEGRADED</div></div>
+        <div class="cell"><div class="num {'t-err' if counts['down'] else 't-strong'}">{counts['down']:02d}</div><div class="lab">DOWN</div></div>
+        <div class="cell"><div class="num t-muted">{counts['unknown']:02d}</div><div class="lab">UNKNOWN</div></div>
+      </div>
 {cost_block}
 {alerts_block}
-
-  <div class="section-label">Services</div>
+      <div class="rule">── SERVICES ─────────────────────────</div>
 {''.join(service_rows_html)}
-
-  <div class="footer">Generated {NOW_PT.strftime('%Y-%m-%d %H:%M:%S')} PT · {len(SERVICES)} services tracked</div>
+      <div class="footer">— generated {NOW_PT.strftime('%H:%M:%S')} PT · {len(SERVICES)} services tracked —</div>
+    </div>
+  </div>
 </div>
 </body>
 </html>"""

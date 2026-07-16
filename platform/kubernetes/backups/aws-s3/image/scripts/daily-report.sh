@@ -425,23 +425,40 @@ for execution in sorted_executions:
     start_pt_v = to_pt(start_time_v) if start_time_v else None
     end_pt_v = to_pt(end_time_v) if end_time_v else None
 
+    # Terminal leader-row: name … detail … [ tag ]
+    _tag_tone = {'ok': 't-ok', 'warn': 't-warn', 'err': 't-err'}[status_class]
+    _tag_text = {'ok': '[ ok ]', 'warn': '[warn]', 'err': '[fail]'}[status_class]
+    if status_class == 'ok':
+        _detail = (f"{execution.get('files', 0):,} files · {format_bytes(execution.get('bytes', 0))} · "
+                   f"{format_duration(execution.get('duration', 0))}")
+    else:
+        # Non-ok: lead with the human status, append size if we have it
+        _detail = status_text
+        if execution.get('files', 0) or execution.get('bytes', 0):
+            _detail += f" · {execution.get('files', 0):,} files · {format_bytes(execution.get('bytes', 0))}"
+    _win = ''
+    if start_pt_v:
+        _win = (f"{start_pt_v.strftime('%H:%M')}–{end_pt_v.strftime('%H:%M')}"
+                if end_pt_v else start_pt_v.strftime('%H:%M'))
     tasks_html_parts.append(f"""
-        <div class="task">
-            <div class="task-head">
-                <span class="task-name">{share.title()}</span>
-                <span class="pill pill-{status_class}"><span class="dot"></span>{status_text}</span>
-            </div>
-            <div class="task-body">
-                <div class="kv"><div class="kv-label">Files</div><div class="kv-value">{execution.get('files', 0):,}</div></div>
-                <div class="kv"><div class="kv-label">Data</div><div class="kv-value">{format_bytes(execution.get('bytes', 0))}</div></div>
-                <div class="kv"><div class="kv-label">Start</div><div class="kv-value mono">{start_pt_v.strftime('%H:%M') if start_pt_v else '—'}</div></div>
-                <div class="kv"><div class="kv-label">End</div><div class="kv-value mono">{end_pt_v.strftime('%H:%M') if end_pt_v else '—'}</div></div>
-                <div class="kv kv-wide"><div class="kv-label">Duration</div><div class="kv-value">{format_duration(execution.get('duration', 0))}</div></div>
-            </div>
+        <div class="lrow">
+            <span class="l-name">{share.title()}</span>
+            <span class="l-detail">{_detail}{(' · ' + _win) if _win else ''}</span>
+            <span class="leader"></span>
+            <span class="tag {_tag_tone}">{_tag_text}</span>
         </div>""")
 
 tasks_html = '\n'.join(tasks_html_parts) if tasks_html_parts else \
     '<div class="empty">No executions in this window.</div>'
+
+_exit_code = 0 if total_errors == 0 else 1
+_summary_line = (f'runs <span class="v">{total_executions}</span>'
+                 f'<span class="sep"> · </span>ok <span class="t-ok">{total_completed}</span>'
+                 f'<span class="sep"> · </span>err <span class="v">{total_errors}</span>')
+if total_in_progress:
+    _summary_line += f'<span class="sep"> · </span>running <span class="t-warn">{total_in_progress}</span>'
+_summary_line += (f'<span class="sep"> · </span>files <span class="v">{total_files:,}</span>'
+                  f'<span class="sep"> · </span>data <span class="v">{format_bytes(total_bytes)}</span>')
 
 # Render the full email. Targets Apple Mail (iCloud) primarily — modern
 # CSS (vars, grid, prefers-color-scheme) is supported there. Other
@@ -456,206 +473,92 @@ html = f"""<!DOCTYPE html>
 <title>Sequoia → S3 backup report</title>
 <style>
   :root {{
-    --bg: #f6f7f9;
-    --surface: #ffffff;
-    --text: #0f172a;
-    --text-muted: #64748b;
-    --border: #e5e7eb;
-    --border-soft: #eef0f3;
-    --ok: #047857;       --ok-bg: #ecfdf5;
-    --warn: #b45309;     --warn-bg: #fffbeb;
-    --err: #b91c1c;      --err-bg: #fef2f2;
-    --accent: #1f2937;
+    color-scheme: light dark;
+    --page: #e7e8ec; --surface: #f7f7f2; --border: #dedcd0; --titlebar: #eeece2;
+    --text: #26241d; --prose: #6b6a5f; --dim: #8a897e; --dim2: #c9c5b6; --leader: #cfcdbc;
+    --ok: #2f8f52; --cyan: #2a7d8c; --warn: #9a6100; --err: #a5342a;
+    --dot-r: #c9483d; --dot-a: #c08a1e; --dot-g: #2f8f52;
   }}
   @media (prefers-color-scheme: dark) {{
     :root {{
-      --bg: #0b1220;
-      --surface: #131c2e;
-      --text: #e8eaf0;
-      --text-muted: #94a3b8;
-      --border: #243049;
-      --border-soft: #1b2538;
-      --ok: #34d399;     --ok-bg: rgba(16,185,129,0.12);
-      --warn: #fbbf24;   --warn-bg: rgba(217,119,6,0.15);
-      --err: #f87171;    --err-bg: rgba(220,38,38,0.16);
-      --accent: #f1f5f9;
+      --page: #05070b; --surface: #0a0e14; --border: #1b232e; --titlebar: #0d1219;
+      --text: #e6edf3; --prose: #8a93a0; --dim: #6b7888; --dim2: #3a4553; --leader: #2a3542;
+      --ok: #46c46a; --cyan: #5ac2d4; --warn: #e0a53a; --err: #f4685c;
+      --dot-r: #f4685c; --dot-a: #e0a53a; --dot-g: #46c46a;
     }}
   }}
-  body {{
-    margin: 0; padding: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
-    font-size: 15px;
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-    -webkit-text-size-adjust: 100%;
-  }}
-  .wrap {{ max-width: 680px; margin: 0 auto; padding: 36px 20px 56px; }}
-  .eyebrow {{
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-muted);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    margin: 0 0 10px;
-  }}
-  h1 {{
-    font-size: 26px;
-    font-weight: 700;
-    letter-spacing: -0.015em;
-    margin: 0 0 6px;
-    color: var(--accent);
-  }}
-  .subhead {{
-    color: var(--text-muted);
-    font-size: 14px;
-    margin: 0 0 22px;
-  }}
-  .pill {{
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 5px 11px;
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 500;
-    line-height: 1;
-  }}
-  .pill .dot {{
-    width: 7px; height: 7px; border-radius: 50%; background: currentColor;
-    display: inline-block;
-  }}
-  .pill-ok   {{ background: var(--ok-bg);   color: var(--ok);   }}
-  .pill-warn {{ background: var(--warn-bg); color: var(--warn); }}
-  .pill-err  {{ background: var(--err-bg);  color: var(--err);  }}
-  .hero-status {{ margin: 0 0 32px; }}
-  .section-label {{
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-muted);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin: 0 0 10px;
-  }}
-  .metrics {{
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    margin: 0 0 32px;
-  }}
-  @media (max-width: 520px) {{
-    .metrics {{ grid-template-columns: repeat(2, 1fr); }}
-  }}
-  .metric {{
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 16px;
-  }}
-  .metric-label {{
-    font-size: 11px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin: 0 0 6px;
-  }}
-  .metric-value {{
-    font-size: 22px;
-    font-weight: 600;
-    line-height: 1.15;
-    color: var(--accent);
-    font-variant-numeric: tabular-nums;
-  }}
-  .metric.tone-ok   .metric-value {{ color: var(--ok); }}
-  .metric.tone-warn .metric-value {{ color: var(--warn); }}
-  .metric.tone-err  .metric-value {{ color: var(--err); }}
-  .task {{
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    margin: 0 0 10px;
-    overflow: hidden;
-  }}
-  .task-head {{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 14px 18px;
-    border-bottom: 1px solid var(--border-soft);
-  }}
-  .task-name {{ font-weight: 600; font-size: 15px; color: var(--text); }}
-  .task-body {{
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0;
-  }}
-  .kv {{
-    padding: 12px 18px;
-    border-top: 1px solid var(--border-soft);
-    border-right: 1px solid var(--border-soft);
-  }}
-  .kv:nth-child(even) {{ border-right: none; }}
-  .kv:nth-child(-n+2) {{ border-top: none; }}
-  .kv-wide {{ grid-column: 1 / -1; border-right: none; }}
-  .kv-label {{
-    font-size: 11px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin: 0 0 3px;
-  }}
-  .kv-value {{
-    font-size: 14px;
-    color: var(--text);
-    font-variant-numeric: tabular-nums;
-  }}
-  .kv-value.mono {{
+  body {{ margin:0; padding:0; background:var(--page); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; -webkit-text-size-adjust:100%; }}
+  .wrap {{ max-width: 600px; margin: 0 auto; padding: 28px 16px 46px; }}
+  .term {{ background:var(--surface); border:1px solid var(--border); border-radius:11px; overflow:hidden; }}
+  .mono {{ font-family: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace; }}
+  .titlebar {{ display:flex; align-items:center; padding:11px 16px; background:var(--titlebar);
+    border-bottom:1px solid var(--border);
+    font-family: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace; }}
+  .dots {{ display:flex; gap:7px; }}
+  .dots i {{ width:11px; height:11px; border-radius:50%; display:inline-block; }}
+  .d-r {{ background:var(--dot-r); }} .d-a {{ background:var(--dot-a); }} .d-g {{ background:var(--dot-g); }}
+  .brand {{ margin:0 auto; display:inline-flex; align-items:center; gap:8px; font-size:12.5px; }}
+  .ring {{ width:15px; height:15px; border:2px solid var(--ok); border-radius:50%;
+    display:inline-block; position:relative; box-sizing:border-box; vertical-align:middle; }}
+  .ring i {{ width:4px; height:4px; border-radius:50%; background:var(--ok);
+    position:absolute; top:3px; left:3px; }}
+  .brand b {{ font-weight:600; color:var(--text); }}
+  .brand em {{ font-style:normal; color:var(--dim); }}
+  .tb-spacer {{ width:47px; }}
+  .screen {{ padding:24px 26px 28px;
     font-family: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace;
-    font-size: 13px;
-  }}
-  .empty {{
-    background: var(--surface);
-    border: 1px dashed var(--border);
-    border-radius: 12px;
-    padding: 24px;
-    color: var(--text-muted);
-    text-align: center;
-  }}
-  .footer {{
-    margin-top: 36px;
-    padding-top: 18px;
-    border-top: 1px solid var(--border);
-    font-size: 12px;
-    color: var(--text-muted);
-    text-align: center;
-  }}
+    font-size:13px; line-height:1.7; }}
+  .prompt {{ margin:0 0 20px; color:var(--text); word-break:break-all; }}
+  .p-user {{ color:var(--ok); }} .p-punc {{ color:var(--dim); }} .p-path {{ color:var(--cyan); }}
+  .cursor {{ display:inline-block; width:8px; height:15px; background:var(--text);
+    margin-left:4px; vertical-align:-2px; animation: blink 1.1s step-end infinite; }}
+  @keyframes blink {{ 50% {{ opacity:0; }} }}
+  h1 {{ font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Helvetica,Arial,sans-serif;
+    font-size:24px; font-weight:700; letter-spacing:-0.02em; color:var(--text); margin:0 0 5px; }}
+  .meta {{ font-size:12px; color:var(--dim); margin:0 0 18px; }}
+  .status-line {{ font-size:14px; margin:0 0 24px; }}
+  .status-line i {{ width:9px; height:9px; border-radius:50%; background:currentColor;
+    display:inline-block; margin-right:8px; vertical-align:middle; }}
+  .rule {{ color:var(--dim); font-size:11px; letter-spacing:0.14em; margin:0 0 10px; }}
+  .kvline {{ font-size:13px; color:var(--prose); margin:0 0 24px; }}
+  .kvline .v {{ color:var(--text); }}
+  .kvline .sep {{ color:var(--dim2); }}
+  .t-ok {{ color:var(--ok); }} .t-warn {{ color:var(--warn); }} .t-err {{ color:var(--err); }}
+  .lrow {{ display:flex; align-items:center; gap:8px; font-size:13px; margin:0 0 6px; }}
+  .l-name {{ color:var(--text); flex:none; min-width:64px; }}
+  .l-detail {{ color:var(--dim); }}
+  .leader {{ flex:1; border-bottom:1px dotted var(--leader); transform:translateY(-4px); }}
+  .tag {{ white-space:nowrap; }}
+  .empty {{ color:var(--dim); font-size:13px; }}
+  .footer {{ margin-top:24px; color:var(--dim2); font-size:11px; }}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="eyebrow">Homelab · backups</div>
-  <h1>Sequoia → S3 backup report</h1>
-  <p class="subhead">{start_pt.strftime('%a %b %-d')} {start_pt.strftime('%H:%M')} – {now_pt.strftime('%a %b %-d %H:%M')} PT</p>
+  <div class="term">
+    <div class="titlebar">
+      <span class="dots"><i class="d-r"></i><i class="d-a"></i><i class="d-g"></i></span>
+      <span class="brand"><span class="ring"><i></i></span><b>etherport</b><em>· backups</em></span>
+      <span class="tb-spacer"></span>
+    </div>
+    <div class="screen">
+      <div class="prompt"><span class="p-user">alerts@etherport</span><span class="p-punc">:</span><span class="p-path">~</span><span class="p-punc">$</span> backups report --since {start_pt.strftime('%H:%M')}<span class="cursor"></span></div>
 
-  <div class="hero-status">
-    <span class="pill pill-{overall_pill_class}"><span class="dot"></span>{overall_pill_text}</span>
-  </div>
+      <h1>Sequoia → S3</h1>
+      <p class="meta">// {start_pt.strftime('%a %b %-d %H:%M')} – {now_pt.strftime('%a %b %-d %H:%M')} PT</p>
+      <div class="status-line t-{overall_pill_class}"><i></i>{overall_pill_text}</div>
 
-  <div class="section-label">Summary</div>
-  <div class="metrics">
-    <div class="metric"><div class="metric-label">Runs</div><div class="metric-value">{total_executions}</div></div>
-    <div class="metric{' tone-ok' if total_completed > 0 else ''}"><div class="metric-label">Completed</div><div class="metric-value">{total_completed}</div></div>
-    <div class="metric{' tone-warn' if total_in_progress > 0 else ''}"><div class="metric-label">In progress</div><div class="metric-value">{total_in_progress}</div></div>
-    <div class="metric{' tone-err' if total_errors > 0 else ''}"><div class="metric-label">Errors</div><div class="metric-value">{total_errors}</div></div>
-    <div class="metric"><div class="metric-label">Files</div><div class="metric-value">{total_files:,}</div></div>
-    <div class="metric"><div class="metric-label">Data</div><div class="metric-value">{format_bytes(total_bytes)}</div></div>
-  </div>
+      <div class="rule">── SUMMARY ──────────────────────────</div>
+      <div class="kvline">{_summary_line}</div>
 
-  <div class="section-label">Executions</div>
+      <div class="rule">── EXECUTIONS ───────────────────────</div>
 {tasks_html}
 
-  <div class="footer">Generated {now_pt.strftime('%Y-%m-%d %H:%M:%S')} PT</div>
+      <div class="footer">— generated {now_pt.strftime('%H:%M:%S')} PT · exit {_exit_code} —</div>
+    </div>
+  </div>
 </div>
 </body>
 </html>"""
