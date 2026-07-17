@@ -509,7 +509,7 @@ html = f"""<!DOCTYPE html>
   .screen {{ padding:24px 26px 28px;
     font-family: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace;
     font-size:13px; line-height:1.7; }}
-  .prompt {{ margin:0 0 20px; color:var(--text); word-break:break-all; }}
+  .prompt {{ margin:0 0 20px; color:var(--text); overflow-wrap:break-word; }}
   .p-user {{ color:var(--ok); }} .p-punc {{ color:var(--dim); }} .p-path {{ color:var(--cyan); }}
   .cursor {{ display:inline-block; width:8px; height:15px; background:var(--text);
     margin-left:4px; vertical-align:-2px; animation: blink 1.1s step-end infinite; }}
