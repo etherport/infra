@@ -178,6 +178,18 @@ run_sync_with_retry() {
       --no-progress
     )
 
+    # 2026-07-17: opt-in per share. A source with BROKEN symlinks (e.g. the
+    # `backups` share's macOS "Library/Application Scripts/group.com.apple.*"
+    # app-group symlinks whose targets don't exist) makes `aws s3 sync` warn
+    # "File does not exist" and exit 2 while following them — which trips the
+    # fail-closed delete-guard and fails the whole run. --no-follow-symlinks
+    # ignores symlinks entirely (real files still back up), so aws exits 0.
+    # (An --exclude can't help: the target-stat/warning happens during the
+    # directory walk, before include/exclude filtering.)
+    if [[ "${NO_FOLLOW_SYMLINKS:-false}" == "true" ]]; then
+      sync_cmd+=(--no-follow-symlinks)
+    fi
+
     # --delete is gated: the real sync runs uploads-only (no --delete) while a
     # deletion is held for approval, so new files are still backed up.
     if [[ "${delete_flag}" == "true" ]]; then

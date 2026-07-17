@@ -22,6 +22,13 @@ spec:
                 - name: DEST_PREFIX
                   value: "objects/backups"
 
+                # This share (mini cairn iCloud dest) contains broken macOS
+                # app-group symlinks that make `aws s3 sync` exit 2 and trip the
+                # delete-guard (2026-07-17). Ignore symlinks — real files still
+                # back up. Only set here; the 6 other shares keep default follow.
+                - name: NO_FOLLOW_SYMLINKS
+                  value: "true"
+
                 # --- exclude file locations (read by sync-and-verify.sh) ---
                 - name: EXCLUDES_GLOBAL_FILE
                   value: "/etc/aws-s3-sync/excludes-global.txt"
