@@ -12,3 +12,9 @@
 *.Trash-1000/
 /VMWare
 /Veeam
+# 2026-07-17: macOS app-group container symlinks (Notes/Reminders "Library/
+# Application Scripts/group.com.apple.*") point at non-existent targets, so
+# `aws s3 sync` warns "File does not exist" and exits 2 → the fail-closed
+# delete-guard aborted the whole backups-share sync (S3SyncStale). Never useful
+# in a backup; excluding them lets aws exit 0 and the sync proceed.
+*/Library/Application Scripts/*
