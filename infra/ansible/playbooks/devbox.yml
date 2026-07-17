@@ -121,20 +121,43 @@
         state: present
         update_cache: true
 
-    - name: Install Claude Code (global npm)
+    # Claude Code = NATIVE build in the user's home (2026-07-17). Was a global
+    # npm install (`@anthropic-ai/claude-code`) under root-owned /usr, which made
+    # self-update fail ("no write permission to npm prefix") since sessions run
+    # as `ubuntu` — auto-updates silently never happened. The native installer
+    # lands in ~/.local (user-owned) so `claude update` / auto-update works, and
+    # ~/.local/bin must precede /usr/bin on PATH so `claude` resolves to it (incl.
+    # the headless doc-drift-audit, whose script already prepends ~/.local/bin).
+    # Auth is unchanged: RC uses ~/.claude/.credentials.json copied from the
+    # laptop (scripts/push-claude-creds.sh) — the broken headless OAuth flow is
+    # bypassed, so the build version doesn't matter and native auto-update is safe.
+    - name: Install Claude Code (native, user-owned → self-update works)
+      become: true
+      become_user: ubuntu
+      ansible.builtin.shell: |
+        set -e
+        if command -v claude >/dev/null 2>&1 && [ -x "$HOME/.local/bin/claude" ]; then
+          "$HOME/.local/bin/claude" update || true
+        else
+          curl -fsSL https://claude.ai/install.sh | bash
+        fi
+      args:
+        creates: /home/ubuntu/.local/bin/claude
+
+    - name: Ensure ~/.local/bin precedes /usr/bin on PATH (so claude = native)
+      become: true
+      become_user: ubuntu
+      ansible.builtin.lineinfile:
+        path: /home/ubuntu/.bashrc
+        line: 'export PATH="$HOME/.local/bin:$PATH"'
+        regexp: '\.local/bin.*PATH'
+        state: present
+
+    - name: Remove any leftover root-owned npm-global Claude Code (blocks self-update)
       community.general.npm:
         name: "@anthropic-ai/claude-code"
         global: true
-        state: latest
-        # Tracks latest. The remote-control INTERACTIVE OAuth login is broken on
-        # headless Linux on every build we tried — "Missing code_challenge" PKCE
-        # error on new builds (2.1.96+, anthropics/claude-code #45340/#43996),
-        # "Invalid OAuth Request" (stale client_id) on old builds (<=2.1.94). So
-        # the box is NOT authenticated via the browser flow. Instead we copy the
-        # laptop's working Claude subscription credentials into
-        # ~/.claude/.credentials.json (scripts/push-claude-creds.sh) — they carry
-        # the user:sessions:claude_code scope remote control needs. Bypassing
-        # OAuth means the build version no longer matters, so we track latest.
+        state: absent
 
     # -------------------------------------------------------------------------
     # 1Password CLI (installed; auth stays interactive/agent-forwarded)

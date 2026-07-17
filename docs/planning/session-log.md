@@ -71,6 +71,24 @@ flagged to operator.
 **Next:** L37/L38, M138 iCloud app-password (operator), ntfy app subscribe (operator), M12
 recurring-drill trust-line (optional), watch the next Renovate PR plans green under the M140 role.
 
+**2026-07-17 — morning advisor alerts (M145 held) + claude auto-update fixed on the devbox:**
+- **Advisor alerts (all noop, self-resolved):** PveHostMemoryPressure (91% mem but 0 swap activity —
+  normal steady-state for a Ceph+VM host, transient spike in the backup window), KubeJobFailed (the
+  known s3-sync/gdrive-sync DeadlineExceeded backup-window jobs; re-run fine), NodeSystemSaturation
+  (w1 19/core, I/O-wait from kopia). **Key: M145 HELD — zero etcd leader loss overnight** (all 3
+  members clean 18h). w1 saturation is now benign (etcd protected, wireguard/rclone hardened). The
+  residual is kopia *maintenance* scheduling — M144 tail, low priority.
+- **claude auto-update fixed (the "no write permission to npm prefix" warning):** the devbox ran
+  claude as a **root-owned global npm install at /usr**, but sessions run as `ubuntu` → self-update
+  always permission-failed (silently never updated). Fix: installed the **native user-owned build**
+  (`~/.local/bin/claude` → `~/.local/share/claude/versions/…`), added `~/.local/bin` ahead of
+  `/usr/bin` in `.bashrc`, and removed the npm global (sudo). `claude update` now runs clean (no
+  permission error, no leftover-npm warning). Headless doc-drift-audit already prepends ~/.local/bin
+  so it uses native too. **Codified in `devbox.yml`** (native installer + PATH + npm-absent) so a
+  rebuild reproduces it. ⏳ The 3 running sessions (cue/infra/personal-web) still hold the deleted
+  npm binary in memory — stable + RC-connected, but restart onto native at convenience to complete
+  the migration (transcripts persisted; restart is safe).
+
 **2026-07-16 (cont.3) — advisor email 2 real bugs fixed + Alertmanager email themed:**
 - Operator screenshot showed the advisor email with **two bugs**: (1) `AI Advisor &middot; …` — the
   eyebrow/footer passed literal HTML entities into `_render_email` fields that html-escape them →
