@@ -26,7 +26,7 @@ credentials:
 initContainers:
   - name: velero-plugin-for-aws
     # renovate: datasource=docker depName=velero/velero-plugin-for-aws
-    image: velero/velero-plugin-for-aws:v1.14.0
+    image: velero/velero-plugin-for-aws:v1.14.2
     volumeMounts:
       - mountPath: /target
         name: plugins
