@@ -15,6 +15,48 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-18 — Velero backups silently stopped ~37h (default-BSL flipped to the ReadOnly mirror) + mini/cairn alert silence
+
+**What (Velero — the real find):** `VeleroLastBackupAgeHigh` was firing across **all 12
+schedules** (>36h since last success). Backups *were* running — every run since
+2026-07-18 01:00 was `FailedValidation` with *"backup storage location default is
+currently in read-only mode."* Root cause: the velero server had **no
+`--default-backup-storage-location` flag**, so it fell back to the literal string
+`"default"` and, on the pod restart ~34h earlier, its default-BSL controller re-marked
+the BSL *named* `default` — our **ReadOnly** AWS-S3 offsite DR mirror — as THE default,
+inverting the chart's `spec.default: true` on `garage`. Schedules omit `storageLocation`
+→ inherited the ReadOnly BSL → admission rejected every backup. (git intends `garage`
+= ReadWrite primary, `default` = ReadOnly DR mirror.)
+
+**Fix:** pinned `configuration.defaultBackupStorageLocation: garage` in
+`clusters/wind/helm-releases/velero.yaml` (chart 11.4.0 renders
+`--default-backup-storage-location=garage`, verified via `helm template`). Commit
+`addbbe9`, Flux-reconciled, velero redeployed with the flag. **Verified:** an ad-hoc
+backup validated + wrote to `garage` + completed; then kicked an on-demand backup from
+every schedule (label `trigger=bsl-fix-recovery`) — **0 FailedValidation**, all routing
+to `garage`; `VeleroLastBackupAgeHigh` cleared to **0 active** as they completed
+(authentik/critical-apps/cue/infrastructure done first, heavy plex/ollama/postgres
+churning through serially). Docs: velero README BSL section + memory
+`velero-default-bsl-flag-pin`. **Never remove that flag while a BSL is named `default`.**
+NB `kubectl get backup` = `backups.postgresql.cnpg.io`, not velero — use
+`kubectl get backups.velero.io`.
+
+**Mini/cairn alerts:** silenced the whole `Mini*/Cairn*/ICloud*` alert family in
+Alertmanager (silence `319e1119-…`, 7d, expires 2026-07-25) — the mini is
+hardware-wedged in EFI pre-boot pending a physical power-cycle (not on a switchable
+outlet, no BMC). Delete the silence once it's recovered.
+
+**Authentik login theme — NOT confirmed working.** custom.css is mounted + served
+(HTTP 200, correct new content), pod restarted after commit `0a5e3df`, and the built
+assets use the `.pf-c-*` (PatternFly v5) prefix — so it's **not** the v6-prefix risk.
+But the flow page loads/adopts custom.css via SPA JS at runtime, which can't be
+exercised headless (no browser on devbox; mini down). Needs a browser devtools check
+(is custom.css loaded + are the `.pf-c-login__*` nodes in a shadow root that breaks the
+descendant combinators). **Open — awaiting operator browser verification.**
+
+**Next:** let the remaining recovery backups finish (auto); operator to visually verify
+the Authentik login page and report the DOM/class structure if still unstyled.
+
 ## 2026-07-11 (cont.) — mini session housekeeping: auto-start/resume + move to the cairn repo
 
 **What:** two owner asks after the session crash forced a manual console resume.

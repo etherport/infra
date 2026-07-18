@@ -8,7 +8,15 @@ Velero is our Kubernetes backup solution for disaster recovery and data protecti
 - **Storage** (two `BackupStorageLocation`s since M137, 2026-07):
   - **`garage` — the default BSL.** In-cluster Garage S3 (`platform/kubernetes/garage/`),
     bucket `velero`, endpoint `http://garage.garage.svc.cluster.local:3900`. All scheduled
-    backups land here (local-first 3-2-1).
+    backups land here (local-first 3-2-1). ⚠️ **The default is pinned via the server flag
+    `--default-backup-storage-location=garage`** (`configuration.defaultBackupStorageLocation`
+    in the HelmRelease), NOT just the BSL's `spec.default: true`. If that flag is unset the
+    velero server falls back to the literal string `"default"` and, on every restart,
+    force-marks the BSL *named* `default` (the ReadOnly DR mirror) as THE default — schedules
+    omit `storageLocation`, so all backups then route to the ReadOnly BSL and every schedule
+    hits `FailedValidation` ("backup storage location default is currently in read-only mode").
+    That silently stopped all backups for ~37h after a pod restart (2026-07-18); never remove
+    that flag while a BSL is literally named `default`.
   - **`default` — AWS S3, `accessMode: ReadOnly`.** Bucket `velero.wind.etherport.net`
     (us-west-2), prefix `dr/` — populated by the weekly `velero-dr` Garage→S3 mirror
     (`platform/kubernetes/velero-dr/`), used only to restore when Garage is lost.
