@@ -51,6 +51,16 @@ spec:
       # phased out in upstream Velero and Kopia is significantly faster on
       # large repos. Pin explicitly so this doesn't drift on chart bumps.
       uploaderType: kopia
+      # ⚠️ MUST be pinned to `garage`. The velero server's default-BSL controller
+      # reads `--default-backup-storage-location`; if UNSET it falls back to the
+      # literal string "default" and, on every velero restart, force-marks the BSL
+      # *named* `default` (our ReadOnly offsite DR mirror) as THE default —
+      # inverting the `default: true` the chart puts on `garage`. Schedules omit
+      # storageLocation (inherit the default), so that inversion routes every
+      # backup to the ReadOnly BSL → all schedules `FailedValidation`, no backups
+      # for ~37h until caught (2026-07-18 incident). Pinning the name here makes
+      # the controller keep `garage` default across restarts.
+      defaultBackupStorageLocation: garage
       # Cluster-wide default: capture PV data on every backup unless a
       # specific Backup/Schedule opts out. The migration outage was caused
       # by an ad-hoc `velero backup create` that omitted
