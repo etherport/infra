@@ -71,6 +71,21 @@ flagged to operator.
 **Next:** L37/L38, M138 iCloud app-password (operator), ntfy app subscribe (operator), M12
 recurring-drill trust-line (optional), watch the next Renovate PR plans green under the M140 role.
 
+**2026-07-17 (cont.) — S3-sync backups-share fix + email word-break bug:**
+- **s3-sync-backups failing nightly (S3SyncStale/KubeJobFailed, ONLY that share):** the `backups`
+  share (mini cairn iCloud dest) has broken macOS app-group symlinks (`Library/Application Scripts/
+  group.com.apple.{notes,reminders}`) whose targets don't exist → `aws s3 sync` warns "File does not
+  exist" during the directory walk and exits 2 → sync-and-verify.sh's fail-closed delete-guard
+  aborted the whole run. An `--exclude` can't help (the target-stat happens before exclude
+  filtering). Fix `b3b8b6c`: `--no-follow-symlinks`, opt-in via `NO_FOLLOW_SYMLINKS` env set only on
+  the backups share (image rebuild). Verified: 0 warnings, real sync proceeds. Source-side (cairn
+  not copying those symlinks) handed to the mini agent.
+- **Email word-break (operator screenshot):** the terminal-theme CSS used `word-break:break-all`,
+  which broke words at any char — the Alertmanager prompt wrapped "firing" as "fi"/"ring" on mobile.
+  Fix `920cf9c`: `overflow-wrap:break-word` (whole words, wrap at spaces, break only an oversized
+  token) across ALL 5 emails' `.prompt` (+ advisor h1/card). Verified live in the running AM config
+  (break-all=0). Rendered the fixed AM email for the operator.
+
 **2026-07-17 — morning advisor alerts (M145 held) + claude auto-update fixed on the devbox:**
 - **Advisor alerts (all noop, self-resolved):** PveHostMemoryPressure (91% mem but 0 swap activity —
   normal steady-state for a Ceph+VM host, transient spike in the backup window), KubeJobFailed (the
