@@ -179,12 +179,20 @@ spec:
           // exec/attach, secret access, RBAC changes) still ships.
           loki.process "apiserver_audit" {
             forward_to = [loki.write.default.receiver]
-            // leader-election lease churn (objectRef.resource == "leases")
+            // Drop the high-churn / zero-forensic-value resources that dominate
+            // the stream (byte-weighted, measured 2026-07-19):
+            //   leases (leader election) ~6%, subjectaccessreviews +
+            //   selfsubjectaccessreviews (authz checks) ~14%, kyverno
+            //   policyreports/ephemeralreports/clusterpolicyreports ~13%,
+            //   + health/readiness probe endpoints. None are matched by the
+            //   06-loki-rules-apiserver-audit ruler alerts. ~35-40% cut.
+            // (nodes ~36% is kubelet status churn but also carries label/taint/
+            //  cordon changes worth auditing, so it's NOT blanket-dropped — the
+            //  72h→48h retention_stream in loki.yaml bounds the rest.)
             stage.drop {
-              expression          = ".*\"resource\":\"leases\".*"
-              drop_counter_reason = "audit_lease_churn"
+              expression          = ".*\"resource\":\"(leases|subjectaccessreviews|selfsubjectaccessreviews|policyreports|ephemeralreports|clusterpolicyreports)\".*"
+              drop_counter_reason = "audit_churn_resource"
             }
-            // health/readiness/version/metrics probe endpoints
             stage.drop {
               expression          = ".*\"requestURI\":\"/(readyz|healthz|livez|version|metrics)([/?\"]).*"
               drop_counter_reason = "audit_health_probe"

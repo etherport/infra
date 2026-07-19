@@ -95,12 +95,13 @@ spec:
             priority: 1
             period: 168h
           # apiserver-audit (M131) is the highest-volume stream even after the
-          # Alloy-side lease/health-probe drop (see alloy.yaml). It's ruler-alert
-          # feedstock, not a 30d forensic archive — the ALERTS persist. Cap at 72h
-          # so the compactor bounds it (it was filling storage-loki-0, 2026-07-19).
+          # Alloy-side churn/probe drop (see alloy.yaml). It's ruler-alert feedstock,
+          # not a 30d forensic archive — the ALERTS persist. Cap at 48h so the
+          # compactor reliably bounds it regardless of ingest spikes (it filled
+          # storage-loki-0 to 99%, 2026-07-19).
           - selector: '{job="apiserver-audit"}'
             priority: 1
-            period: 72h
+            period: 48h
       compactor:
         retention_enabled: true
         delete_request_store: filesystem
