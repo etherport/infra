@@ -56,10 +56,33 @@ data:
     .pf-c-login { background: var(--ep-page) !important; min-height: 100vh !important; font-family: var(--ep-sans); }
     .pf-c-background-image { display: none !important; }
 
-    /* Etherport logo (branding_logo SVG) — show + size it above the card */
-    .pf-c-login .pf-c-brand { display: block !important; margin: 0 auto 14px !important; text-align: center; }
+    /* Etherport logo (branding_logo SVG) — show, size, and CENTER it above the card.
+       Center defensively across the possible header DOM: make the header wrappers
+       both text-align:center AND flex-center (whichever applies), and give the brand
+       element auto side-margins so a block-level <img> also centers. */
+    .pf-c-login__header,
+    .pf-c-login .pf-c-login__main-header,
+    .pf-c-login header {
+      display: flex !important;
+      justify-content: center !important;
+      align-items: center !important;
+      text-align: center !important;
+      width: 100% !important;
+    }
+    .pf-c-login .pf-c-brand {
+      display: block !important;
+      margin: 0 auto 14px auto !important;
+      float: none !important;
+      text-align: center;
+    }
     .pf-c-login .pf-c-brand img,
-    .pf-c-login img.pf-c-brand { height: 40px !important; width: auto !important; max-width: 236px; }
+    .pf-c-login img.pf-c-brand {
+      display: block !important;
+      height: 40px !important;
+      width: auto !important;
+      max-width: 236px;
+      margin: 0 auto !important;
+    }
 
     /* Card = terminal window */
     .pf-c-login .pf-c-login__main {
