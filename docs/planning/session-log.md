@@ -15,6 +15,37 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-19 — advisor "flood" root-caused to the apiserver-audit firehose; tightened audit policy (~80% Loki cut) + logo centering
+
+**Advisor flood + still-arriving mini emails.** Two things. (1) The mini/cairn silence
+from 07-18 missed **`PhotosExportStale`** (the mini's iCloud Photos export, `backups` ns)
+— its name doesn't match `Mini*/Cairn*/ICloud*`. Replaced the silence with the full
+family `Mini*/Cairn*/ICloud*/PhotosExport*` (7d). (2) The "flood" was **`storage-loki-0`
+at 99% full** — a real `critical` (`KubePersistentVolumeFillingUp`) re-emailing via both
+AM's critical path and the ai-advisor (which re-diagnoses a persistently-firing alert
+every repeat_interval). Root: **Loki ingest ~11-14 GB/day, of which apiserver-audit
+(M131) was ~13.8 GB/day / ~75%.** The stock kubespray GCE audit policy logs all reads at
+`Request` + all mutations at `RequestResponse` (byte-share: nodes-status heartbeats 36%,
+SAR/authz 14%, kyverno reports 13%, leases 6% — all noise).
+
+**Fixes.** Immediate: expanded `storage-loki-0` 20→40Gi (ceph online) → usage 99%→49%,
+alert cleared. Durable: **tightened the apiserver audit policy at the source** — new
+`audit_policy_custom_rules` in the kubespray inventory drops the system read/heartbeat/
+lease/authz-review/kyverno-report/health-probe noise while keeping ALL mutations,
+secret/RBAC access, and (to preserve the `ApiserverAnonymousSuccess`/`ForbiddenBurst`
+ruler alerts) all human + anonymous requests. Applied via **rolling apiserver restart
+cp3→cp2→cp1-last** (swap the hostPath policy file + `crictl rm -f` the apiserver;
+verified `livez`+nodes Ready between each — no HA API VIP so cp1 last). **Result: audit
+now Metadata-only (0 Request/RequestResponse), total Loki ingest 2.7 GB/day (~80% cut).**
+Also added a 48h `retention_stream` cap on `{job="apiserver-audit"}` (loki.yaml) as a
+guaranteed bound, and an ineffective-but-harmless Alloy drop stage (superseded by the
+source fix). Runbook: `docs/runbooks/apiserver-audit-policy.md`. IaC commit `aafc554`.
+NB the global 30d Loki retention still exceeds 40Gi at 2.7 GB/day (~15d capacity) — a
+slow, non-urgent creep; operator deferred cutting global retention.
+
+**Authentik logo.** Was displaying (after the 07-18 branding-file fix) but left-aligned;
+added defensive flex + `margin:auto` centering CSS (37-*), served + verified.
+
 ## 2026-07-18 — Velero backups silently stopped ~37h (default-BSL flipped to the ReadOnly mirror) + mini/cairn alert silence
 
 **What (Velero — the real find):** `VeleroLastBackupAgeHigh` was firing across **all 12
