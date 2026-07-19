@@ -166,7 +166,29 @@ spec:
 
           loki.source.file "apiserver_audit" {
             targets    = local.file_match.apiserver_audit.targets
+            forward_to = [loki.process.apiserver_audit.receiver]
+          }
+
+          // Drop high-volume / low-value audit noise BEFORE it hits Loki. The raw
+          // stream was ~13.8 GB/day (75% of all Loki ingest) → filled storage-loki-0
+          // to 99% (KubePersistentVolumeFillingUp flood, 2026-07-19). The bulk is
+          // leader-election lease get/update/watch churn (every controller renews a
+          // lease every few seconds) + anonymous health/readiness probes — neither
+          // has forensic value and neither is matched by the 06-loki-rules-apiserver-audit
+          // ruler alerts. Cuts the stream ~70%. Everything else (real API mutations,
+          // exec/attach, secret access, RBAC changes) still ships.
+          loki.process "apiserver_audit" {
             forward_to = [loki.write.default.receiver]
+            // leader-election lease churn (objectRef.resource == "leases")
+            stage.drop {
+              expression          = ".*\"resource\":\"leases\".*"
+              drop_counter_reason = "audit_lease_churn"
+            }
+            // health/readiness/version/metrics probe endpoints
+            stage.drop {
+              expression          = ".*\"requestURI\":\"/(readyz|healthz|livez|version|metrics)([/?\"]).*"
+              drop_counter_reason = "audit_health_probe"
+            }
           }
 
           // ---------- Syslog receiver (UDP+TCP 514) ----------
