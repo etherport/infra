@@ -52,6 +52,14 @@ secret via `!Env`, commit, reconcile.
    attributes, not a UI toggle).
 4. **Forward-auth is wrong for machine APIs and HA** — it breaks mobile/API/
    webhook clients. Keep those ungated (firewall-scoped) or on their own auth.
+5. **`branding_logo`/`branding_favicon` reject `data:` URIs (2026.5+).** They're
+   validated as filenames/paths — a data URI fails validation and makes the WHOLE
+   `branding` blueprint error out (`status=error`), so logo, favicon **and**
+   `theme.base=dark` silently don't apply. Serve the image as a real file (in the
+   `authentik-custom-css` ConfigMap → mounted into `/web/dist/` → served at
+   `/static/dist/`) and reference it by path. Data URIs worked in 2024.12; the H44
+   upgrade broke them (fixed 2026-07-18). Check blueprint health:
+   `kubectl -n authentik exec deploy/authentik-server -- ak shell -c "from authentik.blueprints.models import BlueprintInstance as B; print([(b.name,b.status) for b in B.objects.exclude(status='successful')])"`
 
 ## Files
 

@@ -46,16 +46,24 @@ Alertmanager (silence `319e1119-…`, 7d, expires 2026-07-25) — the mini is
 hardware-wedged in EFI pre-boot pending a physical power-cycle (not on a switchable
 outlet, no BMC). Delete the silence once it's recovered.
 
-**Authentik login theme — NOT confirmed working.** custom.css is mounted + served
-(HTTP 200, correct new content), pod restarted after commit `0a5e3df`, and the built
-assets use the `.pf-c-*` (PatternFly v5) prefix — so it's **not** the v6-prefix risk.
-But the flow page loads/adopts custom.css via SPA JS at runtime, which can't be
-exercised headless (no browser on devbox; mini down). Needs a browser devtools check
-(is custom.css loaded + are the `.pf-c-login__*` nodes in a shadow root that breaks the
-descendant combinators). **Open — awaiting operator browser verification.**
+**Authentik login logo/theme — root-caused + fixed.** Operator reported no logo on the
+login page. Root cause: **Authentik 2026.5.3 validates `branding_logo`/`branding_favicon`
+with a FILENAME validator** ("letters, numbers, dots, hyphens, underscores, slashes,
+%(theme)s") that **rejects `data:` URIs**. The 2026-07-17 redesign set them as SVG data
+URIs (valid in 2024.12, broken by the H44 upgrade), so the **whole `branding` blueprint
+failed validation** (`BlueprintInstance status=error`) → logo, favicon **and
+`theme.base=dark` never applied** (the missing dark base likely also explains why the
+custom.css terminal theme "didn't pick up"). Diagnosed via `ak shell` →
+`Importer.validate()` per-entry (`EntryInvalidError` on branding_logo/favicon).
+**Fix (commit `6b30093`):** serve the two SVGs as real files — added to the
+`authentik-custom-css` ConfigMap (37-*), mounted into `/web/dist/` (33-*, served at
+`/static/dist/`), and referenced by path (`/static/dist/etherport-{logo-dark,mark}.svg`)
+in the Brand blueprint (40-*). **Verified:** SVGs serve HTTP 200 `image/svg+xml`;
+blueprint now `status=successful`; live brand carries the logo path, favicon, and
+`theme.base=dark`. Operator to hard-refresh (browser may cache the old favicon/page).
 
-**Next:** let the remaining recovery backups finish (auto); operator to visually verify
-the Authentik login page and report the DOM/class structure if still unstyled.
+**Next:** let the remaining recovery backups finish (auto); operator hard-refresh +
+visual confirm the etherport logo + terminal login theme render.
 
 ## 2026-07-11 (cont.) — mini session housekeeping: auto-start/resume + move to the cairn repo
 
