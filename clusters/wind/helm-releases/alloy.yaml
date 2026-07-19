@@ -52,6 +52,19 @@ spec:
       configMap:
         create: true
         content: |
+          // ---------- Alloy's own logging ----------
+          // Default is `info`, which emits a line for EVERY file tailed/seeked
+          // ("Seeked …", "tail routine: started", component evals) — the 8 Alloy
+          // DaemonSet pods were ~90% of ALL container-log volume in Loki
+          // (kubernetes-pods ~4GB/day). The shipper was the biggest producer. At
+          // `warn` Alloy only logs problems, cutting the self-generated firehose
+          // ~95% (2026-07-19). Raise back to info/debug temporarily when
+          // debugging a pipeline.
+          logging {
+            level  = "warn"
+            format = "logfmt"
+          }
+
           // ---------- Loki write target ----------
           loki.write "default" {
             endpoint {
