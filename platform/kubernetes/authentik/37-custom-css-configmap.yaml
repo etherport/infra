@@ -20,6 +20,25 @@ metadata:
   name: authentik-custom-css
   namespace: authentik
 data:
+  # ⚠️ Brand logo/favicon are served as FILES (mounted into /web/dist → served at
+  # /static/dist/…) and referenced by PATH in the Brand blueprint, NOT as data
+  # URIs. Authentik 2026.5.x validates branding_logo/branding_favicon with a
+  # FILENAME validator ("letters, numbers, dots, hyphens, underscores, slashes,
+  # %(theme)s") that REJECTS `data:` URIs — a data-URI logo makes the whole
+  # `branding` blueprint fail validation (status=error) so nothing in it applies
+  # (logo, favicon, AND theme.base=dark). Data URIs worked pre-2026.5 (2024.12);
+  # the H44 upgrade broke them. Keep these as served files.
+  etherport-logo-dark.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 236 48" width="236" height="48">
+      <circle cx="24" cy="24" r="14" fill="none" stroke="#46c46a" stroke-width="4"></circle>
+      <circle cx="24" cy="24" r="4.5" fill="#46c46a"></circle>
+      <text x="52" y="33" font-family="-apple-system,BlinkMacSystemFont,&#39;Segoe UI&#39;,Helvetica,Arial,sans-serif" font-size="27" font-weight="700" letter-spacing="-0.5" fill="#e6edf3">etherport</text>
+    </svg>
+  etherport-mark.svg: |
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+      <circle cx="24" cy="24" r="17" fill="none" stroke="#46c46a" stroke-width="5"></circle>
+      <circle cx="24" cy="24" r="5.5" fill="#46c46a"></circle>
+    </svg>
   custom.css: |
     /* ===== Etherport terminal theme — LOGIN FLOW ONLY ===== */
     :root {

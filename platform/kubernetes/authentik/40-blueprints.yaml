@@ -230,11 +230,15 @@ data:
         identifiers:
           domain: authentik-default
         attrs:
-          # Etherport wordmark (green ring + text) SVG, data-URI (2026-07-17
-          # login redesign). Renders above the terminal login card; the
-          # custom-css sizes/centers it. Favicon = the ring mark alone.
-          branding_logo: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMzYgNDgiIHdpZHRoPSIyMzYiIGhlaWdodD0iNDgiPgogIDxjaXJjbGUgY3g9IjI0IiBjeT0iMjQiIHI9IjE0IiBmaWxsPSJub25lIiBzdHJva2U9IiM0NmM0NmEiIHN0cm9rZS13aWR0aD0iNCI+PC9jaXJjbGU+CiAgPGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iNC41IiBmaWxsPSIjNDZjNDZhIj48L2NpcmNsZT4KICA8dGV4dCB4PSI1MiIgeT0iMzMiIGZvbnQtZmFtaWx5PSItYXBwbGUtc3lzdGVtLEJsaW5rTWFjU3lzdGVtRm9udCwmIzM5O1NlZ29lIFVJJiMzOTssSGVsdmV0aWNhLEFyaWFsLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjciIGZvbnQtd2VpZ2h0PSI3MDAiIGxldHRlci1zcGFjaW5nPSItMC41IiBmaWxsPSIjZTZlZGYzIj5ldGhlcnBvcnQ8L3RleHQ+Cjwvc3ZnPg=="
-          branding_favicon: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCIgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4Ij4KICA8Y2lyY2xlIGN4PSIyNCIgY3k9IjI0IiByPSIxNyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNDZjNDZhIiBzdHJva2Utd2lkdGg9IjUiPjwvY2lyY2xlPgogIDxjaXJjbGUgY3g9IjI0IiBjeT0iMjQiIHI9IjUuNSIgZmlsbD0iIzQ2YzQ2YSI+PC9jaXJjbGU+Cjwvc3ZnPg=="
+          # Etherport wordmark (green ring + text) + ring-only favicon. ⚠️ MUST be
+          # served-file PATHS, not data URIs: Authentik 2026.5 validates these with a
+          # filename validator that REJECTS `data:` URIs → the whole blueprint fails
+          # (status=error, nothing applies incl. theme.base below). The SVGs are in
+          # the authentik-custom-css ConfigMap (37-*), mounted into /web/dist/ (33-*)
+          # and thus served at /static/dist/. Renders above the terminal login card;
+          # custom.css sizes/centers it.
+          branding_logo: "/static/dist/etherport-logo-dark.svg"
+          branding_favicon: "/static/dist/etherport-mark.svg"
           # Force Authentik's NATIVE dark theme for every interface (login flow +
           # admin/user mgmt). 2024.12 has no theme column, but the web reads
           # brand.attributes.settings.theme.base — this is the supported way to

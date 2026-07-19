@@ -82,6 +82,10 @@ spec:
             - { name: media, mountPath: /media }
             - { name: blueprints, mountPath: /blueprints/custom, readOnly: true }
             - { name: custom-css, mountPath: /web/dist/custom.css, subPath: custom.css, readOnly: true }
+            # Brand logo + favicon served at /static/dist/… and referenced by PATH
+            # in the Brand blueprint (2026.5 rejects data-URI logos — see 37-*).
+            - { name: custom-css, mountPath: /web/dist/etherport-logo-dark.svg, subPath: etherport-logo-dark.svg, readOnly: true }
+            - { name: custom-css, mountPath: /web/dist/etherport-mark.svg, subPath: etherport-mark.svg, readOnly: true }
       volumes:
         - { name: media, emptyDir: {} }   # seed-login-bg regenerates the only file each start (see M114 note above)
         - { name: blueprints, configMap: { name: authentik-blueprints } }
