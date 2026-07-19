@@ -43,6 +43,19 @@ source fix). Runbook: `docs/runbooks/apiserver-audit-policy.md`. IaC commit `aaf
 NB the global 30d Loki retention still exceeds 40Gi at 2.7 GB/day (~15d capacity) — a
 slow, non-urgent creep; operator deferred cutting global retention.
 
+**Alloy was the OTHER firehose.** After the audit fix, the remaining ~4 GB/day
+`kubernetes-pods` volume was ~90% **Alloy itself** — the log shipper ran at its default
+`info` level, emitting a line for every file it tails/seeks ("Seeked …", "tail routine:
+started") ×hundreds of pod logs ×8 DaemonSet pods. Added `logging { level = "warn" }` to
+the Alloy config (commit `33be003`) → Alloy dropped from ~33k lines/5m to **3 lines/3m**.
+Genuine app logs are only ~0.19 GB/day.
+
+**Net result: Loki ingest ~14 GB/day → ~0.57 GB/day (~96% cut)** — apiserver-audit 0.19,
+kubernetes-pods 0.19, hubble 0.12, syslog 0.07. **This RETIRES the retention concern:**
+at 0.57 GB/day, 30d retention needs only ~17 GB — fits the 40 GB disk comfortably, so the
+global retention does NOT need cutting (the earlier "slow creep" note is moot). The 48h
+apiserver-audit `retention_stream` cap stays as a cheap safety bound.
+
 **Authentik logo.** Was displaying (after the 07-18 branding-file fix) but left-aligned;
 added defensive flex + `margin:auto` centering CSS (37-*), served + verified.
 
