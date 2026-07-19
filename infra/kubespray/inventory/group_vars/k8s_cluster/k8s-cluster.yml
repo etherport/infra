@@ -255,6 +255,63 @@ audit_log_path: "/var/log/kubernetes/audit.log"
 audit_log_maxage: 30
 audit_log_maxbackups: 10
 audit_log_maxsize: 100
+# Tightened audit policy (2026-07-19). Replaces kubespray's stock GCE default, which
+# logged ALL reads at Request + ALL mutations at RequestResponse (~14 GB/day, ~70% of
+# Loki ingest — node-status heartbeats, SAR/authz churn, leases, kyverno reports).
+# This keeps the security signal (mutations, secret/RBAC access, and — to preserve the
+# ApiserverAnonymousSuccess/ApiserverForbiddenBurst ruler alerts — ALL human + anonymous
+# requests) while dropping the high-volume SYSTEM read/heartbeat/review/report/probe
+# noise (~80% cut). The template inserts this under `rules:` (indented 2). See
+# docs/runbooks/apiserver-audit-policy.md.
+audit_policy_custom_rules: |
+  # Never log health / discovery probe endpoints
+  - level: None
+    nonResourceURLs: ["/healthz*", "/readyz*", "/livez*", "/version", "/metrics", "/swagger*", "/openapi*"]
+  # Leader-election lease churn
+  - level: None
+    resources:
+      - group: "coordination.k8s.io"
+        resources: ["leases"]
+  # Authn/authz review churn (webhook check on every request)
+  - level: None
+    resources:
+      - group: "authorization.k8s.io"
+      - group: "authentication.k8s.io"
+        resources: ["tokenreviews"]
+  # Policy-engine report churn (kyverno)
+  - level: None
+    resources:
+      - group: "wgpolicyk8s.io"
+      - group: "kyverno.io"
+        resources: ["policyreports","clusterpolicyreports","ephemeralreports","clusterephemeralreports","admissionreports","clusteradmissionreports","backgroundscanreports","clusterbackgroundscanreports","updaterequests"]
+      - group: "reports.kyverno.io"
+  # Events
+  - level: None
+    resources:
+      - group: ""
+        resources: ["events"]
+      - group: "events.k8s.io"
+  # High-volume SYSTEM reads (bulk of traffic) — drop; human + anonymous reads are kept
+  # by the fall-through rules below so the security alerts keep their signal.
+  - level: None
+    userGroups: ["system:serviceaccounts"]
+    verbs: ["get", "list", "watch"]
+  - level: None
+    userGroups: ["system:nodes"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - level: None
+    users: ["system:kube-controller-manager", "system:kube-scheduler", "system:apiserver", "system:kube-proxy", "system:volume-scheduler"]
+    verbs: ["get", "list", "watch"]
+  # Sensitive resources at Metadata — including any remaining reads
+  - level: Metadata
+    resources:
+      - group: ""
+        resources: ["secrets", "configmaps", "serviceaccounts/token"]
+      - group: "rbac.authorization.k8s.io"
+    omitStages: ["RequestReceived"]
+  # Everything else at Metadata (all mutations; human + anonymous reads)
+  - level: Metadata
+    omitStages: ["RequestReceived"]
 
 # define kubelet config dir for dynamic kubelet
 # kubelet_config_dir:
