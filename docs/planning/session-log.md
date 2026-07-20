@@ -88,6 +88,23 @@ at 0.57 GB/day, 30d retention needs only ~17 GB — fits the 40 GB disk comforta
 global retention does NOT need cutting (the earlier "slow creep" note is moot). The 48h
 apiserver-audit `retention_stream` cap stays as a cheap safety bound.
 
+**Login theme — resolved to the achievable ceiling ("quiet card").** DevTools proved the
+login card/form/button are in shadow DOM; Authentik's dark theme redefines the PF colour
+tokens on `:host([theme=dark]) .pf-m-dark` inside the shadow root, so light-DOM injection
+can theme the font (inherited) + light-DOM logo/bg but NOT the button colour or card chrome.
+Shipped: dark bg, mono font, centred logo (fixed the SVG's own viewBox whitespace, 236→191),
+dark favicon tile (Safari tiles favicons white), footer-band hide. Dropped the unreachable
+green-button/terminal-chrome. ⚠️ authentik-server subPath ConfigMap changes need a pod DELETE
+(Flux reverts `rollout restart`). CSS lives in `Brand.branding_custom_css` (flow never loads
+the served custom.css).
+
+**PVE etherport branding + no-subscription nag (new).** Design-drop kit vendored to
+`infra/ansible/playbooks/files/proxmox-branding/` + new `proxmox-branding.yml`. Applied to pve
+(10.10.200.41): etherport logo/favicon/dark-terminal CSS + injected `orig_cmd(); return;` into
+proxmoxlib.js `checked_command` so the "No valid subscription" dialog never fires. Both survive
+package upgrades via DPkg::Post-Invoke apt hooks (99-etherport-branding, 98-etherport-nosub).
+PVE is plain ExtJS (no shadow DOM) so CSS applies cleanly. Verified live; hard-refresh to see.
+
 **Authentik logo.** Was displaying (after the 07-18 branding-file fix) but left-aligned;
 added defensive flex + `margin:auto` centering CSS (37-*), served + verified.
 
