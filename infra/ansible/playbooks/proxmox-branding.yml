@@ -1,0 +1,60 @@
+---
+# Etherport cosmetics for Proxmox VE — two independent tweaks, both made to
+# survive package updates (pve-manager / proxmox-widget-toolkit overwrite these
+# files on upgrade) via DPkg::Post-Invoke apt hooks:
+#   1. Login + UI branding (etherport logo, favicon, dark terminal CSS).
+#   2. Suppress the "No valid subscription" nag dialog shown on every login.
+#
+# Apply:  cd infra/ansible && ansible-playbook playbooks/proxmox-branding.yml
+# (Design kit in files/proxmox-branding/ from the 2026-07-20 design drop.)
+- name: Proxmox VE — etherport branding + no-subscription nag suppression
+  hosts: "{{ target_hosts | default('pve') }}"
+  become: true
+  gather_facts: false
+  vars:
+    widget_js: /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
+  tasks:
+    # ---------------- Branding ----------------
+    - name: Stage the etherport branding kit on the host
+      ansible.builtin.copy:
+        src: files/proxmox-branding/
+        dest: /usr/local/share/etherport-branding/
+        mode: preserve
+      register: branding_stage
+
+    - name: Ensure apply-branding.sh is executable
+      ansible.builtin.file:
+        path: /usr/local/share/etherport-branding/apply-branding.sh
+        mode: "0755"
+
+    - name: Apply branding (idempotent; the script installs its own pve-manager apt hook)
+      ansible.builtin.command: /usr/local/share/etherport-branding/apply-branding.sh
+      register: branding_apply
+      changed_when: "'branding applied' in branding_apply.stdout"
+
+    # ------------- No valid subscription nag -------------
+    # checked_command(orig_cmd) normally hits /nodes/<n>/subscription and pops
+    # "No valid subscription" unless status == 'active'. Inject an immediate
+    # orig_cmd()+return so the command runs and the check/dialog never fires.
+    # Negative lookahead → idempotent (won't double-inject).
+    - name: Suppress the "No valid subscription" dialog in proxmoxlib.js
+      ansible.builtin.replace:
+        path: "{{ widget_js }}"
+        regexp: 'checked_command: function \(orig_cmd\) \{(?! orig_cmd\(\); return;)'
+        replace: 'checked_command: function (orig_cmd) { orig_cmd(); return;'
+      register: nosub_patch
+
+    - name: Install apt hook so the no-sub patch survives widget-toolkit upgrades
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/98-etherport-nosub
+        mode: "0644"
+        content: |
+          // Re-suppress the PVE "No valid subscription" nag after any dpkg run
+          // that reinstalls proxmox-widget-toolkit (etherport, 2026-07-20).
+          DPkg::Post-Invoke { "if [ -e {{ widget_js }} ] && ! grep -q 'orig_cmd(); return;' {{ widget_js }}; then sed -i 's/checked_command: function (orig_cmd) {/checked_command: function (orig_cmd) { orig_cmd(); return;/' {{ widget_js }} || true; fi"; };
+
+    - name: Reload pveproxy so the patched JS + branding are served
+      ansible.builtin.systemd:
+        name: pveproxy
+        state: reloaded
+      when: nosub_patch.changed or branding_apply.changed or branding_stage.changed

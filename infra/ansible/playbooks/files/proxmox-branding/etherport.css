@@ -1,0 +1,38 @@
+/* Etherport branding for Proxmox VE (dark theme) — injected via apply-branding.sh */
+
+/* Login dialog: terminal-card feel */
+.pve-login-window, .x-window-body-default {
+  background-color: #0a0e14 !important;
+  border-color: #1b232e !important;
+}
+.x-window-header-default {
+  background-color: #0d1219 !important;
+  border-color: #1b232e !important;
+}
+.x-window-header-title-default > .x-title-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #6b7888 !important;
+  font-size: 12.5px;
+}
+
+/* Header bar */
+#header, .x-panel-header-default {
+  background-color: #0d1219;
+}
+
+/* Primary buttons → etherport green */
+.x-btn-default-toolbar-small .x-btn-inner,
+.x-btn-default-small .x-btn-inner { font-size: 13px; }
+.x-btn-over.x-btn-default-small, .x-btn-focus.x-btn-default-small {
+  border-color: #2e6b3f !important;
+}
+
+/* Accent: selected/active states */
+.x-tab-active .x-tab-inner-default { color: #46c46a !important; }
+.x-grid-item-selected { background-color: rgba(70, 196, 106, .10) !important; }
+
+/* Using the dark logo asset: stop the dark theme from re-inverting it */
+img[src*="proxmox_logo"] { filter: none !important; }
+
+/* Trademark line under login box: dim */
+.pve-login-window .x-form-display-field { color: #3a4553 !important; }
