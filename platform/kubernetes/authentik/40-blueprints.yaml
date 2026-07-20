@@ -254,20 +254,18 @@ data:
           # prompt, `[ ]` brackets) are NOT achievable via this injection and were
           # dropped. Scoped to .pf-c-login so the admin/user UI keeps native dark.
           branding_custom_css: |
-            /* Only the reachable, confirmed-working bits are kept. The login CARD,
-               FORM and BUTTON render in SHADOW DOM, and Authentik's dark theme
-               redefines the PatternFly colour tokens (e.g. --pf-global--primary-color--100
-               on `:host([theme=dark]) .pf-m-dark`) INSIDE the shadow root — closer in
-               the cascade than any light-DOM injection — so button/input/card COLOURS
-               cannot be overridden from here (verified against flow-2026.5.3.css,
-               2026-07-20). What DOES cross the boundary: inherited props (font-family)
-               + light-DOM elements (page bg, brand/logo). So this ships: dark page,
-               mono font, centred etherport logo. The green button / terminal card
-               chrome are not achievable without a custom flow-interface build. */
+            /* ===== Etherport "quiet card" login — design 5b (2026-07-20) =====
+               KEY: the login card/form/button are in SHADOW DOM. Authentik adopts
+               branding_custom_css INTO each shadow root, so component rules must be
+               UNSCOPED (a `.pf-c-login .pf-c-button` prefix fails — there's no
+               .pf-c-login ancestor inside the button's shadow root). Unscoped
+               `.pf-c-button.pf-m-primary{}` matches the button within its own root.
+               These unscoped rules also apply to the admin/user UI (accepted — on-brand).
+               Light-DOM bits (page bg, logo) stay .pf-c-login-scoped. */
+            /* --- light DOM --- */
             html:has(ak-flow-executor),
             body:has(ak-flow-executor) { background: #05070b !important; margin: 0 !important; }
             .pf-c-login { background: #05070b !important; min-height: 100vh !important; text-align: center;
-              /* mono font — font-family inherits across the shadow boundary (this works) */
               --pf-global--FontFamily--text: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace;
               --pf-global--FontFamily--sans-serif: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace;
               font-family: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace;
@@ -278,11 +276,35 @@ data:
             .pf-c-login .pf-c-brand img, .pf-c-login img.pf-c-brand {
               display: block !important; height: 40px !important; width: auto !important; max-width: 200px; margin: 0 auto !important;
             }
-            /* Hide the "Powered by authentik" footer band (best-effort — if it's
-               shadow-scoped like the button this won't reach it; verify after refresh). */
-            .pf-c-login__main-footer-band,
-            .pf-c-login__main-footer-band-item,
-            .pf-c-login__footer { display: none !important; }
+            /* --- shadow-DOM components (UNSCOPED) --- */
+            .pf-c-login__main {
+              background: #0a0e14 !important; border: 1px solid #1b232e !important;
+              border-radius: 12px !important; box-shadow: 0 18px 40px rgba(0,0,0,.4) !important;
+            }
+            .pf-c-login__main-header, .pf-c-title { color: #e6edf3 !important; font-weight: 700; }
+            /* comment-style subtitle under the "Sign in" title */
+            .pf-c-login__main-body::before {
+              content: "// single sign-on \00b7 etherport"; display: block;
+              font-family: ui-monospace, monospace; font-size: 13px; color: #3a4553; margin: 2px 0 20px;
+            }
+            .pf-c-form__label-text {
+              font-family: ui-monospace, monospace; text-transform: uppercase;
+              letter-spacing: .1em; font-size: 11px; color: #6b7888 !important;
+            }
+            .pf-c-form-control {
+              background: #0d1219 !important; border: 1px solid #1b232e !important;
+              border-radius: 8px !important; color: #e6edf3 !important; font-family: ui-monospace, monospace !important;
+            }
+            .pf-c-form-control:focus, .pf-c-form-control:hover { border-color: #46c46a !important; box-shadow: none !important; }
+            .pf-c-button.pf-m-primary {
+              background-color: #57bd6b !important; color: #05221a !important; border-color: #57bd6b !important;
+              border-radius: 8px !important; font-family: ui-monospace, monospace !important; font-weight: 700 !important;
+            }
+            .pf-c-button.pf-m-primary:hover, .pf-c-button.pf-m-primary:focus { background-color: #6ccb7f !important; border-color: #6ccb7f !important; }
+            /* footer "powered by authentik" — dim, per the design */
+            .pf-c-login__main-footer-band, .pf-c-login__footer {
+              color: #3a4553 !important; font-family: ui-monospace, monospace; font-size: 11px;
+            }
           # Force Authentik's NATIVE dark theme for every interface (login flow +
           # admin/user mgmt). 2024.12 has no theme column, but the web reads
           # brand.attributes.settings.theme.base — this is the supported way to
@@ -300,7 +322,7 @@ data:
           name: "Welcome to authentik!"
           slug: default-authentication-flow
           designation: authentication
-          title: "Etherport SSO"
+          title: "Sign in"
           # flow.background is a FileField served from /media/public/<name>; a
           # data-URI gets stored as a bogus filename. The solid dark-gray PNG is
           # seeded into the media volume by the server's seed-login-bg init
