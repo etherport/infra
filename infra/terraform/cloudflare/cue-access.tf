@@ -98,8 +98,22 @@ resource "cloudflare_zero_trust_access_application" "cue_healthkit" {
       precedence = 1
       include = [
         {
+          // The standalone Apple Health Auto Export app's token.
           service_token = {
             token_id = cloudflare_zero_trust_access_service_token.cue_healthkit.id
+          }
+        },
+        {
+          // The NATIVE iOS app's token (2026-07-20 fix). The app posts HealthKit
+          // batches to /ingest/healthkit with its own cue-ios edge token (the only
+          // one it carries) — but this app previously admitted ONLY the cue-healthkit
+          // token, so CF rejected every native-app health POST AT THE EDGE (403, never
+          // reached origin). That was the week-long "Health won't sync" bug: reinstalls
+          // and fresh grants couldn't fix an edge rejection. Admitting cue-ios here is
+          // the same two-layer model the main `cue` app already uses — the edge token
+          // only proves "our app", cue-api's device-token guard is the per-user gate.
+          service_token = {
+            token_id = cloudflare_zero_trust_access_service_token.cue_ios.id
           }
         }
       ]
