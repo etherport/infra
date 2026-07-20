@@ -46,6 +46,14 @@ data:
                   | json policy="process_kprobe.policy_name", func="process_kprobe.function_name", binary="process_kprobe.process.binary", k8s_ns="process_kprobe.process.pod.namespace", k8s_pod="process_kprobe.process.pod.name"
                   | __error__=""
                   | policy="detect-cred-file-access"
+                  # Exclude the wireguard pod's own package-config reading /etc/shadow:
+                  # debconf/dpkg-preconfigure read /etc/shadow to check for system users
+                  # while (re)configuring packages at container start — standard, benign,
+                  # and it flapped this critical every time the wg pod restarted (2026-07-20).
+                  # Scoped to (wireguard ns AND dpkg/debconf binary) so no global blind spot;
+                  # any OTHER pod/binary touching /etc/shadow still alerts. (Real fix: bake
+                  # wireguard-tools into the image so it doesn't run apt/dpkg at runtime.)
+                  | k8s_ns!="wireguard" or binary!~"/usr/(sbin/dpkg-preconfigure|share/debconf/.*)"
                   [10m]
                 )
               ) > 0
