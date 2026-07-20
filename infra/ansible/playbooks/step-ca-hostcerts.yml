@@ -432,7 +432,16 @@
           # ExecStart succeeded); SIGHUP never tears down live sessions, and
           # Ubuntu's ssh ExecReload itself runs `sshd -t` first, so a bad reload
           # can't take sshd down.
-          ExecStartPost=/bin/systemctl reload ssh
+          # ⚠️ `reload ssh` FAILS ("ssh.service is not active, cannot reload") on
+          # Ubuntu 24.04 where sshd is SOCKET-ACTIVATED (ssh.socket) — ssh.service is
+          # idle until a connection, and each connection spawns a fresh sshd that
+          # reads the renewed cert anyway, so no reload is needed. The renewal
+          # ExecStart still succeeded, but the failed reload marked the whole unit
+          # `failed` → ExternalHostSystemdFailed alert (first fired 2026-07-20 when
+          # the host certs first crossed the renewal threshold). `try-reload-or-restart`
+          # reloads ssh.service only if it's ACTIVE (long-running sshd) and is a
+          # clean no-op when it's socket-idle. `-` prefix ignores any residual error.
+          ExecStartPost=-/usr/bin/systemctl try-reload-or-restart ssh.service
 
     - name: Install the host-cert renewal timer unit (daily)
       ansible.builtin.copy:
