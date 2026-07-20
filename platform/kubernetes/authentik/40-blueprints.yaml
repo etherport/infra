@@ -239,6 +239,81 @@ data:
           # custom.css sizes/centers it.
           branding_logo: "/static/dist/etherport-logo-dark.svg"
           branding_favicon: "/static/dist/etherport-mark.svg"
+          # ⚠️ Terminal login theme lives HERE (branding_custom_css), NOT the served
+          # /static/dist/custom.css file. In 2026.5 the FLOW interface
+          # (FlowInterface-*.js) loads only flow-<ver>.css — it never loads
+          # custom.css (that's the admin/user UI only), so the served-file approach
+          # styled nothing on the login page. branding_custom_css IS injected into
+          # the flow. Scoped to .pf-c-login so the admin/user UI keeps native dark.
+          branding_custom_css: |
+            :root {
+              --ep-page: #05070b; --ep-surface: #0a0e14; --ep-titlebar: #0d1219;
+              --ep-border: #1b232e; --ep-text: #e6edf3; --ep-dim: #6b7888;
+              --ep-dim2: #3a4553; --ep-ok: #46c46a; --ep-ok-border: #2e6b3f;
+              --ep-cyan: #5ac2d4;
+              --ep-mono: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace;
+              --ep-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
+            }
+            html:has(ak-flow-executor),
+            body:has(ak-flow-executor) { background: var(--ep-page) !important; margin: 0 !important; }
+            .pf-c-login { background: var(--ep-page) !important; min-height: 100vh !important; font-family: var(--ep-sans); }
+            .pf-c-background-image { display: none !important; }
+            /* Logo — center it above the card */
+            .pf-c-login__header,
+            .pf-c-login .pf-c-login__main-header,
+            .pf-c-login header {
+              display: flex !important; justify-content: center !important;
+              align-items: center !important; text-align: center !important; width: 100% !important;
+            }
+            .pf-c-login .pf-c-brand {
+              display: block !important; margin: 0 auto 14px auto !important; float: none !important; text-align: center;
+            }
+            .pf-c-login .pf-c-brand img,
+            .pf-c-login img.pf-c-brand {
+              display: block !important; height: 40px !important; width: auto !important; max-width: 236px; margin: 0 auto !important;
+            }
+            /* Card = terminal window */
+            .pf-c-login .pf-c-login__main {
+              background: var(--ep-surface) !important; border: 1px solid var(--ep-border) !important;
+              border-radius: 11px !important; overflow: hidden !important; box-shadow: 0 18px 40px rgba(0,0,0,.4) !important;
+            }
+            /* Titlebar (traffic lights) */
+            .pf-c-login .pf-c-login__main::before {
+              content: "etherport \00b7 sso"; display: block; padding: 11px 16px 11px 76px;
+              background:
+                radial-gradient(circle 5.5px at 24px 50%, #f4685c 5.5px, transparent 6px),
+                radial-gradient(circle 5.5px at 42px 50%, #e0a53a 5.5px, transparent 6px),
+                radial-gradient(circle 5.5px at 60px 50%, #46c46a 5.5px, transparent 6px),
+                var(--ep-titlebar);
+              border-bottom: 1px solid var(--ep-border); font-family: var(--ep-mono);
+              font-size: 12.5px; color: var(--ep-dim); text-align: center;
+            }
+            /* Prompt line above the form */
+            .pf-c-login .pf-c-login__main-body::before {
+              content: "guest@etherport:~$ ssh etherport \2589"; display: block; margin: 4px 0 18px;
+              font-family: var(--ep-mono); font-size: 13px; color: var(--ep-ok); animation: ep-blink 1.1s step-end infinite;
+            }
+            @keyframes ep-blink { 50% { opacity: .55; } }
+            .pf-c-login .pf-c-login__main-header,
+            .pf-c-login .pf-c-title { color: var(--ep-text) !important; }
+            .pf-c-login .pf-c-login__main-body { color: var(--ep-text); }
+            .pf-c-login .pf-c-form__label-text {
+              font-family: var(--ep-mono); font-size: 11px; letter-spacing: .08em;
+              text-transform: uppercase; color: var(--ep-dim);
+            }
+            .pf-c-login .pf-c-form-control {
+              background: var(--ep-titlebar) !important; border: 1px solid var(--ep-border) !important;
+              border-radius: 6px !important; color: var(--ep-text) !important; font-family: var(--ep-mono);
+            }
+            .pf-c-login .pf-c-form-control:focus { border-color: var(--ep-ok) !important; box-shadow: none !important; }
+            /* Primary button = bracket style */
+            .pf-c-login .pf-c-button.pf-m-primary {
+              background: rgba(70,196,106,.08) !important; border: 1px solid var(--ep-ok-border) !important;
+              border-radius: 6px !important; color: var(--ep-ok) !important; font-family: var(--ep-mono); font-weight: 700;
+            }
+            .pf-c-login .pf-c-button.pf-m-primary::before { content: "[ "; }
+            .pf-c-login .pf-c-button.pf-m-primary::after { content: " ]"; }
+            .pf-c-login .pf-c-button.pf-m-primary:hover { background: rgba(70,196,106,.16) !important; }
           # Force Authentik's NATIVE dark theme for every interface (login flow +
           # admin/user mgmt). 2024.12 has no theme column, but the web reads
           # brand.attributes.settings.theme.base — this is the supported way to
