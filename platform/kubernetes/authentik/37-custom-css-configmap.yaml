@@ -28,16 +28,28 @@ data:
   # `branding` blueprint fail validation (status=error) so nothing in it applies
   # (logo, favicon, AND theme.base=dark). Data URIs worked pre-2026.5 (2024.12);
   # the H44 upgrade broke them. Keep these as served files.
+  # Logo: Authentik's .pf-c-brand already centers this (justify-content:center) +
+  # scales it to a % of the card width. So centering depends ENTIRELY on the SVG
+  # content being centered within its OWN viewBox. The wordmark (ring + "etherport")
+  # spans ~x8–183, so in the old 236-wide viewBox it sat left-of-centre → looked
+  # off-centre (2026-07-20). Tightened the viewBox to hug the content (8px margins
+  # both sides) so the centred, scaled logo is actually centred.
   etherport-logo-dark.svg: |
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 236 48" width="236" height="48">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 191 48" width="191" height="48">
       <circle cx="24" cy="24" r="14" fill="none" stroke="#46c46a" stroke-width="4"></circle>
       <circle cx="24" cy="24" r="4.5" fill="#46c46a"></circle>
       <text x="52" y="33" font-family="-apple-system,BlinkMacSystemFont,&#39;Segoe UI&#39;,Helvetica,Arial,sans-serif" font-size="27" font-weight="700" letter-spacing="-0.5" fill="#e6edf3">etherport</text>
     </svg>
+  # Favicon: intentional DARK rounded tile (matches the terminal palette) rather than
+  # a bare transparent ring. The SVG is transparent, but Safari composites favicons
+  # onto a light tile in the tab/favourites, so a bare mark shows as a green ring on
+  # WHITE. A dark rounded square owns the tile so it reads as deliberate on a dark tab
+  # (2026-07-20). Revert to fill:none rect for true transparency if Safari behaviour changes.
   etherport-mark.svg: |
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-      <circle cx="24" cy="24" r="17" fill="none" stroke="#46c46a" stroke-width="5"></circle>
-      <circle cx="24" cy="24" r="5.5" fill="#46c46a"></circle>
+      <rect width="48" height="48" rx="11" fill="#0a0e14"></rect>
+      <circle cx="24" cy="24" r="14" fill="none" stroke="#46c46a" stroke-width="4.5"></circle>
+      <circle cx="24" cy="24" r="5" fill="#46c46a"></circle>
     </svg>
   custom.css: |
     /* ===== Etherport terminal theme — LOGIN FLOW ONLY ===== */

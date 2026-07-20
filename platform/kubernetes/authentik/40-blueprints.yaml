@@ -254,42 +254,35 @@ data:
           # prompt, `[ ]` brackets) are NOT achievable via this injection and were
           # dropped. Scoped to .pf-c-login so the admin/user UI keeps native dark.
           branding_custom_css: |
-            /* ---- light-DOM (reachable directly): page bg + logo centering ---- */
+            /* Only the reachable, confirmed-working bits are kept. The login CARD,
+               FORM and BUTTON render in SHADOW DOM, and Authentik's dark theme
+               redefines the PatternFly colour tokens (e.g. --pf-global--primary-color--100
+               on `:host([theme=dark]) .pf-m-dark`) INSIDE the shadow root — closer in
+               the cascade than any light-DOM injection — so button/input/card COLOURS
+               cannot be overridden from here (verified against flow-2026.5.3.css,
+               2026-07-20). What DOES cross the boundary: inherited props (font-family)
+               + light-DOM elements (page bg, brand/logo). So this ships: dark page,
+               mono font, centred etherport logo. The green button / terminal card
+               chrome are not achievable without a custom flow-interface build. */
             html:has(ak-flow-executor),
             body:has(ak-flow-executor) { background: #05070b !important; margin: 0 !important; }
-            .pf-c-login { background: #05070b !important; min-height: 100vh !important; text-align: center; }
+            .pf-c-login { background: #05070b !important; min-height: 100vh !important; text-align: center;
+              /* mono font — font-family inherits across the shadow boundary (this works) */
+              --pf-global--FontFamily--text: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace;
+              --pf-global--FontFamily--sans-serif: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace;
+              font-family: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace;
+            }
             .pf-c-background-image { display: none !important; }
             .pf-c-login__header, .pf-c-login header { display: flex !important; justify-content: center !important; width: 100% !important; }
             .pf-c-login .pf-c-brand { display: block !important; margin: 0 auto 14px auto !important; float: none !important; }
             .pf-c-login .pf-c-brand img, .pf-c-login img.pf-c-brand {
-              display: block !important; height: 40px !important; width: auto !important; max-width: 236px; margin: 0 auto !important;
+              display: block !important; height: 40px !important; width: auto !important; max-width: 200px; margin: 0 auto !important;
             }
-            /* ---- shadow-DOM (reachable ONLY via inherited CSS vars + font) ----
-               PatternFly v5 component variables, set on the .pf-c-login light-DOM
-               ancestor so they inherit into the shadow card/form/button. */
-            .pf-c-login {
-              /* mono font — font-family inherits across shadow boundaries */
-              --pf-global--FontFamily--text: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace;
-              --pf-global--FontFamily--sans-serif: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace;
-              font-family: ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace;
-              /* accent → etherport green (primary button) */
-              --pf-c-button--m-primary--BackgroundColor: #2e6b3f;
-              --pf-c-button--m-primary--Color: #e6edf3;
-              --pf-c-button--m-primary--hover--BackgroundColor: #46c46a;
-              --pf-c-button--m-primary--active--BackgroundColor: #46c46a;
-              --pf-c-button--m-primary--focus--BackgroundColor: #46c46a;
-              /* inputs → terminal surface + green focus underline */
-              --pf-c-form-control--BackgroundColor: #0d1219;
-              --pf-c-form-control--Color: #e6edf3;
-              --pf-c-form-control--BorderBottomColor: #1b232e;
-              --pf-c-form-control--focus--BorderBottomColor: #46c46a;
-              --pf-c-form-control--hover--BorderBottomColor: #46c46a;
-              /* links → cyan */
-              --pf-global--link--Color: #5ac2d4;
-              --pf-global--link--Color--hover: #7ad4e4;
-              /* card surface */
-              --pf-c-login__main--BackgroundColor: #0a0e14;
-            }
+            /* Hide the "Powered by authentik" footer band (best-effort — if it's
+               shadow-scoped like the button this won't reach it; verify after refresh). */
+            .pf-c-login__main-footer-band,
+            .pf-c-login__main-footer-band-item,
+            .pf-c-login__footer { display: none !important; }
           # Force Authentik's NATIVE dark theme for every interface (login flow +
           # admin/user mgmt). 2024.12 has no theme column, but the web reads
           # brand.attributes.settings.theme.base — this is the supported way to
