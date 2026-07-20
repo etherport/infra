@@ -18,17 +18,17 @@
     - name: Stage the etherport branding kit on the host
       ansible.builtin.copy:
         src: files/proxmox-branding/
-        dest: /usr/local/share/etherport-branding/
+        dest: /usr/local/src/etherport-branding/
         mode: preserve
       register: branding_stage
 
     - name: Ensure apply-branding.sh is executable
       ansible.builtin.file:
-        path: /usr/local/share/etherport-branding/apply-branding.sh
+        path: /usr/local/src/etherport-branding/apply-branding.sh
         mode: "0755"
 
     - name: Apply branding (idempotent; the script installs its own pve-manager apt hook)
-      ansible.builtin.command: /usr/local/share/etherport-branding/apply-branding.sh
+      ansible.builtin.command: /usr/local/src/etherport-branding/apply-branding.sh
       register: branding_apply
       changed_when: "'branding applied' in branding_apply.stdout"
 
