@@ -15,6 +15,38 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-20 — morning alert triage: host-cert renew, tetragon FP, AWS cost, favicon, login mechanism
+
+**ExternalHostSystemdFailed (flapping ×3):** `step-ssh-hostcert-renew.service` renews the
+cert fine but its `ExecStartPost=systemctl reload ssh` fails ("ssh.service is not active")
+on socket-activated sshd (Ubuntu 24.04) — surfaced today when host certs first crossed the
+168h renewal threshold. Fixed → `-systemctl try-reload-or-restart ssh.service` in
+`step-ca-hostcerts.yml` (commit 3483f19) + applied live on all 4 affected hosts (devbox,
+gh-runner, vpn-fallback, asterisk-sbc); alert cleared fleet-wide.
+
+**Tetragon cred-access (flapping critical):** benign — the `wireguard` pod's startup runs
+dpkg-preconfigure/debconf which read /etc/shadow during package config. Scoped-out via a
+LogQL filter `| k8s_ns!="wireguard" or binary!~"/usr/(sbin/dpkg-preconfigure|share/debconf/.*)"`
+(no global blind spot), validated against live Loki (commit 5ba70d5). Real fix: bake
+wireguard-tools into the image.
+
+**AWS cost $75→$88 forecast:** confirmed the operator's guess — **Amazon Registrar $15.00
+MTD = the domain renewal** (one-time/annual). S3 $46.52 MTD is front-loaded from the
+earlier-month K8s-upgrade egress + backups (trailing-7 back to $0.61/day, yesterday $0.65 —
+decayed). No spike_ratio anomalies. Nothing new popped up. Data from the aws-cost-exporter
+Prometheus metrics (terraform-homelab key lacks ce:GetCostAndUsage).
+
+**Favicon:** the served etherport-mark.svg is already fully transparent (no bg element);
+the white tile is Safari's tab/favorites chrome, not the icon.
+
+**Login theme — mechanism found, still not rendering.** The served /static/dist/custom.css
+is NEVER loaded by the flow interface (only the admin/user UI) — that's why the whole
+terminal theme styled nothing. Moved it to `Brand.branding_custom_css` (commit 00bb3ed),
+which IS served by /api/v3/core/brands/current/ that the flow reads. But the desktop
+screenshot still shows default → likely shadow-DOM scoping in the 2026.5 flow. Awaiting an
+operator DevTools inspection (card class + shadow-root?) to fix the selectors, or fall back
+to logo+dark-only. Memory: authentik-sso-gotchas updated.
+
 ## 2026-07-19 — advisor "flood" root-caused to the apiserver-audit firehose; tightened audit policy (~80% Loki cut) + logo centering
 
 **Advisor flood + still-arriving mini emails.** Two things. (1) The mini/cairn silence
