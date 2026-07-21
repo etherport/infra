@@ -15,6 +15,13 @@ set -uo pipefail
 export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 REPO="/home/ubuntu/code/infra"
+# ⚠️ PIN the model. Without --model, `claude -p` inherits the interactive default
+# (~/.claude.json), which flipped to `claude-fable-5[1m]` in early July — whose usage
+# cap is exhausted, so EVERY weekly run since ~2026-07-06 died with "You've reached your
+# Fable 5 limit" (rc=1) and emailed an "(error)" summary instead of a real drift report.
+# Sonnet 5 = capable for drift analysis + generous limits + doesn't compete with the
+# operator's interactive Opus quota. Override via AUDIT_MODEL if desired.
+AUDIT_MODEL="${AUDIT_MODEL:-claude-sonnet-5}"
 PROMPT_FILE="$REPO/infra/devbox/doc-drift-audit-prompt.md"
 HELPER="$REPO/infra/devbox/audit-helpers.sh"
 LOG_DIR="$HOME/.local/state/doc-drift-audit"
@@ -45,6 +52,7 @@ echo "[$(date -Is)] starting doc-drift audit" >>"$LOG"
 # SOPS_AGE_KEY_FILE is NOT exported to the agent; only the helper (which it runs) decrypts, and only
 # returns UDM/GitHub GET results — never raw secrets.
 claude -p "$(cat "$PROMPT_FILE")" \
+  --model "$AUDIT_MODEL" \
   --permission-mode default \
   --settings "$REPO/infra/devbox/doc-drift-audit-permissions.json" \
   >>"$LOG" 2>&1
