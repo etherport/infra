@@ -40,16 +40,14 @@ data:
       <circle cx="24" cy="24" r="4.5" fill="#46c46a"></circle>
       <text x="52" y="33" font-family="-apple-system,BlinkMacSystemFont,&#39;Segoe UI&#39;,Helvetica,Arial,sans-serif" font-size="27" font-weight="700" letter-spacing="-0.5" fill="#e6edf3">etherport</text>
     </svg>
-  # Favicon: intentional DARK rounded tile (matches the terminal palette) rather than
-  # a bare transparent ring. The SVG is transparent, but Safari composites favicons
-  # onto a light tile in the tab/favourites, so a bare mark shows as a green ring on
-  # WHITE. A dark rounded square owns the tile so it reads as deliberate on a dark tab
-  # (2026-07-20). Revert to fill:none rect for true transparency if Safari behaviour changes.
+  # Favicon: TRANSPARENT (no background rect) per operator preference — a green ring
+  # mark. NB Safari composites favicons onto a light tile in bookmarks/favourites, so
+  # it can still look boxed there; in the actual (dark) browser tab it's transparent.
+  # Aggressively cached by browsers — hard-refresh after changing.
   etherport-mark.svg: |
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-      <rect width="48" height="48" rx="11" fill="#0a0e14"></rect>
-      <circle cx="24" cy="24" r="14" fill="none" stroke="#46c46a" stroke-width="4.5"></circle>
-      <circle cx="24" cy="24" r="5" fill="#46c46a"></circle>
+      <circle cx="24" cy="24" r="17" fill="none" stroke="#46c46a" stroke-width="5"></circle>
+      <circle cx="24" cy="24" r="5.5" fill="#46c46a"></circle>
     </svg>
   custom.css: |
     /* ===== Etherport terminal theme — LOGIN FLOW ONLY ===== */
