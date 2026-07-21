@@ -216,6 +216,18 @@ This file foregrounds open/in-progress/gated work._
 
 > M122+ from the 2026-07-02 currency/state review + path-loss investigation.
 
+### ⏳ M146. k8s-w4 stuck cordoned + reboot-pending since 2026-07-17 (incomplete node patch)
+- Surfaced by the 2026-07-21 doc-drift audit (first clean run after the Fable-5-limit fix).
+  `k8s-w4` is `SchedulingDisabled` (taint `node.kubernetes.io/unschedulable`) with
+  `*** System restart required ***` pending — the rolling node patch (w4 canary → …, "two
+  incidents en route") cordoned + upgraded it but never completed its **reboot + uncordon**.
+  Node is `Ready` + running pods (incl. `cue-db-1` CNPG primary), so nothing's broken; it's
+  just out of the scheduling pool with an unapplied kernel update for 4d.
+- **Resolve in a window:** drain w4 (delete the PDB-blocked single-instance CNPG pods first
+  per the k8s-node-patch playbook — `cue-db` fails over), reboot, uncordon. Or, if the reboot
+  is to be deferred, `kubectl uncordon k8s-w4` now to restore capacity. Operator's call —
+  not actioned autonomously (node reboot = disruptive, needs a window).
+
 ### 🟡 L33. WG HA-failover review — DONE 2026-07-02: architecture KEPT (it proved itself live today); 3 follow-ups
 - **Verdict: keep the design.** The VRRP failover **fired for real during today's 1.34.3 rolling upgrade** (w2 drain took the K8s WG pod) and worked: vpn-fallback took VIP `10.10.201.20`, started wg0, and the AWS site-to-site stayed up (fresh handshakes verified). The three-path model is sound: K8s WG pod (HA across drains) → vpn-fallback VM (survives cluster-wide outages) → Tailscale mesh (independent third path; now healthy again post-L32 with BOTH local exit nodes live).
 - **Backup readiness audited on-box:** keepalived active+enabled, wg0 config present, the tailscale-failover unit active. The 47-day dead-TS episode (L32) was the only rot — and nothing alerted on it.
