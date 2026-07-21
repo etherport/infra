@@ -19,9 +19,13 @@ if [ "$SRC_DIR" != "$STAMP" ]; then
 fi
 
 apply() {
-  # 1. Header logo. ⚠️ PVE 9's header uses the proxmoxLogoSvg component →
-  #    src '/images/proxmox_logo.svg' (an SVG, NOT the .png). PVE 8 used the .png.
-  #    Replace BOTH so this works on 8 and 9.
+  # 1. Header logo. ⚠️ PVE 9's masthead uses `proxmoxLogoSvg` with `prefix: 'pwt'`,
+  #    so the HEADER logo loads from /pwt/images/proxmox_logo.svg =
+  #    proxmox-widget-toolkit's copy — NOT pve-manager's. Replace ALL of them:
+  #    the widget-toolkit SVG (header), the pve-manager SVG (login/other), + the
+  #    PNG (PVE 8). The 99-etherport-branding apt Post-Invoke re-applies after any
+  #    dpkg run, so widget-toolkit upgrades don't revert it.
+  cp "$STAMP/etherport-logo.svg" /usr/share/javascript/proxmox-widget-toolkit/images/proxmox_logo.svg 2>/dev/null || true
   cp "$STAMP/etherport-logo.svg" "$PVE/images/proxmox_logo.svg" 2>/dev/null || true
   cp "$STAMP/etherport-logo-proxmox.png" "$PVE/images/proxmox_logo.png"
   # 2. Favicon
