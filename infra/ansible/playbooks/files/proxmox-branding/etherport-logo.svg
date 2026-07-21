@@ -1,5 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" width="200" height="48">
-  <circle cx="22" cy="24" r="13" fill="none" stroke="#46c46a" stroke-width="4"/>
-  <circle cx="22" cy="24" r="4.5" fill="#46c46a"/>
-  <text x="48" y="32" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="25" font-weight="700" letter-spacing="-0.5" fill="#e6edf3">etherport</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 35" width="200" height="35">
+  <style>
+    /* Text adapts to the theme (green ring stays green in both). PVE default theme
+       = auto → follows the browser/OS color scheme, which this @media matches.
+       The etherport.css `filter:none` rule stops PVE re-inverting the logo. */
+    .ep-text { fill: #0a0e14; }
+    @media (prefers-color-scheme: dark) { .ep-text { fill: #e6edf3; } }
+  </style>
+  <circle cx="18" cy="17.5" r="11" fill="none" stroke="#46c46a" stroke-width="3.2"/>
+  <circle cx="18" cy="17.5" r="3.6" fill="#46c46a"/>
+  <text class="ep-text" x="38" y="24" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="20" font-weight="700" letter-spacing="-0.4">etherport</text>
 </svg>
