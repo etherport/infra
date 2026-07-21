@@ -284,7 +284,7 @@ data:
             .pf-c-login__main-header, .pf-c-title { color: #e6edf3 !important; font-weight: 700; }
             /* comment-style subtitle under the "Sign in" title */
             .pf-c-login__main-body::before {
-              content: "// single sign-on \00b7 etherport"; display: block;
+              content: "// single sign-on · etherport"; display: block;
               font-family: ui-monospace, monospace; font-size: 13px; color: #3a4553; margin: 2px 0 20px;
             }
             .pf-c-form__label-text {
