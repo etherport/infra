@@ -13,6 +13,7 @@
   gather_facts: false
   vars:
     widget_js: /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
+    widget_min_js: /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.min.js
   tasks:
     # ---------------- Branding ----------------
     - name: Stage the etherport branding kit on the host
@@ -37,12 +38,22 @@
     # "No valid subscription" unless status == 'active'. Inject an immediate
     # orig_cmd()+return so the command runs and the check/dialog never fires.
     # Negative lookahead → idempotent (won't double-inject).
-    - name: Suppress the "No valid subscription" dialog in proxmoxlib.js
+    # Non-minified (index.html.tpl loads this): `checked_command: function (orig_cmd) {`
+    - name: Suppress the nag in proxmoxlib.js (non-minified)
       ansible.builtin.replace:
         path: "{{ widget_js }}"
         regexp: 'checked_command: function \(orig_cmd\) \{(?! orig_cmd\(\); return;)'
         replace: 'checked_command: function (orig_cmd) { orig_cmd(); return;'
       register: nosub_patch
+
+    # Minified (belt-and-suspenders — some paths serve .min.js): `checked_command:function(i){`
+    - name: Suppress the nag in proxmoxlib.min.js (minified)
+      ansible.builtin.replace:
+        path: "{{ widget_min_js }}"
+        regexp: 'checked_command:function\((\w)\)\{(?!\1\(\);return;)'
+        replace: 'checked_command:function(\1){\1();return;'
+      register: nosub_patch_min
+      failed_when: false
 
     - name: Install apt hook so the no-sub patch survives widget-toolkit upgrades
       ansible.builtin.copy:
@@ -50,11 +61,12 @@
         mode: "0644"
         content: |
           // Re-suppress the PVE "No valid subscription" nag after any dpkg run
-          // that reinstalls proxmox-widget-toolkit (etherport, 2026-07-20).
+          // that reinstalls proxmox-widget-toolkit (etherport, 2026-07).
           DPkg::Post-Invoke { "if [ -e {{ widget_js }} ] && ! grep -q 'orig_cmd(); return;' {{ widget_js }}; then sed -i 's/checked_command: function (orig_cmd) {/checked_command: function (orig_cmd) { orig_cmd(); return;/' {{ widget_js }} || true; fi"; };
+          DPkg::Post-Invoke { "if [ -e {{ widget_min_js }} ] && ! grep -q 'i();return;' {{ widget_min_js }}; then sed -i 's/checked_command:function(i){/checked_command:function(i){i();return;/' {{ widget_min_js }} || true; fi"; };
 
     - name: Reload pveproxy so the patched JS + branding are served
       ansible.builtin.systemd:
         name: pveproxy
         state: reloaded
-      when: nosub_patch.changed or branding_apply.changed or branding_stage.changed
+      when: nosub_patch.changed or nosub_patch_min.changed or branding_apply.changed or branding_stage.changed

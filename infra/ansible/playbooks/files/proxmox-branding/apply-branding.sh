@@ -9,16 +9,20 @@ PVE=/usr/share/pve-manager
 STAMP="/usr/local/share/etherport-branding"
 
 mkdir -p "$STAMP"
-cp "$SRC_DIR/etherport-logo-proxmox.png" "$STAMP/"
-cp "$SRC_DIR/etherport-logo-proxmox-light.png" "$STAMP/" 2>/dev/null || true
-cp "$SRC_DIR/etherport-favicon.png" "$STAMP/"
-cp "$SRC_DIR/etherport.css" "$STAMP/"
+# copy source assets to the stamp dir (unless already running from it)
+if [ "$SRC_DIR" != "$STAMP" ]; then
+  cp "$SRC_DIR/etherport-logo-proxmox.png" "$STAMP/"
+  cp "$SRC_DIR/etherport-logo-proxmox-light.png" "$STAMP/" 2>/dev/null || true
+  cp "$SRC_DIR/etherport-favicon.png" "$STAMP/"
+  cp "$SRC_DIR/etherport-logo.svg" "$STAMP/" 2>/dev/null || true
+  cp "$SRC_DIR/etherport.css" "$STAMP/"
+fi
 
 apply() {
-  # 1. Logo (header + login dialog use the same file).
-  #    Dark-only nodes: keep the dark asset + disable PVE's dark-theme image
-  #    filter (rule in etherport.css). Mixed/light: copy the -light asset
-  #    instead and let PVE's dark theme invert it.
+  # 1. Header logo. ⚠️ PVE 9's header uses the proxmoxLogoSvg component →
+  #    src '/images/proxmox_logo.svg' (an SVG, NOT the .png). PVE 8 used the .png.
+  #    Replace BOTH so this works on 8 and 9.
+  cp "$STAMP/etherport-logo.svg" "$PVE/images/proxmox_logo.svg" 2>/dev/null || true
   cp "$STAMP/etherport-logo-proxmox.png" "$PVE/images/proxmox_logo.png"
   # 2. Favicon
   cp "$STAMP/etherport-favicon.png" "$PVE/images/favicon.png" 2>/dev/null || true
