@@ -216,7 +216,7 @@ This file foregrounds open/in-progress/gated work._
 
 > M122+ from the 2026-07-02 currency/state review + path-loss investigation.
 
-### ⏳ M146. k8s-w4 stuck cordoned + reboot-pending since 2026-07-17 (incomplete node patch)
+### ✅ M146. k8s-w4 stuck cordoned + reboot-pending — RESOLVED 2026-07-22 (patched: drained → rebooted 6.8.0-136 via kured → uncordoned; cue-db moved to w3 healthy)
 - Surfaced by the 2026-07-21 doc-drift audit (first clean run after the Fable-5-limit fix).
   `k8s-w4` is `SchedulingDisabled` (taint `node.kubernetes.io/unschedulable`) with
   `*** System restart required ***` pending — the rolling node patch (w4 canary → …, "two
