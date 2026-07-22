@@ -3,7 +3,7 @@
 # Migrated 2026-05-27 from the public.ecr.aws/aws-cli base (~200MB)
 # to alpine + curl + jq + bind-tools after the script switched to
 # writing Cloudflare records over HTTPS (no AWS calls remain).
-FROM alpine:3.21
+FROM alpine:3.24
 
 RUN apk add --no-cache \
     bash \
