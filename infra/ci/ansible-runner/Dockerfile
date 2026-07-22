@@ -6,7 +6,7 @@
 #
 # Used by `.github/workflows/ansible-proxmox.yml` via `container:`.
 
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
