@@ -31,8 +31,10 @@
 .x-tab-active .x-tab-inner-default { color: #46c46a !important; }
 .x-grid-item-selected { background-color: rgba(70, 196, 106, .10) !important; }
 
-/* Using the dark logo asset: stop the dark theme from re-inverting it */
-img[src*="proxmox_logo"] { filter: none !important; }
+/* Logo is a BLACK-text SVG (correct for light mode). In DARK mode PVE's own
+   `img[id^=proxmoxLogoSvg-][id$=-img]{filter:invert(1) hue-rotate(180deg)}` flips
+   it → white text + green-ish ring. So we do NOT override that filter (the old
+   `filter: none` kept the text black on the dark header — 2026-07-22 fix). */
 
 /* Trademark line under login box: dim */
 .pve-login-window .x-form-display-field { color: #3a4553 !important; }

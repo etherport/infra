@@ -1,12 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 35" width="200" height="35">
-  <style>
-    /* Text adapts to the theme (green ring stays green in both). PVE default theme
-       = auto → follows the browser/OS color scheme, which this @media matches.
-       The etherport.css `filter:none` rule stops PVE re-inverting the logo. */
-    .ep-text { fill: #0a0e14; }
-    @media (prefers-color-scheme: dark) { .ep-text { fill: #e6edf3; } }
-  </style>
+  <!-- Black text for LIGHT mode. In DARK mode PVE applies
+       filter: invert(1) hue-rotate(180deg) to the logo img → black text becomes
+       white, the green ring stays green-ish (hue preserved). So do NOT set
+       filter:none in etherport.css (that would keep the text black on the dark header). -->
   <circle cx="18" cy="17.5" r="11" fill="none" stroke="#46c46a" stroke-width="3.2"/>
   <circle cx="18" cy="17.5" r="3.6" fill="#46c46a"/>
-  <text class="ep-text" x="38" y="24" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="20" font-weight="700" letter-spacing="-0.4">etherport</text>
+  <text x="38" y="24" fill="#0a0e14" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="20" font-weight="700" letter-spacing="-0.4">etherport</text>
 </svg>
