@@ -32,6 +32,13 @@ spec:
       # L26 (2026-07-01): this workload never calls the kube API — don't hand
       # every pod a cluster credential by default.
       automountServiceAccountToken: false
+      # Plex is a single-point workload: it needs the GPU (HW transcode) so it can
+      # ONLY run on gpu1 — there is no fallback node. When gpu1 is rebooted (kured,
+      # for kernel/security patches), Plex is evicted and must reschedule back onto
+      # the just-rebooted gpu1 while every other pod is also landing there. Give it
+      # cluster-critical priority so it can preempt lower-priority pods and reclaim
+      # its only node quickly, minimising the outage (2026-07-23).
+      priorityClassName: k8s-cluster-critical
       # Run on a node with an NVIDIA GPU. Matches the label automatically
       # set by gpu-operator's node-feature-discovery — no manual `gpu=true`
       # labelling required. Same selector as Ollama.
@@ -49,7 +56,12 @@ spec:
           resources:
             requests:
               cpu: 1000m
-              memory: 2Gi
+              # 512Mi request (was 2Gi — a 6x over-reservation: Plex's 7d peak
+              # working-set is only ~330Mi even under transcode). The oversized
+              # request was what made Plex hard to reschedule onto a busy gpu1 after
+              # a reboot ("Insufficient memory" FailedScheduling). The 8Gi LIMIT
+              # below still allows bursting for heavy transcodes (2026-07-23).
+              memory: 512Mi
               nvidia.com/gpu.shared: "1" # Request 1 GPU time-slice
             limits:
               cpu: 4000m
