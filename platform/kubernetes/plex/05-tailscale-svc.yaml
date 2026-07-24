@@ -1,0 +1,31 @@
+---
+# Tailnet exposure of Plex via the Tailscale K8s operator (2026-07-23). Gives Plex
+# a dedicated tailnet node → plex.tail48f596.ts.net + a 100.x IP, reachable DIRECTLY
+# by every tailnet device (phone Plex app, Apple TV w/ Tailscale, browser) with no
+# subnet-router / MetalLB-BGP-VIP gymnastics. Same `loadBalancerClass: tailscale` +
+# `tag:k8s` pattern as ntfy-ts/cue-api-ts (tag:k8s is operator-mintable; ACL in
+# infra/tailscale/policy.hujson). Raw TCP over WireGuard; the ClusterIP `plex`
+# Service stays for the in-cluster/Traefik bridge.
+#
+# After apply: set Plex → Settings → Network → "Custom server access URLs" to
+#   http://plex.tail48f596.ts.net:32400
+# so plex.tv hands clients the tailnet URL. Keep CF-tunnel (no Access) as the
+# public backup for devices that aren't on the tailnet.
+apiVersion: v1
+kind: Service
+metadata:
+  name: plex-ts
+  namespace: plex
+  annotations:
+    tailscale.com/hostname: "plex"     # → plex.tail48f596.ts.net
+    tailscale.com/tags: "tag:k8s"       # operator-mintable (owned by tag:k8s-operator)
+spec:
+  type: LoadBalancer
+  loadBalancerClass: tailscale
+  selector:
+    app: plex
+  ports:
+    - name: pms
+      port: 32400
+      targetPort: 32400
+      protocol: TCP
