@@ -2,3 +2,11 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: home-automation
+  labels:
+    # H46 (2026-07-25): baseline PSS now that home-assistant is de-privileged
+    # (was the only privileged app pod — see remote-access-zt-review-2026-07-25).
+    # baseline (not restricted): HA needs Multus annotations + runs as root in
+    # the official image; restricted would require a larger image/uid rework.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: restricted
