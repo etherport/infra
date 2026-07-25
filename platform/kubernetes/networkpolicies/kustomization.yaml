@@ -22,3 +22,4 @@ resources:
   - 13-tier-traefik.yaml
   - 14-tier-monitoring.yaml  # OBSERVATION DRAFT — audit on; enforce after Loki audit confirms
   - 15-tier-authentik.yaml   # M115 tier 6 — SSO IdP (validated via the audit toggle 2026-07-01)
+  - 16-tier-plex.yaml        # M147 tier 7 — Plex (internet-reachable sans CF Access since 2026-07-25; audit-first rollout)

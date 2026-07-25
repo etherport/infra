@@ -1,0 +1,46 @@
+# Tier 7 — Plex (M147, 2026-07-25). Added because plex.wind is internet-reachable
+# WITHOUT CF Access since 2026-07-25 (Plex apps can't do interactive SSO; auth =
+# plex.tv account tokens) — a compromised Plex pod must not have free east-west
+# reach (it was previously in an unlabeled allow-all namespace; see
+# docs/planning/remote-access-zt-review-2026-07-25.md §4).
+#
+# Built from topology (small, well-understood flow set — same approach as the cue
+# tier) + verified through the standard audit-first window. Distinct flows beyond
+# the cluster-wide allows (DNS / kube-apiserver / host / monitoring-scrape):
+#   ingress  plex :32400  <- traefik     (plex.wind via the VIP — internal + TS
+#                                         subnet-router path; container port,
+#                                         NOT the svc port — the 2026-06-23 lesson)
+#   ingress  plex :32400  <- cloudflared (CF tunnel routes DIRECT to the svc,
+#                                         bypassing traefik)
+#   ingress  plex :32400  <- tailscale   (the plex-ts LB proxy pod)
+#   egress   world :443 + :80            (plex.tv auth/metadata/relay, image CDNs,
+#                                         cert OCSP; Plex phones home over both)
+# NB no NFS egress rule: the movies/tv NFS volumes are mounted by the KUBELET
+# (host network namespace), so pod-level policy never sees that traffic.
+# The plex-logtail sidecar makes no network calls (reads the shared PVC).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: plex-tier
+  namespace: plex
+spec:
+  description: "plex allowlist: ingress :32400 (traefik/cloudflared/tailscale) ; egress :443+:80 world (plex.tv + CDNs)."
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: traefik
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cloudflared
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: tailscale
+      toPorts:
+        - ports:
+            - { port: "32400", protocol: TCP }
+  egress:
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }
+            - { port: "80", protocol: TCP }

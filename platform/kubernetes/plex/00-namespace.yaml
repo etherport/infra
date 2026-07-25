@@ -2,3 +2,10 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: plex
+  labels:
+    # M147 (2026-07-25): netpol tier 7 — Plex is internet-reachable without CF
+    # Access since 2026-07-25 (plex.tv auth only), so its pod must not have free
+    # east-west reach. Allowlist: networkpolicies/16-tier-plex.yaml. Enforcement
+    # went through the standard audit-first rollout (global audit ON → observe
+    # via Loki hubble-audit → 0 unexpected drops → audit OFF).
+    netpol.wind/enforced: "true"
