@@ -12,19 +12,14 @@ spec:
       X-Frame-Options: "SAMEORIGIN"
 
 ---
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: plex-buffering
-  namespace: plex
-spec:
-  buffering:
-    maxRequestBodyBytes: 104857600  # 100MB for uploads
-    memRequestBodyBytes: 10485760   # 10MB in memory
-    maxResponseBodyBytes: 104857600
-    memResponseBodyBytes: 10485760
-
----
+# NB: there is deliberately NO `buffering` middleware here. Traefik's buffering
+# middleware accumulates the whole response before forwarding it — fatal for a
+# media server's continuous transcode stream (client gets starved → 0kbps
+# estimates, "changing to client buffered", throttle/sloth cycling → stalls and
+# slow stream start). It was originally added "for uploads", but Traefik's
+# default request-body limit is already unlimited, so it only ever added harm.
+# A reverse proxy in front of Plex must pass streams through untouched.
+# (Removed 2026-07-25 after diagnosing streaming instability over the TS path.)
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -38,7 +33,6 @@ spec:
       kind: Rule
       middlewares:
         - name: plex-headers
-        - name: plex-buffering
       services:
         - name: plex
           port: 32400
