@@ -5,3 +5,5 @@ namespace: tailscale
 
 resources:
   - connector.yaml
+  - proxyclass-static-endpoint.yaml
+  - service-static-endpoint.yaml

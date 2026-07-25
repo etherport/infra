@@ -108,3 +108,28 @@ import {
 # "Wireguard Travel" (UDP 9820, disabled) was removed 2026-07-01 with the travel-VPN
 # tooling deletion (M110). The rule had been disabled since the 2026-05 outbound
 # re-architecture; the forward was destroyed via this stack (plan = 1 to destroy).
+
+# M154 (2026-07-25): Tailscale subnet-router static endpoint. Gives TS the same
+# deterministic inbound path the WG VIP has — without it, every TS connection
+# depends on NAT hole-punching and silently degrades to the DERP relay when the
+# client-side NAT is uncooperative (the "slow over TS, fine over WG" issue).
+# Path: WAN:41641/udp → MetalLB VIP 10.10.201.74 (svc tailscale/
+# ts-router-static-endpoint) → router pod's pinned tailscaled :41641. The pod
+# advertises WAN:41641 via TS_DEBUG_PRETENDPOINT (proxyclass-static-endpoint.yaml).
+resource "unifi_port_forward" "tailscale_static_endpoint" {
+  name     = "Tailscale-Static-Endpoint"
+  protocol = "udp"
+
+  forward = {
+    ip   = "10.10.201.74" # MetalLB VIP → ts-router pod :41641
+    port = "41641"
+  }
+
+  wan = {
+    port = "41641"
+  }
+
+  lifecycle {
+    ignore_changes = [wan.interface, source_limiting]
+  }
+}

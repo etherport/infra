@@ -1,0 +1,28 @@
+# M154 (2026-07-25): give the subnet-router a DETERMINISTIC direct path, like the
+# WG VIP has. Without a dialable inbound port, every TS connection depends on NAT
+# hole-punching; when the client-side NAT is uncooperative (hotel/carrier/CGNAT)
+# it silently degrades to the DERP relay (Mac homed to nyc ↔ homelab homed to LA
+# = coast-to-coast bounce + relay caps — the "slow over TS, fine over WG" issue).
+#
+# NB the operator's native staticEndpoints feature only advertises node
+# ExternalIPs — our kubespray nodes have private IPs only, so we do the manual
+# equivalent: pin tailscaled's UDP port + advertise the WAN endpoint explicitly.
+# Path in: WAN:41641/udp (UDM forward, terraform/unifi) → MetalLB VIP
+# 10.10.201.74 (BGP /32) → router pod :41641.
+#
+# ⚠️ TS_DEBUG_PRETENDPOINT hardcodes the WAN IP. If the ISP reassigns it, direct
+# dial-in breaks and clients fall back to DERP (fail-safe, = today's behavior);
+# update the IP here + nothing else (the UDM forward + VIP are IP-agnostic).
+apiVersion: tailscale.com/v1alpha1
+kind: ProxyClass
+metadata:
+  name: static-endpoint-router
+spec:
+  statefulSet:
+    pod:
+      tailscaleContainer:
+        env:
+          - name: TS_TAILSCALED_EXTRA_ARGS
+            value: "--port=41641"
+          - name: TS_DEBUG_PRETENDPOINT
+            value: "47.159.189.5:41641"

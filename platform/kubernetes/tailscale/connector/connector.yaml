@@ -12,6 +12,10 @@ metadata:
   name: homelab-subnet-router
   namespace: tailscale
 spec:
+  # M154 (2026-07-25): static-endpoint ProxyClass — pins tailscaled to :41641 and
+  # advertises WAN:41641 so clients dial in DIRECT instead of DERP-relaying when
+  # NAT hole-punching fails. See proxyclass-static-endpoint.yaml.
+  proxyClass: static-endpoint-router
   # Hostname shown in Tailscale admin console
   hostname: k8s-homelab-router
   # Enable exit node to allow routing all traffic through homelab

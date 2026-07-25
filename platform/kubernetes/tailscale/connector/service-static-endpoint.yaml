@@ -1,0 +1,23 @@
+# M154: the in-path service for the static endpoint — WAN:41641/udp (UDM
+# forward) lands on this MetalLB VIP and DNATs to the router pod's pinned
+# tailscaled port. LoadBalancer VIP (not NodePort) so the path survives node
+# reschedules. Selector uses the operator's stable parent-resource labels (the
+# `app` label is a per-create UID). externalTrafficPolicy stays Cluster: source
+# NAT is irrelevant to tailscale disco (it validates by nonce, not source), and
+# Cluster policy keeps the VIP reachable regardless of which node holds the pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ts-router-static-endpoint
+  namespace: tailscale
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 10.10.201.74
+  selector:
+    tailscale.com/parent-resource: homelab-subnet-router
+    tailscale.com/parent-resource-type: connector
+  ports:
+    - name: tailscale-udp
+      port: 41641
+      targetPort: 41641
+      protocol: UDP
