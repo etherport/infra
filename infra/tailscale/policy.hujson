@@ -84,8 +84,10 @@
   // and by the sync workflow's validator)
   //----------------------------------------------------------------
   "tests": [
-    // Owner paths that must keep working.
-    {"src": "autogroup:member", "accept": [
+    // Owner paths that must keep working. NB the test-runner requires a
+    // CONCRETE user as src (autogroups are rejected with "unknown user") —
+    // this is the tailnet's sole member; grants themselves use autogroup:member.
+    {"src": "sparked-diamond@github", "accept": [
       "tag:k8s:32400",       // Plex via plex-ts
       "tag:k8s:5432",        // cue-db dev access
       "10.10.201.70:443",    // Traefik VIP via the subnet router
