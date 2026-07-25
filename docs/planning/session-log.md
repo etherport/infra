@@ -15,6 +15,27 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-25 (cont. 3) — TS static endpoint (M154), plaintext-secret incident, DERP explainer
+
+**M154 DONE:** TS "slow vs WG fast" = DERP relay dependence (no dialable homelab port; Mac
+curaddr empty, relay=nyc). Built the WG-equivalent deterministic path: ProxyClass
+`static-endpoint-router` (TS_TAILSCALED_EXTRA_ARGS=--port=41641 +
+TS_DEBUG_PRETENDPOINT=47.159.189.5:41641 — native staticEndpoints unusable, advertises
+node ExternalIPs only), LB svc `ts-router-static-endpoint` VIP 10.10.201.74 (stable
+parent-resource selector; Cluster ETP fine — disco validates by nonce), unifi TF forward
+WAN:41641/udp → VIP (plan 1-add → applied). Router restarted once, /19 primary kept,
+WAN:41641 in Self.Addrs. WAN-IP change → stale advert → DERP fallback (fail-safe).
+
+**Security incident (small, contained):** operator pushed `tailscale-policy-push.sops.yaml`
+in PLAINTEXT (no sops run) — policy:write OAuth secret in git history ~15min.
+secret-scan + sops-decrypt-check CI both went red (guardrails worked). File removed from
+tree; client REVOKED by operator; replacement handover switched to the devbox-file method
+(agent encrypts). NB Tailscale OAuth scopes: write always bundles read — "write-only" isn't
+a thing; single-scope write IS least-priv here.
+
+**Still open:** re-mint policy-push client (devbox handover) → migrate tailscale-policy.yml
+off the 90d API key; M147/M151 audit-off flip after ~24h observation; M152 tail.
+
 ## 2026-07-25 (cont. 2) — ZT batch: tiers 8-14 in audit, L34 ACL LIVE, TS OAuth verified
 
 **M151/H46-tail (29743e8):** 7 new netpol tiers under the OPEN audit window — flux-system(8)

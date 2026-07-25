@@ -240,7 +240,18 @@ This file foregrounds open/in-progress/gated work._
   window as plex (M147); one audit-OFF flip enforces all 8 new tiers. Nightly backups
   CronJobs are the main flows the window still needs to see.
 
-### 🟡 M152. Tailnet surface — ACL scoping DONE via L34 (eb19b71); remaining: key hygiene, plex-ts fate
+### ✅ M154. TS static endpoint — DONE 2026-07-25 (f2bc16f + unifi apply 30176244750)
+- "Slow over TS, fine over WG" root cause: no dialable inbound port → NAT hole-punch
+  failures silently degrade to the DERP relay (Mac homed nyc ↔ homelab homed LA). Fix
+  mirrors WG: ProxyClass pins tailscaled :41641 + advertises WAN:41641
+  (TS_DEBUG_PRETENDPOINT — operator's native staticEndpoints only advertises node
+  ExternalIPs, private-only here); MetalLB VIP 10.10.201.74 svc fronts the pod; UDM
+  forwards WAN:41641/udp → VIP. Verified: pod restarted, /19 primary retained,
+  Self.Addrs advertises 47.159.189.5:41641. ⚠️ WAN-IP change = stale advert → DERP
+  fallback (fail-safe); update the ProxyClass env. Consider a drift check vs
+  wan1 DDNS later.
+
+### 🟡 M152. Tailnet surface — ACL scoping DONE via L34 (eb19b71); remaining: key hygiene, plex-ts fate, policy-push client re-mint (first one committed PLAINTEXT → revoked; guardrails caught it)
 - `policy.hujson` grants are allow-all → the tailnet-exposed Postgres `cue-db` is reachable
   from every device; ✅ `abacus` CONFIRMED as the operator's Windows box (2026-07-25);
   expire stale iPad/mini keys; audit the 3 exit nodes; decide whether the `plex-ts` LB
