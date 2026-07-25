@@ -216,6 +216,43 @@ This file foregrounds open/in-progress/gated work._
 
 > M122+ from the 2026-07-02 currency/state review + path-loss investigation.
 
+### ⏳ M149. TS subnet-router HA is BROKEN by primary-election preemption — standby adverts removed; decide durable design
+- **Found 2026-07-25** while chasing "Plex slow/unstable over TS": **vpn-aws held the tailnet
+  primary for `10.10.192.0/19`** → every TS client hairpinned homelab traffic through the AWS
+  t4g.small (slow page loads, unstable streams). Empirically (3 controlled toggles): this
+  Tailscale control plane **re-elects on every advertiser change and the preference order is
+  fixed `vpn-aws > vpn-fallback > k8s-homelab-router`** — the K8s router only wins when it is
+  the SOLE advertiser; any standby (re)advertise **steals primary and never fails back**.
+  Worse, vpn-fallback-as-primary **blackholes the MetalLB VIPs** (VLAN-201 BGP gap).
+- **Applied state (live, NOT in IaC):** `/19` advert REMOVED from vpn-aws
+  (`tailscale set --advertise-routes=10.10.100.0/22`) and vpn-fallback
+  (`--advertise-routes=`); K8s Connector is the sole /19 advertiser + primary. Exit-node
+  adverts untouched. **Break-glass** if the K8s router dies: on vpn-fallback
+  `sudo tailscale set --advertise-routes=10.10.192.0/19` (VIPs still unreachable through it —
+  fine for SSH/direct-IP; full VIP access needs the k8s router back).
+- ⏳ Follow-ups: (1) codify the single-advertiser design + break-glass in
+  `docs/runbooks/` + the L33/L34 review doc; (2) consider alerting if the /19 primary is NOT
+  k8s-homelab-router (advisor check or TS API poll); (3) revisit if Tailscale ships route
+  priorities.
+
+### ⏳ M147. Plex netpol tier — close the lateral-movement gap (post CF-Access removal)
+- Context: 2026-07-25 removed CF Access from `plex.wind` (internet-reachable, plex.tv auth
+  only — commit `4fbf5f6`). Pod is hardened (no SA token, RO media NFS, PSA baseline) but the
+  `plex` ns has **no NetworkPolicy** and isn't an enforced Cilium tier, so a compromised Plex
+  pod can reach any *unlabeled* namespace (enforced tiers already drop it). Add `plex` as
+  tier 7 per `docs/runbooks/networkpolicy-tiers.md`: flip global audit ON → label ns →
+  build the allowlist from Hubble/audit data (expect: ingress from traefik pods :32400;
+  egress plex.tv/CDN 443 + NFS 2049 to 10.10.209.10 + DNS) → 0 drops → enforce → audit OFF.
+  NB egress to plex.tv is broad `world` — keep the egress side permissive like traefik's if
+  it fights the CDN.
+
+### ⏳ M148. CF rate-limit rule on the public Plex login (credential-stuffing brake)
+- Context: same CF-Access removal. Add a Cloudflare rate-limiting rule scoped to
+  `plex.wind.etherport.net` auth-ish paths (e.g. `/users/signin`, `/api/v2/users/signin`,
+  or simply all requests >N/min/IP with a sane threshold that never touches streaming
+  segment fetches) in `infra/terraform/cloudflare/` (free-plan rate limiting = 1 rule,
+  10s window — verify plan limits). Dispatch plan → eyeball → apply via CI.
+
 ### ✅ M146. k8s-w4 stuck cordoned + reboot-pending — RESOLVED 2026-07-22 (patched: drained → rebooted 6.8.0-136 via kured → uncordoned; cue-db moved to w3 healthy)
 - Surfaced by the 2026-07-21 doc-drift audit (first clean run after the Fable-5-limit fix).
   `k8s-w4` is `SchedulingDisabled` (taint `node.kubernetes.io/unschedulable`) with
