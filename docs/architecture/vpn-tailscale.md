@@ -28,11 +28,11 @@ While WireGuard handles AWS↔homelab traffic routing, Tailscale enables:
 │                     ▼                      ▼                      ▼         │
 │   ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────┐ │
 │   │  k8s-homelab-router │    │  vpn-fallback       │    │  vpn-aws        │ │
-│   │  (K8s Connector)    │    │  (BACKUP router)    │    │  (Subnet Router)│ │
-│   │  PRIMARY            │    │                     │    │                 │ │
-│   │  Routes:            │    │  Routes:            │    │  Routes:        │ │
-│   │  10.10.192.0/19     │    │  10.10.192.0/19     │    │  10.10.100.0/22 │ │
-│   │  (on-prem)          │    │  (failover only)    │    │  (AWS)          │ │
+│   │  (K8s Connector)    │    │  (exit node ONLY)   │    │  (Subnet Router)│ │
+│   │  SOLE /19 ROUTER    │    │                     │    │                 │ │
+│   │  Routes:            │    │  Routes: NONE       │    │  Routes:        │ │
+│   │  10.10.192.0/19     │    │  (/19 = manual      │    │  10.10.100.0/22 │ │
+│   │  (on-prem)          │    │   break-glass)      │    │  (AWS ONLY)     │ │
 │   └──────────┬──────────┘    └──────────┬──────────┘    └────────┬────────┘ │
 │              │                          │                                   │
 │              │                          │ (NOT via Tailscale)               │
@@ -114,28 +114,26 @@ spec:
     - "tag:subnet-router"
 ```
 
-### vpn-fallback Backup Router
+### Sole-advertiser model (no TS auto-failover) — M149/M150, 2026-07-25
 
-vpn-fallback runs as a backup subnet router with automatic failover. When the K8s Connector is down, vpn-fallback takes over advertising on-prem routes:
+**The K8s Connector is the ONLY `10.10.192.0/19` advertiser. There is deliberately no
+automatic TS failover.** The retired `tailscale-failover` unit on vpn-fallback (and
+vpn-aws's static `/19` advert) caused the 2026-07 hairpin incident, for two reasons:
 
-```bash
-# Failover script monitors K8s router every 10s
-# After 3 consecutive failures, vpn-fallback advertises routes
-# When K8s recovers, vpn-fallback releases routes
+1. **Primary election preempts and never fails back.** The control plane re-elects the
+   subnet-route primary on *every* advertiser change, with a fixed preference
+   `vpn-aws > vpn-fallback > k8s-homelab-router` — the K8s router only routes while it is
+   the *sole* advertiser. Any standby advert silently steals the primary even when the
+   K8s router is healthy: via vpn-aws = all TS clients hairpin through AWS; via
+   vpn-fallback = MetalLB VIPs blackhole (VLAN-201 hosts can't reach BGP VIPs).
+2. **The failover script pinged a hardcoded Connector Tailscale IP** that went stale when
+   the Connector was recreated → "router down" forever → permanent standby advert.
 
-# Systemd service: tailscale-failover.service
-# Script: /usr/local/bin/tailscale-failover.sh
-```
-
-**Failover Behavior:**
-
-| K8s Router State | vpn-fallback Routes | Notes |
-|------------------|------------------|-------|
-| UP | None (standby) | K8s is primary |
-| DOWN (3+ checks) | 10.10.192.0/19 | Auto-failover |
-| Recovered | None (releases) | K8s resumes primary |
-
-The failover script checks K8s router via `tailscale ping 100.75.199.69`. Routes are approved in Tailscale admin but only advertised during failover.
+**If the K8s router is actually down:** the WG VIP (`10.10.201.20`, keepalived) is the
+*automatic* backup path; TS subnet routing has a *manual* break-glass —
+[`docs/runbooks/tailscale-route-failback.md`](../runbooks/tailscale-route-failback.md).
+The `tailscale-route-drift` CI detector (every 6h) alerts if any standby re-advertises
+the `/19` or the Connector loses it.
 
 ### AWS VPN Server Tailscale
 
@@ -270,8 +268,8 @@ The playbook manages per-host settings:
 ```yaml
 # From playbooks/tailscale.yml
 tailscale_advertise_routes:
-  vpn-aws: "10.10.100.0/22"
-  vpn-fallback: ""  # Empty - failover script controls this
+  vpn-aws: "10.10.100.0/22"  # AWS VPC ONLY — never the homelab /19 (M149/M150)
+  vpn-fallback: ""           # exit-node only — /19 is manual break-glass
 
 tailscale_host_accept_routes:
   vpn-aws: false   # Critical: prevents WireGuard route override
@@ -282,7 +280,10 @@ tailscale_advertise_exit_node:
   vpn-fallback: true  # Backup exit node
 ```
 
-The playbook also deploys the failover script and systemd service on vpn-fallback.
+The playbook REMOVES the retired `tailscale-failover` unit from vpn-fallback if present
+(see the sole-advertiser section above for why auto-failover is unsafe here), and its
+`tailscale set` task passes `--advertise-routes` explicitly even when empty, so a run
+CLEARS any drifted advert rather than leaving it in place.
 
 ## Comparison: WireGuard wg1 vs Tailscale
 

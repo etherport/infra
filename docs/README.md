@@ -54,6 +54,7 @@ docs/
 | [cilium-upgrade.md](runbooks/cilium-upgrade.md) | Upgrading Cilium via `helm` from the devbox — re-assert policyAuditMode after reset-then-reuse, 4-point verify, persist to inventory + snapshot |
 | [cilium-mtu-wireguard-blackhole.md](runbooks/cilium-mtu-wireguard-blackhole.md) | Cilium MTU auto-detect picks the WG-pod node's wg0 (1420) → same-works/large-fails black hole; pin MTU=9000 |
 | [networkpolicy-tiers.md](runbooks/networkpolicy-tiers.md) | H3 NetworkPolicy enforcement model + **catering for new services** (allowlist a new flow) + tier rollout + rollback |
+| [tailscale-route-failback.md](runbooks/tailscale-route-failback.md) | TS /19 break-glass when the K8s subnet router is down + MANDATORY manual failback (sole-advertiser model, M149/M150 — no TS auto-failover by design) |
 | [udm-manual-hardening-actions.md](runbooks/udm-manual-hardening-actions.md) | Console-only UDM hardening: Security/205 isolation+DNS (M104), unused/exposed switch ports → Disabled + VLAN-min + 802.1X/MAB (M105/#18), UDM_API_KEY GH secret (M47), BGP auth (L24) |
 | [secrets-rotation.md](runbooks/secrets-rotation.md) | SOPS age-key rotation (routine + post-compromise) + offline backup recipient |
 | [irsa-workload-identity.md](runbooks/irsa-workload-identity.md) | M75 in-cluster AWS workload identity (self-hosted IRSA) — **current state**: architecture, the 5 least-priv roles, the durable issuer-change gotchas, maintenance |

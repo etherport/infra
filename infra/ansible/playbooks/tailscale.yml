@@ -29,10 +29,20 @@
     # tailscale_auth_key: ""
 
     # Subnet routes per host (override in host_vars or inventory)
-    # NOTE: vpn-fallback initially advertises NO routes - failover script enables them
+    #
+    # ⚠️ M149/M150 (2026-07-25): the K8s Connector is the SOLE 10.10.192.0/19
+    # advertiser — do NOT add the /19 here for ANY host. The Tailscale control
+    # plane re-elects the route primary on every advertiser change with a fixed
+    # preference (vpn-aws > vpn-fallback > k8s-homelab-router) and never fails
+    # back, so a standby advertising the /19 silently STEALS the primary: via
+    # vpn-aws = every TS client hairpins homelab traffic through AWS (the
+    # 3-day 2026-07 incident); via vpn-fallback = MetalLB VIPs blackhole
+    # (VLAN-201 BGP gap). Break-glass if the K8s router is down:
+    # docs/runbooks/tailscale-route-failback.md. Drift is caught by the
+    # tailscale-route-drift CI detector within 6h.
     tailscale_advertise_routes:
-      vpn-aws: "10.10.100.0/22,10.10.192.0/19"  # AWS VPC + Homelab (via WireGuard)
-      vpn-fallback: ""  # Backup router - routes enabled by failover script when K8s router is down
+      vpn-aws: "10.10.100.0/22"  # AWS VPC ONLY — never the homelab /19 (see above)
+      vpn-fallback: ""           # exit-node only — /19 is manual break-glass (see above)
 
     # Accept routes from other Tailscale nodes (per-host)
     # IMPORTANT: Set to false for hosts with existing VPN routes (e.g., WireGuard)
@@ -152,7 +162,7 @@
       ansible.builtin.command: >
         tailscale set
         --hostname={{ tailscale_hostname }}
-        {% if host_routes %}--advertise-routes={{ host_routes }}{% endif %}
+        --advertise-routes={{ host_routes }}
         --accept-routes={{ host_accept_routes | lower }}
         --advertise-exit-node={{ host_exit_node | lower }}
       when: tailscale_logged_in
@@ -172,129 +182,36 @@
         var: final_status.stdout_lines
 
     # =========================================================================
-    # Tailscale Failover (vpn-fallback only)
-    # Monitors K8s Tailscale router and advertises routes when it's down
+    # Tailscale failover unit — REMOVED (M149/M150, 2026-07-25)
+    #
+    # The old tailscale-failover.sh monitored the K8s router and advertised the
+    # /19 from vpn-fallback when it looked down. Two fatal flaws: (1) it pinged a
+    # HARDCODED Connector Tailscale IP that went stale when the Connector was
+    # recreated, so it concluded "router down" forever and advertised the /19
+    # permanently; (2) the control plane's primary election preempts on every
+    # advertiser change with no failback (M149), so any advertisement from a
+    # standby steals the primary even while the K8s router is healthy — and
+    # vpn-fallback-as-primary blackholes the MetalLB VIPs (VLAN-201 BGP gap).
+    # Auto-failover is therefore NOT SAFE for TS subnet routing here; the WG VIP
+    # (keepalived) remains the automatic backup path, and TS break-glass is
+    # manual: docs/runbooks/tailscale-route-failback.md. These tasks REMOVE the
+    # unit from any host that still has it.
     # =========================================================================
-    - name: Create Tailscale failover script
-      ansible.builtin.copy:
-        dest: /usr/local/bin/tailscale-failover.sh
-        owner: root
-        group: root
-        mode: "0755"
-        content: |
-          #!/bin/bash
-          # Tailscale Subnet Router Failover Script
-          # Monitors K8s Tailscale router and takes over when it's down
-          #
-          # This script runs as a systemd service and:
-          # - Checks if the K8s Tailscale router is reachable
-          # - If down for 3 consecutive checks, advertises homelab routes
-          # - If back up, stops advertising routes (K8s router is primary)
-
-          set -euo pipefail
-
-          # Configuration
-          K8S_ROUTER_IP="100.75.199.69"  # K8s homelab-router Tailscale IP
-          HOMELAB_ROUTES="10.10.192.0/19"
-          CHECK_INTERVAL=10
-          FAILURE_THRESHOLD=3
-
-          # State tracking
-          FAILURE_COUNT=0
-          CURRENTLY_ADVERTISING=false
-
-          log() {
-            logger -t tailscale-failover "$1"
-            echo "$(date '+%Y-%m-%d %H:%M:%S') $1"
-          }
-
-          check_k8s_router() {
-            # Check if K8s router is reachable via Tailscale
-            if tailscale ping --timeout=3s "$K8S_ROUTER_IP" &>/dev/null; then
-              return 0
-            fi
-            return 1
-          }
-
-          advertise_routes() {
-            if [ "$CURRENTLY_ADVERTISING" = false ]; then
-              log "K8s router DOWN - Taking over subnet routing for $HOMELAB_ROUTES"
-              tailscale set --advertise-routes="$HOMELAB_ROUTES"
-              CURRENTLY_ADVERTISING=true
-            fi
-          }
-
-          stop_advertising() {
-            if [ "$CURRENTLY_ADVERTISING" = true ]; then
-              log "K8s router UP - Releasing subnet routing (K8s router is primary)"
-              tailscale set --advertise-routes=""
-              CURRENTLY_ADVERTISING=false
-            fi
-          }
-
-          main() {
-            log "Starting Tailscale failover monitor"
-            log "Monitoring K8s router: $K8S_ROUTER_IP"
-            log "Backup routes: $HOMELAB_ROUTES"
-
-            # Check if we're already advertising routes (e.g., after restart)
-            if tailscale status --json | grep -q "$HOMELAB_ROUTES"; then
-              log "Detected existing route advertisement - syncing state"
-              CURRENTLY_ADVERTISING=true
-            fi
-
-            while true; do
-              if check_k8s_router; then
-                # K8s router is up
-                FAILURE_COUNT=0
-                stop_advertising
-              else
-                # K8s router is down
-                FAILURE_COUNT=$((FAILURE_COUNT + 1))
-                log "K8s router check failed ($FAILURE_COUNT/$FAILURE_THRESHOLD)"
-
-                if [ $FAILURE_COUNT -ge $FAILURE_THRESHOLD ]; then
-                  advertise_routes
-                fi
-              fi
-
-              sleep $CHECK_INTERVAL
-            done
-          }
-
-          main
-      when: inventory_hostname == 'vpn-fallback'
-
-    - name: Create Tailscale failover systemd service
-      ansible.builtin.copy:
-        dest: /etc/systemd/system/tailscale-failover.service
-        owner: root
-        group: root
-        mode: "0644"
-        content: |
-          [Unit]
-          Description=Tailscale Subnet Router Failover
-          After=network.target tailscaled.service
-          Wants=tailscaled.service
-
-          [Service]
-          Type=simple
-          ExecStart=/usr/local/bin/tailscale-failover.sh
-          Restart=always
-          RestartSec=10
-
-          [Install]
-          WantedBy=multi-user.target
-      when: inventory_hostname == 'vpn-fallback'
-      notify: Reload systemd
-
-    - name: Enable and start Tailscale failover service
+    - name: Stop and disable the retired Tailscale failover service
       ansible.builtin.systemd:
         name: tailscale-failover
-        enabled: yes
-        state: started
-        daemon_reload: yes
-      when: inventory_hostname == 'vpn-fallback'
+        enabled: false
+        state: stopped
+      failed_when: false  # absent on fresh hosts
+
+    - name: Remove the retired Tailscale failover unit + script
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/tailscale-failover.service
+        - /usr/local/bin/tailscale-failover.sh
+      notify: Reload systemd
 
   # ===========================================================================
   # Handlers
