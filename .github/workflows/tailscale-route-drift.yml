@@ -1,0 +1,117 @@
+name: Tailscale Route Drift
+
+# Asserts the tailnet subnet-route invariants (M153, after the M149 primary-steal
+# incident): the K8s Connector must be the SOLE 10.10.192.0/19 advertiser+holder
+# (the control plane re-elects on every advertiser change with a fixed preference
+# vpn-aws > vpn-fallback > k8s-router and never fails back — a standby quietly
+# re-advertising silently hairpins all TS clients through AWS, or blackholes the
+# MetalLB VIPs via vpn-fallback). Ran undetected ~3 days pre-detector; this makes
+# it a same-run alert. Assertions: scripts/network/tailscale-route-assertions.sh
+# (read-only Tailscale API; `wind-infra-ops` OAuth client from SOPS).
+#
+# Every 6h (the invariant can break at any hour — an ansible re-run, a manual
+# console edit), vs the daily cadence of the IaC-diff detectors. Mirrors
+# network-topology-drift.yml: drift opens/refreshes a `tailscale-route-drift`
+# issue + red run; clean run closes it; result feeds the daily status email
+# (detector `tailscale-routes` — MUST run on the lifecycle runner for that).
+
+on:
+  schedule:
+    - cron: '20 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  assert:
+    name: Assert tailnet route invariants
+    runs-on: [self-hosted, lifecycle]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Install sops (if missing)
+        run: |
+          if ! command -v sops >/dev/null 2>&1; then
+            TAG=$(curl -fsSL https://api.github.com/repos/getsops/sops/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')
+            curl -fsSL -o /tmp/sops "https://github.com/getsops/sops/releases/download/${TAG}/sops-${TAG}.linux.amd64"
+            sudo install -m 0755 /tmp/sops /usr/local/bin/sops && rm -f /tmp/sops
+          fi
+
+      - name: Run route assertions
+        id: assert
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          set +e
+          mkdir -p ~/.config/sops/age
+          printf '%s' "$SOPS_AGE_KEY" > ~/.config/sops/age/keys.txt
+          chmod 600 ~/.config/sops/age/keys.txt
+          export TS_OAUTH_CLIENT_ID=$(sops -d infra/ansible/playbooks/secrets/tailscale-oauth.sops.yaml | awk '/^ts_oauth_client_id:/{print $2}')
+          export TS_OAUTH_CLIENT_SECRET=$(sops -d infra/ansible/playbooks/secrets/tailscale-oauth.sops.yaml | awk '/^ts_oauth_client_secret:/{print $2}')
+          bash scripts/network/tailscale-route-assertions.sh > /tmp/ts-routes.log 2>&1
+          rc=$?
+          rm -f ~/.config/sops/age/keys.txt
+          cat /tmp/ts-routes.log
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Open / refresh drift issue (on failure)
+        if: steps.assert.outputs.rc != '0'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const fs = require('fs');
+            const log = fs.readFileSync('/tmp/ts-routes.log', 'utf8');
+            const title = 'Tailscale route drift: the /19 sole-advertiser invariant broke';
+            const body = `A tailnet subnet-route assertion FAILED — most likely a standby (vpn-aws / vpn-fallback) re-advertised \`10.10.192.0/19\` and STOLE the primary (M149 preemption: no failback; all TS clients now hairpin through AWS or blackhole the MetalLB VIPs). Fix: \`sudo tailscale set --advertise-routes=...\` on the offender to drop the /19 (see \`docs/planning/outstanding-work.md\` M149/M150 + the break-glass note).\n\n\`\`\`\n${log}\n\`\`\``;
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'tailscale-route-drift', per_page: 1,
+            });
+            if (existing.length) {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing[0].number, title, body,
+              });
+              core.info(`Updated tailscale-route-drift issue #${existing[0].number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['tailscale-route-drift'],
+              });
+              core.info(`Opened tailscale-route-drift issue #${created.data.number}`);
+            }
+            core.setFailed('Tailscale route drift detected');
+
+      - name: Close resolved drift issue (clean run)
+        if: steps.assert.outputs.rc == '0'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'tailscale-route-drift', per_page: 20,
+            });
+            for (const issue of open) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number,
+                body: '✅ Resolved — tailnet route invariants all pass; auto-closing.',
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number, state: 'closed',
+              });
+              core.info(`Closed resolved tailscale-route-drift issue #${issue.number}`);
+            }
+
+      - name: Report drift status (daily email rollup)
+        if: always()
+        uses: ./.github/actions/report-drift-status
+        with:
+          detector: tailscale-routes
+          status: ${{ steps.assert.outputs.rc == '0' && '0' || '1' }}
+          jwk-password: ${{ secrets.STEP_JWK_PASSWORD }}

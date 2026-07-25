@@ -83,6 +83,7 @@ SERVICES = [
     ("Config drift", "Network topology",         "drift_status", "", "topology"),
     ("Config drift", "Cluster config",           "drift_status", "", "cluster-config"),
     ("Config drift", "step-ca PKI",              "drift_status", "", "step-ca-pki"),
+    ("Config drift", "Tailscale routes",         "drift_status", "", "tailscale-routes"),
     # (service-status-inventory-drift is WEEKLY — omitted here; a daily email would always
     #  show it "stale". It keeps its own GitHub issue.)
 
