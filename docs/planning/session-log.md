@@ -15,6 +15,30 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-25 (cont. 2) — ZT batch: tiers 8-14 in audit, L34 ACL LIVE, TS OAuth verified
+
+**M151/H46-tail (29743e8):** 7 new netpol tiers under the OPEN audit window — flux-system(8)
+velero(9) backups(10) tailscale(11) cert-manager(12) garage(13) home-automation(14);
+allowlists grounded in live hubble-relay sampling; ZERO early AUDIT flows on all 8 new
+tiers (incl. plex). Coverage 6→14 namespaces. Labels via the PSS patch (+ garage 00-ns);
+fixed the stale "HA privileged" PSS note (now enforce=baseline/warn=restricted).
+**ONE audit-OFF flip enforces everything** — wait for nightly backups CronJobs + a Plex
+streaming session, check Loki {job="hubble-audit"} for the 8 namespaces, then flip
+(ConfigMap + rollout restart, separate commands).
+
+**L34 ACL LIVE (eb19b71 + test-src fix):** allow-all grants replaced. member → LAN /19 +
+AWS /22 + tag:k8s + cluster-ingress(443/80) + subnet-routers + self + internet(exit/
+Mullvad). NO tag-as-src grants → tagged service/router nodes cannot INITIATE tailnet
+connections (no pivot from a popped proxy). Regression tests embedded (concrete-user src
+required — autogroup src is rejected by the test-runner, learned the hard way; first push
+FAILED SAFELY: API 400 test-failure → old policy stayed live). Verified via API readback:
+new grants live. NB the sed-fallback HuJSON validator mangles CIDR strings in dst arrays —
+trust hujsonfmt/the API, not the sed path.
+
+**M152:** ACL scoping done via L34; remaining: stale device-key expiry (iPad/mini),
+plex-ts keep/remove, workflow OAuth migration (operator minting `wind-policy-push`
+policy-write client; wind-infra-ops stays read-only).
+
 ## 2026-07-25 (cont.) — queue execution: M150/M153/M148/H46 done, M147 in audit, TS OAuth live
 
 **TS OAuth (`wind-infra-ops`)** minted by operator, stored SOPS `tailscale-oauth.sops.yaml`;

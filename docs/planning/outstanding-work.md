@@ -233,12 +233,14 @@ This file foregrounds open/in-progress/gated work._
   (sole-advertiser); new runbook `tailscale-route-failback.md`. Drift caught by the
   tailscale-route-drift detector.
 
-### ⏳ M151. Netpol tiers for credential-bearing namespaces
-- flux-system, velero, backups, tailscale, cert-manager, garage — cluster-admin-equivalent
-  creds / AWS roles / tailnet keys, all allow-all today (coverage 6/39). Review §4.4.
-  Sequence after M147/H46.
+### 🟡 M151. Netpol tiers 8-13 SHIPPED in audit mode (29743e8) + HA tier 14 — enforce with M147
+- All six credential namespaces (flux-system, velero, backups, tailscale, cert-manager,
+  garage) + home-automation now have tiers + labels (coverage 6→14 namespaces), grounded
+  in live hubble-relay flow sampling; zero early AUDIT flows. Validated in the SAME audit
+  window as plex (M147); one audit-OFF flip enforces all 8 new tiers. Nightly backups
+  CronJobs are the main flows the window still needs to see.
 
-### ⏳ M152. Tailnet surface audit — cue-db ACL scope, `abacus` verify, stale-node expiry, exit nodes, plex-ts fate
+### 🟡 M152. Tailnet surface — ACL scoping DONE via L34 (eb19b71); remaining: key hygiene, plex-ts fate
 - `policy.hujson` grants are allow-all → the tailnet-exposed Postgres `cue-db` is reachable
   from every device; ✅ `abacus` CONFIRMED as the operator's Windows box (2026-07-25);
   expire stale iPad/mini keys; audit the 3 exit nodes; decide whether the `plex-ts` LB
