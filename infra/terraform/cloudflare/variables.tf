@@ -102,10 +102,14 @@ variable "cf_tunnel_services" {
       cluster_service_url = "http://monitoring-grafana.monitoring.svc.cluster.local:80"
       access_name         = "Grafana"
     }
-    "plex.wind" = {
-      cluster_service_url = "http://plex.plex.svc.cluster.local:32400"
-      access_name         = "Plex"
-    }
+    // NB: plex.wind is deliberately NOT in this map. The map wires a blanket
+    // Google-SSO CF Access app in front of each service, which breaks Plex apps
+    // and non-browser devices (Apple TV, smart-TV Plex apps) that can't complete
+    // an interactive SSO login. Plex is exposed via a dedicated un-gated tunnel
+    // ingress + DNS record below (see cloudflare_dns_record.plex_cname + the
+    // static ingress rule) — reachable over the internet, gated only by Plex's
+    // own plex.tv account auth. Tailscale (plex.tail48f596.ts.net) remains the
+    // primary/private path; this CF route is the fallback for non-TS devices.
     "ollama.wind" = {
       cluster_service_url = "http://ollama.ollama.svc.cluster.local:11434"
       access_name         = "Ollama API"

@@ -190,6 +190,18 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "wind_cluster" {
           service        = "http://cue-api.cue.svc.cluster.local:3000"
           origin_request = { no_tls_verify = false, connect_timeout = 10 }
         },
+        // Plex — un-gated (NO CF Access). Deliberately a static ingress rule
+        // rather than a cf_tunnel_services map entry (which would attach a
+        // Google-SSO Access app that breaks Plex apps / non-browser devices).
+        // Auth is Plex's own plex.tv account tokens. Tailscale is primary; this
+        // is the internet fallback for devices that can't run TS. DNS record:
+        // cloudflare_dns_record.plex_cname below. See variables.tf note.
+        {
+          hostname       = "plex.wind.etherport.net"
+          path           = null
+          service        = "http://plex.plex.svc.cluster.local:32400"
+          origin_request = { no_tls_verify = false, connect_timeout = 10 }
+        },
       ],
       // All other CF-Tunnel-exposed services come from the cf_tunnel_services
       // map (variables.tf). Add new services there.
@@ -283,6 +295,24 @@ resource "cloudflare_dns_record" "wiki_cname" {
   ttl     = 1
   proxied = true
   comment = "CF tunnel for wiki-js (CF Access in front)"
+}
+
+// ---------------------------------------------------------------------------
+// Plex — CF tunnel, NO CF Access (intentionally un-gated at the edge).
+// Auth is Plex's own plex.tv account tokens. This is the internet fallback for
+// devices that can't run Tailscale (Apple TV / smart-TV Plex apps); Tailscale
+// (plex.tail48f596.ts.net) stays the primary/private path. Matching un-gated
+// ingress rule is in the static list in the tunnel config above; there is
+// deliberately NO cloudflare_zero_trust_access_application for this host.
+// ---------------------------------------------------------------------------
+resource "cloudflare_dns_record" "plex_cname" {
+  zone_id = var.cloudflare_zone_id
+  name    = "plex.wind.${var.cf_zone_domain}"
+  type    = "CNAME"
+  content = "${cloudflare_zero_trust_tunnel_cloudflared.wind_cluster.id}.cfargotunnel.com"
+  ttl     = 1
+  proxied = true
+  comment = "CF tunnel for Plex (NO CF Access — plex.tv account auth only)"
 }
 
 resource "cloudflare_zero_trust_access_application" "wiki" {
