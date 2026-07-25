@@ -15,6 +15,51 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-25 — Plex streaming root-cause chain, CF Access off plex.wind, TS primary-steal fix, remote-access/ZT review
+
+**Plex "slow/unstable over TS" — three stacked causes, all fixed:**
+1. **Traefik `plex-buffering` middleware** buffered the whole response (`maxResponseBodyBytes`)
+   → starved streaming clients (PMS log: "client buffered … 0kbps", throttle/sloth cycling).
+   Removed entirely from `platform/kubernetes/plex/04-ingress.yaml` — a reverse proxy in
+   front of a media server must never buffer.
+2. **LAN/WAN misclassification:** Plex scores location by the direct peer IP = the Traefik
+   pod IP, and `LanNetworksBandwidth` included `10.42.0.0/16` → every proxied client was
+   "lan"/uncapped (would push original 57 Mbps remotely). Fixed live via `PUT /:/prefs`:
+   `LanNetworksBandwidth=10.10.0.0/16`, `WanPerStreamMaxUploadRate=25000`. NB pref lives in
+   the config PVC, not IaC.
+3. **THE BIG ONE (M149): vpn-aws held the tailnet primary for `10.10.192.0/19`** — every TS
+   client hairpinned homelab traffic through the AWS t4g.small for ~3 days. Empirically (3
+   controlled toggles): TS control re-elects on every advertiser change, fixed preference
+   `vpn-aws > vpn-fallback > k8s-router`, NO failback; vpn-fallback-as-primary additionally
+   blackholes the MetalLB VIPs (VLAN-201 BGP gap). Fix: standby `/19` adverts REMOVED live
+   (vpn-aws keeps `10.10.100.0/22`+exit, vpn-fallback exit-only); K8s Connector = sole
+   advertiser + verified primary. Break-glass = re-advertise on vpn-fallback. ⚠️ the standby
+   config is still in ansible (`tailscale.yml`) → M150.
+   Residual client-side slowness suspect: Mac direct↔DERP(nyc) flap — diagnose with
+   `tailscale ping 10.10.201.70` when slow.
+   Also: 15-20s stream start/seek on 4K DoVi P7 + TrueHD = transcode cold-start (20s ffmpeg
+   probe + EAE spin-up per seek), NOT infra — NFS 380MB/s, GPU idle, HW pipeline 2.5×.
+
+**CF Access removed from plex.wind (operator-approved):** commit `4fbf5f6`, plan+apply via
+CI (runs 30166589615 / 30167647348), verified: public `/identity` returns Plex XML direct,
+no SSO redirect. Plex apps / Apple TV now work off-tailnet; auth = plex.tv accounts
+(operator to enable 2FA). `plex.wind` moved from `cf_tunnel_services` (blanket SSO) to a
+static un-gated ingress + dedicated `plex_cname`.
+
+**Remote-access + ZT review (two read-only audits, repo + live):** deliverable
+`remote-access-zt-review-2026-07-25.md`. Healthy: sole-advertiser verified, no DERP-relayed
+peers, 9/10 public hostnames gated, SA-token hygiene, certs. New items: **H46**
+(home-assistant privileged+unlabeled+no-netpol = highest-exposure pod), **M150** (TS standby
+adverts still in IaC), **M151** (netpol tiers for credential namespaces), **M152** (tailnet
+surface: cue-db ACL scope, verify Windows device `abacus`, stale keys, 3 exit nodes,
+plex-ts fate), **M153** (TS-primary + VRRP VIP-holder alerts — both fallback layers fail
+silently today). Queued earlier: M147 (plex netpol tier), M148 (CF rate-limit on Plex login).
+
+**Next steps:** M150 first (IaC drift will resurrect the misconfig), then M153 alerts, H46,
+M147/M148; M152 needs operator input (`abacus`?, TS API key for L34).
+
+---
+
 ## 2026-07-20 — morning alert triage: host-cert renew, tetragon FP, AWS cost, favicon, login mechanism
 
 **ExternalHostSystemdFailed (flapping ×3):** `step-ssh-hostcert-renew.service` renews the

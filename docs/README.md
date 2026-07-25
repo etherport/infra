@@ -177,6 +177,7 @@ captured yet.
 |----------|-------------|
 | [outstanding-work.md](planning/outstanding-work.md) | **Source of truth** for prioritized open work (C/H/M/L tiers) + completed index |
 | [session-log.md](planning/session-log.md) | **Narrative journal** of each working session (what/why/how-to-resume), newest first |
+| [remote-access-zt-review-2026-07-25.md](planning/remote-access-zt-review-2026-07-25.md) | Remote-access topology + ZT review after the CF-Access-off-Plex + TS sole-advertiser changes — path matrix, exposure table, fix queue (H46, M150–M153) |
 | [dev-roadmap-2026-06-11.md](planning/dev-roadmap-2026-06-11.md) | Forward-looking build backlog (4-track review) — dated snapshot kept live; `outstanding-work.md` is the status |
 | [roadmap-specs-2026-06-11.md](planning/roadmap-specs-2026-06-11.md) | Executable specs for roadmap items B1/A2/C2-I7 (B1 shipped; A2 spec needs a us-west-2-local rework) |
 | [outstanding-work-completed-2026-07.md](planning/archive/outstanding-work-completed-2026-07.md) | Completed-items archive — 2026-07-01 extraction (full text of ✅ items + retired tracker top-matter) |

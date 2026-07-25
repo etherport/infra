@@ -215,6 +215,34 @@ This file foregrounds open/in-progress/gated work._
 ## MEDIUM — quality / hygiene
 
 > M122+ from the 2026-07-02 currency/state review + path-loss investigation.
+> H46 + M150–M153 from the 2026-07-25 remote-access/ZT review
+> (`remote-access-zt-review-2026-07-25.md`).
+
+### ⏳ H46. home-assistant: privileged + no PSS label + no netpol, edge-reachable — highest-exposure app pod
+- From the 2026-07-25 review §4.1 (HIGH; filed here to keep the review batch together).
+  De-privilege if feasible (or document why not), add a PSS enforce label, netpol-tier it.
+
+### ⏳ M150. TS standby /19 adverts still in IaC — an ansible re-run resurrects the M149 misconfig
+- `infra/ansible/playbooks/tailscale.yml` + the vpn-fallback `tailscale-failover` unit still
+  configure standby `/19` advertising. Remove from IaC; rewrite
+  `docs/architecture/vpn-tailscale.md` (still documents the removed standby design);
+  add the sole-advertiser + break-glass runbook. Review §4.2.
+
+### ⏳ M151. Netpol tiers for credential-bearing namespaces
+- flux-system, velero, backups, tailscale, cert-manager, garage — cluster-admin-equivalent
+  creds / AWS roles / tailnet keys, all allow-all today (coverage 6/39). Review §4.4.
+  Sequence after M147/H46.
+
+### ⏳ M152. Tailnet surface audit — cue-db ACL scope, `abacus` verify, stale-node expiry, exit nodes, plex-ts fate
+- `policy.hujson` grants are allow-all → the tailnet-exposed Postgres `cue-db` is reachable
+  from every device; verify Windows device `abacus` (joined 07-02, online) is expected;
+  expire stale iPad/mini keys; audit the 3 exit nodes; decide whether the `plex-ts` LB
+  stays. Durable fix = L34 (TS ACL IaC), still blocked on operator minting a TS API key.
+  Review §4.5.
+
+### ⏳ M153. Path-health alerting — TS /19-primary alert + VRRP VIP-holder alert (L33 fu-2)
+- Both fallback layers currently fail SILENTLY (the 3-day AWS hairpin proved it). Alert when
+  the /19 primary ≠ k8s-homelab-router + when the WG VIP holder changes. Review §4.3.
 
 ### ⏳ M149. TS subnet-router HA is BROKEN by primary-election preemption — standby adverts removed; decide durable design
 - **Found 2026-07-25** while chasing "Plex slow/unstable over TS": **vpn-aws held the tailnet
