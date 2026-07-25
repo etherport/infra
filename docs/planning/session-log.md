@@ -15,6 +15,43 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-25 (cont.) — queue execution: M150/M153/M148/H46 done, M147 in audit, TS OAuth live
+
+**TS OAuth (`wind-infra-ops`)** minted by operator, stored SOPS `tailscale-oauth.sops.yaml`;
+verified (token mint + device list). Pre-existing TS creds mapped: operator OAuth client
+(K8s operator — keep), `TAILSCALE_API_KEY` GH secret (policy-sync workflow; 90d expiry —
+migrate to the OAuth client under L34).
+
+**M153 ✅ (both halves):** `tailscale-route-drift.yml` detector (6h; sole-/19-advertiser
+invariant; issue open/close; email rollup row "Tailscale routes"; first run green e2e) +
+WG VIP alerts (`WgVipUnreachable` ICMP probe / `WgVipOnFallback` via `wg_vip_held`
+textfile timer on vpn-fallback — deployed live incl. adding textfile collector flags to
+its node_exporter; metric verified in Prometheus).
+
+**M150 ✅:** THE M149 ROOT CAUSE WAS IN THE IaC — tailscale.yml gave vpn-aws the /19
+statically, and vpn-fallback's failover script pinged a hardcoded STALE Connector TS IP
+("router down" forever → permanent advert; would re-arm on reboot). Purged from IaC +
+live (unit removed from vpn-fallback), playbook now REMOVES the unit + clears empty
+routes; vpn-tailscale.md rewritten (sole-advertiser model); new runbook
+`tailscale-route-failback.md`.
+
+**M148 ✅:** CF rate-limit 300 req/10s per-IP on plex.wind (ratelimit.tf; plan 1-add
+verified → applied run 30169108231; /identity via edge still 200).
+
+**H46 🟡:** home-assistant DE-PRIVILEGED (privileged:true was cargo cult — network
+integrations only, Multus wired by CNI; verified healthy unprivileged) + PSS
+baseline/warn=restricted labels. Remaining: HA netpol tier (next audit window).
+
+**M147 🟡:** global audit ON (ConfigMap+rollout, verified PolicyAuditMode=true), plex ns
+labelled tier 7, `16-tier-plex.yaml` applied (ingress :32400 from
+traefik/cloudflared/tailscale; egress world 443/80; NFS kubelet-side). Zero early AUDIT
+flows. **NEXT SESSION: after ~24h + a streaming session, check Loki hubble-audit ns=plex;
+if clean flip audit OFF (all 7 tiers enforce). Until then all tiers observe-only.**
+
+**Remaining from the review:** L34 (ACL tightening + policy-sync onto the OAuth client +
+device-key hygiene — needs design decisions), M151 (credential-ns tiers), M152 tail
+(cue-db ACL scope rides on L34; plex-ts fate), HA netpol tier.
+
 ## 2026-07-25 — Plex streaming root-cause chain, CF Access off plex.wind, TS primary-steal fix, remote-access/ZT review
 
 **Plex "slow/unstable over TS" — three stacked causes, all fixed:**

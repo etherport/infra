@@ -218,15 +218,20 @@ This file foregrounds open/in-progress/gated work._
 > H46 + M150–M153 from the 2026-07-25 remote-access/ZT review
 > (`remote-access-zt-review-2026-07-25.md`).
 
-### ⏳ H46. home-assistant: privileged + no PSS label + no netpol, edge-reachable — highest-exposure app pod
-- From the 2026-07-25 review §4.1 (HIGH; filed here to keep the review batch together).
-  De-privilege if feasible (or document why not), add a PSS enforce label, netpol-tier it.
+### 🟡 H46. home-assistant hardening — de-privileged ✅ + PSS baseline ✅ (d6705d4); netpol tier ⏳
+- ✅ 2026-07-25: `privileged: true` was cargo cult (network integrations only, no devices;
+  Multus vlan202 wired by the CNI) — removed (`allowPrivilegeEscalation: false`), pod
+  verified healthy (HTTP 200, all 3 Multus ifaces, only pre-existing device noise). PSS
+  `enforce=baseline`+`warn=restricted` on the ns. ⏳ remaining: netpol tier for
+  home-automation (fold into the next audit window after M147 plex enforces).
 
-### ⏳ M150. TS standby /19 adverts still in IaC — an ansible re-run resurrects the M149 misconfig
-- `infra/ansible/playbooks/tailscale.yml` + the vpn-fallback `tailscale-failover` unit still
-  configure standby `/19` advertising. Remove from IaC; rewrite
-  `docs/architecture/vpn-tailscale.md` (still documents the removed standby design);
-  add the sole-advertiser + break-glass runbook. Review §4.2.
+### ✅ M150. TS standby /19 adverts purged from IaC + live (3cef310) — RESOLVED 2026-07-25
+- Root cause found IN the IaC: vpn-aws had the /19 STATICALLY; the vpn-fallback failover
+  script pinged a hardcoded stale Connector TS IP → "router down" forever → permanent
+  standby advert. Fixed: playbook routes vpn-aws=/22-only, REMOVES the failover unit
+  (removed live too), `tailscale set` clears empty routes; vpn-tailscale.md rewritten
+  (sole-advertiser); new runbook `tailscale-route-failback.md`. Drift caught by the
+  tailscale-route-drift detector.
 
 ### ⏳ M151. Netpol tiers for credential-bearing namespaces
 - flux-system, velero, backups, tailscale, cert-manager, garage — cluster-admin-equivalent
@@ -240,15 +245,18 @@ This file foregrounds open/in-progress/gated work._
   stays. Durable fix = L34 (TS ACL IaC), still blocked on operator minting a TS API key.
   Review §4.5.
 
-### 🟡 M153. Path-health alerting — TS route detector ✅ LIVE (8f3db3a); VRRP VIP-holder alert ⏳
+### ✅ M153. Path-health alerting COMPLETE 2026-07-25 — TS route detector (8f3db3a) + WG VIP alerts (024d740)
 - ✅ **TS half (2026-07-25):** `tailscale-route-drift.yml` (every 6h + dispatch, lifecycle
   runner) runs `scripts/network/tailscale-route-assertions.sh` — k8s-homelab-router must be
   the SOLE `/19` advertiser+holder and online; vpn-aws `/22`-only; vpn-fallback exit-only.
   Drift → `tailscale-route-drift` issue + red run; clean closes it; daily-email row
   "Tailscale routes" (detector `tailscale-routes`). Creds = `wind-infra-ops` OAuth client
   (SOPS `tailscale-oauth.sops.yaml`; also unblocks L34/M152). First run green e2e.
-- ⏳ **VRRP half (L33 fu-2):** alert when the WG VIP `10.10.201.20` holder changes /
-  backup-not-ready. Keepalived-exporter or textfile probe → Prometheus.
+- ✅ **VRRP half (L33 fu-2):** blackbox ICMP Probe `wg-vip` → `WgVipUnreachable` (critical
+  5m; both holders dead / VRRP split-brain) + `WgVipOnFallback` (warning 15m; silent
+  failover/missed failback) from `wg_vip_held` (wg-vip-metric.timer on vpn-fallback,
+  wireguard.yml; deployed live, metric verified in Prometheus). NB vpn-fallback's
+  node_exporter gained the textfile collector flags in the process.
 
 ### ⏳ M149. TS subnet-router HA is BROKEN by primary-election preemption — standby adverts removed; decide durable design
 - **Found 2026-07-25** while chasing "Plex slow/unstable over TS": **vpn-aws held the tailnet
@@ -269,7 +277,7 @@ This file foregrounds open/in-progress/gated work._
   k8s-homelab-router (advisor check or TS API poll); (3) revisit if Tailscale ships route
   priorities.
 
-### ⏳ M147. Plex netpol tier — close the lateral-movement gap (post CF-Access removal)
+### 🟡 M147. Plex netpol tier 7 — SHIPPED in AUDIT mode (77aaa23); enforce pending observation
 - Context: 2026-07-25 removed CF Access from `plex.wind` (internet-reachable, plex.tv auth
   only — commit `4fbf5f6`). Pod is hardened (no SA token, RO media NFS, PSA baseline) but the
   `plex` ns has **no NetworkPolicy** and isn't an enforced Cilium tier, so a compromised Plex
@@ -279,8 +287,14 @@ This file foregrounds open/in-progress/gated work._
   egress plex.tv/CDN 443 + NFS 2049 to 10.10.209.10 + DNS) → 0 drops → enforce → audit OFF.
   NB egress to plex.tv is broad `world` — keep the egress side permissive like traefik's if
   it fights the CDN.
+- 🟡 2026-07-25: global policy-audit-mode ON (live), plex ns labelled, `16-tier-plex.yaml`
+  applied (ingress :32400 traefik/cloudflared/tailscale; egress world :443/:80; NFS is
+  kubelet-side). Early hubble AUDIT check: zero would-be drops. NEXT: after ~24h incl. a
+  real streaming session, check Loki `{job="hubble-audit"}` ns=plex → if clean, flip
+  audit OFF (ConfigMap + rollout restart, separate commands) → tiers enforce again.
+  ⚠️ Until audit is flipped OFF, ALL 7 tiers are observe-only.
 
-### ⏳ M148. CF rate-limit rule on the public Plex login (credential-stuffing brake)
+### ✅ M148. CF rate-limit LIVE 2026-07-25 (c4f3835; apply run 30169108231)
 - Context: same CF-Access removal. Add a Cloudflare rate-limiting rule scoped to
   `plex.wind.etherport.net` auth-ish paths (e.g. `/users/signin`, `/api/v2/users/signin`,
   or simply all requests >N/min/IP with a sane threshold that never touches streaming
