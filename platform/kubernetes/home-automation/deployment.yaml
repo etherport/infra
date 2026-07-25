@@ -143,8 +143,16 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 5
             timeoutSeconds: 3
+          # H46 (2026-07-25): privileged REMOVED. The old `privileged: true
+          # # Required for device access` was cargo cult — this HA uses only
+          # network integrations (HomeKit/Hue/Roomba/Nest/SmartThings/…), mounts
+          # no /dev devices or hostPaths, and LAN presence (mDNS/HomeKit) comes
+          # from the Multus vlan202 interface, which the CNI wires up BEFORE the
+          # container starts (no container privilege involved). HA was the only
+          # privileged app pod in the cluster while also being edge-reachable —
+          # the worst exposure combination (see remote-access-zt-review-2026-07-25).
           securityContext:
-            privileged: true # Required for device access
+            allowPrivilegeEscalation: false
       volumes:
         - name: config
           persistentVolumeClaim:

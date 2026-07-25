@@ -693,6 +693,7 @@
             echo '# TYPE wg_vip_held gauge'
             echo "wg_vip_held{vip=\"10.10.201.20\"} $HELD"
           } > "$TMP"
+          chmod 0644 "$TMP"   # mktemp is 0600 — node_exporter must be able to read it
           mv "$TMP" "$DIR/wg_vip.prom"
       when: inventory_hostname == 'vpn-fallback'
 
