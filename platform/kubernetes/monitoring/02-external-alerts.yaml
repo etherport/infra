@@ -244,6 +244,41 @@ spec:
             summary: "VPN gateway {{ $labels.instance }} is down"
             description: "VPN gateway {{ $labels.instance }} has been unreachable for more than 2 minutes. Site-to-site connectivity may be affected."
 
+        # M153 (2026-07-25): the WG VIP layers used to fail SILENTLY (proven by the
+        # 3-day TS-hairpin cousin incident). Two signals:
+        # (1) VIP gone entirely — both keepalived holders dead, or a VRRP split-brain
+        #     ARP blackhole (the M77 proto-112 incident class). ICMP works on this VIP
+        #     (real ARP, unlike the MetalLB BGP VIPs which drop ICMP by design).
+        - alert: WgVipUnreachable
+          expr: probe_success{appliance="wg-vip"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "WireGuard VIP 10.10.201.20 is unreachable"
+            description: >-
+              The keepalived-floated WG VIP answers from neither holder (K8s WG pod
+              prio 150 / vpn-fallback prio 100) for >5m — remote WG access is DOWN.
+              Check the wireguard pod, keepalived on both holders, and for VRRP
+              split-brain (both holding the VIP; clients then need `ip neigh flush`
+              — the M77 proto-112 incident class).
+        # (2) Silent failover: vpn-fallback holds the VIP. Legitimate DURING an
+        #     incident, but the K8s pod (prio 150, preempt_delay 300) should reclaim
+        #     within ~5m of recovery — >15m on the fallback means the pod is dead or
+        #     VRRP is wedged, and nothing else would tell us. Metric = node_exporter
+        #     textfile collector on vpn-fallback (wireguard.yml wg-vip-metric.timer).
+        - alert: WgVipOnFallback
+          expr: wg_vip_held{instance="vpn-fallback"} == 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "WG VIP has been on vpn-fallback for >15m"
+            description: >-
+              vpn-fallback holds 10.10.201.20 — the K8s WG pod either died and never
+              came back, or recovered but failed to reclaim (VRRP wedge). Check
+              `kubectl -n wireguard get pods` and keepalived logs on both holders.
+
     # Weekly doc/IaC drift audit (devbox doc-drift-audit.timer, Mon 14:37). The audit also emails
     # every run (incl. a per-run "❗ audit error" on failure), so these add the off-box signal the
     # email can't give — a MISSED run (devbox down / timer disabled). The success-timestamp metric

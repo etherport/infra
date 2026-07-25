@@ -665,6 +665,78 @@
         state: started
       when: inventory_hostname == 'vpn-aws'
 
+    # =========================================================================
+    # WG VIP holder metric (vpn-fallback only) — M153, 2026-07-25
+    # Writes wg_vip_held{vip="10.10.201.20"} 0|1 to the node_exporter textfile
+    # collector (deployed by node-exporter.yml) every 30s. Feeds the
+    # WgVipOnFallback alert: a failover onto vpn-fallback is legitimate during
+    # an incident, but >15m means the K8s WG pod died or VRRP is wedged — and
+    # before this metric NOTHING reported a silent failover / missed failback.
+    # =========================================================================
+    - name: Install WG VIP metric script
+      copy:
+        dest: /usr/local/bin/wg-vip-metric.sh
+        owner: root
+        group: root
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          # Emit wg_vip_held for the node_exporter textfile collector (atomic).
+          set -u
+          DIR=/var/lib/node_exporter/textfile_collector
+          [ -d "$DIR" ] || exit 0   # node_exporter not deployed yet
+          HELD=0
+          ip -4 addr show | grep -q '10\.10\.201\.20/' && HELD=1
+          TMP=$(mktemp "$DIR/.wg_vip.XXXXXX")
+          {
+            echo '# HELP wg_vip_held 1 if this host currently holds the WG VIP 10.10.201.20'
+            echo '# TYPE wg_vip_held gauge'
+            echo "wg_vip_held{vip=\"10.10.201.20\"} $HELD"
+          } > "$TMP"
+          mv "$TMP" "$DIR/wg_vip.prom"
+      when: inventory_hostname == 'vpn-fallback'
+
+    - name: Install WG VIP metric service + timer
+      copy:
+        dest: "/etc/systemd/system/{{ item.name }}"
+        owner: root
+        group: root
+        mode: "0644"
+        content: "{{ item.content }}"
+      loop:
+        - name: wg-vip-metric.service
+          content: |
+            [Unit]
+            Description=Write WG VIP holder metric for node_exporter
+
+            [Service]
+            Type=oneshot
+            ExecStart=/usr/local/bin/wg-vip-metric.sh
+        - name: wg-vip-metric.timer
+          content: |
+            [Unit]
+            Description=WG VIP holder metric every 30s
+
+            [Timer]
+            OnBootSec=30s
+            OnUnitActiveSec=30s
+            AccuracySec=5s
+
+            [Install]
+            WantedBy=timers.target
+      loop_control:
+        label: "{{ item.name }}"
+      when: inventory_hostname == 'vpn-fallback'
+      notify: Reload systemd
+
+    - name: Enable WG VIP metric timer
+      systemd:
+        name: wg-vip-metric.timer
+        enabled: yes
+        state: started
+        daemon_reload: yes
+      when: inventory_hostname == 'vpn-fallback'
+
   # ===========================================================================
   # Handlers
   # ===========================================================================
