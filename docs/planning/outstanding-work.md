@@ -235,7 +235,7 @@ This file foregrounds open/in-progress/gated work._
 
 ### ⏳ M152. Tailnet surface audit — cue-db ACL scope, `abacus` verify, stale-node expiry, exit nodes, plex-ts fate
 - `policy.hujson` grants are allow-all → the tailnet-exposed Postgres `cue-db` is reachable
-  from every device; verify Windows device `abacus` (joined 07-02, online) is expected;
+  from every device; ✅ `abacus` CONFIRMED as the operator's Windows box (2026-07-25);
   expire stale iPad/mini keys; audit the 3 exit nodes; decide whether the `plex-ts` LB
   stays. Durable fix = L34 (TS ACL IaC), still blocked on operator minting a TS API key.
   Review §4.5.
