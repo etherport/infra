@@ -15,7 +15,9 @@
 //
 // To rotate / revoke the GitHub sync, see infra/tailscale/README.md.
 //
-// Last revised: 2026-05-24 (added tag:cluster-ingress + heavy comments).
+// Last revised: 2026-07-25 (L34: tightened grants — allow-all replaced with
+// member-scoped rules; tagged service nodes can no longer INITIATE tailnet
+// connections. Regression tests added; console runs them on every save.)
 
 {
   //----------------------------------------------------------------
@@ -46,23 +48,58 @@
   //----------------------------------------------------------------
   // grants: ACLs in the v2 grants format
   //----------------------------------------------------------------
-  // Currently allow-all: any device → any device on any port.
-  // This matches the homelab posture where every node is trusted
-  // and we rely on per-VLAN firewall rules at the UDM for L3
-  // segmentation. Tightening this would require:
-  //   - Inventory who actually needs what (small surface, mostly
-  //     the operator's laptop/phone hitting the cluster + AWS
-  //     resources hitting the homelab over the WireGuard mesh).
-  //   - Per-tag dst rules e.g.
-  //       {"src": ["autogroup:member"],
-  //        "dst": ["tag:cluster-ingress:443,80",
-  //                "tag:subnet-router:*",
-  //                "autogroup:self:*"]}
-  //   - A separate rule for tag:k8s-operator → cluster nodes so the
-  //     operator can poll the cluster state.
-  // Defer until the homelab has more users / less trust.
+  // L34 (2026-07-25): tightened from allow-all. The design principle:
+  // MEMBER (owner) devices keep everything they use today; TAGGED
+  // service/router nodes can no longer INITIATE tailnet connections —
+  // so a compromised in-cluster proxy (plex-ts, cue-db-ts, ...) cannot
+  // pivot across the tailnet to other services or to owner devices.
+  // Grants govern connection INITIATION only; return traffic of
+  // member-initiated flows (incl. via subnet routers) is stateful and
+  // unaffected. Rationale + review: docs/planning/
+  // remote-access-zt-review-2026-07-25.md §4.5 (M152/L34).
   "grants": [
-    {"src": ["*"], "dst": ["*"], "ip": ["*"]},
+    // Owner devices → the homelab LAN + AWS VPC (via the subnet routers).
+    {"src": ["autogroup:member"], "dst": ["10.10.192.0/19", "10.10.100.0/22"], "ip": ["*"]},
+    // Owner devices → the tailnet-exposed cluster services (plex-ts,
+    // cue-api, cue-db, ntfy, remediation-approve, operator).
+    {"src": ["autogroup:member"], "dst": ["tag:k8s"], "ip": ["*"]},
+    // Owner devices → TS-Ingress services (cluster-ingress terminates TLS).
+    {"src": ["autogroup:member"], "dst": ["tag:cluster-ingress"], "ip": ["tcp:443", "tcp:80"]},
+    // Owner devices → the router nodes themselves (diagnostics, TS-SSH).
+    {"src": ["autogroup:member"], "dst": ["tag:subnet-router"], "ip": ["*"]},
+    // Owner devices ↔ each other (laptop → devbox SSH etc.).
+    {"src": ["autogroup:member"], "dst": ["autogroup:self"], "ip": ["*"]},
+    // Exit-node + Mullvad usage (internet egress through an exit node
+    // requires an explicit internet grant).
+    {"src": ["autogroup:member"], "dst": ["autogroup:internet"], "ip": ["*"]},
+    // NOTE deliberately ABSENT: any rule with a tag as src. Tagged
+    // nodes (tag:k8s, tag:k8s-operator, tag:subnet-router,
+    // tag:cluster-ingress) accept inbound + forward, but never
+    // initiate. Adding a future service that must CALL OUT over the
+    // tailnet needs its own narrow grant here.
+  ],
+
+  //----------------------------------------------------------------
+  // tests: policy regression tests (run by the console on every save
+  // and by the sync workflow's validator)
+  //----------------------------------------------------------------
+  "tests": [
+    // Owner paths that must keep working.
+    {"src": "autogroup:member", "accept": [
+      "tag:k8s:32400",       // Plex via plex-ts
+      "tag:k8s:5432",        // cue-db dev access
+      "10.10.201.70:443",    // Traefik VIP via the subnet router
+      "10.10.201.50:6443",   // kube-apiserver via the subnet router
+      "10.10.100.10:53",     // AWS DNS replica via vpn-aws's /22
+    ]},
+    // Pivot paths that must stay closed.
+    {"src": "tag:k8s", "deny": [
+      "tag:k8s:5432",        // service node → cue-db
+      "10.10.201.50:6443",   // service node → kube-apiserver via router
+    ]},
+    {"src": "tag:subnet-router", "deny": [
+      "tag:k8s:5432",        // router node → cue-db
+    ]},
   ],
 
   //----------------------------------------------------------------
