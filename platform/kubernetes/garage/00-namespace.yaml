@@ -13,3 +13,6 @@ metadata:
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/warn: baseline
     pod-security.kubernetes.io/audit: baseline
+    # M151 tier 13 (networkpolicies/22-tier-garage.yaml): garage holds the PRIMARY
+    # velero backups — the in-cluster ransomware target. Audit-first rollout 2026-07-25.
+    netpol.wind/enforced: "true"

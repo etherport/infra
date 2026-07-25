@@ -1,0 +1,40 @@
+# Tier 10 — backups (M151, 2026-07-25). 12 CronJobs with IRSA AWS creds + NAS
+# reach + the backup-approval webhook. Flows (topology — most jobs run nightly,
+# validated through the audit window):
+#   ingress backup-approval :8080 <- traefik (internal HMAC path) + cloudflared
+#                                    (CF Access path for backup-approve.wind)
+#   egress  world :443  (AWS S3/STS/SES, UDM https for unifi-backup)
+#   egress  world :22   (pve-config-offsite ssh to pve)
+#   egress  garage :3900 (velero-dr-sync reads the primary BSL)
+# NFS media mounts are kubelet-side (no pod egress).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: backups-tier
+  namespace: backups
+spec:
+  description: "backups allowlist: ingress :8080 (traefik/cloudflared); egress world :443/:22 + garage :3900 + intra."
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: traefik
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cloudflared
+      toPorts:
+        - ports:
+            - { port: "8080", protocol: TCP }
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: backups
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: backups
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: garage
+    - toEntities: [world]
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }
+            - { port: "22", protocol: TCP }

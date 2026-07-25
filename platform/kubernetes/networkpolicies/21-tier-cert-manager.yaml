@@ -1,0 +1,24 @@
+# Tier 12 — cert-manager (M151, 2026-07-25). Holds the Cloudflare API token
+# (DNS-01) — a stolen token = DNS takeover. Smallest tier: live flows show only
+# egress world :443 (ACME + CF API) beyond the cluster-wide allows; the webhook
+# ingress (:10250 from apiserver) arrives as host/remote-node → 02-essentials.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cert-manager-tier
+  namespace: cert-manager
+spec:
+  description: "cert-manager allowlist: egress world :443 (ACME/CF) + intra; webhook/probes/scrape via cluster-wide allows."
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cert-manager
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cert-manager
+    - toEntities: [world]
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }

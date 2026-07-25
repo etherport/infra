@@ -1,0 +1,37 @@
+# Tier 11 — tailscale (M151, 2026-07-25). Holds tailnet authkeys + the operator;
+# its proxy pods are also the tailnet ENTRY POINT into the cluster, so egress to
+# cluster endpoints stays permissive (any port — proxies forward to plex :32400,
+# cue :3000/:5432, ntfy :8080, traefik :8443, remediation :8080, and future
+# services; enumerating them here would silently break each new tailnet service).
+# The WIN is bounding its WORLD surface: WG p2p is UDP on arbitrary high ports
+# (+ :3478 STUN), control plane is TCP :443 (DERP rides :443 too), NAT-PMP/SSDP
+# to the gateway arrive as host/world :5351/:1900. Live flows 2026-07-25.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: tailscale-tier
+  namespace: tailscale
+spec:
+  description: "tailscale allowlist: ingress world UDP (WG p2p) + intra; egress cluster any (entry proxy) + world UDP any + world TCP :443/:80."
+  endpointSelector: {}
+  ingress:
+    # Inbound WG punches from peers — arbitrary source, UDP only.
+    - fromEntities: [world]
+      toPorts:
+        - ports:
+            - { port: "1", protocol: UDP, endPort: 65535 }
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: tailscale
+  egress:
+    # Entry proxy: cluster-wide any-port, mirroring the traefik-tier egress rationale.
+    - toEntities: [cluster]
+    - toEntities: [world]
+      toPorts:
+        - ports:
+            - { port: "1", protocol: UDP, endPort: 65535 }
+    - toEntities: [world]
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }
+            - { port: "80", protocol: TCP }

@@ -1,0 +1,28 @@
+# Tier 8 — flux-system (M151, 2026-07-25). The GitOps engine holds cluster-admin-
+# equivalent power (kustomize-controller applies arbitrary manifests); it must not
+# also have free east-west reach. Flows from live Hubble sampling (2026-07-25):
+#   egress  world :443  (GitHub https, ghcr/OCI, helm repos)
+#   egress  world :22   (git+ssh)
+#   intra   controllers <-> source-controller :9090 artifact fetch, notif :8080/:9090
+# kubelet probes :9440 + apiserver + monitoring scrape covered by 01/02/03.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: flux-tier
+  namespace: flux-system
+spec:
+  description: "flux allowlist: egress world :443/:22 (git/OCI/helm) + intra; probes/apiserver/scrape via cluster-wide allows."
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: flux-system
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: flux-system
+    - toEntities: [world]
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }
+            - { port: "22", protocol: TCP }

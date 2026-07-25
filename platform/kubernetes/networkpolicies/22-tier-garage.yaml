@@ -1,0 +1,28 @@
+# Tier 13 — garage (M151, 2026-07-25). The local S3 store holding the PRIMARY
+# velero backups — exactly what ransomware-in-the-cluster would target. Consumers:
+# velero (BSL) + backups (velero-dr-sync mirror job). Single instance, no
+# replication egress; probes/scrape via 02/03.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: garage-tier
+  namespace: garage
+spec:
+  description: "garage allowlist: ingress :3900 (velero/backups) + intra; no egress beyond cluster-wide allows."
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: velero
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: backups
+      toPorts:
+        - ports:
+            - { port: "3900", protocol: TCP }
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: garage
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: garage

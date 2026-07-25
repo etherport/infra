@@ -23,3 +23,10 @@ resources:
   - 14-tier-monitoring.yaml  # OBSERVATION DRAFT — audit on; enforce after Loki audit confirms
   - 15-tier-authentik.yaml   # M115 tier 6 — SSO IdP (validated via the audit toggle 2026-07-01)
   - 16-tier-plex.yaml        # M147 tier 7 — Plex (internet-reachable sans CF Access since 2026-07-25; audit-first rollout)
+  - 17-tier-flux.yaml        # M151 tier 8 — GitOps engine (cluster-admin-equivalent creds)
+  - 18-tier-velero.yaml      # M151 tier 9 — backup engine (cluster RBAC + IRSA AWS role)
+  - 19-tier-backups.yaml     # M151 tier 10 — backup CronJobs + approval webhook
+  - 20-tier-tailscale.yaml   # M151 tier 11 — tailnet entry proxies + operator (authkeys)
+  - 21-tier-cert-manager.yaml # M151 tier 12 — CF API token holder
+  - 22-tier-garage.yaml      # M151 tier 13 — primary velero BSL (ransomware target)
+  - 23-tier-home-automation.yaml # H46 tail tier 14 — HA (de-privileged, edge-reachable)

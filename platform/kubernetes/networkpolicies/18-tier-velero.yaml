@@ -1,0 +1,29 @@
+# Tier 9 — velero (M151, 2026-07-25). Cluster-wide RBAC + an IRSA AWS role; the
+# backup engine must not double as a lateral-movement hub. Live flows 2026-07-25:
+#   egress  world :443    (AWS S3 DR mirror, STS)
+#   egress  garage :3900  (primary BSL — local S3)
+#   intra   server <-> node-agent
+# NB node-agent is a hostNetwork DaemonSet — its traffic carries host identity
+# (essentials), not this ns; this tier effectively governs the velero server pod.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: velero-tier
+  namespace: velero
+spec:
+  description: "velero allowlist: egress world :443 (AWS) + garage :3900 (primary BSL) + intra."
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: velero
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: velero
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: garage
+    - toEntities: [world]
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }

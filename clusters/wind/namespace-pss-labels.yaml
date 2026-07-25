@@ -13,11 +13,11 @@
 # (verified by scanning live pods) graduate to `enforce: baseline` — new
 # violating pods are rejected at admission; existing pods are unaffected.
 # audit+warn are kept alongside enforce so violations are still logged/surfaced.
-# Three tier=data namespaces stay audit/warn-only because they run legitimately
+# Two tier=data namespaces stay audit/warn-only because they run legitimately
 # elevated pods that baseline would block:
-#   - home-automation: Home Assistant runs privileged (USB/hardware access)
 #   - monitoring:      node-exporter (hostNetwork/PID), alloy (hostPath), grafana
 #   - tailscale:       operator/proxy pods need NET_ADMIN
+# (home-automation graduated 2026-07-25 — H46 de-privileged HA; enforce=baseline now.)
 # tier=system wireguard stays unrestricted by design (hostNetwork+NET_ADMIN);
 # plex graduated to enforce=baseline 2026-07-01 (L27 — device-plugin GPU, not privileged).
 #
@@ -39,9 +39,14 @@ metadata:
   name: home-automation
   labels:
     tier: data
-    # audit/warn only — HA pod is privileged (hardware access). See header.
+    # H46 (2026-07-25): HA de-privileged (the "privileged for hardware" note was
+    # cargo cult — network integrations only; Multus is CNI-wired) → baseline
+    # ENFORCED; warn=restricted as the regression nudge.
     pod-security.kubernetes.io/audit: baseline
-    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/enforce: baseline
+    # H46 tail: netpol tier 14 (23-tier-home-automation.yaml) — audit-first rollout.
+    netpol.wind/enforced: "true"
 ---
 apiVersion: v1
 kind: Namespace
@@ -121,6 +126,8 @@ metadata:
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
     pod-security.kubernetes.io/enforce: baseline
+    # M151 tier 10 (19-tier-backups.yaml) — audit-first rollout 2026-07-25.
+    netpol.wind/enforced: "true"
 ---
 apiVersion: v1
 kind: Namespace
@@ -131,6 +138,8 @@ metadata:
     # audit/warn only — operator/proxy pods need NET_ADMIN. See header.
     pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: baseline
+    # M151 tier 11 (20-tier-tailscale.yaml) — audit-first rollout 2026-07-25.
+    netpol.wind/enforced: "true"
 ---
 # Phase 2 extension (2026-06-02): additional tenant app namespaces, all scanned
 # with zero baseline violations → straight to enforce. (cue deployed this round;
@@ -215,6 +224,8 @@ metadata:
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/warn: restricted
     pod-security.kubernetes.io/enforce: baseline
+    # M151 tier 12 (21-tier-cert-manager.yaml) — audit-first rollout 2026-07-25.
+    netpol.wind/enforced: "true"
 ---
 apiVersion: v1
 kind: Namespace
@@ -268,6 +279,8 @@ metadata:
   name: flux-system
   labels:
     pod-security.kubernetes.io/enforce: baseline
+    # M151 tier 8 (17-tier-flux.yaml) — audit-first rollout 2026-07-25.
+    netpol.wind/enforced: "true"
 ---
 # L-1 (2026-07-11): privileged infra namespaces that slipped the M72 sweep get the
 # tier=system marker (house style for privileged infra — tetragon/wireguard precedent;
@@ -279,6 +292,8 @@ metadata:
   name: velero
   labels:
     tier: system  # node-agent DaemonSet: privileged hostPath (kopia FS backups)
+    # M151 tier 9 (18-tier-velero.yaml) — audit-first rollout 2026-07-25.
+    netpol.wind/enforced: "true"
 ---
 apiVersion: v1
 kind: Namespace

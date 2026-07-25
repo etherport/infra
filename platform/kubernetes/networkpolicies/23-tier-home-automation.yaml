@@ -1,0 +1,31 @@
+# Tier 14 — home-automation (H46 tail, 2026-07-25). HA is edge-reachable (CF
+# Access) + internally un-gated by design; de-privileged 2026-07-25 (H46). Its
+# smart-device traffic (Roomba/Hue/HomeKit on VLANs 202/204/205) rides the MULTUS
+# interfaces (net1-3), which Cilium does NOT govern — this tier bounds only eth0:
+#   ingress :8123 <- traefik (ha.wind internal + webhook entrypoint) + cloudflared
+#   egress  world :443/:80 (Nest/SmartThings/Tesla cloud APIs, HA cloud)
+#   egress  world :123/UDP (NTP)
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: home-automation-tier
+  namespace: home-automation
+spec:
+  description: "home-automation allowlist: ingress :8123 (traefik/cloudflared); egress world :443/:80 + NTP. Multus device VLANs are outside Cilium."
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: traefik
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: cloudflared
+      toPorts:
+        - ports:
+            - { port: "8123", protocol: TCP }
+  egress:
+    - toEntities: [world]
+      toPorts:
+        - ports:
+            - { port: "443", protocol: TCP }
+            - { port: "80", protocol: TCP }
+            - { port: "123", protocol: UDP }
