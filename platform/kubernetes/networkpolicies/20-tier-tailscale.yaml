@@ -24,14 +24,13 @@ spec:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: tailscale
   egress:
-    # Entry proxy: cluster-wide any-port, mirroring the traefik-tier egress rationale.
+    # This is a SUBNET ROUTER + EXIT NODE — it forwards client traffic to
+    # arbitrary destinations/ports by definition (the whole /19, plus exit-node
+    # internet egress). Port-bounding egress here is both harmful (breaks routing
+    # to any homelab host:port other than 443/80 — SSH, apiserver :6443, Plex,
+    # etc.) and low-value (a compromised router already reaches the LAN by
+    # design). So egress is unrestricted; the SECURITY WIN of this tier is the
+    # INGRESS restriction (only inbound WG UDP + intra — nothing can INITIATE to
+    # the proxy/operator pods), reinforcing the L34 tailnet ACL at the netpol layer.
     - toEntities: [cluster]
     - toEntities: [world]
-      toPorts:
-        - ports:
-            - { port: "1", protocol: UDP, endPort: 65535 }
-    - toEntities: [world]
-      toPorts:
-        - ports:
-            - { port: "443", protocol: TCP }
-            - { port: "80", protocol: TCP }

@@ -29,3 +29,8 @@ spec:
             - { port: "443", protocol: TCP }
             - { port: "80", protocol: TCP }
             - { port: "123", protocol: UDP }
+            # SSDP (UPnP) + mDNS device discovery on eth0. The real device
+            # traffic is on the Multus VLAN ifaces (outside Cilium); these are
+            # the pod-net announces — allow to keep the audit clean.
+            - { port: "1900", protocol: UDP }
+            - { port: "5353", protocol: UDP }

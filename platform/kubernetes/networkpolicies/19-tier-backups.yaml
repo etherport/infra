@@ -33,6 +33,15 @@ spec:
             k8s:io.kubernetes.pod.namespace: backups
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: garage
+    # Backup CronJobs push run metrics to the pushgateway (:9091) + some query
+    # prometheus (:9090) for report generation.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+      toPorts:
+        - ports:
+            - { port: "9091", protocol: TCP }
+            - { port: "9090", protocol: TCP }
     - toEntities: [world]
       toPorts:
         - ports:

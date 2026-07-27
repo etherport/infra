@@ -44,3 +44,6 @@ spec:
         - ports:
             - { port: "443", protocol: TCP }
             - { port: "80", protocol: TCP }
+            # Plex GDM / DLNA discovery (SSDP) — harmless on the pod net; allow
+            # to keep the audit clean rather than log a drop every announce.
+            - { port: "1900", protocol: UDP }

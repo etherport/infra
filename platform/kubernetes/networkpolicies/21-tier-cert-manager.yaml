@@ -22,3 +22,7 @@ spec:
       toPorts:
         - ports:
             - { port: "443", protocol: TCP }
+            # DNS-01 challenge: cert-manager queries authoritative/recursive
+            # resolvers directly to confirm the _acme-challenge TXT propagated.
+            - { port: "53", protocol: TCP }
+            - { port: "53", protocol: UDP }
