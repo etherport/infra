@@ -107,6 +107,6 @@ if the rolled-back revision predates a ConfigMap hand-patch.
 
 - [[cilium-cni-dir-owner]] — **never** upgrade Cilium via kubespray (the `/opt/cni/bin`
   chown landmine); this is why Cilium is Helm-managed out-of-band.
-- `docs/runbooks/networkpolicy-tiers.md` — the 6 enforced tiers + the audit-toggle
-  procedure (what audit mode gates).
+- `docs/runbooks/networkpolicy-tiers.md` — the labeled tiers (14 as of 2026-07-27) + the
+  audit-toggle procedure (what audit mode gates).
 - `docs/reference/snapshots/cilium-helm-values.yaml` — the committed values snapshot.

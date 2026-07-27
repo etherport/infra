@@ -169,7 +169,7 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   layer looks identical from the client: (1) **UDM zone firewall** (custom zones default
   intra-zone BLOCK; Trusted=201, Management=200); (2) **PVE host firewall** (H37 default-deny
   — keep its FOUR allows: mgmt, Ceph storage-VLAN, IPMI, node_exporter); (3) **Cilium NetworkPolicy tiers**
-  (6 enforced; allow CONTAINER not service ports); (4) **CF Access (edge) + Authentik
+  (14 labeled, see §5; allow CONTAINER not service ports); (4) **CF Access (edge) + Authentik
   forward-auth (internal apps)**. Each is detailed below. Tell **timeout** (firewall SYN
   drop) from **refused** (dead process) to localize fast.
 - **MetalLB is BGP-only, not L2** (M18/M36). Traefik VIP = `10.10.201.70`. Raw ICMP to
@@ -215,16 +215,24 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   `pre-flight.yml` afterward to restore `root:root`. Real run path (venv, `--tags=cilium,download`)
   + full incident: `docs/runbooks/cilium-cni-dir-owner.md`. Cilium is **Helm-managed**
   (release `cilium`/kube-system), **not** Flux.
-- **Cilium `policy-audit-mode` is OFF — policies ENFORCE** (since 2026-06-22; was the H3
-  observation phase 06-15→06-22). IaC source of truth = `cilium_policy_audit_mode: false`
-  in the kubespray inventory; toggle live via the `cilium-config` ConfigMap + `kubectl
+- **Cilium `policy-audit-mode`** toggles per onboarding batch — check live before assuming
+  either state (`kubectl get cm -n kube-system cilium-config -o
+  jsonpath='{.data.policy-audit-mode}'`; `true`=audit-only/no enforcement, `false`=enforce).
+  Steady state is `false` (enforce); IaC source of truth =
+  `cilium_policy_audit_mode: false` in the kubespray inventory. It's briefly flipped `true`
+  while onboarding a new batch of tiers (see below), then flipped back — **as of 2026-07-27
+  it is live `true`** (M147/M151, tiers 7-14 in their observation window; outstanding-work.md
+  has current status). Toggle live via the `cilium-config` ConfigMap + `kubectl
   rollout restart ds/cilium` (read only at startup), NOT a raw kubespray run. ⚠️ patch +
   rollout as SEPARATE commands (the compound one trips the auto-mode classifier). H3
   NetworkPolicy manifests in `platform/kubernetes/networkpolicies/`; enforcement is
-  **per-namespace opt-in via the `netpol.wind/enforced=true` label** — **all 6 enforced tiers:
-  `postgres`, `cue`, `dns`/Technitium, `traefik`, `monitoring`, `authentik`** (the original 5 H3
-  target tiers + `authentik` added as tier 6, M115 2026-07-01 — SSO IdP; each allowlist
-  built+verified from Hubble/audit data, 0 drops). **All unlabeled namespaces stay allow-all.**
+  **per-namespace opt-in via the `netpol.wind/enforced=true` label** — **14 labeled tiers
+  live: `postgres`, `cue`, `dns`/Technitium, `traefik`, `monitoring`, `authentik`** (the
+  original 5 H3 target tiers + `authentik` tier 6, M115 2026-07-01 — SSO IdP; each allowlist
+  built+verified from Hubble/audit data, 0 drops) **+ 8 more labeled 2026-07-25 and currently
+  in the audit-mode observation window: `flux-system`, `velero`, `backups`, `tailscale`,
+  `cert-manager`, `garage`, `home-automation`, `plex`** (M147/M151 — not yet enforcing until
+  the next audit-OFF flip). **All unlabeled namespaces stay allow-all.**
   (dns query ports open to `all`, `:5380` admin in-cluster only; traefik + monitoring egress
   permissive — `cluster` any-port + enumerated `world` ports — so scrapes/routes never cut;
   traefik/monitoring labelled via the `namespace-pss-labels.yaml` patch since Helm-created.)

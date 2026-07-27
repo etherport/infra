@@ -1,7 +1,11 @@
 # Runbook — NetworkPolicy tiers (H3) & catering for new services
 
-Cilium enforces per-namespace NetworkPolicies (H3). **`policy-audit-mode` is OFF
-(enforcing).** Manifests: [`platform/kubernetes/networkpolicies/`](../../platform/kubernetes/networkpolicies/)
+Cilium enforces per-namespace NetworkPolicies (H3). **`policy-audit-mode` is a single
+GLOBAL switch — check live, don't assume** (`kubectl get cm -n kube-system cilium-config
+-o jsonpath='{.data.policy-audit-mode}'`; `true`=audit-only/no real drops, `false`=enforce).
+Steady state is OFF (enforcing); it's briefly flipped ON while a new tier batch is onboarded
+— **as of 2026-07-27 it is live ON** (M147/M151, tiers 7-14 in observation; see
+`docs/planning/outstanding-work.md` for current status). Manifests: [`platform/kubernetes/networkpolicies/`](../../platform/kubernetes/networkpolicies/)
 (see its `README.md` for the model + the audit-toggle workflow). This runbook is the
 **operational** companion: what to do when you add or change a service so you don't
 silently break its connectivity.
@@ -15,9 +19,14 @@ DNS + kube-apiserver + host/remote-node probes, `allow-monitoring-scrape` = ingr
 from the `monitoring` ns) **plus** that tier's own allowlist (`1x-tier-<ns>.yaml`).
 Everything else is dropped. Unlabelled namespaces are unaffected (allow-all).
 
-**Enforced tiers:** `postgres`, `cue`, `dns`, `traefik`, `monitoring` (the 5 H3 target tiers,
-2026-06), plus **`authentik`** (tier 6, M115 2026-07-01 — the SSO IdP) — **6 enforced tiers**.
-Never label `kube-system`, `flux-system`, `wireguard`, `metallb-system`.
+**Labeled tiers (14 live):** `postgres`, `cue`, `dns`, `traefik`, `monitoring` (the 5 H3
+target tiers, 2026-06), plus **`authentik`** (tier 6, M115 2026-07-01 — the SSO IdP) — these
+6 are meant to enforce but revert to audit-only whenever the global switch is ON. Plus 8 more
+labeled 2026-07-25, currently in their audit-mode observation window pending the next
+audit-OFF flip: `flux-system`, `velero`, `backups`, `tailscale`, `cert-manager`, `garage`,
+`home-automation`, `plex` (tiers 7-14, M147/M151 — note `flux-system` IS now labeled,
+superseding the older "never label flux-system" guidance). Never label `kube-system`,
+`wireguard`, `metallb-system`.
 
 > ⚠️ **`dns` tier has OFF-CLUSTER egress deps — keep them.** `dns-sync-watcher` does an hourly
 > FULL_SYNC to the two **off-cluster** Technitium replicas — the VM fallback `10.10.201.6` and the

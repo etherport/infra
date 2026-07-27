@@ -4,13 +4,20 @@ Default-deny + per-tier allowlists for the `wind` cluster. Closes H3 (the larges
 internal-segmentation gap: today Cilium is allow-all, so a compromised pod has
 unrestricted lateral movement). Detailed plan: `docs/planning/archive/hardening-plan-2026-06-10.md` §H3.
 
-> ✅ **ENFORCING — 6 TIERS.** Cilium `policy-audit-mode` is
-> **OFF** — these policies enforce (real drops). Enforced tiers (labeled
-> `netpol.wind/enforced=true`): **`postgres`** (1), **`cue`** (2), **`dns`/Technitium** (3),
-> **`traefik`** (4), **`monitoring`** (5) — the 5 H3 target tiers, enforcing since 2026-06-23 —
-> plus **`authentik`** (6, the SSO IdP; M115, added 2026-07-01). Each allowlist built+verified
-> from Hubble/audit data (0 drops post-flip). **All unlabeled namespaces remain allow-all.** The
-> original 5 tiers closed H3; authentik (tier 6) extended enforcement to the crown-jewel IdP.
+> ⚠️ **14 TIERS LABELED — 6 enforcing, 8 in the audit-mode observation window (as of
+> 2026-07-27).** Check live before assuming either state: `kubectl get cm -n kube-system
+> cilium-config -o jsonpath='{.data.policy-audit-mode}'` (`true`=audit-only/no real drops
+> cluster-wide, `false`=enforce). Tiers `postgres` (1), `cue` (2), `dns`/Technitium (3),
+> `traefik` (4), `monitoring` (5) — the 5 H3 target tiers, enforcing since 2026-06-23 — and
+> `authentik` (6, the SSO IdP; M115, added 2026-07-01) were built+verified from Hubble/audit
+> data (0 drops) and are meant to enforce, but **because `policy-audit-mode` is a single
+> GLOBAL switch, they too revert to audit-only whenever it's flipped ON to onboard a new
+> batch** — which is the case right now: 8 more namespaces were labeled 2026-07-25
+> (`flux-system`, `velero`, `backups`, `tailscale`, `cert-manager`, `garage`,
+> `home-automation`, `plex` — tiers 7-14, manifests `17-tier-flux.yaml` through
+> `23-tier-home-automation.yaml` + `16-tier-plex.yaml`) and are still in their observation
+> window pending the next audit-OFF flip (tracked as M147/M151 in
+> `docs/planning/outstanding-work.md`). **All unlabeled namespaces remain allow-all.**
 >
 > ⚠️ **Audit is a single GLOBAL switch.** To add the NEXT tier you must briefly flip audit
 > back ON, observe + build that namespace's allowlist, then flip OFF again — see "Adding a
@@ -64,8 +71,9 @@ Enforcement is gated on the namespace label **`netpol.wind/enforced: "true"`**. 
 namespace is allow-all until labeled; labeling it makes it default-deny and subject to
 the universal allows + its tier allowlist. This gives a clean, reversible, per-namespace
 rollout (Phase 2's "postgres → cue → dns → traefik → monitoring" order = label them in
-that order). `kube-system`, `flux-system`, `wireguard` (hostNetwork → node identity),
-`metallb-system` are **never** labeled.
+that order). `kube-system`, `wireguard` (hostNetwork → node identity), `metallb-system` are
+**never** labeled. (`flux-system` WAS on that never-label list but is labeled as of
+2026-07-25 — M151, tier 7; see the banner above.)
 
 ## Files
 
