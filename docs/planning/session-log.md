@@ -15,6 +15,31 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-28 — enforcement flip (14 tiers LIVE), vzdump/NFS flap root-cause, M152 closed
+
+**Overnight flap storm root-caused:** pve's 03:00 vzdump job (VM backups → sequoia-backups
+= UNAS NFS) saturated the UNAS NFS service 03:00-04:56 PDT → pvestatd timeouts, Ceph
+mon.pve slow op (blocked 577s, 04:18-04:27) → RBD latency cluster-wide → load spikes
+(cp3 119), etcd leader flaps, CNPG evictions, TargetDown — all self-healed when vzdump
+finished. Same time-signature as the 07-21/22 "deep-scrub" saturations — scrubs were
+throttled + not running today, so vzdump-vs-UNAS is likely the recurring driver.
+PROPOSED (pending approval): vzdump bwlimit in /etc/pve/vzdump.conf.
+
+**Enforcement flip DONE:** audit window verified clean (30h+, 2 nightly backup sweeps +
+the NFS chaos; only 1 stray inbound ICMP). policy-audit-mode=false + cilium rollout →
+PolicyAuditMode=false. Validation: plex 200 via edge, grafana Access 302, flux Ready,
+BOTH velero BSLs Available, certs Ready, HA 200, tailscale healthy, ZERO DROPPED
+verdicts across all 8 new namespaces. **14 tiers enforcing.** cluster-config drift
+detector re-dispatched → green (the "cluster config down" emails were this deliberate
+audit-mode drift).
+
+**M152 CLOSED:** policy-push OAuth migration live (d507e38, self-triggered run green;
+operator deleted TAILSCale_API_KEY); stale iPad device deleted via API; plex-ts LB
+removed (redundant); mini node kept (returns after power-cycle). abacus confirmed.
+
+**Next:** vzdump bwlimit (operator approval), then #18 switch-port hardening is the
+remaining ZT frontier; M149 runbook items absorbed into tailscale-route-failback.md.
+
 ## 2026-07-25 (cont. 3) — TS static endpoint (M154), plaintext-secret incident, DERP explainer
 
 **M154 DONE:** TS "slow vs WG fast" = DERP relay dependence (no dialable homelab port; Mac

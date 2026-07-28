@@ -233,7 +233,7 @@ This file foregrounds open/in-progress/gated work._
   (sole-advertiser); new runbook `tailscale-route-failback.md`. Drift caught by the
   tailscale-route-drift detector.
 
-### 🟡 M151. Netpol tiers 8-13 SHIPPED in audit mode (29743e8) + HA tier 14 — enforce with M147
+### ✅ M151. Netpol tiers 8-14 ENFORCING since 2026-07-28 — coverage 14 namespaces, 0 drops post-flip
 - All six credential namespaces (flux-system, velero, backups, tailscale, cert-manager,
   garage) + home-automation now have tiers + labels (coverage 6→14 namespaces), grounded
   in live hubble-relay flow sampling; zero early AUDIT flows. Validated in the SAME audit
@@ -251,7 +251,7 @@ This file foregrounds open/in-progress/gated work._
   fallback (fail-safe); update the ProxyClass env. Consider a drift check vs
   wan1 DDNS later.
 
-### 🟡 M152. Tailnet surface — ACL scoping (L34) + policy-push OAuth migration DONE; remaining: device-key hygiene, plex-ts fate
+### ✅ M152. Tailnet surface — ACL scoping (L34) + policy-push OAuth migration DONE; remaining: device-key hygiene, plex-ts fate
 - ✅ L34 ACL tightened (eb19b71) — member-scoped grants, tagged nodes can't initiate.
 - ✅ policy-sync workflow migrated off the 90-day TAILSCALE_API_KEY → short-lived token
   from the `wind-policy-push` OAuth client (SOPS `tailscale-policy-push.sops.yaml`,
@@ -259,8 +259,11 @@ This file foregrounds open/in-progress/gated work._
   delete the now-unused `TAILSCALE_API_KEY` repo secret.** (First policy-push client was
   committed PLAINTEXT → operator revoked it; guardrails/secret-scan caught it; re-minted
   clean.)
-- ⏳ remaining: expire stale device keys (iPad offline 07-08, mini offline); decide the
-  `plex-ts` LB keep/remove (redundant with subnet-router + un-gated CF now).
+- ✅ 2026-07-28: stale iPad tailnet device DELETED via API; `plex-ts` LB REMOVED
+  (redundant 3rd path — apps use plex.wind via plex.tv customConnections on- and
+  off-tailnet). Mini's tailnet node deliberately KEPT (expected to return after its
+  physical power-cycle; deleting would force re-auth). M152 CLOSED except: operator
+  deleted TAILSCALE_API_KEY ✅.
 - `policy.hujson` grants are allow-all → the tailnet-exposed Postgres `cue-db` is reachable
   from every device; ✅ `abacus` CONFIRMED as the operator's Windows box (2026-07-25);
   expire stale iPad/mini keys; audit the 3 exit nodes; decide whether the `plex-ts` LB
@@ -299,7 +302,7 @@ This file foregrounds open/in-progress/gated work._
   k8s-homelab-router (advisor check or TS API poll); (3) revisit if Tailscale ships route
   priorities.
 
-### 🟡 M147. Plex netpol tier 7 — SHIPPED in AUDIT mode (77aaa23); enforce pending observation
+### ✅ M147. Plex netpol tier 7 — ENFORCING since 2026-07-28 (audit-off flip; validated clean)
 - Context: 2026-07-25 removed CF Access from `plex.wind` (internet-reachable, plex.tv auth
   only — commit `4fbf5f6`). Pod is hardened (no SA token, RO media NFS, PSA baseline) but the
   `plex` ns has **no NetworkPolicy** and isn't an enforced Cilium tier, so a compromised Plex
