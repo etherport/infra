@@ -251,7 +251,16 @@ This file foregrounds open/in-progress/gated work._
   fallback (fail-safe); update the ProxyClass env. Consider a drift check vs
   wan1 DDNS later.
 
-### 🟡 M152. Tailnet surface — ACL scoping DONE via L34 (eb19b71); remaining: key hygiene, plex-ts fate, policy-push client re-mint (first one committed PLAINTEXT → revoked; guardrails caught it)
+### 🟡 M152. Tailnet surface — ACL scoping (L34) + policy-push OAuth migration DONE; remaining: device-key hygiene, plex-ts fate
+- ✅ L34 ACL tightened (eb19b71) — member-scoped grants, tagged nodes can't initiate.
+- ✅ policy-sync workflow migrated off the 90-day TAILSCALE_API_KEY → short-lived token
+  from the `wind-policy-push` OAuth client (SOPS `tailscale-policy-push.sops.yaml`,
+  SOPS_AGE_KEY in-run; d507e38). Self-triggered run GREEN end-to-end. **Operator TODO:
+  delete the now-unused `TAILSCALE_API_KEY` repo secret.** (First policy-push client was
+  committed PLAINTEXT → operator revoked it; guardrails/secret-scan caught it; re-minted
+  clean.)
+- ⏳ remaining: expire stale device keys (iPad offline 07-08, mini offline); decide the
+  `plex-ts` LB keep/remove (redundant with subnet-router + un-gated CF now).
 - `policy.hujson` grants are allow-all → the tailnet-exposed Postgres `cue-db` is reachable
   from every device; ✅ `abacus` CONFIRMED as the operator's Windows box (2026-07-25);
   expire stale iPad/mini keys; audit the 3 exit nodes; decide whether the `plex-ts` LB
