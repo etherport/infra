@@ -4,16 +4,13 @@ name: Tailscale Policy
 # that touches it. Closes the IaC loop — git becomes the source of
 # truth, the admin console becomes display-only.
 #
-# Setup (one-time):
-# 1. Tailscale admin console → Personal Settings → Keys →
-#    "Generate access token". Scope: tailnet policy file (acl:write).
-#    Save the token immediately (only shown once).
-# 2. GitHub repo → Settings → Secrets and variables → Actions →
-#    add `TAILSCALE_API_KEY` with the token value.
-# 3. After first successful workflow run, lock the admin console
-#    policy editor (Tailnet Settings → Policy file management →
-#    "Prevent edits in the admin console") so the web UI becomes
-#    view-only.
+# Auth (M152, 2026-07-28): mints a short-lived token from the
+# `wind-policy-push` OAuth client (policy:write scope) — creds are
+# SOPS-encrypted at infra/ansible/playbooks/secrets/
+# tailscale-policy-push.sops.yaml, decrypted in-run with the SOPS_AGE_KEY
+# GH secret. This replaced the 90-day-expiry TAILSCALE_API_KEY (which can
+# now be deleted from repo secrets). The admin console policy editor is
+# GitHub-synced (view-only) so this file is the source of truth.
 #
 # Tailnet ID for this tailnet: TwxNUjPekr11CNTRL. The API accepts
 # `-` as a shortcut meaning "the tailnet of the API key being used",
@@ -73,19 +70,41 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
+      # M152 (2026-07-28): mint a short-lived token from the `wind-policy-push`
+      # OAuth client (policy:write scope) instead of the 90-day-expiry
+      # TAILSCALE_API_KEY. Creds live SOPS-encrypted in the repo
+      # (infra/ansible/playbooks/secrets/tailscale-policy-push.sops.yaml),
+      # decrypted here with the SOPS_AGE_KEY GH secret (same pattern as
+      # terraform-drift-detection.yml). No standing token to rotate.
+      - name: Install sops
+        run: |
+          TAG=$(curl -fsSL https://api.github.com/repos/getsops/sops/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')
+          curl -fsSL -o /tmp/sops "https://github.com/getsops/sops/releases/download/${TAG}/sops-${TAG}.linux.amd64"
+          sudo install -m 0755 /tmp/sops /usr/local/bin/sops
+
       - name: POST policy to Tailscale API
         env:
-          TS_API_KEY: ${{ secrets.TAILSCALE_API_KEY }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
-          set -e
-          if [ -z "$TS_API_KEY" ]; then
-            echo "::error::TAILSCALE_API_KEY repo secret missing — see workflow file header for setup."
+          set -euo pipefail
+          mkdir -p ~/.config/sops/age
+          printf '%s' "$SOPS_AGE_KEY" > ~/.config/sops/age/keys.txt
+          chmod 600 ~/.config/sops/age/keys.txt
+          F=infra/ansible/playbooks/secrets/tailscale-policy-push.sops.yaml
+          CID=$(sops -d "$F" | awk '/^ts_policy_client_id:/{print $2}')
+          CSEC=$(sops -d "$F" | awk '/^ts_policy_client_secret:/{print $2}')
+          rm -f ~/.config/sops/age/keys.txt
+          TOK=$(curl -sS -d "client_id=$CID" -d "client_secret=$CSEC" \
+            https://api.tailscale.com/api/v2/oauth/token \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+          if [ -z "$TOK" ]; then
+            echo "::error::Could not mint a Tailscale OAuth token from wind-policy-push (revoked/expired?)"
             exit 1
           fi
 
           HTTP=$(curl -sS -o /tmp/resp.json -w '%{http_code}' \
             -X POST \
-            -H "Authorization: Bearer $TS_API_KEY" \
+            -H "Authorization: Bearer $TOK" \
             -H "Content-Type: application/hujson" \
             --data-binary @infra/tailscale/policy.hujson \
             'https://api.tailscale.com/api/v2/tailnet/-/acl')
