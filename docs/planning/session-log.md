@@ -15,6 +15,25 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-29 — #18 switch-port hardening via API (31 ports disabled)
+
+**#18 largely closed, remotely via the UDM Network API** (the old "console-only" label
+predated the API-key path). Discovery first (read-only): 9 switches inventoried;
+camera/gate ports were ALREADY VLAN-min (UniFi Devices profile: native 212,
+forward=native) and Access Road's spares already disabled — the real gap was
+enabled-but-unused ports, worst on Outdoor Junction (3 dead jacks with NO profile =
+full trunk if plugged). Applied the exact override shape the UI produces
+(forward=disabled + tagged block_all + no native net + port-security on w/ empty MAC
+list) to 31 currently-DOWN ports across 6 switches: Outdoor Junction 2/3/5, Chapel
+3/4/6/7, Rack PoE ×12, Workroom ×4, Office ×7, Rack-10G "Hallway". Safety: script
+refused any UP port; verified post-apply: all 31 forward=disabled, zero previously-UP
+ports lost, 18 VLAN-212 devices online. NB `enable` flag display varies by switch gen;
+`forward=disabled` is the authoritative bit. PUT /rest/device/<id> with the FULL merged
+port_overrides array (replace-not-append footgun).
+
+**Remaining for #18:** 802.1X/MAB (RADIUS + MAC entries — design item, deliberately
+deferred); re-enable procedure = UI or API (flip forward=native + profile).
+
 ## 2026-07-28 (cont.) — vzdump right-sizing (backup-set 545→115 GiB), orphan purge, kubespray check
 
 **vzdump job right-sized (operator-approved):** the nightly job was `all:1` minus CPs —
