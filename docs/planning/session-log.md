@@ -15,6 +15,24 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-29 (cont. 2) — Postgres HA restored 3/3, CNPG PVC alert, Phase-1 MAB blocker
+
+**Postgres HA fully restored:** re-cloned the 2 stuck replicas (-1 wedged mid-resize, -6
+broken 28h pre-incident) by deleting their PVC+pod → CNPG `pg_basebackup` from primary -8 →
+**3/3 healthy, phase "Cluster in healthy state".** Primary served throughout; zero further
+app impact.
+
+**Prevention shipped:** `CnpgPvcUsageHigh` alert (critical, 65%, for=10m) on
+postgres-cluster-*/cue-db-* PVCs — pages BEFORE the disk-halt (the generic
+KubePersistentVolumeFillingUp fired too late today). Committed + reconciled.
+
+**Phase-1 802.1X MAC-pin BLOCKED (schema):** inline API PUT of port_security fields onto the
+active camera/gate ports was stripped by the controller because those ports use a
+`portconf_id` profile. No harm (ports up, all cameras pingable). Needs the port-auth.py
+helper w/ the right field combo — annotated in dot1x-mab-design-2026-07-29.md. Yesterday's
+DISABLED ports correctly retain port_security_enabled (part of the disable template) — not
+a partial pin.
+
 ## 2026-07-29 (cont.) — INCIDENT: shared HA Postgres disk-halt → SSO outage (resolved)
 
 **Symptom:** morning "flapping" alerts that "self-resolved" were actually the shared HA

@@ -37,7 +37,21 @@ other switches, which we must NOT gate — dot1x on uplinks breaks everything do
 Accepted residual: an attacker splicing into the Junction's *transit* path is a
 wire-tapping attack, which port auth wouldn't stop anyway.
 
+## ⚠️ Phase-1 attempt finding (2026-07-29)
+
+An inline API attempt to add `port_security_enabled` + `port_security_mac_address` to the
+active edge ports FAILED SILENTLY: the controller stripped the fields on write because
+those ports carry a **port profile** (`portconf_id`) — this fork won't layer per-port
+MAC-security onto a profiled port via a plain `port_overrides` PUT (`setting_preference:
+manual` + `portconf_id` conflict → profile wins, security dropped). No harm (ports stayed
+up, all 6 cameras/gate pingable). **Conclusion:** Phase-1 needs the `scripts/unifi/
+port-auth.py` helper with the correct field combination worked out (likely: drop
+`portconf_id` and set the native network + security explicitly, OR use the dedicated
+port-security endpoint if the fork exposes one). Do NOT brute-force via inline PUTs — the
+UDM rate-limiter also trips. Verify each change downs nothing (ports stay up + camera ping).
+
 ## Options
+
 
 **A. Per-port MAC pinning (port-security, no RADIUS).** Set
 `port_security_enabled + port_security_mac_address:[<device MAC>]` on each exposed edge
