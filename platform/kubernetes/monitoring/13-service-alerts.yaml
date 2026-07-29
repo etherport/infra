@@ -15,6 +15,27 @@ spec:
   groups:
     - name: cnpg-availability.rules
       rules:
+        # 2026-07-29 incident: WAL backed up during a storage stall and filled the
+        # 10Gi shared-PG PVC; CNPG's low-disk guard HALTED the whole cluster (no
+        # primary -> SSO outage). KubePersistentVolumeFillingUp fired too late/generic.
+        # This pages EARLY (65%) on the CNPG database PVCs specifically — at 32Gi,
+        # 65% leaves ~11Gi of reaction headroom. Critical so it emails.
+        - alert: CnpgPvcUsageHigh
+          expr: >
+            (1 - kubelet_volume_stats_available_bytes{persistentvolumeclaim=~"postgres-cluster-.*|cue-db-.*"}
+               / kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~"postgres-cluster-.*|cue-db-.*"}) * 100 > 65
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CNPG PVC {{ $labels.persistentvolumeclaim }} is {{ $value | printf \"%.0f\" }}% full"
+            description: >-
+              A CNPG database PVC crossed 65% — usually WAL accumulating because
+              archiving lags (storage stall / barman outage). If it fills, CNPG
+              HALTS the whole cluster ("Not enough disk space" -> no primary ->
+              dependent apps get connection refused; the 2026-07-29 SSO outage).
+              Check pg_wal size + barman archiving; recovery = session-log 2026-07-29
+              (patch PVC requests directly — CNPG won't self-resize from the halt).
         # absent()-based: when a CNPG cluster dies entirely its series VANISH,
         # so a `== 0` expr would never fire. One rule per cluster (absent()
         # can't be aggregated across label values).
