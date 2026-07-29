@@ -15,6 +15,27 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-28 (cont.) — vzdump right-sizing (backup-set 545→115 GiB), orphan purge, kubespray check
+
+**vzdump job right-sized (operator-approved):** the nightly job was `all:1` minus CPs —
+73% of the 545 GiB set was k8s WORKER OS disks (pure IaC cattle; state lives in
+Ceph/velero/barman/etcd-backup) + never-changing packer templates re-dumped daily.
+Rescoped to the 6 standalone VMs only (1001-1006, ~115 GiB), `bwlimit 81920` (80 MiB/s —
+derived from the observed UNAS absorb: healthy 130-190 MiB/s, flush-contended floor
+32-37 MiB/s; the fast/crawl alternation = SSD-cache fill/flush cycles, worsened by the
+degraded single-NVMe cache), retention keep-daily=7+keep-weekly=4 (was 14d).
+`pvesh set /cluster/backup/backup-820c6707-cfc0`; snapshot at /root/jobs.cfg.bak-2026-07-28.
+Worker-loss trade-off accepted: kubespray rebuild (~45 min) instead of image restore.
+**1.6 TB of orphaned worker/template dumps deleted** (294 archives; operator chose
+clean-break). NB: NAS `df` hadn't reflected the free space immediately (recycle/snapshot
+layer?) — re-check. ALSO still present: old CP-era dumps (qemu-100/101/102) + retired-VM
+archives (103/104/105/2001) — small, flagged for a later sweep.
+
+**Kubespray drift check:** running `cluster.yml --check --diff` full-cluster from the
+devbox (detached tmux `kscheck`, log ~/kscheck-2026-07-28.log). NB `--limit` + check mode
+trips the fact-cache assert — full-cluster only. Treat check-mode diffs as leads (some
+tasks skip; cert/token diffs are noise). Results next entry.
+
 ## 2026-07-28 — enforcement flip (14 tiers LIVE), vzdump/NFS flap root-cause, M152 closed
 
 **Overnight flap storm root-caused:** pve's 03:00 vzdump job (VM backups → sequoia-backups
