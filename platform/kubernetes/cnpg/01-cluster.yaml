@@ -30,8 +30,14 @@ spec:
   primaryUpdateStrategy: unsupervised
 
   # Storage configuration
+  # 32Gi (was 10Gi): 2026-07-29 the 10Gi PVC filled with WAL during a storage
+  # stall (03:00 vzdump→UNAS→Ceph RBD latency), tripping CNPG's low-disk guard,
+  # which halts the WHOLE cluster ("Not enough disk space" → no primary → SSO +
+  # all shared-DB apps down). 10Gi is too small for a shared HA Postgres that
+  # accumulates WAL when archiving lags a storage stall; 32Gi gives real headroom.
+  # Ceph RBD online-expands (allowVolumeExpansion=true); RBD can't shrink.
   storage:
-    size: 10Gi
+    size: 32Gi
     storageClass: ceph-rbd
 
   # Resource limits
