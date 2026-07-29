@@ -15,6 +15,42 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-07-29 (cont.) — INCIDENT: shared HA Postgres disk-halt → SSO outage (resolved)
+
+**Symptom:** morning "flapping" alerts that "self-resolved" were actually the shared HA
+postgres-cluster DOWN from ~05:10 — AuthentikDown, TargetDown postgres, KubePodCrashLooping,
+KubePersistentVolumeFillingUp (w3/w4 03:26-05:04). SSO + every shared-DB app
+(Grafana/wiki/OpenWebUI OIDC, forward-auth admin UIs) failing. NB the AWS alerts the operator
+asked about were a red herring: AWSCostForecastHigh is a STEADY warning (forecast $90);
+vpn-aws had 2 scrape flaps at 04:43 (the known M124 WAN wave). The real event was Postgres.
+
+**Root cause:** the 03:00 storage stall (vzdump→UNAS NFS→Ceph RBD latency — the recurring
+cascade) backed up WAL faster than it archived; the **10Gi** postgres PVC filled; CNPG's
+`ensure_sufficient_disk_space` guard latched the cluster into phase "Not enough disk space",
+which HALTS all orchestration (won't start pg / promote a primary until the PVC group grows)
+→ no primary → postgres-cluster-rw zero endpoints → connection-REFUSED (not timeout, so NOT
+a netpol drop — enforcement flip was exonerated). Confirmed via instance-manager log
+"Detected low-disk space condition" (safety halt, NOT corruption).
+
+**Recovery (operator-approved 10→32Gi):** (1) bumped Cluster spec.storage.size to 32Gi
+(git e131faa + live patch). (2) CNPG WON'T self-propagate the resize from the halted state
+(known behavior — it just loops "cannot proceed until enlarged"), so **directly patched the
+3 PVCs' spec.resources.requests.storage to 32Gi** → Ceph online-expanded -6/-8 immediately;
+-1 stuck FileSystemResizePending (crashlooping pod never mounts to resize2fs) → **deleted -1
+pod** to force a clean mount. (3) halt cleared → failover → **postgres-cluster-8 promoted
+primary, accepting writes, rw endpoint restored**. (4) restarted authentik-server + wiki
+pods to skip crashloop backoff → **SSO fully recovered** (authentik health 200, grafana OIDC
+302, wiki Running). Replicas -1/-6 PITR-replaying to rejoin (HA convergence in progress,
+monitored separately).
+
+**Durable fixes shipped/queued:** 32Gi is the durable headroom (10Gi too small for a shared
+HA DB that accumulates WAL during a storage stall). The UPSTREAM trigger is the same
+vzdump/UNAS-NFS/Ceph saturation we mitigated last night (bwlimit+scope); tonight's gentler
+run should stop retriggering it. TODO: add a CNPG PVC-usage alert BEFORE it fills (the
+KubePersistentVolumeFillingUp fired but at 03:26 into an already-degrading window — want a
+lower, earlier threshold on the postgres PVCs specifically). NB #18 phase-1 802.1X MAC-pin
+was DEFERRED by this incident — still pending.
+
 ## 2026-07-29 — #18 switch-port hardening via API (31 ports disabled)
 
 **#18 largely closed, remotely via the UDM Network API** (the old "console-only" label
