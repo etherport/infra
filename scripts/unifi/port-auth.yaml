@@ -1,0 +1,34 @@
+# Desired switch-port authentication state (#18 phase 2) — driven by port-auth.py.
+#
+# mode: mab  -> 802.1X MAB (dot1x_ctrl=mac_based) + a RADIUS account per MAC.
+#              VLAN stays from the port's profile. Auth failures show in the UDM
+#              event log (Phase 3 alerting). This is the profile-compatible path.
+# mode: open -> dot1x_ctrl=force_authorized (the default / rollback state).
+#
+# ONLY physically-exposed EDGE ports fronting a single known device belong here.
+# NEVER list uplinks/transit (the script refuses them anyway). MACs from the live
+# inventory 2026-07-29. Cutover = a maintenance window when physically home:
+# flip ONE port to mab, soak 48h, then the rest (gate/intercom are physical-access
+# devices — a failed cutover = gate dark). Start with the note-marked pilot.
+switches:
+  - name: Switch Chapel
+    ports:
+      - { port: 1, mode: open, macs: ["e4:38:83:0f:03:8c"] }   # chapel camera — PILOT: flip to mab first
+      - { port: 2, mode: open, macs: ["e4:38:83:0f:02:24"] }   # driveway-upper camera
+  - name: Switch Driveway
+    ports:
+      - { port: 2, mode: open, macs: ["e4:38:83:0f:02:b9"] }   # driveway-mid camera
+      - { port: 3, mode: open, macs: ["e4:38:83:0f:01:96"] }   # driveway-lower camera
+      # NB Driveway p5 is the UPLINK (→ Rack PoE p7) — NOT listed. The gate/
+      # intercom devices that appear as "sw_port 5" are reached THROUGH the
+      # uplink (they sit on another switch, likely indoor), so they are not
+      # physically-exposed Driveway ports. Confirm their real switch/port before
+      # ever securing them — the helper's uplink-guard flags this if mis-listed.
+  - name: Switch Access Road
+    ports:
+      - { port: 2, mode: open, macs: ["1c:6a:1b:88:1a:c0"] }   # access-road camera
+# NB AP ports (Driveway p4, Access Road p3) are deliberately EXCLUDED — wifi
+# client MACs bridge onto them, so MAB there would deauth every roaming device.
+# NB Outdoor Junction (Flex-Mini) can't do MAB at all; and its upstream port
+# can't be MAC-secured either (it trunks a whole downstream switch's MACs) —
+# see docs/planning/dot1x-mab-design-2026-07-29.md "Outdoor Junction".
