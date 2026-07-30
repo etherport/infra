@@ -75,7 +75,7 @@ jobs:
     outputs:
       drifted: ${{ steps.plan.outputs.drifted }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
@@ -147,7 +147,7 @@ jobs:
 
       - name: Upload plan artifact
         if: steps.plan.outputs.drifted == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: plan-${{ matrix.module.name }}
           path: ${{ matrix.module.dir }}/plan.txt
@@ -190,7 +190,7 @@ jobs:
       TWILIO_API_SECRET: ${{ secrets.TWILIO_API_SECRET }}
       TF_VAR_gcp_project_id: ${{ secrets.GCP_PROJECT_ID }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # unzip MUST be installed BEFORE setup-terraform — the self-hosted lifecycle
       # runner lacks it, and setup-terraform needs it to extract the binary (else
@@ -219,7 +219,7 @@ jobs:
       # AWS creds above). Mirrors terraform-google.yml.
       - name: Configure GCP credentials (WIF)
         if: matrix.module.gcp
-        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           workload_identity_provider: projects/909531984469/locations/global/workloadIdentityPools/github/providers/github
           service_account: gh-actions-terraform@homelab-infra-497414.iam.gserviceaccount.com
@@ -264,7 +264,7 @@ jobs:
 
       - name: Upload plan artifact
         if: steps.plan.outputs.drifted == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: plan-${{ matrix.module.name }}
           path: ${{ matrix.module.dir }}/plan.txt
@@ -276,8 +276,8 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: artifacts
           pattern: plan-*
@@ -394,7 +394,7 @@ jobs:
     if: always()
     runs-on: [self-hosted, lifecycle]
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/report-drift-status
         with:
           detector: tf-drift
