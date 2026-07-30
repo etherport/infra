@@ -39,7 +39,7 @@ jobs:
     runs-on: [self-hosted, lifecycle]
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Configure AWS credentials (S3 backend)
         uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6
@@ -62,7 +62,7 @@ jobs:
         # provider's attribute condition. SA gh-actions-terraform has
         # serviceUsageAdmin + projectIamAdmin + viewer on both projects.
         # See docs/planning/gcp-oidc-wif-l21.md.
-        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           workload_identity_provider: projects/909531984469/locations/global/workloadIdentityPools/github/providers/github
           service_account: gh-actions-terraform@homelab-infra-497414.iam.gserviceaccount.com
