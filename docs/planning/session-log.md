@@ -69,6 +69,28 @@ KubePersistentVolumeFillingUp fired but at 03:26 into an already-degrading windo
 lower, earlier threshold on the postgres PVCs specifically). NB #18 phase-1 802.1X MAC-pin
 was DEFERRED by this incident — still pending.
 
+## 2026-08-01 — #18 MAB LIVE on 5 exposed camera ports (remote, rollback-safe)
+
+Implemented Phase 2 fully remotely (operator can't be on-site). Ordering: most-remote
+lowest-stakes first (Access Road pilot → Chapel → Driveway). Remote-safe because every
+in-scope port is a LEAF camera port; the mgmt path (uplinks) stays force_authorized, so
+worst case = one camera dark + a one-write rollback that doesn't need RADIUS.
+
+**Schema finding (cost a rewrite):** this controller strips per-port `dot1x_ctrl` AND
+`port_security_*` from any override that has a `portconf_id` — auth MUST live in the PORT
+PROFILE. Fix: created a **"Cameras MAB"** portconf (UniFi Devices clone + dot1x_ctrl=
+mac_based), enabled `global_switch.dot1x_portctrl_enabled`, added a RADIUS account per
+camera MAC; port-auth.py rewritten to swap a port's profile MAB<->base (idempotent, dry-run
+clean). Verified END-TO-END: PoE-cut the access-road cam → fresh link-up authenticated via
+RADIUS → back online (a grandfathered-session test would've been meaningless; the PoE cut
+forces a real auth). All 5 cameras up on MAB.
+
+**Caveats / Phase 3:** the REJECT path (unknown MAC blocked) is by-design but not
+empirically tested (needs plugging in an unknown device = physical). MAB auth events did
+NOT surface in /stat/event — Phase 3 (auth-failure alerting) needs to find where MAB
+success/fail is logged (RADIUS acct? controller syslog?). Outdoor Junction (Flex-Mini)
+remains un-authable by design (physical lock / hardware swap is the only answer).
+
 ## 2026-07-29 — #18 switch-port hardening via API (31 ports disabled)
 
 **#18 largely closed, remotely via the UDM Network API** (the old "console-only" label
