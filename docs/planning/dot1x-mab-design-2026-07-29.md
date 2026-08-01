@@ -1,6 +1,8 @@
 # 802.1X / MAB design — physically-exposed switch ports (#18, phase 2)
 
-Status: **DESIGN — phases pending operator approval.** Phase 0 (unused-port disable ×31 +
+Status: **PHASE 2 LIVE (2026-08-01)** — all 5 exposed camera ports on MAB via the
+`Cameras MAB` profile, driven by `scripts/unifi/port-auth.py`; verified end-to-end
+(PoE-cut → RADIUS auth on relink). Phase 3 (auth-failure alerting) pending. Phase 0 (unused-port disable ×31 +
 VLAN-min verification) completed 2026-07-29 via the UDM API; this doc covers the
 port-authentication layer on the ports that remain *active* and physically exposed.
 

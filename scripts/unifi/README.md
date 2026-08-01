@@ -15,13 +15,16 @@ script reconciles the UDM to match. Design + rationale:
 
 Auth: `UNIFI_API_KEY` env, else it `sops -d`'s `udm_api_key` from the ops bundle.
 
-### Why MAB, not port-security MAC-pinning
-The ubiquiti-community fork makes "port uses a named profile (`portconf_id`)" and
-"port has manual `port_security_enabled`" **mutually exclusive** — a raw
-port-security PUT on a profiled port is silently stripped (verified 2026-07-29).
-MAB via `dot1x_ctrl: mac_based` is orthogonal to the VLAN profile, so it keeps
-the profile intact **and** yields an auth-failure signal (UDM event log → Phase-3
-alerting). That's the profile-compatible, best-practice path.
+### How it works (profile-swap, verified end-to-end 2026-08-01)
+This controller strips per-port auth fields (`port_security_*` AND `dot1x_ctrl`)
+from any override that has a `portconf_id` — so auth must live in the PORT
+PROFILE, not the override. Bootstrap (one-time, already done):
+1. A **"Cameras MAB"** portconf = clone of "UniFi Devices" + `dot1x_ctrl: mac_based`.
+2. Global `global_switch.dot1x_portctrl_enabled = true` (RADIUS profile already set).
+3. A RADIUS account per camera MAC (username=password=lowercase MAC).
+The script then just **swaps a port's profile** between "UniFi Devices" (`open`)
+and "Cameras MAB" (`mab`). VLAN is identical (MAB profile is a clone). Proven by
+PoE-cutting a camera and watching the fresh link-up authenticate via RADIUS.
 
 ### Safety built in
 - **Refuses uplink/transit ports** (it derives them from the live uplink graph) —

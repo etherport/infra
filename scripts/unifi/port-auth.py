@@ -7,20 +7,19 @@ ports from a git-committed desired-state file (scripts/unifi/port-auth.yaml),
 same philosophy as udm-firewall.yml: repo is the source of truth, the console is
 display-only.
 
-WHY MAB and not port-security MAC-pinning:
-  The ubiquiti-community fork treats a port as EITHER "uses a named port profile
-  (portconf_id)" OR "fully-manual config incl. port_security_enabled" — the two
-  are mutually exclusive in the port_overrides model (a raw port_security PUT on
-  a profiled port is silently stripped; verified 2026-07-29). MAB via
-  `dot1x_ctrl: mac_based` is orthogonal to the VLAN profile, so it keeps the
-  profile intact AND adds an auth-failure signal (UDM event log). Design doc:
-  docs/planning/dot1x-mab-design-2026-07-29.md.
+HOW MAB actually works on this controller (verified 2026-08-01):
+  Per-port overrides CANNOT carry auth config on profiled ports — the controller
+  silently strips BOTH `port_security_*` AND `dot1x_ctrl` from any override that
+  has a `portconf_id` (both were verified stripped). Auth lives in the PORT
+  PROFILE: a dedicated "Cameras MAB" portconf (clone of "UniFi Devices" +
+  `dot1x_ctrl: mac_based`) + the global `global_switch.dot1x_portctrl_enabled`
+  flag + a RADIUS account per MAC (username=password=lowercase-colon MAC).
+  Proven end-to-end: PoE-cut a camera, fresh link-up authenticated via RADIUS.
 
-MODEL:
-  - `mab`   : dot1x_ctrl=mac_based on the port + a RADIUS account per allowed MAC
-              (username=password=MAC, UniFi's MAB convention). VLAN unchanged
-              (stays from the port profile).
-  - `open`  : dot1x_ctrl=force_authorized (the default; used to ROLL BACK a port).
+MODEL (profile swap):
+  - `mab`   : port's portconf -> the "Cameras MAB" profile + RADIUS accounts for
+              its MACs. VLAN identical (the MAB profile is a clone of the base).
+  - `open`  : port's portconf -> the base "UniFi Devices" profile (ROLLBACK).
 
 SAFETY:
   - Refuses to modify any port that is an UPLINK (another device uplinks through
@@ -122,6 +121,17 @@ def main():
     by_name = {d.get("name"): d for d in devices if d.get("type") == "usw"}
     uplinks = uplink_ports(devices)
 
+    # resolve the two profiles + the global dot1x flag
+    pcs = req(key, "/rest/portconf")["data"]
+    prof = {p.get("name"): p["_id"] for p in pcs}
+    MAB_P, BASE_P = prof.get("Cameras MAB"), prof.get("UniFi Devices")
+    if not MAB_P or not BASE_P:
+        sys.exit("missing 'Cameras MAB' or 'UniFi Devices' portconf — see README bootstrap")
+    gs = [x for x in req(key, "/get/setting")["data"] if x.get("key") == "global_switch"][0]
+    if not gs.get("dot1x_portctrl_enabled"):
+        print("!! global_switch.dot1x_portctrl_enabled is FALSE — MAB profiles will not enforce"
+              " (enable it via the console or /set/setting/global_switch)")
+
     all_macs, plans = set(), []
     for sw in desired.get("switches", []):
         name = sw["name"]
@@ -136,13 +146,12 @@ def main():
             macs = [m.lower() for m in port.get("macs", [])]
             if (name, idx) in uplinks:
                 print(f"!! REFUSING {name} p{idx}: it is an UPLINK — skipped"); continue
-            want_ctrl = "mac_based" if mode == "mab" else "force_authorized"
-            cur = ov.get(idx, {})
-            cur_ctrl = cur.get("dot1x_ctrl", "force_authorized")
+            want_pc = MAB_P if mode == "mab" else BASE_P
+            cur_pc = ov.get(idx, {}).get("portconf_id")
             if mode == "mab":
                 all_macs.update(macs)
-            if cur_ctrl != want_ctrl:
-                plans.append((name, dev["_id"], idx, cur, want_ctrl,
+            if cur_pc != want_pc:
+                plans.append((name, dev["_id"], idx, ov.get(idx, {}), want_pc,
                               pt.get(idx, {}).get("up"), mode, macs))
 
     # RADIUS accounts first (a MAB port with no account = deauth)
@@ -155,9 +164,10 @@ def main():
     print(f"\n{'DRY-RUN — ' if dry else ''}port changes:")
     # group by device so we PUT the full merged override array once per switch
     by_dev = {}
-    for name, did, idx, cur, ctrl, up, mode, macs in plans:
-        print(f"  {name:24} p{idx:<2} dot1x_ctrl -> {ctrl:16} (mode={mode}, currently up={up})")
-        by_dev.setdefault((name, did), []).append((idx, ctrl))
+    prof_name = {v: k for k, v in prof.items()}
+    for name, did, idx, cur, pc, up, mode, macs in plans:
+        print(f"  {name:24} p{idx:<2} profile -> {prof_name.get(pc, pc):16} (mode={mode}, currently up={up})")
+        by_dev.setdefault((name, did), []).append((idx, pc))
     if dry:
         print("\n(dry-run) re-run with --apply to write.")
         return
@@ -165,10 +175,9 @@ def main():
     for (name, did), changes in by_dev.items():
         dev = by_name[name]
         ov = {o["port_idx"]: o for o in dev.get("port_overrides", [])}
-        for idx, ctrl in changes:
+        for idx, pc in changes:
             o = ov.get(idx, {"port_idx": idx, "name": f"Port {idx}"})
-            o["dot1x_ctrl"] = ctrl
-            o["dot1x_idle_timeout"] = 300
+            o["portconf_id"] = pc
             ov[idx] = o
         req(key, f"/rest/device/{did}", "PUT",
             {"port_overrides": sorted(ov.values(), key=lambda x: x["port_idx"])})
@@ -179,7 +188,7 @@ def main():
     time.sleep(20)
     devices2 = req(key, "/stat/device")["data"]
     by_name2 = {d.get("name"): d for d in devices2 if d.get("type") == "usw"}
-    for name, did, idx, cur, ctrl, was_up, mode, macs in plans:
+    for name, did, idx, cur, pc, was_up, mode, macs in plans:
         now = {p["port_idx"]: p for p in by_name2[name].get("port_table", [])}.get(idx, {})
         if was_up and not now.get("up"):
             print(f"  ⚠️  {name} p{idx} went DOWN after {mode} — device failed auth. "
