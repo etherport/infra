@@ -2,14 +2,18 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
+  # NB 03-static-pv-recovery.yaml + 04-pvc-pre-bind.yaml are DR pre-bind (03/04)
+  # templates — apply MANUALLY during a full cluster rebuild, regenerated to match
+  # the surviving RBD image + current size. NOT in steady state: they pinned
+  # instance-1 to a static 10Gi volume, but after the 2026-07-29 re-clone all 3
+  # PVCs are dynamic 32Gi, so leaving them here permanently blocked Flux (immutable
+  # PVC conflict). See README.
   - 00-namespace.yaml
   # 03 + 04 must apply BEFORE 01-cluster.yaml so that when CNPG reconciles
   # the Cluster it finds an already-Bound PVC with cnpg adoption labels and
   # adopts the existing pgdata instead of running bootstrap.initdb on a
   # fresh empty volume. See 03-static-pv-recovery.yaml for the "skip on
   # truly fresh install" case.
-  - 03-static-pv-recovery.yaml
-  - 04-pvc-pre-bind.yaml
   # 02 + 05 are SOPS-encrypted Secrets; must exist before the Cluster
   # references them (postgres-app-credentials, barman-s3-credentials).
   - 02-credentials.sops.yaml

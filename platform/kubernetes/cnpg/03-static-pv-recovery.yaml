@@ -1,3 +1,7 @@
+# ⚠️ REBUILD-ONLY TEMPLATE — NOT applied by Flux (removed from kustomization 2026-08-02).
+# Values below (10Gi, volumeName postgres-cluster-1-recovery) are STALE after the
+# 2026-07-29 re-clone; regenerate to match the surviving RBD image + size before
+# applying by hand during a cluster rebuild. See README + session-log 2026-08-02.
 # Static PersistentVolume binding the postgres-cluster-1 PVC directly to the
 # existing Ceph RBD image that holds the live pgdata.
 #
