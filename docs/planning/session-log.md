@@ -69,6 +69,24 @@ KubePersistentVolumeFillingUp fired but at 03:26 into an already-degrading windo
 lower, earlier threshold on the postgres PVCs specifically). NB #18 phase-1 802.1X MAC-pin
 was DEFERRED by this incident — still pending.
 
+## 2026-08-02 (cont.) — exposed-switch tamper alert + unblocked a stalled Flux
+
+Built the detection alert `UnexpectedDeviceOnExposedSwitch` (critical → ntfy phone + SES
+email): fires when a WIRED client not in the 8-MAC camera/gate allowlist appears on
+Driveway/Chapel/Access-Road/Outdoor-Junction (unifi-poller data; wifi excluded so
+randomized phones on the APs don't trip it). Detection half of MAB, zero lockout risk,
+surfaces a cloned MAC as a duplicate. Add a MAC to the rule regex when adding a device.
+
+⚠️ WHILE shipping it, found Flux had been FAILING every apply since the 2026-07-29 postgres
+re-clone — the CNPG DR pre-bind `04-pvc-pre-bind.yaml` pinned instance-1 to a static 10Gi
+volume, but the re-clone made all 3 PVCs dynamic 32Gi, so git permanently conflicted with
+live on immutable PVC fields and BLOCKED THE WHOLE flux-system kustomization (silently — it
+kept serving lastAppliedRevision from before). Fixed: annotated the live PVC + recovery PV
+`kustomize.toolkit.fluxcd.io/prune=disabled`, removed 03/04 from the kustomization (kept as
+regenerate-me rebuild templates). Flux Ready=True again on da3f411; PVCs safe. LESSON: a
+delete-PVC recovery on a CNPG cluster that has a git-managed pre-bind PVC WILL wedge Flux —
+check `kubectl -n flux-system get kustomization` after any such surgery.
+
 ## 2026-08-02 — CORRECTION: MAB not achievable on the outdoor switches; reverted
 
 Operator spotted the UDM UI notice "options that will not be applied to the device"
