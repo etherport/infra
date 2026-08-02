@@ -1,5 +1,9 @@
 # Desired switch-port authentication state (#18 phase 2) — driven by port-auth.py.
 #
+# ⚠️ 2026-08-02: mab is NOT ENFORCEABLE on the current outdoor switches (USF5P Flex =
+# no 802.1X; USL8LP Lite = stuck force_auth). Everything stays `open`. This file is the
+# ready inventory for when an 802.1X-capable switch replaces them. See the helper header.
+#
 # mode: mab  -> 802.1X MAB (dot1x_ctrl=mac_based) + a RADIUS account per MAC.
 #              VLAN stays from the port's profile. Auth failures show in the UDM
 #              event log (Phase 3 alerting). This is the profile-compatible path.
@@ -13,12 +17,12 @@
 switches:
   - name: Switch Chapel
     ports:
-      - { port: 1, mode: open, macs: ["e4:38:83:0f:03:8c"] }    # chapel camera — MAB live 2026-08-01
-      - { port: 2, mode: open, macs: ["e4:38:83:0f:02:24"] }    # driveway-upper camera — MAB live 2026-08-01
+      - { port: 1, mode: open, macs: ["e4:38:83:0f:03:8c"] }   # chapel camera
+      - { port: 2, mode: open, macs: ["e4:38:83:0f:02:24"] }   # driveway-upper camera
   - name: Switch Driveway
     ports:
-      - { port: 2, mode: open, macs: ["e4:38:83:0f:02:b9"] }    # driveway-mid camera — MAB live 2026-08-01
-      - { port: 3, mode: open, macs: ["e4:38:83:0f:01:96"] }    # driveway-lower camera — MAB live 2026-08-01
+      - { port: 2, mode: open, macs: ["e4:38:83:0f:02:b9"] }   # driveway-mid camera
+      - { port: 3, mode: open, macs: ["e4:38:83:0f:01:96"] }   # driveway-lower camera
       # NB Driveway p5 is the UPLINK (→ Rack PoE p7) — NOT listed. The gate/
       # intercom devices that appear as "sw_port 5" are reached THROUGH the
       # uplink (they sit on another switch, likely indoor), so they are not
@@ -26,7 +30,7 @@ switches:
       # ever securing them — the helper's uplink-guard flags this if mis-listed.
   - name: Switch Access Road
     ports:
-      - { port: 2, mode: open, macs: ["1c:6a:1b:88:1a:c0"] }    # access-road camera — MAB live 2026-08-01 (remote pilot)
+      - { port: 2, mode: open, macs: ["1c:6a:1b:88:1a:c0"] }   # access-road camera
 # NB AP ports (Driveway p4, Access Road p3) are deliberately EXCLUDED — wifi
 # client MACs bridge onto them, so MAB there would deauth every roaming device.
 # NB Outdoor Junction (Flex-Mini) can't do MAB at all; and its upstream port
