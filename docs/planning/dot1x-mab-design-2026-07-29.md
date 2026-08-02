@@ -1,8 +1,9 @@
 # 802.1X / MAB design — physically-exposed switch ports (#18, phase 2)
 
-Status: **PHASE 2 LIVE (2026-08-01)** — all 5 exposed camera ports on MAB via the
-`Cameras MAB` profile, driven by `scripts/unifi/port-auth.py`; verified end-to-end
-(PoE-cut → RADIUS auth on relink). Phase 3 (auth-failure alerting) pending. Phase 0 (unused-port disable ×31 +
+Status: **❌ MAB NOT ACHIEVABLE ON CURRENT HARDWARE (corrected 2026-08-02).** A prior
+2026-08-01 attempt was reverted — the outdoor switches cannot enforce 802.1X/MAB (see the
+CORRECTED capability matrix below). #18's real protection is Phase 0 (disabled unused
+ports) + VLAN isolation + physical security. Genuine port-auth needs a hardware swap. Phase 0 (unused-port disable ×31 +
 VLAN-min verification) completed 2026-07-29 via the UDM API; this doc covers the
 port-authentication layer on the ports that remain *active* and physically exposed.
 
@@ -25,13 +26,30 @@ Limits, stated plainly:
 
 ## Hardware capability matrix (from live API inventory)
 
-| Switch | Model | 802.1X/MAB capable? | Exposed active ports |
+| Switch | Model | 802.1X/MAB capable? | Evidence (verified 2026-08-02 via live API) |
 |---|---|---|---|
-| Driveway | USF5P (Flex) | ✅ | p2/p3 cameras, p4 AP, p5 gate cluster (UA-GATE + UA-Intercom + gate via downstream) |
-| Access Road | USF5P (Flex) | ✅ | p2 camera, p3 AP |
-| Chapel | USL8LP (Lite 8 PoE) | ✅ | p1/p2 cameras, p5 (port-security already configured), p8 uplink |
-| **Outdoor Junction** | **USW-Flex-Mini** | **❌ no 802.1X, no port-security** | p1/p4 transit only |
+| Driveway | USF5P (Flex) | **❌ NO** | device `dot1x_portctrl_enabled=False`; zero dot1x fields on any port; UI "will not be applied" lists 802.1X |
+| Access Road | USF5P (Flex) | **❌ NO** | same as Driveway (identical model) |
+| Chapel | USL8LP (Lite 8 PoE) | **❌ effectively NO** | ports HAVE dot1x fields but are stuck `dot1x_mode=force_auth` (open); a `mac_based` profile + global dot1x enable did NOT translate to the port — mac_based never took |
+| Outdoor Junction | USW-Flex-Mini | ❌ NO | no dot1x support at all |
 | Living Room | USW-Flex-Mini | ❌ (indoor, out of scope) | — |
+
+⚠️ **The 2026-07-29 matrix that marked USF5P/USL8LP "✅" was WRONG** — it inferred capability
+from the controller ACCEPTING the profile assignment, but these switches silently drop
+unsupported features (the UI "options that will not be applied" notice is the tell). None of
+the outdoor switches can actually enforce MAB. The 2026-08-01 "verified end-to-end" claim was
+a FALSE POSITIVE: a camera returning online after a PoE cut is exactly what happens with NO
+enforcement — the reject path was never tested. All changes reverted 2026-08-02.
+
+## The only real port-auth option: hardware
+802.1X/MAB on UniFi needs a capable switch (USW-Pro / USW-Enterprise / standard USW —
+NOT Flex, Flex-Mini, or Lite). To get genuine port authentication at the driveway/gate,
+swap those USF5P/USL8LP units for an 802.1X-capable model; then `scripts/unifi/port-auth.py`
+(profile-swap mechanism is sound) can drive it. Until then, the exposed-port protection is:
+disabled unused ports (Phase 0, done + real) + VLAN 212 isolation (firewall-segmented) +
+physical box security. Given the threat (opportunistic attach at an outdoor jack) and that a
+plugged-in laptop lands only on the isolated camera VLAN, that posture may be sufficient
+without a hardware spend — an operator call.
 
 **Flex-Mini consequence:** Outdoor Junction can never enforce port auth. Its protection =
 the port disables from phase 0 + it carries only transit (both active ports are trunks to

@@ -69,6 +69,26 @@ KubePersistentVolumeFillingUp fired but at 03:26 into an already-degrading windo
 lower, earlier threshold on the postgres PVCs specifically). NB #18 phase-1 802.1X MAC-pin
 was DEFERRED by this incident — still pending.
 
+## 2026-08-02 — CORRECTION: MAB not achievable on the outdoor switches; reverted
+
+Operator spotted the UDM UI notice "options that will not be applied to the device"
+(802.1X Control among them) on the Driveway port. Investigation confirmed: the USF5P
+(Flex) switches have `dot1x_portctrl_enabled=False` at the DEVICE level (no 802.1X
+hardware support); the Chapel USL8LP (Lite) has dot1x fields but every port is stuck
+`dot1x_mode=force_auth` — the `mac_based` profile never translated. **None of the outdoor
+switches can enforce MAB.** The 2026-08-01 "verified end-to-end" was a FALSE POSITIVE: a
+camera returning online after a PoE-cut is what happens with NO enforcement (the reject
+path was never tested — I'd even flagged I couldn't test it). Lesson: the controller
+accepting a profile assignment ≠ the switch applying it; verify via device-level
+`dot1x_portctrl_enabled` + per-port `dot1x_mode`, not "device came back up".
+
+REVERTED cleanly: 5 ports → base "UniFi Devices" profile, deleted the "Cameras MAB"
+portconf + 5 RADIUS accounts + global dot1x toggle (all cameras verified up). Corrected the
+design-doc capability matrix + status; port-auth.py kept with a NOT-USABLE-ON-THIS-HARDWARE
+header (mechanism is sound for a future 802.1X-capable switch). #18 real state: Phase 0
+(31 ports disabled) + VLAN-212 isolation are the actual protections; genuine port-auth needs
+a hardware swap (USW-Pro/-Enterprise) — operator call whether the threat warrants it.
+
 ## 2026-08-01 — #18 MAB LIVE on 5 exposed camera ports (remote, rollback-safe)
 
 Implemented Phase 2 fully remotely (operator can't be on-site). Ordering: most-remote

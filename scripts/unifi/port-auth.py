@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """
-port-auth.py — idempotent UniFi switch-port authentication manager (#18 phase 2).
+port-auth.py — idempotent UniFi switch-port MAB manager (#18 phase 2).
 
-Drives 802.1X **MAB** (MAC Authentication Bypass) on physically-exposed switch
-ports from a git-committed desired-state file (scripts/unifi/port-auth.yaml),
-same philosophy as udm-firewall.yml: repo is the source of truth, the console is
-display-only.
+⚠️ NOT USABLE ON THE CURRENT OUTDOOR SWITCHES (verified 2026-08-02). The
+Driveway/Access Road USF5P (Flex) have NO 802.1X support, and the Chapel USL8LP
+(Lite) reports dot1x but stays stuck at force_auth (mac_based never enforces).
+The controller ACCEPTS the profile assignment but the switch silently drops it
+(UI: "options that will not be applied"). This script + mechanism are SOUND and
+kept for when an 802.1X-CAPABLE switch (USW-Pro / -Enterprise / standard USW) is
+installed outdoors. Until then it is a no-op on this hardware. Details:
+docs/planning/dot1x-mab-design-2026-07-29.md.
 
 HOW MAB actually works on this controller (verified 2026-08-01):
   Per-port overrides CANNOT carry auth config on profiled ports — the controller
