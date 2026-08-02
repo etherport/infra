@@ -41,6 +41,13 @@ the outdoor switches can actually enforce MAB. The 2026-08-01 "verified end-to-e
 a FALSE POSITIVE: a camera returning online after a PoE cut is exactly what happens with NO
 enforcement — the reject path was never tested. All changes reverted 2026-08-02.
 
+## Detection alternative (SHIPPED 2026-08-02)
+Since MAB can't enforce here, `UnexpectedDeviceOnExposedSwitch` (critical) fires when any
+WIRED device not in the known camera/gate allowlist appears on the 4 exposed switches —
+the detection half of MAB, via unifi-poller, zero lockout risk. Rule:
+`platform/kubernetes/monitoring/16-exposed-switch-alerts.yaml`. Add a MAC to its regex when
+you legitimately add/replace a device.
+
 ## The only real port-auth option: hardware
 802.1X/MAB on UniFi needs a capable switch (USW-Pro / USW-Enterprise / standard USW —
 NOT Flex, Flex-Mini, or Lite). To get genuine port authentication at the driveway/gate,

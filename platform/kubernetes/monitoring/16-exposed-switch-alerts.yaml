@@ -1,0 +1,57 @@
+---
+# Physical-tamper detection for the outdoor/exposed switches (#18).
+#
+# The outdoor switches (USF5P Flex / USL8LP Lite) can't enforce 802.1X/MAB in
+# hardware (verified 2026-08-02, see docs/planning/dot1x-mab-design-2026-07-29.md),
+# so instead of blocking an unknown device we DETECT it: alert when any WIRED
+# client that is NOT one of the known camera/gate devices appears on one of these
+# switches. This is the detection half of what MAB would have given us, with zero
+# allowlist maintenance risk (it observes, never blocks) and it also surfaces a
+# CLONED MAC as a duplicate (the same MAC in two places), which a static port
+# allowlist would silently pass.
+#
+# Data: unifi-poller `unpoller_client_*` series carry mac/sw_name/sw_port/wired/vlan.
+# Allowlist = the 8 fixed wired devices currently on these switches (2026-08-02):
+#   cameras driveway-mid/-lower/-upper + chapel + access-road, and the gate cluster
+#   (UA-GATE / UA-Intercom / gate). WIFI clients are excluded (wired="true") so
+#   roaming/MAC-randomized phones on the driveway/access-road APs never trip it.
+# WHEN A DEVICE IS LEGITIMATELY ADDED/REPLACED: add its MAC to the `mac!~` regex
+# below (that IS the acknowledge action — the alert fires until you do).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: exposed-switch-tamper
+  namespace: monitoring
+  labels:
+    release: monitoring
+    app: kube-prometheus-stack
+spec:
+  groups:
+    - name: exposed-switch-tamper.rules
+      rules:
+        - alert: UnexpectedDeviceOnExposedSwitch
+          # any WIRED client on an exposed switch whose MAC is NOT in the allowlist.
+          expr: >
+            unpoller_client_uptime_seconds{
+              wired="true",
+              sw_name=~"Switch (Driveway|Chapel|Access Road|Outdoor Junction)",
+              mac!~"1c:6a:1b:88:1a:c0|28:70:4e:11:81:6c|9c:05:d6:a1:3a:9e|9c:05:d6:b7:f0:56|e4:38:83:0f:01:96|e4:38:83:0f:02:24|e4:38:83:0f:02:b9|e4:38:83:0f:03:8c"
+            } > 0
+          # 2m so a brief legit test-plug / scrape blip doesn't page, but a real
+          # attach (which persists) trips fast.
+          for: 2m
+          labels:
+            severity: critical   # -> ntfy (phone via Tailscale) + email (SES)
+          annotations:
+            summary: "Unexpected wired device on exposed switch {{ $labels.sw_name }} port {{ $labels.sw_port }}"
+            description: >-
+              A wired device NOT in the known camera/gate allowlist appeared on
+              {{ $labels.sw_name }} port {{ $labels.sw_port }}: MAC {{ $labels.mac }}
+              ({{ $labels.oui }}), name "{{ $labels.name }}", VLAN {{ $labels.vlan }}.
+              These are physically-exposed outdoor switches — this may be someone
+              plugging into an outdoor jack. VERIFY: is this a device you added? If
+              legit, add its MAC to the allowlist regex in
+              platform/kubernetes/monitoring/16-exposed-switch-alerts.yaml. If NOT,
+              treat as physical intrusion — the device is bounded to VLAN 212
+              (firewall-isolated cameras) but investigate the jack. A DUPLICATE of a
+              known MAC here = a possible clone/spoof.

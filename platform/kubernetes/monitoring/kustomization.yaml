@@ -43,3 +43,4 @@ resources:
   - service-status-report
   - aws-cost-exporter
   - 15-aws-cost-alerts.yaml
+  - 16-exposed-switch-alerts.yaml
