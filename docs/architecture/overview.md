@@ -54,7 +54,7 @@ High-level infrastructure design for the homelab environment.
 | Traefik | LoadBalancer on 10.10.201.70; serves `*.wind.etherport.net` via cert-manager wildcard + TLSStore default |
 | Cloudflare Tunnel | **Public edge.** `cloudflared` deploy (`platform/kubernetes/cloudflared/`) outbound-only; routes public traffic through CF Access. DNS authoritative on Cloudflare (the former AWS ALB edge was decommissioned 2026-05-27 — see [`../runbooks/archive/alb-decom.md`](../runbooks/archive/alb-decom.md)). |
 | Authentik SSO | IdP at `auth.wind.etherport.net` gating internal apps via OIDC + a Traefik forward-auth middleware (H38). |
-| Tailscale | Per-service ingresses managed by the Tailscale operator (e.g. `remediation-approve.<tailnet>.ts.net`) for tailnet-only access |
+| Tailscale | Per-service ingresses managed by the Tailscale operator (e.g. `remediation-approve.<tailnet>.ts.net`) for tailnet-only access, **plus** a `Connector` (`homelab-subnet-router`) advertising `10.10.192.0/19` to the tailnet — sole advertiser (M149) with a pinned static UDP endpoint (MetalLB VIP `10.10.201.74:41641`, M154) to avoid DERP-relay fallback. See [VPN: Tailscale](vpn-tailscale.md). |
 
 ## Cluster automation (auto-remediation namespace)
 
@@ -66,4 +66,5 @@ High-level infrastructure design for the homelab environment.
 - [Network Architecture](network.md)
 - [Firewall Zones](firewall-zones.md)
 - [VPN Infrastructure](vpn-wireguard.md)
+- [VPN: Tailscale](vpn-tailscale.md)
 - [AWS Infrastructure](aws-infrastructure.md)

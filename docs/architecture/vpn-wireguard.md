@@ -48,7 +48,7 @@ The local site WireGuard gateway runs in high availability mode with automatic f
 | Component | Primary | Backup | Failover Time |
 |-----------|---------|--------|---------------|
 | WireGuard wg0 | K8s pod | vpn-fallback VM | ~10-15 seconds |
-| VIP 10.10.201.20 | K8s node (k8s-w1) | vpn-fallback VM | ~2-3 seconds |
+| VIP 10.10.201.20 | K8s node (any worker; no per-node preference) | vpn-fallback VM | ~2-3 seconds |
 
 **How it works:**
 1. K8s WireGuard pod runs with Keepalived sidecar (VRRP priority 150; `state BACKUP`

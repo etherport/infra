@@ -52,11 +52,16 @@ The public edge is the Cloudflare Tunnel + Access (ALB decommissioned
 `docs/runbooks/archive/cloudflare-access-enable.md`.
 
 **MetalLB is BGP-only** (eBGP to the UDM at `10.10.201.1`), not L2 —
-VIPs (Traefik `.70`, DNS `.5/.6`) are advertised via BGP, so raw ICMP to
-a VIP fails by design and a same-subnet VLAN-201 host can't reach them.
+VIPs (Traefik `.70`, DNS `.5` + per-pod `.71`/`.72`, syslog `.73`, tailscale
+static-endpoint `.74`) are advertised via BGP, so raw ICMP to a VIP fails by
+design and a same-subnet VLAN-201 host can't reach them. `.6` is **not** a
+MetalLB VIP — it's the separate `vpn-fallback` VM's Technitium instance (a
+normal L2-reachable host on Servers/201), kept as DNS secondary precisely
+because it doesn't share the BGP-VIP reachability gap.
 
 ## Related Documentation
 
 - [Architecture Overview](overview.md)
 - [Firewall Zones](firewall-zones.md)
 - [VPN Infrastructure](vpn-wireguard.md)
+- [VPN: Tailscale](vpn-tailscale.md)

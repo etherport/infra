@@ -14,7 +14,7 @@ Alloy DaemonSet. Replaces "logs only live in pod stdout".
       |                       |
       |              UDM-Pro / USW / USG
       v
-  loki (singleBinary, ceph-rbd PVC 20Gi, 30d retention)
+  loki (singleBinary, ceph-rbd PVC 40Gi, 30d retention)
       |
       v
   grafana (datasource: Loki, auto-provisioned via ConfigMap)
@@ -97,7 +97,7 @@ Two options:
 - **Retention**: 30 d, enforced by the compactor. Change
   `loki.limits_config.retention_period` in
   `clusters/wind/helm-releases/loki.yaml`.
-- **PVC size**: 20Gi on `ceph-rbd`. To grow:
+- **PVC size**: 40Gi on `ceph-rbd`. To grow:
   1. Edit `singleBinary.persistence.size` in the HelmRelease.
   2. Flux applies it. Ceph RBD supports online expansion — the pod
      stays up.

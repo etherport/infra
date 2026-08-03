@@ -4,20 +4,20 @@ Default-deny + per-tier allowlists for the `wind` cluster. Closes H3 (the larges
 internal-segmentation gap: today Cilium is allow-all, so a compromised pod has
 unrestricted lateral movement). Detailed plan: `docs/planning/archive/hardening-plan-2026-06-10.md` §H3.
 
-> ⚠️ **14 TIERS LABELED — 6 enforcing, 8 in the audit-mode observation window (as of
-> 2026-07-27).** Check live before assuming either state: `kubectl get cm -n kube-system
-> cilium-config -o jsonpath='{.data.policy-audit-mode}'` (`true`=audit-only/no real drops
-> cluster-wide, `false`=enforce). Tiers `postgres` (1), `cue` (2), `dns`/Technitium (3),
-> `traefik` (4), `monitoring` (5) — the 5 H3 target tiers, enforcing since 2026-06-23 — and
-> `authentik` (6, the SSO IdP; M115, added 2026-07-01) were built+verified from Hubble/audit
-> data (0 drops) and are meant to enforce, but **because `policy-audit-mode` is a single
-> GLOBAL switch, they too revert to audit-only whenever it's flipped ON to onboard a new
-> batch** — which is the case right now: 8 more namespaces were labeled 2026-07-25
-> (`flux-system`, `velero`, `backups`, `tailscale`, `cert-manager`, `garage`,
-> `home-automation`, `plex` — tiers 7-14, manifests `17-tier-flux.yaml` through
-> `23-tier-home-automation.yaml` + `16-tier-plex.yaml`) and are still in their observation
-> window pending the next audit-OFF flip (tracked as M147/M151 in
-> `docs/planning/outstanding-work.md`). **All unlabeled namespaces remain allow-all.**
+> ⚠️ **14 TIERS LABELED — ALL 14 ENFORCING (as of 2026-07-28).** Check live before assuming
+> either state: `kubectl get cm -n kube-system cilium-config -o
+> jsonpath='{.data.policy-audit-mode}'` (`true`=audit-only/no real drops cluster-wide,
+> `false`=enforce; confirmed `false` live). Tiers `postgres` (1), `cue` (2), `dns`/Technitium
+> (3), `traefik` (4), `monitoring` (5) — the 5 H3 target tiers, enforcing since 2026-06-23 —
+> and `authentik` (6, the SSO IdP; M115, added 2026-07-01) were built+verified from
+> Hubble/audit data (0 drops). 8 more namespaces were labeled 2026-07-25 (`flux-system`,
+> `velero`, `backups`, `tailscale`, `cert-manager`, `garage`, `home-automation`, `plex` —
+> tiers 7-14, manifests `17-tier-flux.yaml` through `23-tier-home-automation.yaml` +
+> `16-tier-plex.yaml`); their observation window closed and audit-mode was flipped back OFF
+> 2026-07-28, so all 14 tiers now enforce together (tracked as M147/M151 in
+> `docs/planning/outstanding-work.md`). **Because `policy-audit-mode` is a single GLOBAL
+> switch, all 14 will revert to audit-only together if it's flipped ON again to onboard a
+> future tier 15.** **All unlabeled namespaces remain allow-all.**
 >
 > ⚠️ **Audit is a single GLOBAL switch.** To add the NEXT tier you must briefly flip audit
 > back ON, observe + build that namespace's allowlist, then flip OFF again — see "Adding a
@@ -110,9 +110,10 @@ that order). `kube-system`, `wireguard` (hostNetwork → node identity), `metall
   `world` `:587` (recovery/invite mail) + intra-ns. Deliberately **no `world` :443** (update
   check/analytics/gravatar all disabled).
 
-## Current state (2026-07-01)
+## Current state (updated 2026-07-28)
 
-Enforcing. `cilium_policy_audit_mode: false`. Enforced tiers:
+Enforcing. `cilium_policy_audit_mode: false`. Enforced tiers (first 6 built 2026-07-01 or
+earlier; tiers 7-14 added below):
 - **`postgres`** (`10-tier-postgres.yaml`) — verified 0 AUDIT over 7d before the flip;
   post-flip 0 DROPs, CNPG healthy, wikijs path OK, exporters scraping.
 - **`cue`** (`11-tier-cue.yaml`) — cue-api + single-instance cue-db; allowlist from live
@@ -145,6 +146,11 @@ Enforcing. `cilium_policy_audit_mode: false`. Enforced tiers:
   + `blackbox-exporter` (probe) + intra-ns; egress `postgres` `:5432` + SES `world` `:587` +
   intra-ns (redis). No `world` :443 (update check/analytics/avatars disabled). Validated
   under audit → 0 would-be-drops → audit OFF.
+
+- **tiers 7-14** — `flux-system`, `velero`, `backups`, `tailscale`, `cert-manager`, `garage`,
+  `home-automation`, `plex` (M147/M151, labeled 2026-07-25). Built+verified from the
+  2026-07-25→2026-07-28 audit observation window, then flipped to enforce with the rest on
+  2026-07-28. See `docs/planning/outstanding-work.md` M147/M151 for the per-tier build notes.
 
 All other namespaces are unlabeled = allow-all.
 

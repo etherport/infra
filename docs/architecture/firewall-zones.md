@@ -121,7 +121,7 @@ WireGuard tunnel; see note), **Hotspot** (Guest/206), **DMZ** (unused).
 |------|------|--------|------|---------|
 | (untagged) | Default | 10.10.199.0/24 | Internal | Untagged native — should be empty (DHCP `.100-.254` still on). Talk listens on `10.10.199.1`. |
 | 200 | Management | 10.10.200.0/24 | **Management** | Network equipment (UDM, switches, APs). Contained admin plane. |
-| 201 | Servers | 10.10.201.0/24 | **Trusted** | K8s nodes, DNS (MetalLB `.5/.6`), infra services. **UDM-routed** (gateway = UDM `10.10.201.1`). |
+| 201 | Servers | 10.10.201.0/24 | **Trusted** | K8s nodes, DNS (MetalLB `.5`, VM-fallback `.6` — see [network.md](network.md)), infra services. **UDM-routed** (gateway = UDM `10.10.201.1`). |
 | 204 | IoT | 10.10.204.0/24 | **IoT** | Smart-home devices. |
 | 205 | Security | 10.10.205.0/24 | **Security** | SimpliSafe (cameras retired). DHCP DNS empty — see anomalies. |
 | 206 | Guest | 10.10.206.0/24 | Hotspot | Guest WiFi (public resolvers). |
@@ -198,6 +198,7 @@ Groups: `DNS-Servers` (addr, 2 IPs), `DNS-Ports` (port, 53), `Twilio Signal IPs`
 | `Twilio-SIP` | **TCP 5061** | **10.10.201.40** (asterisk-sbc SIP bridge) | `infra/ansible/playbooks/asterisk-sbc.yml` |
 | `Twilio-Media-Signal` | **UDP 10000-20000** | **10.10.201.40** (asterisk-sbc media) | `asterisk-sbc.yml` |
 | `Wireguard Local` | TCP+UDP 9821 | 10.10.201.20 (VIP) | `platform/wireguard/README.md` |
+| `Tailscale-Static-Endpoint` | UDP 41641 | 10.10.201.74 (MetalLB VIP, `ts-router-static-endpoint` svc) | `infra/terraform/unifi/port-forwards.tf` (`unifi_port_forward.tailscale_static_endpoint`, M154, 2026-07-25) — port-forwards live in the UniFi TF provider, not `udm-firewall.yml` (that playbook only drives zone-firewall + DNS). |
 
 ---
 

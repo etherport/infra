@@ -114,6 +114,42 @@ spec:
     - "tag:subnet-router"
 ```
 
+### Static endpoint (DERP-fallback fix for the subnet router) — M154, 2026-07-25
+
+The Connector's `proxyClass` is `static-endpoint-router` (`platform/kubernetes/tailscale/`
+ProxyClass CR), which pins `tailscaled` to a fixed UDP port and advertises a dialable WAN
+endpoint so peers with hard NATs can hole-punch to the subnet router instead of silently
+falling back to a slow DERP relay:
+
+```yaml
+# ProxyClass static-endpoint-router
+spec:
+  statefulSet:
+    pod:
+      tailscaleContainer:
+        env:
+        - name: TS_TAILSCALED_EXTRA_ARGS
+          value: --port=41641
+        - name: TS_DEBUG_PRETENDPOINT
+          value: <homelab-WAN-IP>:41641   # must be updated if the WAN IP changes
+```
+
+A LoadBalancer Service exposes that fixed port on the MetalLB VIP so the UDM can forward
+WAN traffic to it:
+
+| Property | Value |
+|----------|-------|
+| Service | `ts-router-static-endpoint` (namespace `tailscale`) |
+| VIP | 10.10.201.74 |
+| Port | 41641/UDP |
+
+**Native Tailscale `staticEndpoints` only advertises node ExternalIPs**, which doesn't fit
+this cluster's topology (no node has the WAN IP), hence the `TS_DEBUG_PRETENDPOINT` env-var
+workaround + explicit VIP/UDM-forward path instead. ⚠️ **The advertised endpoint goes stale
+if the homelab WAN IP changes** — update `TS_DEBUG_PRETENDPOINT` (and the UDM port-forward)
+to match, or peers silently fall back to DERP again. Tell direct-vs-relay via `tailscale
+status`/`tailscale ping` (empty `curaddr` + a `relay` set = DERP fallback).
+
 ### Sole-advertiser model (no TS auto-failover) — M149/M150, 2026-07-25
 
 **The K8s Connector is the ONLY `10.10.192.0/19` advertiser. There is deliberately no
@@ -159,7 +195,7 @@ Exit nodes allow routing **all** traffic through a Tailscale node, not just priv
 | Node | Tailscale IP | Exit Location | Use Case |
 |------|--------------|---------------|----------|
 | vpn-aws | 100.117.87.10 | AWS us-west-2 | Privacy, US exit |
-| k8s-homelab-router | 100.75.199.69 | Home ISP | Appear at home (primary) |
+| k8s-homelab-router | 100.126.218.72 | Home ISP | Appear at home (primary) |
 | vpn-fallback | 100.97.20.113 | Home ISP | Appear at home (backup) |
 
 k8s-homelab-router and vpn-fallback are **both approved** exit nodes in the tailnet.
@@ -173,7 +209,7 @@ vpn-fallback re-registered as a tagged device after the M128 `vpn-local` →
 tailscale set --exit-node=100.117.87.10
 
 # Route ALL traffic through homelab (appear at home)
-tailscale set --exit-node=100.75.199.69
+tailscale set --exit-node=100.126.218.72
 
 # Disable exit node (split tunnel - only private traffic via Tailscale)
 tailscale set --exit-node=
@@ -186,7 +222,7 @@ Add to `~/.zshrc` for convenience:
 ```bash
 alias ts-split='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node='
 alias ts-aws='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node=100.117.87.10'
-alias ts-home='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node=100.75.199.69'
+alias ts-home='/Applications/Tailscale.app/Contents/MacOS/Tailscale set --exit-node=100.126.218.72'
 alias ts-status='/Applications/Tailscale.app/Contents/MacOS/Tailscale status'
 ```
 

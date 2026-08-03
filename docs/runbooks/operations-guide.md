@@ -254,7 +254,7 @@ kubectl logs -n flux-system deployment/kustomize-controller
 
 ### Web UI Access
 
-- Primary: https://dns.wind.etherport.net:5380
+- Primary: https://dns.wind.etherport.net (Traefik IngressRoute on 443 → technitium :5380 backend; the port is NOT exposed directly on this hostname)
 - Fallback: http://10.10.201.6:5380
 - AWS edge box (vpn-aws): http://10.10.100.10:5380
 

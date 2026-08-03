@@ -220,19 +220,19 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   jsonpath='{.data.policy-audit-mode}'`; `true`=audit-only/no enforcement, `false`=enforce).
   Steady state is `false` (enforce); IaC source of truth =
   `cilium_policy_audit_mode: false` in the kubespray inventory. It's briefly flipped `true`
-  while onboarding a new batch of tiers (see below), then flipped back — **as of 2026-07-27
-  it is live `true`** (M147/M151, tiers 7-14 in their observation window; outstanding-work.md
-  has current status). Toggle live via the `cilium-config` ConfigMap + `kubectl
+  while onboarding a new batch of tiers (see below), then flipped back — **live is `false`
+  (enforce) as of 2026-07-28** (M147/M151 audit-OFF flip; outstanding-work.md has current
+  status). Toggle live via the `cilium-config` ConfigMap + `kubectl
   rollout restart ds/cilium` (read only at startup), NOT a raw kubespray run. ⚠️ patch +
   rollout as SEPARATE commands (the compound one trips the auto-mode classifier). H3
   NetworkPolicy manifests in `platform/kubernetes/networkpolicies/`; enforcement is
-  **per-namespace opt-in via the `netpol.wind/enforced=true` label** — **14 labeled tiers
-  live: `postgres`, `cue`, `dns`/Technitium, `traefik`, `monitoring`, `authentik`** (the
-  original 5 H3 target tiers + `authentik` tier 6, M115 2026-07-01 — SSO IdP; each allowlist
-  built+verified from Hubble/audit data, 0 drops) **+ 8 more labeled 2026-07-25 and currently
-  in the audit-mode observation window: `flux-system`, `velero`, `backups`, `tailscale`,
-  `cert-manager`, `garage`, `home-automation`, `plex`** (M147/M151 — not yet enforcing until
-  the next audit-OFF flip). **All unlabeled namespaces stay allow-all.**
+  **per-namespace opt-in via the `netpol.wind/enforced=true` label** — **all 14 labeled tiers
+  now ENFORCING: `postgres`, `cue`, `dns`/Technitium, `traefik`, `monitoring`, `authentik`**
+  (the original 5 H3 target tiers + `authentik` tier 6, M115 2026-07-01 — SSO IdP) **+
+  `flux-system`, `velero`, `backups`, `tailscale`, `cert-manager`, `garage`,
+  `home-automation`, `plex`** (tiers 7-14, M147/M151 — enforcing since 2026-07-28, 0 drops
+  post-flip; each allowlist built+verified from Hubble/audit data). **All unlabeled
+  namespaces stay allow-all.**
   (dns query ports open to `all`, `:5380` admin in-cluster only; traefik + monitoring egress
   permissive — `cluster` any-port + enumerated `world` ports — so scrapes/routes never cut;
   traefik/monitoring labelled via the `namespace-pss-labels.yaml` patch since Helm-created.)

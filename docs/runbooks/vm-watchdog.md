@@ -1,12 +1,14 @@
 # Proxmox VM Hardware Watchdog
 
-> ⚠️ **STATUS 2026-06-24: NOT WORKING — BLOCKED (M91). The hardware watchdog has never
-> armed.** The node kernel (`6.8.0-124-generic`) lacks the `i6300esb` module (even
-> `linux-modules-extra` doesn't ship it), so `/dev/watchdog0` never appears and the guest
-> daemon is inert. The device is attached host-side but is dead weight. **Do NOT rely on
-> this as a safety net, and do NOT add a `modprobe i6300esb` task** (it FATALs the
-> k8s-node-fixes playbook). The procedure below is the intended design, retained for when
-> a kernel with the module is available. See CLAUDE.md §5 (M91) for the full incident.
+> ⚠️ **STATUS (M91, re-verified 2026-07-14 on kernel `6.8.0-134-generic`): NOT WORKING —
+> BLOCKED. The hardware watchdog has never armed.** The node kernel lacks the `i6300esb`
+> module (even `linux-modules-extra` doesn't ship it), so `/dev/watchdog0` never appears
+> and the guest daemon is inert. The device is attached host-side but is dead weight. **Do
+> NOT rely on this as a safety net, and do NOT add a `modprobe i6300esb` task** (it FATALs
+> the k8s-node-fixes playbook). The procedure below is the intended design, retained for
+> when a kernel with the module is available. Nodes are now on `6.8.0-136-generic`
+> (two kernel bumps past the last check) — re-run `modinfo i6300esb` on the PVE host
+> before assuming this is still current. See CLAUDE.md §5 (M91) for the full incident.
 
 ## Purpose
 
