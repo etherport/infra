@@ -87,6 +87,48 @@ regenerate-me rebuild templates). Flux Ready=True again on da3f411; PVCs safe. L
 delete-PVC recovery on a CNPG cluster that has a git-managed pre-bind PVC WILL wedge Flux —
 check `kubectl -n flux-system get kustomization` after any such surgery.
 
+## 2026-08-04 — INCIDENT: cp1 kernel fork-deadlock wedged the single API endpoint (resolved)
+
+**Symptom:** operator woke to a flood of error/down emails; on inspection most alerts had
+"self-resolved" but the cluster control plane was degraded.
+
+**Root cause chain (this is the important part):**
+1. A kernel update made kured start a **fleet reboot sweep**.
+2. cp1 took the kured lock and began its reboot — and hit a **kernel hung-task/fork
+   deadlock**: `runc`/`nfd-master` tasks blocked >1012s in `kernel_clone`, journald
+   watchdog timeout, `Failed unmounting run-cilium-cgroupv2.mount` +
+   containerd rootfs mounts. `fork()` was blocked SYSTEM-WIDE — the apiserver was
+   liveness-killed and could not restart (11 attempts), kubelet stopped reporting, and
+   **sshd could not fork** so the node was unreachable in-band. NOT resource exhaustion:
+   iowait 0%, disk idle, no OOM, pid_max 4M vs 601 tasks, kubepods pids 205/60722.
+3. Because cp1 is the **single control-plane endpoint** (documented SPOF — no HA API VIP),
+   every cilium agent cluster-wide lost its apiserver watch ("http2: client connection
+   lost", TLS handshake timeout) and began flapping → the alert storm.
+4. cp1 also **held the kured lock while wedged**, blocking every other node's reboot.
+
+**Recovery:** `qm shutdown 100` failed (guest agent can't fork) → **`qm reset 100`**
+(operator-approved; etcd quorum verified healthy on cp2+cp3 first). cp1 came back clean:
+0 D-state procs, apiserver 200, **etcd 3/3 quorate**, node Ready, all cilium agents 1/1.
+The kured sweep AUTO-RESUMED (w1 took the lock next). Devbox kubeconfig was repointed
+cp1→cp2 during the outage to regain visibility (left on cp2).
+
+**Also fixed:** orphaned `velero-test-garage-kopia` BackupRepository (namespace long
+deleted, zero backups, corrupted `kopia.maintenance` blob) was failing a job every ~4 min
+generating repeat KubeJobFailed noise — CR + jobs deleted.
+
+**Watch items / follow-ups:**
+- ⚠️ **Recurrence risk:** cp1 showed the same hung-task signature on **Jul 24** (systemd:1,
+  khugepaged blocked 546s). Kernel 6.8.0-136, containerd v2.2.5. If it recurs, this needs a
+  real kernel/containerd investigation — it is NOT a capacity problem.
+- ⚠️ **The SPOF is the amplifier:** a single wedged CP took out cluster-wide agent
+  connectivity because controlPlaneEndpoint = cp1 only. An HA API VIP (kube-vip/HAProxy)
+  would have contained this to one node. Strongest argument yet for fixing it.
+- ⏳ **cue-db-1 is on w4**, which is still pending its kured reboot → the single-instance
+  PDB will stall that drain (the known gotcha). Pre-empt by deleting the cue-db pod when
+  w4 cordons, or w4 ends up stuck cordoned again.
+- `CiliumNetpolDropFlow` fired on benign IPv6 link-local (ICMPv6 RS / mDNS, "Unsupported
+  L3 protocol") amplified by the mass pod restart — consider excluding those in the rule.
+
 ## 2026-08-02 — CORRECTION: MAB not achievable on the outdoor switches; reverted
 
 Operator spotted the UDM UI notice "options that will not be applied to the device"
