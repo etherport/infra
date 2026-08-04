@@ -87,6 +87,42 @@ regenerate-me rebuild templates). Flux Ready=True again on da3f411; PVCs safe. L
 delete-PVC recovery on a CNPG cluster that has a git-managed pre-bind PVC WILL wedge Flux —
 check `kubectl -n flux-system get kustomization` after any such surgery.
 
+## 2026-08-04 (cont. 2) — H47: HA API endpoint LIVE (kube-vip) — cp1 SPOF killed
+
+**The SPOF that amplified this morning's incident is fixed.** `10.10.201.49` /
+`k8s-api.wind.etherport.net` is now an HA Kubernetes API VIP held by kube-vip (ARP/L2)
+across cp1/cp2/cp3. **Failover PROVEN**: killed kube-vip on the holder (cp1) → VIP moved
+to cp2 in ~10s and kept answering `readyz=200`.
+
+**Staged execution (each gate verified, all with `--limit` one CP at a time — the
+control-plane play has NO `serial:`, so a group run restarts all 3 apiservers at once):**
+- *Stage 1* — `supplementary_addresses_in_ssl_keys: [10.10.201.49, k8s-api.wind...]` →
+  kubespray detected SAN drift (`openssl -checkip/-checkhost`), removed apiserver.crt and
+  regenerated per CP. Verified with `-checkip/-checkhost` on all 3. Inert for clients.
+- *Stage 2* — `kube_vip_enabled/arp/controlplane` + `loadbalancer_apiserver`. ⚠️ **FIRST
+  ATTEMPT FAILED**: setting `loadbalancer_apiserver` makes the control-plane role
+  "Wait for k8s apiserver" AT THE VIP, but the kube-vip manifest is deployed by the
+  **node** role — so `--tags=control-plane` waits forever for a VIP nothing is serving.
+  **Fix: deploy kube-vip FIRST with `--tags=kube-vip`, then run control-plane.** Nothing
+  broke (only downloads/kubeadm-config written; live cluster untouched).
+- *Stage 3* — control-plane re-run completed cleanly once the VIP existed.
+
+**What actually needed migrating was smaller than feared:** workers already load-balance
+across all 3 CPs via nginx-proxy, and CP kubelets use `127.0.0.1:6443`. kubespray does NOT
+rewrite the cluster-level `kubeadm-config` ConfigMap on an existing cluster, so the
+remaining two changes were done directly: (1) ConfigMap `controlPlaneEndpoint` →
+`k8s-api.wind.etherport.net:6443` (governs FUTURE `kubeadm join`), (2) devbox kubeconfig →
+the VIP name (this was the thing that made kubectl hang during the incident).
+
+**kubespray-vs-live drift check (the operator's other question) — clean.** The M75 IRSA
+`--service-account-issuer` + `--api-audiences` in the inventory match live EXACTLY (the
+setting that 401s every in-cluster token and breaks Multus if reverted). Across ~6 runs the
+only recurring failure was `k8s-w2` apt-lock in the post-run pre-flight (unattended-upgrades
+holding /var/lib/apt/lists) — benign, unrelated, but worth a retry-with-lock-wait later.
+
+**Live state:** 8/8 nodes Ready, 0 pods down, VIP 200 by IP and by DNS with valid TLS,
+3× kube-vip pods Running, all 3 apiservers 200.
+
 ## 2026-08-04 (cont.) — M91 hardware watchdog UNBLOCKED + armed; kured sweep finished
 
 **M91 was blocked on a FALSE PREMISE for months.** The standing note said the i6300esb
