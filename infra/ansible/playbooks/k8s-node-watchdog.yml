@@ -1,0 +1,167 @@
+---
+# M91 — i6300esb HARDWARE watchdog on the k8s VMs (auto-reset a wedged node).
+#
+# WHY: on 2026-08-04 cp1 hit a kernel hung-task/fork deadlock — `fork()` blocked
+# system-wide, so the apiserver could not restart and sshd could not even accept a
+# session. The node pinged but was otherwise inert and needed a MANUAL `qm reset`
+# from the PVE host. Because cp1 was (at the time) the single control-plane
+# endpoint, that took cluster-wide agent connectivity with it. A hardware watchdog
+# recovers this class of failure automatically in ~60s.
+#
+# ⚠️ M91 WAS WRONGLY BELIEVED IMPOSSIBLE. The long-standing note said "the
+# i6300esb kernel module is ABSENT from the node kernel". The real cause was that
+# **`linux-modules-extra-<kernel>` was simply never installed** — the module ships
+# in that package, which is in the standard Ubuntu repo. The PCI device itself was
+# already attached host-side (`qm set <vmid> --watchdog model=i6300esb,action=reset`,
+# present on all 8 VMs). Installing the package + loading the module makes
+# /dev/watchdog0 appear immediately (verified on k8s-w4, 2026-08-04).
+#
+# ⚠️ COLD-START REQUIREMENT: the emulated PCI device only appears after the VM's
+# next COLD start (stop+start), NOT a warm `reboot`. Check with
+# `lspci | grep -i "6300ESB Watchdog"`. Nodes without the device are SKIPPED by
+# this playbook (it is a no-op there) — cold-start them, then re-run.
+#
+# HOW IT PROTECTS: systemd opens /dev/watchdog0 and pets it every
+# RuntimeWatchdogSec/2. If systemd cannot pet it for RuntimeWatchdogSec (because
+# the kernel/userspace is wedged), the emulated watchdog expires and qemu applies
+# the PVE `action=reset` → hard VM reset. Recovery is automatic.
+#
+# Usage:
+#   KUBESPRAY_SSH_KEY=~/.ssh/id_homelab_cert \
+#   ansible-playbook -i inventory/wind/ playbooks/k8s-node-watchdog.yml
+#   # single node:  --limit k8s-w4        # check only: --check --diff
+- name: Enable the i6300esb hardware watchdog on k8s nodes
+  hosts: "{{ target_hosts | default('k8s_cluster') }}"
+  become: true
+  # One node at a time: arming a watchdog is low-risk, but never touch the whole
+  # control plane simultaneously.
+  serial: 1
+
+  vars:
+    # systemd pets every RuntimeWatchdogSec/2 (=30s). 60s is long enough to ride
+    # out normal load spikes (this cluster sees storage stalls) but short enough
+    # that a true wedge self-heals fast.
+    watchdog_runtime_sec: 60
+    watchdog_shutdown_sec: 10min
+
+  tasks:
+    - name: Detect the emulated i6300ESB PCI device
+      ansible.builtin.shell: |
+        set -o pipefail
+        lspci | grep -ci '6300ESB Watchdog' || true
+      args:
+        executable: /bin/bash
+      changed_when: false
+      # Read-only probe: must ALSO run under --check, otherwise check mode skips
+      # it, wd_device is empty, and every host looks like it lacks the device.
+      check_mode: false
+      register: wd_device
+
+    - name: Report nodes lacking the PCI device (need a COLD start)
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}: NO i6300ESB PCI device — the VM needs a COLD
+          start (qm stop + qm start; a warm reboot is NOT enough) before the
+          watchdog can be armed. Skipping this host.
+      when: wd_device.stdout | trim | int == 0
+
+    - name: Configure the watchdog (only where the device exists)
+      when: wd_device.stdout | trim | int > 0
+      block:
+        - name: Install linux-modules-extra (ships i6300esb) for the RUNNING kernel
+          ansible.builtin.apt:
+            name: "linux-modules-extra-{{ ansible_kernel }}"
+            state: present
+            update_cache: true
+            cache_valid_time: 3600
+
+        # ⚠️ MUST happen BEFORE the module is loaded. The legacy `watchdog`
+        # daemon package is installed on these nodes (from the original M91
+        # attempt) and sits dormant while /dev/watchdog0 is absent. The moment
+        # the module creates the device the daemon wakes up, runs ITS health
+        # checks, and REBOOTS the node on a failed check — that is exactly what
+        # rebooted k8s-cp1 at 12:11 on 2026-08-04 (clean systemd-shutdown,
+        # preceded by "watchdog.service: Triggering OnFailure="). Two watchdog
+        # consumers must never share the device; systemd (RuntimeWatchdogSec)
+        # is the single owner here.
+        - name: Disable + mask the legacy watchdog daemon (conflicts with systemd)
+          ansible.builtin.systemd:
+            name: watchdog
+            state: stopped
+            enabled: false
+            masked: true
+          failed_when: false  # not installed on every node
+
+        - name: Load the i6300esb module now
+          community.general.modprobe:
+            name: i6300esb
+            state: present
+
+        - name: Persist the module across reboots
+          ansible.builtin.copy:
+            dest: /etc/modules-load.d/i6300esb.conf
+            content: "i6300esb\n"
+            owner: root
+            group: root
+            mode: "0644"
+
+        - name: Wait for /dev/watchdog0 to appear
+          ansible.builtin.wait_for:
+            path: /dev/watchdog0
+            timeout: 20
+
+        - name: Ensure the systemd drop-in directory exists
+          ansible.builtin.file:
+            path: /etc/systemd/system.conf.d
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Arm the systemd watchdog (pets /dev/watchdog0)
+          ansible.builtin.copy:
+            dest: /etc/systemd/system.conf.d/watchdog.conf
+            owner: root
+            group: root
+            mode: "0644"
+            content: |
+              [Manager]
+              # M91: i6300esb hardware watchdog. systemd pets /dev/watchdog0 every
+              # RuntimeWatchdogSec/2; if it cannot (kernel/userspace wedge like the
+              # 2026-08-04 cp1 fork-deadlock), qemu HARD RESETS the VM per the PVE
+              # watchdog action=reset. ShutdownWatchdogSec guards a hung reboot.
+              RuntimeWatchdogSec={{ watchdog_runtime_sec }}
+              ShutdownWatchdogSec={{ watchdog_shutdown_sec }}
+          register: wd_conf
+
+        - name: Re-exec systemd to pick up the watchdog config
+          ansible.builtin.command: systemctl daemon-reexec
+          when: wd_conf.changed  # noqa no-handler (must take effect before verify)
+          changed_when: true
+
+        - name: Verify systemd is driving the watchdog
+          ansible.builtin.shell: |
+            set -o pipefail
+            echo "runtime=$(systemctl show -p RuntimeWatchdogUSec --value)"
+            echo "state=$(cat /sys/class/watchdog/watchdog0/state 2>/dev/null)"
+            # PID 1 (systemd) must be the ONLY holder — anything else means a
+            # second consumer is racing it (see the legacy-daemon note above).
+            echo "holder=$(fuser /dev/watchdog0 2>/dev/null | tr -d ' ')"
+          args:
+            executable: /bin/bash
+          changed_when: false
+          register: wd_verify
+
+        - name: Show watchdog status
+          ansible.builtin.debug:
+            var: wd_verify.stdout_lines
+
+        - name: Fail if the watchdog did not arm
+          ansible.builtin.assert:
+            that:
+              - "'state=active' in wd_verify.stdout"
+              - "'runtime=0' not in wd_verify.stdout"
+              - "'holder=1' in wd_verify.stdout"
+            fail_msg: >-
+              Watchdog did not arm on {{ inventory_hostname }} — /dev/watchdog0
+              exists but systemd is not petting it. Do NOT leave it half-configured.
