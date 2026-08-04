@@ -180,6 +180,16 @@ records:
     value: 10.10.201.70
     comment: Open WebUI chat interface (via Traefik)
 
+  # H47 (2026-08-04): HA Kubernetes API endpoint. kube-vip holds this VIP in
+  # ARP/L2 mode across the 3 control planes, replacing the cp1-only
+  # controlPlaneEndpoint (10.10.201.50) whose wedge on 2026-08-04 took
+  # cluster-wide agent connectivity with it. NB this is an L2/ARP VIP, NOT a
+  # MetalLB BGP VIP — so VLAN-201 hosts CAN reach it (unlike .70/.5).
+  - name: k8s-api
+    type: A
+    value: 10.10.201.49
+    comment: Kubernetes API HA VIP (kube-vip ARP across cp1/cp2/cp3)
+
   - name: prox
     type: A
     value: 10.10.201.70
