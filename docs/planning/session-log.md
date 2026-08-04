@@ -87,6 +87,48 @@ regenerate-me rebuild templates). Flux Ready=True again on da3f411; PVCs safe. L
 delete-PVC recovery on a CNPG cluster that has a git-managed pre-bind PVC WILL wedge Flux —
 check `kubectl -n flux-system get kustomization` after any such surgery.
 
+## 2026-08-04 (cont.) — M91 hardware watchdog UNBLOCKED + armed; kured sweep finished
+
+**M91 was blocked on a FALSE PREMISE for months.** The standing note said the i6300esb
+kernel module was "ABSENT from the node kernel". Truth: the module ships in
+**`linux-modules-extra-<kernel>`, which was simply never installed** (a normal Ubuntu repo
+package). The PCI device was already attached host-side on ALL 8 VMs
+(`qm config` shows `watchdog: model=i6300esb,action=reset`). `apt install
+linux-modules-extra` + `modprobe i6300esb` → `/dev/watchdog0` appears immediately
+(driver identity "i6300ESB timer", 30s default). **ARMED on cp1/cp2/cp3/w4**
+(systemd RuntimeWatchdogSec=60, state=active) — a node that wedges like cp1 did this
+morning now gets hard-reset by qemu in ~60s instead of needing a manual `qm reset`.
+IaC: `infra/ansible/playbooks/k8s-node-watchdog.yml` (serial:1, skips nodes lacking the
+device, asserts systemd is sole holder).
+
+⚠️ **HAZARD FOUND THE HARD WAY — cost an unplanned cp1 reboot (12:11).** The legacy
+`watchdog` DAEMON package is installed on these nodes (residue of the original M91
+attempt) and sits dormant while /dev/watchdog0 is absent. The moment the module creates
+the device, the daemon wakes, runs ITS OWN health checks, and **reboots the node** on a
+failure — cp1's journal shows `watchdog.service: Triggering OnFailure=` then a clean
+`systemd-shutdown`. Two watchdog consumers must never share the device. Fix applied to all
+4 nodes + encoded in the playbook: **disable+mask the legacy daemon BEFORE loading the
+module**; verify asserts PID 1 (systemd) is the only holder of /dev/watchdog0.
+
+⏳ **w1/w2/w3/gpu1 still need a COLD start** (qm stop+start; a warm reboot does NOT attach
+the emulated PCI device) before the watchdog can arm there. Playbook is a safe no-op on
+them until then.
+
+**kured sweep completed:** unblocked w4's stalled drain by deleting cue-db-1 (the
+documented single-instance-PDB gotcha) → rescheduled to w1, cluster healthy 1/1 → w4
+rebooted + uncordoned. All 8 nodes Ready, etcd 3/3, zero non-Running pods.
+
+**STILL OPEN — HA API endpoint (operator approved "do the full migration now"):** NOT
+started, deliberately. Sequencing: it is unwise to run a kubespray control-plane
+cert/endpoint migration (restarts all 3 apiservers) in the same window as a fleet reboot
+sweep + an unplanned CP reboot. Plan for the next focused session: kube-vip ARP mode
+(kubespray `kube_vip_enabled/kube_vip_arp_enabled/kube_vip_controlplane_enabled/
+kube_vip_address`), VIP on a VERIFIED-free VLAN-201 IP (NB .46 is step-ca — firewalled,
+so ping alone is NOT proof of free; check Technitium + UDM reservations), migrate
+controlPlaneEndpoint + apiserver cert SANs, then repoint kubeconfigs. Workers already
+nginx-proxy across all 3 CPs, so the SPOF is really controlPlaneEndpoint + external
+kubeconfigs (devbox kubeconfig currently pinned to cp2 as the interim mitigation).
+
 ## 2026-08-04 — INCIDENT: cp1 kernel fork-deadlock wedged the single API endpoint (resolved)
 
 **Symptom:** operator woke to a flood of error/down emails; on inspection most alerts had
