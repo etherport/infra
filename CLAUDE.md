@@ -65,8 +65,13 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
 - **Node OS patching:** `infra/ansible/playbooks/k8s-node-patch.yml` (rolling
   cordon/drain/`apt full-upgrade`/reboot-if-required/uncordon, `serial:1`, force-deletes
   PDB-blocked single-instance CNPG pods). Its kubectl steps are `delegate_to: localhost`.
-  ⚠️ **There is NO HA API VIP** (`controlPlaneEndpoint` = the single cp1 `10.10.201.50`;
-  workers use local `nginx-proxy`). So to patch a **control-plane** node, point the
+  ✅ **HA API VIP LIVE since 2026-08-04 (H47)**: `controlPlaneEndpoint` =
+  `k8s-api.wind.etherport.net:6443` → **10.10.201.49**, held by **kube-vip in ARP/L2 mode**
+  across cp1/cp2/cp3 (`kube_vip_*` in the kubespray inventory `addons.yml`; static pod
+  `kube-vip.yml` on each CP). Failover verified (~10s, VIP kept serving). Workers also still
+  use local `nginx-proxy` across all 3 CPs. NB it is an **ARP** VIP, so VLAN-201 hosts CAN
+  reach it — unlike the MetalLB **BGP** VIPs (.5/.70). Replaced the old single-cp1 endpoint,
+  whose wedge on 2026-08-04 flapped every cilium agent cluster-wide. So to patch a **control-plane** node, point the
   playbook at a *different* healthy CP: `-l k8s-cpN -e confirm=yes -e
   kubeconfig_path=<temp kubeconfig → another CP>`. Patch **cp1 LAST** (etcd leader +
   endpoint); verify etcd quorum (`etcdctl endpoint health --cluster`, `/etc/etcd.env`
