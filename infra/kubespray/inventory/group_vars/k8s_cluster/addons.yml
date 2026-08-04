@@ -233,16 +233,31 @@ argocd_enabled: false
 
 # The plugin manager for kubectl
 
-# Kube VIP
-kube_vip_enabled: false
-# kube_vip_arp_enabled: true
-# kube_vip_controlplane_enabled: true
-# kube_vip_address: 192.168.56.120
-# loadbalancer_apiserver:
-#   address: "{{ kube_vip_address }}"
-#   port: 6443
-# kube_vip_interface: eth0
-# kube_vip_services_enabled: false
+# Kube VIP — H47 (2026-08-04): HA Kubernetes API endpoint.
+#
+# WHY: controlPlaneEndpoint was cp1 alone (10.10.201.50). When cp1 hit a kernel
+# fork-deadlock on 2026-08-04 the apiserver died and could not restart, and
+# because every cluster-internal join/kubeconfig pointed at that one address,
+# cilium agents lost their apiserver watch cluster-wide. kube-vip floats
+# 10.10.201.49 (k8s-api.wind.etherport.net) across cp1/cp2/cp3 so losing any one
+# control plane is survivable.
+#
+# ARP (L2) mode, NOT BGP: MetalLB already owns the BGP session to the UDM, and a
+# BGP VIP is unreachable from VLAN-201 hosts (they have no route — the documented
+# .70/.5 gotcha). An ARP VIP answers on-subnet, which is what the CPs and the
+# devbox need. Different IP range from MetalLB (.5, .70-.90) so no conflict.
+#
+# kube_vip_services_enabled stays FALSE — MetalLB does LoadBalancer Services here;
+# kube-vip is control-plane-only.
+kube_vip_enabled: true
+kube_vip_arp_enabled: true
+kube_vip_controlplane_enabled: true
+kube_vip_services_enabled: false
+kube_vip_address: 10.10.201.49
+kube_vip_interface: eth0
+loadbalancer_apiserver:
+  address: "{{ kube_vip_address }}"
+  port: 6443
 # kube_vip_dns_mode: first
 # kube_vip_cp_detect: false
 # kube_vip_leasename: plndr-cp-lock
