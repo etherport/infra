@@ -304,14 +304,26 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   with apply+reboots — they do nothing; verify the live VM config, not just "apply succeeded"). The
   k8s-vms VMs carry `lifecycle { ignore_changes = [watchdog] }` to suppress it. The device is now
   attached host-side via `qm set <vmid> --watchdog model=i6300esb,action=reset` (PVE API; surfaces in
-  the guest as a PCI device on the VM's next COLD start) — **BUT the watchdog still does NOT work: the
-  `i6300esb` kernel module is ABSENT from the node kernel** (re-verified on `6.8.0-134-generic`
-  2026-07-14 — still only `softdog` + `wdat_wdt`; re-check `modinfo i6300esb` after each kernel
-  bump), so `/dev/watchdog0` never appears and the guest
-  daemon is inert. **The hardware watchdog has never armed; it's BLOCKED pending the module** (M91). Do
-  NOT add a `modprobe i6300esb` task — it FATALs the k8s-node-fixes playbook. **Verify a kernel module
-  exists before attaching watchdog devices + rebooting nodes** (this lesson cost ~7 reboots + 3
-  incidents). Also: a **VM graceful shutdown HANGS** if an un-drainable single-instance CNPG pod (PDB
+  the guest as a PCI device on the VM's next **COLD** start — a warm `reboot` is NOT enough).
+  ✅ **The hardware watchdog is LIVE on all 8 nodes since 2026-08-04 (M91 DONE)** — systemd feeds
+  `/dev/watchdog0` (`RuntimeWatchdogSec=60`), so a wedged node hard-resets in ~60s (the automatic
+  recovery for the cp1 fork-deadlock). IaC = `infra/ansible/playbooks/k8s-node-watchdog.yml`
+  (idempotent + self-asserting; re-run after any node rebuild). The old "the `i6300esb` module is
+  ABSENT from the kernel" claim was **WRONG** — `linux-modules-extra-$(uname -r)` was simply never
+  installed (that package ships the module).
+  ⚠️ **Three things will bite you here:** (1) **`/etc/modules-load.d/` does NOT work for it** — Ubuntu
+  deny-lists the module in `/lib/modprobe.d/blacklist_linux_<kernel>.conf` (regenerated on every
+  kernel bump, so it can't be removed durably), `systemd-modules-load` honours it, and the watchdog
+  silently vanishes on the next reboot (this really happened to cp3 + w4). Load it from the
+  **initramfs** (`/etc/initramfs-tools/modules` + `update-initramfs -u`), which modprobes by name
+  without `-b` and lands before PID 1 — systemd opens the device once at startup and never retries.
+  (2) **Never let two consumers share the device** — the legacy `watchdog` *daemon* wakes the instant
+  the module loads and reboots the node on its own health checks (it rebooted cp1 on 2026-08-04); the
+  playbook masks it *before* the modprobe and asserts systemd (PID 1) is the sole holder.
+  (3) `lsinitramfs | grep i6300esb` is a **false-positive** durability check (`MODULES=most` bundles
+  every driver into every initrd) — assert on `/etc/initramfs-tools/modules` instead. **General
+  lesson: verify a kernel module actually loads before attaching watchdog devices + rebooting nodes**
+  (this cost ~7 reboots + 3 incidents). Also: a **VM graceful shutdown HANGS** if an un-drainable single-instance CNPG pod (PDB
   minAvailable=1, e.g. `cue-db`) sits on it (RBD won't unmount) — drain evicts what it can, then
   `kubectl delete pod` the PDB-blocked ones before any node reboot.
 - **Authentik is the SSO IdP** at **`auth.wind.etherport.net`** (goauthentik 2024.12, embedded outpost;

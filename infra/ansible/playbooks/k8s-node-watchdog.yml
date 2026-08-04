@@ -21,6 +21,14 @@
 # `lspci | grep -i "6300ESB Watchdog"`. Nodes without the device are SKIPPED by
 # this playbook (it is a no-op there) — cold-start them, then re-run.
 #
+# ⚠️ THE MODULE IS DENY-LISTED BY UBUNTU. /lib/modprobe.d/blacklist_linux_<kernel>.conf
+# (shipped by linux-modules, regenerated on every kernel bump) contains
+# `blacklist i6300esb`, so /etc/modules-load.d/ NEVER loads it at boot —
+# systemd-modules-load logs "Module 'i6300esb' is deny-listed (by kmod)" and the
+# watchdog silently disappears on the next reboot. We load it from the
+# **initramfs** instead (explicit modprobe by name, no `-b`, before PID 1). The
+# verify step asserts the module is in the initramfs for exactly this reason.
+#
 # HOW IT PROTECTS: systemd opens /dev/watchdog0 and pets it every
 # RuntimeWatchdogSec/2. If systemd cannot pet it for RuntimeWatchdogSec (because
 # the kernel/userspace is wedged), the emulated watchdog expires and qemu applies
@@ -97,13 +105,45 @@
             name: i6300esb
             state: present
 
-        - name: Persist the module across reboots
-          ansible.builtin.copy:
-            dest: /etc/modules-load.d/i6300esb.conf
-            content: "i6300esb\n"
+        # ⚠️ /etc/modules-load.d/ DOES NOT WORK for this module. Ubuntu's
+        # linux-modules package ships a per-kernel deny-list at
+        # /lib/modprobe.d/blacklist_linux_<kernel>.conf containing
+        # `blacklist i6300esb` (it is regenerated on EVERY kernel bump, so it
+        # cannot be removed durably). systemd-modules-load honours that
+        # deny-list and skips the module — "Module 'i6300esb' is deny-listed
+        # (by kmod)" — so the watchdog silently vanished on the next reboot
+        # (observed on k8s-cp3 + k8s-w4 after the 2026-08-04 kured sweep: PCI
+        # device present, module absent, no /dev/watchdog0, systemd holding
+        # nothing).
+        #
+        # The deny-list only suppresses ALIAS/auto-load resolution; an explicit
+        # `modprobe i6300esb` by name still inserts it. The initramfs is the
+        # right lever: initramfs-tools' load_modules() runs a bare
+        # `/sbin/modprobe $m` with NO `-b`, so the deny-list does not apply, and
+        # it loads BEFORE PID 1 — which matters because systemd opens
+        # /dev/watchdog0 once at manager start and never retries (a module
+        # loaded later needs a `daemon-reexec`, as below).
+        - name: Persist the module across reboots (initramfs — bypasses the kmod deny-list)
+          ansible.builtin.lineinfile:
+            path: /etc/initramfs-tools/modules
+            line: i6300esb
+            regexp: '^\s*i6300esb\s*$'
+            state: present
+            create: true
             owner: root
             group: root
             mode: "0644"
+          register: wd_initramfs
+
+        - name: Rebuild the initramfs so the module loads at next boot
+          ansible.builtin.command: update-initramfs -u
+          when: wd_initramfs.changed  # noqa no-handler (must land before we claim durability)
+          changed_when: true
+
+        - name: Remove the ineffective modules-load.d drop-in (deny-listed, see above)
+          ansible.builtin.file:
+            path: /etc/modules-load.d/i6300esb.conf
+            state: absent
 
         - name: Wait for /dev/watchdog0 to appear
           ansible.builtin.wait_for:
@@ -147,6 +187,13 @@
             # PID 1 (systemd) must be the ONLY holder — anything else means a
             # second consumer is racing it (see the legacy-daemon note above).
             echo "holder=$(fuser /dev/watchdog0 2>/dev/null | tr -d ' ')"
+            # Durability: the module MUST be listed in /etc/initramfs-tools/modules,
+            # otherwise the kmod deny-list silently drops it on the next reboot.
+            # NB do NOT check "lsinitramfs | grep i6300esb" — the Ubuntu default
+            # MODULES=most bundles the .ko into every initrd regardless, so that
+            # check passes even when the module will never be LOADED. This file
+            # is what becomes /conf/modules, which the initramfs actually probes.
+            echo "initramfs=$(grep -c '^i6300esb' /etc/initramfs-tools/modules 2>/dev/null)"
           args:
             executable: /bin/bash
           changed_when: false
@@ -162,6 +209,10 @@
               - "'state=active' in wd_verify.stdout"
               - "'runtime=0' not in wd_verify.stdout"
               - "'holder=1' in wd_verify.stdout"
+              - "'initramfs=0' not in wd_verify.stdout"
             fail_msg: >-
-              Watchdog did not arm on {{ inventory_hostname }} — /dev/watchdog0
-              exists but systemd is not petting it. Do NOT leave it half-configured.
+              Watchdog did not arm (or is not reboot-durable) on
+              {{ inventory_hostname }}. state/holder tell you whether systemd is
+              petting /dev/watchdog0 right now; initramfs=0 means it IS armed but
+              will silently disappear on the next reboot (kmod deny-list). Do NOT
+              leave it half-configured.

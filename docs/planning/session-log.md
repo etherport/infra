@@ -87,6 +87,64 @@ regenerate-me rebuild templates). Flux Ready=True again on da3f411; PVCs safe. L
 delete-PVC recovery on a CNPG cluster that has a git-managed pre-bind PVC WILL wedge Flux —
 check `kubectl -n flux-system get kustomization` after any such surgery.
 
+## 2026-08-04 (cont. 3) — M91 DONE: watchdog armed on all 8 nodes + made reboot-durable
+
+**M91 is closed.** All four remaining nodes (w2, w3, w1, gpu1) were cold-started to attach
+their emulated i6300esb PCI device, and the hardware watchdog is now armed on **all 8 k8s
+VMs**: module loaded, `/sys/class/watchdog/watchdog0/state=active`, systemd (PID 1) the sole
+holder of `/dev/watchdog0`, `RuntimeWatchdogSec=60`. A wedged node now hard-resets in ~60s
+instead of needing a manual `qm reset` from the PVE host — the automatic recovery for the cp1
+fork-deadlock that has now bitten twice (07-24, 08-04). Combined with H47's HA API VIP, a
+single wedged control plane is no longer a cluster-wide event.
+
+**Cold-start order + notes.** One node at a time, each fully verified Ready before the next:
+w2 (also cleared an `apt-get update` process that had been stuck holding the dpkg lock since
+Jul 24 — 11 days), w3, w1 (needed `kubectl -n cue delete pod cue-db-1` to clear the
+single-instance CNPG PDB blocking the drain — the usual dance), then gpu1 last for the brief
+Plex outage. gpu1's host has **no `nvidia-smi` and that is expected** — the driver is
+containerized by the gpu-operator, which cannot schedule while the node is cordoned. After
+uncordoning, the CUDA validator completed, `nvidia.com/gpu.shared` re-registered as 2, Plex
+rescheduled onto gpu1, and `nvidia-smi` inside the Plex container reports Tesla P40 / driver
+580.105.08. Don't mistake a cordoned GPU node for a broken driver.
+
+**The real find: the watchdog was NOT reboot-durable, and two nodes had already lost it.**
+A fleet-wide check (rather than trusting the earlier PLAY RECAP) showed **cp3 and w4 with the
+PCI device present but no module, no `/dev/watchdog0`, and nothing holding it** — they had
+silently disarmed across this morning's kured sweep. Cause: Ubuntu ships
+`blacklist i6300esb` in `/lib/modprobe.d/blacklist_linux_<kernel>.conf` (regenerated on
+**every** kernel bump, so it can't be removed durably), and `systemd-modules-load` honours
+that deny-list — logging *"Module 'i6300esb' is deny-listed (by kmod)"* and skipping it. So
+the `/etc/modules-load.d/` drop-in the playbook was relying on **never worked**; the 6 armed
+nodes were armed only because the playbook had explicitly modprobed them, and every one would
+have disarmed on its next reboot.
+
+**Fix: load it from the initramfs.** The deny-list only suppresses alias/auto-load resolution
+— an explicit `modprobe i6300esb` by name still inserts it, and initramfs-tools'
+`load_modules()` runs a bare `/sbin/modprobe $m` with **no `-b`** (verified by reading
+`/usr/share/initramfs-tools/scripts/functions` before committing to the approach). It also
+loads *before* PID 1, which matters because systemd opens `/dev/watchdog0` once at manager
+start and never retries — a module loaded later needs a `daemon-reexec`. The playbook now adds
+`i6300esb` to `/etc/initramfs-tools/modules` + runs `update-initramfs -u`, and removes the
+ineffective `modules-load.d` drop-in. This is *more* durable than the original plan assumed:
+that file persists across kernel upgrades and `update-initramfs` re-runs automatically on
+kernel install, so it survives kured/kubespray kernel bumps with no per-kernel step.
+
+**Verification trap worth remembering.** My first durability assertion was
+`lsinitramfs … | grep -c i6300esb`, which passed on every host — including the two that were
+provably broken. Ubuntu's default `MODULES=most` bundles the `.ko` into every initrd
+regardless of whether it will ever be *loaded*, so that check is a guaranteed false positive.
+The assertion now checks `/etc/initramfs-tools/modules` (what actually becomes the initrd's
+`/conf/modules`). Re-run afterwards: `changed=0` on all 8 with all four assertions passing.
+
+**Also corrected:** the playbook's shell block broke YAML parsing when I put an apostrophe
+("Ubuntu's") inside it — ansible's free-form arg splitting fails on the unbalanced quote
+("failed at splitting arguments, either an unbalanced jinja2 block or quotes"). Avoid
+apostrophes in `ansible.builtin.shell` bodies; `--syntax-check` catches it in seconds.
+
+**Next:** nothing outstanding on M91. Open watch items unchanged — the cp1 kernel hung-task
+root cause is still unknown (now contained by the watchdog rather than fixed), UNAS nvme0
+cache remains physically degraded, and the orphan dump sweep for retired VMs is still pending.
+
 ## 2026-08-04 (cont. 2) — H47: HA API endpoint LIVE (kube-vip) — cp1 SPOF killed
 
 **The SPOF that amplified this morning's incident is fixed.** `10.10.201.49` /
