@@ -7,7 +7,7 @@ terraform {
       # schema rewrite + state-rm/import session (replace-provider is unsafe across
       # this fork's rewritten schemas — see docs/planning/outstanding-work.md M125).
       source  = "ubiquiti-community/unifi"
-      version = "0.41.25"
+      version = "0.55.0"
     }
   }
 }
