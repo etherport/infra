@@ -148,6 +148,25 @@ This file foregrounds open/in-progress/gated work._
 ## HIGH — production-readiness; 1–2 weeks
 
 ### 🟡 H41. etcd apply-latency spikes → CP leader-components restart-looping — defrag DONE, disk fix windowed
+- **➕ 2026-08-06 — the residual driver is EXTERNAL I/O contention (nightly vzdump), and this time it
+  escalated past the leader-components to the APISERVERS themselves.** The 2026-06-28 note concluded
+  "storage is NOT the gap" — true for the *media* (enterprise NVMe + PLP), but the CP zvols share `rpool`
+  with the **nightly PVE `vzdump` backup (03:00 PT / 10:00-11:30 UTC)**, and that backup starves etcd
+  fsync hard enough to matter. On 08-06 etcd apply hit **10-13s** (raft "agreement among raft nodes"
+  waits; bolt reads stayed ~80ms → consensus-on-slow-disks, not the DB), all **3 kube-apiservers** failed
+  `/livez` and were hard-restarted (25/22/15 restarts), and the churn cascaded to cluster-wide cilium
+  flaps + a Route53 endpoint-unhealthy flap. **Proof:** 7,544 etcd "took too long" events in 7 days, 94%
+  in UTC hours 10-11; per-VM vzdump log showed **VM 1003 (gh-runner) at 7.3 MiB/s for 47 min** (copy-
+  before-write vs an active guest) vs ~79 MiB/s for the rest. **Both cp1 kernel fork-deadlocks (07-24,
+  08-04) also began inside this window** → same trigger.
+- **✅ Fixes 2026-08-06:** (1) **removed gh-runner (1003) from the vzdump job** (stateless/rebuildable;
+  was >half the window) — PVE job is not IaC, changed via `pvesh set /cluster/backup/<id> --vmid`;
+  (2) **raised kube-apiserver liveness failureThreshold 8→24** (~80s→4min) so a transient etcd stall
+  no longer hard-restarts all 3 apiservers — live via `infra/ansible/playbooks/k8s-apiserver-probe.yml`
+  (serial 1, cp1 last), **persisted as `kubeadm_patches`** in kubespray `k8s-cluster.yml`. Full write-up:
+  session-log 2026-08-06; memory `vzdump-etcd-rpool-contention`. **Next lever if it recurs:** vzdump
+  fleecing, or move the CP zvols off the contended pool. Watch etcd hour-10/11 slow-apply counts collapse.
+
 - **🟢 PARTIAL FIX 2026-06-28 (commit `2d1a22c`).** Refined root cause: NOT ongoing elections (death-window
   10:00-10:14 logs showed **no leader changes**, raft term steady at 79). The real cause is **etcd
   apply-latency spikes** — bursts of 280-320ms `read-only range`/lease applies that **back up behind each

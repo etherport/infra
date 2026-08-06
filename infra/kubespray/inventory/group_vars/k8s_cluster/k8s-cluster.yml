@@ -442,7 +442,24 @@ auto_renew_certificates: true  # 2026-07-03 sweep: kubeadm 1y certs died-with-th
 # auto_renew_certificates_systemd_calendar: "Mon *-*-1,2,3,4,5,6,7 03:00:00"
 
 kubeadm_patches_dir: "{{ kube_config_dir }}/patches"
-kubeadm_patches: []
+# 2026-08-06 vzdump/etcd incident: the nightly PVE backup starved etcd fsync on
+# the shared rpool → /livez failed >80s → kubelet hard-restarted ALL 3
+# apiservers simultaneously (restart churn made it worse: re-list storms against
+# the slow etcd, startup-probe loops, cluster-wide cilium flaps). A restart
+# never helps when the cause is backend I/O — raise liveness tolerance 8→24
+# (~4 min at periodSeconds=10) so the apiserver rides out transient etcd
+# stalls. Startup/readiness probes unchanged (readiness gating traffic during
+# slowness is desirable). Applied live to the static-pod manifests 2026-08-06;
+# this patch keeps kubespray runs from reverting it.
+kubeadm_patches:
+  - target: kube-apiserver
+    type: strategic
+    patch:
+      spec:
+        containers:
+          - name: kube-apiserver
+            livenessProbe:
+              failureThreshold: 24
 # See https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/control-plane-flags/#patches
 # Correspondance with this link
 # patchtype = type

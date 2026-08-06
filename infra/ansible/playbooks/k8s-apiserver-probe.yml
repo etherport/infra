@@ -1,0 +1,70 @@
+---
+# Raise the kube-apiserver LIVENESS probe tolerance (failureThreshold 8 -> 24).
+#
+# WHY (2026-08-06 vzdump/etcd incident): the nightly PVE backup starved etcd
+# fsync on the shared rpool -> /livez failed for >80s -> kubelet hard-restarted
+# ALL 3 apiservers near-simultaneously. The restarts actively amplified the
+# outage: each restart re-lists everything from the already-slow etcd,
+# startup probes looped, and every cilium agent flapped cluster-wide. A restart
+# never fixes backend I/O slowness, so tolerate ~4 min (24 x periodSeconds=10)
+# of liveness failure before killing the container. Readiness (threshold 3) and
+# startup (threshold 24) probes are left unchanged - readiness pulling a slow
+# apiserver out of rotation is desirable and has no kill effect.
+#
+# IaC: the durable source of truth is `kubeadm_patches` in the kubespray
+# inventory (k8s-cluster.yml) - a kubespray run re-applies the same value. This
+# playbook is the LIVE apply (kubelet restarts the static pod on manifest
+# change, so each CP's apiserver blips briefly - hence serial: 1 + health gate).
+#
+# Usage (cp1 LAST by convention):
+#   ansible-playbook -i inventory/wind/inventory.ini playbooks/k8s-apiserver-probe.yml -l k8s-cp2
+#   ansible-playbook -i inventory/wind/inventory.ini playbooks/k8s-apiserver-probe.yml -l k8s-cp3
+#   ansible-playbook -i inventory/wind/inventory.ini playbooks/k8s-apiserver-probe.yml -l k8s-cp1
+- name: Raise kube-apiserver liveness probe tolerance
+  hosts: "{{ target_hosts | default('kube_control_plane') }}"
+  become: true
+  serial: 1
+
+  vars:
+    liveness_failure_threshold: 24
+
+  tasks:
+    - name: Bump livenessProbe failureThreshold 8 -> 24 in the static-pod manifest
+      ansible.builtin.replace:
+        path: /etc/kubernetes/manifests/kube-apiserver.yaml
+        # Only the livenessProbe carries threshold 8 (readiness=3, startup=24),
+        # so this anchored match cannot touch the other probes. Idempotent: a
+        # second run finds no match and reports ok.
+        regexp: '^(\s*)failureThreshold: 8$'
+        replace: '\1failureThreshold: {{ liveness_failure_threshold }}'
+      register: probe_edit
+
+    - name: Wait for the apiserver static pod to come back healthy
+      ansible.builtin.uri:
+        url: "https://{{ ansible_default_ipv4.address }}:6443/readyz"
+        validate_certs: false
+        status_code: 200
+      register: readyz
+      until: readyz.status == 200
+      retries: 30
+      delay: 10
+      when: probe_edit.changed
+
+    - name: Verify the manifest carries the new threshold
+      ansible.builtin.shell: |
+        set -o pipefail
+        grep -c "failureThreshold: {{ liveness_failure_threshold }}" /etc/kubernetes/manifests/kube-apiserver.yaml
+      args:
+        executable: /bin/bash
+      changed_when: false
+      register: verify_count
+
+    - name: Fail if the manifest was not updated
+      ansible.builtin.assert:
+        that:
+          # liveness (24) + pre-existing startup (24) = 2 occurrences
+          - verify_count.stdout | trim | int >= 2
+        fail_msg: >-
+          {{ inventory_hostname }}: expected livenessProbe failureThreshold
+          {{ liveness_failure_threshold }} in the kube-apiserver manifest but
+          did not find it - inspect the manifest by hand.

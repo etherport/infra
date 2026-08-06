@@ -87,6 +87,60 @@ regenerate-me rebuild templates). Flux Ready=True again on da3f411; PVCs safe. L
 delete-PVC recovery on a CNPG cluster that has a git-managed pre-bind PVC WILL wedge Flux —
 check `kubectl -n flux-system get kustomization` after any such surgery.
 
+## 2026-08-06 — ROOT CAUSE: nightly vzdump starves etcd → the "overnight flap" AND both cp1 hangs
+
+**The overnight `homelab-any-endpoint-unhealthy` flap, yesterday's alert storm, and BOTH
+cp1 kernel hangs (07-24, 08-04) share one root cause: the nightly PVE vzdump backup
+(03:00 PT = 10:00–11:30 UTC) starving I/O on `rpool`, which the control-plane VMs — and
+therefore etcd — live on.** Chain for last night: vzdump ran 10:00–11:30 UTC; etcd fsync
+stalled (raft "agreement among raft nodes" waits of 10–13s; bolt reads stayed at ~80ms, so
+it's consensus-on-slow-disks, not reads); `etcdNoLeader`/`etcdInsufficientMembers` fired;
+all 3 kube-apiservers failed /livez >80s and were hard-restarted by kubelet
+(restart counts 25/22/15) — the restarts made it worse (re-list storms against slow etcd,
+startup-probe loops); the gpu1 cilium agent crashed on `localhost:6443 EOF`; cloudflared on
+gpu1 lost cluster DNS → couldn't reach the Plex origin (`dial tcp i/o timeout` 10:31–11:11);
+Route53 saw plex down; the composite CloudWatch alarm (child_health_threshold = ALL) flapped.
+Evidence that closed it: **7,544 etcd "apply request took too long" events in 7 days — 94%
+in UTC hours 10–11**, and per-VM vzdump logs showing **VM 1003 (gh-runner) at 7.3 MiB/s for
+46:43** (copy-before-write vs an active guest) while every other VM ran ~79 MiB/s. PVE RRD:
+iowait ~15%/load 13 during the window, collapsing to 0.2% the minute the backup ended. Both
+cp1 kernel fork-deadlocks also started INSIDE this window (vzdump 07-24 10:00–11:39, 08-04
+10:00–11:26) — the D-state pileup in `kernel_clone` is what a prolonged I/O stall looks like,
+so the "unknown kernel bug" now has a known trigger (contained by the M91 watchdog either way).
+
+**Fixes applied:**
+1. **VM 1003 (gh-runner) excluded from the vzdump job** (PVE job `backup-820c6707-cfc0`,
+   vmid now `1001,1002,1004,1005,1006`; rationale recorded in the job comment). It's a
+   stateless CI runner, fully rebuildable from TF `standalone-vms` + `gh-runner.yml`. Its
+   copy-before-write crawl was >half the backup window and the exact grinding phase.
+   NB the PVE backup job is NOT in IaC — changed via `pvesh set /cluster/backup/…`.
+2. **apiserver liveness tolerance raised 8→24 failures (~80s→4min)** so transient etcd
+   stalls no longer hard-restart all 3 apiservers (a restart never fixes backend I/O).
+   Readiness (3) + startup (24) unchanged. Live-applied rolling cp2→cp3→cp1 via the new
+   **`infra/ansible/playbooks/k8s-apiserver-probe.yml`** (serial 1 + /readyz gate);
+   persisted as **`kubeadm_patches`** in the kubespray inventory `k8s-cluster.yml` so
+   kubespray runs re-apply it. All CPs verified 200 via the VIP after.
+3. **w2 un-wedged:** kured had held the fleet reboot lock since the outage window, stuck
+   evicting `cue-db-1` (single-instance CNPG PDB). Deleted the pod (30-min CNPG grace →
+   moved to w4, brief Multi-Attach wait for the RBD detach), w2 drained, rebooted 11:45,
+   uncordoned. The 12 Error `cloudwatch-to-loki` job pods from the outage window were
+   collateral; later runs green.
+
+**Deliberately NOT done:** no new etcd alert rules — the kube-prometheus defaults
+(`etcdNoLeader` critical etc.) fired correctly during the window; coverage is adequate.
+Fleecing was considered and deferred: with gh-runner gone the remaining 5 VMs back up at
+~79 MiB/s in ~43 min total; revisit if another VM turns write-heavy at 3am.
+
+**Separate + unrelated:** the cloud-tag-drift "run failure" email = **GitHub Actions major
+outage today** (job cancelled at exactly 15:00 with no runner ever assigned + no steps; the
+cron itself fired 2h late; API dispatch returns 500; githubstatus.com shows Actions =
+major_outage). Nothing to fix; tomorrow's cron confirms.
+
+**Next:** watch the next few 03:00 PT windows — etcd slow-apply counts in hours 10–11 UTC
+should collapse; if they don't, the next lever is vzdump fleecing (or moving the CP VMs'
+zvols off the contended pool). cp1's watchdog remains the backstop if the kernel deadlock
+recurs outside the backup window.
+
 ## 2026-08-04 (cont. 3) — M91 DONE: watchdog armed on all 8 nodes + made reboot-durable
 
 **M91 is closed.** All four remaining nodes (w2, w3, w1, gpu1) were cold-started to attach
