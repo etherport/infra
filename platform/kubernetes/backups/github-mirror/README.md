@@ -50,9 +50,47 @@ git push --mirror origin        # only if repopulating an empty GitHub repo
 - **Permissions:** *Contents: Read-only* (clone) + *Metadata: Read-only* (auto;
   needed to enumerate via `/user/repos`)
 
-Nothing else. It cannot write, cannot touch Actions/secrets/settings. Rotate by
-editing the secret (`sops platform/kubernetes/backups/github-mirror/01-token.sops.yaml`)
-and expiring the old PAT on GitHub.
+Nothing else. It cannot write, cannot touch Actions/secrets/settings.
+
+### Rotating the PAT (it expires — GitHub fine-grained max is ~1 year, or the 90d
+you set)
+
+`GithubRepoMirrorStale` fires ~36h after the token dies, so a lapse is caught, but
+rotate ahead of expiry. On the **devbox** (which holds the SOPS age key):
+
+```sh
+# 1. Mint a new fine-grained PAT on github.com (same scopes: Contents:read +
+#    Metadata:read, all repos, owner sparked-diamond). Save it to a temp file.
+# 2. Drop it into the encrypted secret WITHOUT it ever hitting git plaintext:
+cd ~/code/infra
+NEW=$(tr -d '[:space:]' < /path/to/new-pat)
+cat > platform/kubernetes/backups/github-mirror/01-token.sops.yaml <<YAML
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-mirror-token
+  namespace: backups
+type: Opaque
+stringData:
+  token: ${NEW}
+YAML
+unset NEW
+SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops -e -i \
+  platform/kubernetes/backups/github-mirror/01-token.sops.yaml
+grep -q github_pat_ platform/kubernetes/backups/github-mirror/01-token.sops.yaml \
+  && echo "STILL PLAINTEXT — abort" || echo "encrypted OK"
+shred -u /path/to/new-pat            # remove the plaintext copy
+# 3. commit + push; Flux rolls the in-cluster secret. Next nightly run uses it.
+git add platform/kubernetes/backups/github-mirror/01-token.sops.yaml
+git commit -m "chore(backups): rotate github-repo-mirror PAT" && git push
+# 4. verify, then EXPIRE the old PAT on github.com:
+kubectl -n backups create job --from=cronjob/github-repo-mirror ghm-rotate-test
+kubectl -n backups logs -f job/ghm-rotate-test   # expect "done — N/N repos bundled"
+```
+
+The Secret is the single source of truth (SOPS-encrypted in git → Flux → cluster).
+There is no copy anywhere else; the plaintext PAT lives only on GitHub's side and
+transiently on the devbox during rotation (shredded immediately).
 
 ## Image
 
