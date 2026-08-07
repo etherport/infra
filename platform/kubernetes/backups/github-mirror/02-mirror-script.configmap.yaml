@@ -28,12 +28,19 @@ data:
     API="https://api.github.com"
     PUSHGATEWAY_URL="${PUSHGATEWAY_URL:-}"
 
-    # Keep the token out of the URL, the reflog and `ps` by putting it in a git
-    # config `http.extraHeader` under an ephemeral HOME (the /work emptyDir).
     export HOME=/work
     export TMPDIR=/work
-    git config --global http.extraHeader "Authorization: Bearer ${GH_TOKEN}"
-    git config --global --add safe.directory '*'
+    # GitHub git-over-HTTPS expects BASIC auth (token as the password), NOT
+    # Bearer. Bearer works for the REST API enumeration below, but `git clone`
+    # 401s on it and then prompts "could not read Username". Inject the header
+    # via GIT_CONFIG_* env vars so it applies to every git command without the
+    # token ever appearing in a URL, `ps`, or the mirror's stored config/reflog.
+    AUTH_B64="$(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 | tr -d '\n')"
+    export GIT_CONFIG_COUNT=2
+    export GIT_CONFIG_KEY_0="http.extraHeader"
+    export GIT_CONFIG_VALUE_0="Authorization: Basic ${AUTH_B64}"
+    export GIT_CONFIG_KEY_1="safe.directory"
+    export GIT_CONFIG_VALUE_1="*"
 
     mkdir -p "${DEST}"
 
