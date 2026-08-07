@@ -10,9 +10,9 @@ spec:
   # half-written file.
   schedule: "40 0 * * *"
   timeZone: "America/Los_Angeles"
-  # Enabled once the read-only PAT is in the github-mirror-token secret. Until
-  # then it would just fail auth nightly (noise). Flip to false to activate.
-  suspend: true
+  # Activated 2026-08-06 once the read-only PAT landed in github-mirror-token
+  # (verified: manual run bundled all 6 repos, restore from a NAS bundle works).
+  suspend: false
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 5
