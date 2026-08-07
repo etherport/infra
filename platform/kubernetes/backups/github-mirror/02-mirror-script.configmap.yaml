@@ -1,0 +1,130 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: github-mirror-script
+  namespace: backups
+data:
+  # Mirror every repo owned by the sparked-diamond GitHub account into a single
+  # git bundle per repo under the NAS Backups share (repos/). The existing
+  # s3-sync-backups CronJob then sweeps that folder to
+  # s3://archive.wind.etherport.net/objects/backups/repos/ — so this job only has
+  # to produce the bundles; the S3 leg is already handled.
+  #
+  # A `git bundle --all` is a SINGLE file holding the complete history + all refs,
+  # which is exactly what the per-object S3 sync wants (one object per repo, not
+  # thousands of loose git objects). Restore is `git clone <name>.bundle <name>`.
+  #
+  # Image is alpine/git: busybox `wget` does HTTPS + Authorization headers, so no
+  # curl/jq/runtime-installs are needed (verified 2026-08-06). Repo full-names are
+  # a restricted charset ([A-Za-z0-9._/-]) so grep/sed parsing of the API JSON is
+  # safe.
+  mirror-repos.sh: |
+    #!/bin/sh
+    set -eu
+
+    : "${GH_TOKEN:?GH_TOKEN (read-only PAT) must be set}"
+    GH_OWNER="${GH_OWNER:-sparked-diamond}"
+    DEST="${DEST_DIR:-/nas/repos}"
+    API="https://api.github.com"
+    PUSHGATEWAY_URL="${PUSHGATEWAY_URL:-}"
+
+    # Keep the token out of the URL, the reflog and `ps` by putting it in a git
+    # config `http.extraHeader` under an ephemeral HOME (the /work emptyDir).
+    export HOME=/work
+    export TMPDIR=/work
+    git config --global http.extraHeader "Authorization: Bearer ${GH_TOKEN}"
+    git config --global --add safe.directory '*'
+
+    mkdir -p "${DEST}"
+
+    # --- enumerate owner-affiliated repos (all private) via /user/repos ---
+    # Filter to full_names that begin with the owner login so a token that can
+    # also see other orgs' repos never pulls them in.
+    repos=""
+    page=1
+    while : ; do
+      body="$(wget -q -O - \
+        --header="Authorization: Bearer ${GH_TOKEN}" \
+        --header="Accept: application/vnd.github+json" \
+        --header="X-GitHub-Api-Version: 2022-11-28" \
+        --header="User-Agent: wind-github-mirror" \
+        "${API}/user/repos?per_page=100&page=${page}&affiliation=owner")"
+      names="$(printf '%s' "$body" \
+        | grep -oE "\"full_name\": *\"${GH_OWNER}/[A-Za-z0-9._-]+\"" \
+        | sed -E 's/.*"'"${GH_OWNER}"'\/([A-Za-z0-9._-]+)"/\1/' || true)"
+      [ -z "${names}" ] && break
+      repos="${repos} ${names}"
+      # fewer than a full page => last page
+      cnt="$(printf '%s\n' "${names}" | grep -c . || true)"
+      [ "${cnt}" -lt 100 ] && break
+      page=$((page + 1))
+    done
+
+    # de-dup + count
+    repos="$(printf '%s\n' ${repos} | sort -u | grep -c . >/dev/null 2>&1; printf '%s\n' ${repos} | sort -u)"
+    total="$(printf '%s\n' ${repos} | grep -c . || true)"
+    echo "[mirror] discovered ${total} repos under ${GH_OWNER}"
+
+    # SAFETY: never proceed on an empty discovery (bad/expired token, GitHub
+    # outage) — that could otherwise look like "no repos" and, combined with a
+    # future --delete, wipe the backup. We never delete here, but fail loudly.
+    if [ "${total}" -lt 1 ]; then
+      echo "[mirror] ERROR: discovered 0 repos — refusing to run (token scope / GitHub reachability?)" >&2
+      exit 1
+    fi
+
+    fail=0
+    ok=0
+    for name in ${repos}; do
+      url="https://github.com/${GH_OWNER}/${name}.git"
+      work="$(mktemp -d)"
+      printf '[mirror] %s ... ' "${name}"
+      if git clone --quiet --mirror "${url}" "${work}/repo.git" 2>"${work}/err"; then
+        tmp="${DEST}/.${name}.bundle.tmp"
+        # Atomic publish: build+verify to a temp file, then mv into place so the
+        # 01:10 PT s3-sync never uploads a half-written bundle.
+        if git -C "${work}/repo.git" bundle create "${tmp}" --all >/dev/null 2>&1 \
+           && git -C "${work}/repo.git" bundle verify "${tmp}" >/dev/null 2>&1; then
+          mv -f "${tmp}" "${DEST}/${name}.bundle"
+          echo "ok ($(du -h "${DEST}/${name}.bundle" | cut -f1))"
+          ok=$((ok + 1))
+        else
+          echo "FAILED (bundle)"; rm -f "${tmp}"; fail=$((fail + 1))
+        fi
+      else
+        echo "FAILED (clone): $(tail -1 "${work}/err" 2>/dev/null)"; fail=$((fail + 1))
+      fi
+      rm -rf "${work}"
+    done
+
+    # restore instructions + freshness manifest alongside the bundles
+    {
+      echo "# GitHub repo mirror for ${GH_OWNER} — generated $(date -u +%FT%TZ)"
+      echo "# repos discovered: ${total}   succeeded: ${ok}   failed: ${fail}"
+      echo "#"
+      echo "# RESTORE a repo:"
+      echo "#   git clone <name>.bundle <name>"
+      echo "#   cd <name> && git remote set-url origin git@github.com:${GH_OWNER}/<name>.git"
+      echo "#   git push --mirror origin      # to repopulate an empty GitHub repo"
+      echo "#"
+      ls -la "${DEST}"/*.bundle 2>/dev/null || true
+    } > "${DEST}/MANIFEST.txt"
+
+    # freshness/health metric for the staleness alert (best-effort)
+    if [ -n "${PUSHGATEWAY_URL}" ]; then
+      printf '%s\n' \
+        "# TYPE github_repo_mirror_last_success_timestamp_seconds gauge" \
+        "github_repo_mirror_last_success_timestamp_seconds $(date +%s)" \
+        "# TYPE github_repo_mirror_repos_total gauge" \
+        "github_repo_mirror_repos_total ${total}" \
+        "# TYPE github_repo_mirror_failures_total gauge" \
+        "github_repo_mirror_failures_total ${fail}" \
+        | wget -q -O - --post-file=- \
+            "${PUSHGATEWAY_URL}/metrics/job/github-repo-mirror" >/dev/null 2>&1 || true
+    fi
+
+    if [ "${fail}" -gt 0 ]; then
+      echo "[mirror] completed with ${fail} failure(s)" >&2
+      exit 1
+    fi
+    echo "[mirror] done — ${ok}/${total} repos bundled to ${DEST}"

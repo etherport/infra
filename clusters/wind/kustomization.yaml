@@ -109,6 +109,7 @@ resources:
   - ../../platform/kubernetes/backups/aws-s3/shares/scans  # suspended
   - ../../platform/kubernetes/backups/aws-s3/daily-report
   - ../../platform/kubernetes/backups/approval-server      # CF-Access delete-approval service
+  - ../../platform/kubernetes/backups/github-mirror        # off-GitHub repo bundles -> Backups share -> S3
   # Velero backup schedules
   - ../../platform/kubernetes/backups/velero/schedules
   # M137 Phase 3: weekly Garage->S3 Deep Archive DR of the velero repo + Garage-down alert

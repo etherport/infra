@@ -1,0 +1,93 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: github-repo-mirror
+  namespace: backups
+spec:
+  # 00:40 PT — 30 min BEFORE the 01:10 PT s3-sync-backups run, so each night's
+  # fresh bundles are swept to S3 the same night. Bundles are published
+  # atomically (tmp + mv) so a long-running mirror can't hand the sync a
+  # half-written file.
+  schedule: "40 0 * * *"
+  timeZone: "America/Los_Angeles"
+  # Enabled once the read-only PAT is in the github-mirror-token secret. Until
+  # then it would just fail auth nightly (noise). Flip to false to activate.
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      # One attempt → one KubeJobFailed alert on a real failure. The script
+      # already fails loudly on empty discovery / clone / bundle errors.
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 90000   # 25h, matches the s3-sync fleet
+      template:
+        metadata:
+          annotations:
+            backup.velero.io/backup-volumes-excludes: "nas,work"
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: mirror
+              # alpine/git has git + busybox (wget does HTTPS + auth headers), so
+              # no curl/jq/aws needed. Real version tag (not :latest) → passes
+              # Kyverno; Renovate digest-pins on its next run.
+              image: alpine/git:2.54.0
+              command: ["/bin/sh", "/scripts/mirror-repos.sh"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                readOnlyRootFilesystem: true
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "256Mi"
+                  ephemeral-storage: "512Mi"
+                limits:
+                  cpu: "1000m"
+                  memory: "1Gi"
+                  ephemeral-storage: "8Gi"
+              env:
+                - name: GH_OWNER
+                  value: "sparked-diamond"
+                - name: DEST_DIR
+                  value: "/nas/repos"
+                - name: PUSHGATEWAY_URL
+                  value: "http://pushgateway.monitoring.svc.cluster.local:9091"
+                - name: GH_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: github-mirror-token
+                      key: token
+              volumeMounts:
+                - name: nas
+                  mountPath: /nas
+                - name: work
+                  mountPath: /work
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+          volumes:
+            # Backups share on the NAS — the SAME share s3-sync-backups sweeps to
+            # s3://archive.wind.etherport.net/objects/backups. We write repos/ here.
+            - name: nas
+              nfs:
+                server: sequoia.wind.etherport.net
+                path: /var/nfs/shared/Backups
+            # scratch for git clone --mirror + HOME/TMPDIR (token lives in
+            # /work/.gitconfig, never in the URL or `ps`); emptyDir so it's wiped.
+            - name: work
+              emptyDir: {}
+            - name: scripts
+              configMap:
+                name: github-mirror-script
+                defaultMode: 0555

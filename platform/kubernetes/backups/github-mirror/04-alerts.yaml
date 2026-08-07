@@ -1,0 +1,44 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: github-repo-mirror
+  namespace: backups
+  labels:
+    release: monitoring
+    app: kube-prometheus-stack
+spec:
+  groups:
+    - name: github-repo-mirror.rules
+      rules:
+        # No successful mirror Job completed in >36h. kube_job_status_completion_time
+        # is only set on SUCCESS, so this catches both silent non-runs and a job
+        # that keeps failing. (An individual failed run also trips the cluster's
+        # existing KubeJobFailed alert via backoffLimit=0.) 36h tolerates one
+        # missed daily run before paging.
+        - alert: GithubRepoMirrorStale
+          expr: |
+            (
+              time() - max(
+                kube_job_status_completion_time{job_name=~"github-repo-mirror.*"}
+              )
+            ) > 129600
+            or
+            (
+              count(kube_cronjob_spec_suspend{cronjob="github-repo-mirror",namespace="backups"} == 0) == 1
+              and
+              absent(kube_job_status_completion_time{job_name=~"github-repo-mirror.*"})
+            )
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "GitHub repo mirror is stale (no successful run in >36h)"
+            description: >-
+              The github-repo-mirror CronJob has not completed successfully in
+              over 36h, so the off-GitHub repo bundles on the NAS (and their S3
+              copy under objects/backups/repos/) are going stale. Check
+              `kubectl -n backups get cronjob,jobs -l job-name` and the last Job's
+              logs. Common causes: expired/insufficient read-only PAT
+              (github-mirror-token), GitHub API unreachable, or the NAS Backups
+              share unmounted. This alert self-clears once a run succeeds; it does
+              NOT fire while the CronJob is intentionally suspended.

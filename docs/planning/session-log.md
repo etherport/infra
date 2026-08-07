@@ -87,6 +87,43 @@ regenerate-me rebuild templates). Flux Ready=True again on da3f411; PVCs safe. L
 delete-PVC recovery on a CNPG cluster that has a git-managed pre-bind PVC WILL wedge Flux —
 check `kubectl -n flux-system get kustomization` after any such surgery.
 
+## 2026-08-06 (cont.) — off-GitHub repo backup (GitHub → NAS → S3)
+
+**Closed a real DR gap: the git repos had no backup off GitHub** — only whatever working
+clones lived on devbox/mini. Added `platform/kubernetes/backups/github-mirror/`, a nightly
+k8s CronJob that `git clone --mirror`s every repo owned by the `sparked-diamond` account and
+writes **one `git bundle --all` per repo** to `sequoia:/var/nfs/shared/Backups/repos/`. The
+existing `s3-sync-backups` job already sweeps that share to
+`s3://archive.wind.etherport.net/objects/backups/`, so the repos now ride the existing S3
+pipeline with **zero new S3 wiring** — the job only has to produce the bundles.
+
+**Design decisions (+ why):**
+- **k8s CronJob, not devbox** (owner picked): more consistent with the s3-sync fleet, fully
+  Flux/IaC, and the k8s nodes are already in the NAS export allowlist — whereas devbox
+  (10.10.201.45) is **not** in the Backups NFS allowlist, so a devbox executor would have
+  needed a manual UNAS export change. (Verified the allowlist from `showmount -e sequoia`.)
+- **Bundles, not bare mirrors:** a `git bundle --all` is a single file with full history + all
+  refs — ideal for the per-object S3 sync (one object/repo, not thousands of loose git
+  objects), integrity-checkable, trivial restore (`git clone <name>.bundle`). The bare mirror
+  is done in ephemeral scratch and discarded. Validated end-to-end against the real `infra`
+  repo: 100 refs bundled, `bundle verify` OK, restore → byte-identical HEAD, all 23 branches.
+- **Image `alpine/git:2.54.0`** (no custom image, no CI rebuild — GitHub Actions was mid-outage
+  today): busybox `wget` does HTTPS + `Authorization` headers, so enumeration via
+  `/user/repos?affiliation=owner` needs no curl/jq. Repo full-names are a safe charset for
+  grep/sed parsing. Token kept out of the URL/reflog/`ps` via git `http.extraHeader` under an
+  ephemeral `HOME=/work`.
+- **Atomic publish** (`.tmp` + `mv`) so the 01:10 PT S3 sweep never uploads a half-written
+  bundle; mirror runs **00:40 PT**, 30 min ahead. **Empty-discovery guard** fails loudly (never
+  silently produces "0 repos"). `GithubRepoMirrorStale` (>36h, kube-state-metrics based, silent
+  while suspended) + the cluster's `KubeJobFailed` cover freshness/failure.
+- Verified a uid-1000 pod can **write** to the Backups NFS share (the existing sync only reads
+  it) before committing — RW works.
+
+**State: committed but CronJob `suspend: true`.** Remaining = the **read-only PAT**. Needs a
+fine-grained PAT on the `sparked-diamond` account (Contents: read + Metadata: read, all repos),
+dropped into `github-mirror-token` (secret file already SOPS-encrypted with a placeholder), then
+flip `suspend: false` + a manual test run. Full ops in the dir README.
+
 ## 2026-08-06 — ROOT CAUSE: nightly vzdump starves etcd → the "overnight flap" AND both cp1 hangs
 
 **The overnight `homelab-any-endpoint-unhealthy` flap, yesterday's alert storm, and BOTH

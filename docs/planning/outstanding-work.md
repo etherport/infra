@@ -241,6 +241,19 @@ This file foregrounds open/in-progress/gated work._
 - ⏳ **Until fixed:** cache degraded on nvme1 alone (no redundancy). Optional: SSD cache → **read-only** (kills write-back risk); silence `UnasMdArrayDegraded` time-boxed if the reminders are noise.
 - ➕ **2026-06-21 update:** nvme0 dropped a **3rd** time across a `systemctl reboot`; came back healthy (`percentage_used 2%`, `media_errors 0`, `critical_warning 0x2`=temp, `unsafe_shutdowns 7`) and md4 rebuilt `[2/2]`. SMART confirms wear is a non-issue — firmware/APST holds. Gotcha learned: a **raw `systemctl reboot` left the UNAS half-up** (web UI + ping, but SSH/NFS/SMB down ~minutes) while services restarted + the cache resync spiked load — prefer a UI/console restart. Thermal note revised: nvme0 ran **69°C** post-reboot → disabling APST (keeps it out of deep idle) would *raise* idle temp, so firmware rollback/airflow is the better durable fix than APST-off.
 
+### 📋 M156. Off-GitHub repo backup (GitHub → NAS → S3) — built, awaiting read-only PAT
+- **Gap:** the git repos had **no backup off GitHub** — only working clones on devbox/mini. Closed with
+  `platform/kubernetes/backups/github-mirror/`: a nightly (00:40 PT) k8s CronJob that `git clone --mirror`s
+  every `sparked-diamond` repo and writes one **`git bundle --all` per repo** to the NAS Backups share
+  (`repos/`), which the existing `s3-sync-backups` sweeps to `s3://archive.wind.etherport.net/objects/backups/`
+  at 01:10 PT — no new S3 wiring. Image `alpine/git` (busybox wget does the authed API enumeration; no
+  curl/jq/custom image). Atomic `.tmp`+mv publish; empty-discovery guard; `GithubRepoMirrorStale` alert.
+  Bundle create/verify/restore validated against the real `infra` repo (100 refs, HEAD match, 23 branches).
+- ⏳ **Remaining (owner):** create a **fine-grained read-only PAT** on the sparked-diamond account
+  (Contents: read + Metadata: read, all repos) → drop into `github-mirror-token` (`sops` edit;
+  file already encrypted with a placeholder) → flip CronJob `suspend: false` → manual test run.
+  Ops in the dir README. Runs on k8s (not devbox) because devbox isn't in the NAS export allowlist.
+
 ## MEDIUM — quality / hygiene
 
 > M122+ from the 2026-07-02 currency/state review + path-loss investigation.
