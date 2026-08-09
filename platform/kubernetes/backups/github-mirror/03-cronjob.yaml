@@ -35,6 +35,42 @@ spec:
             fsGroup: 1000
             seccompProfile:
               type: RuntimeDefault
+          initContainers:
+            # Mint a 1h GitHub App INSTALLATION token and hand it to the mirror
+            # via the shared `token` emptyDir. WHY an init container: the App
+            # flow needs an RS256 JWT, and alpine/git has no `openssl`. This
+            # keeps the git image unchanged and avoids a runtime `apk add`.
+            # WHY the App at all: the org migration made user-scoped PATs
+            # useless here — the old github-mirror-token could only see 1 of 6
+            # org repos, silently backing up almost nothing. Requested scope is
+            # contents:read only (least privilege per mint).
+            - name: mint-token
+              image: alpine/openssl:3.5.7
+              command: ["/bin/sh", "/scripts/gh-app-token-init.sh"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                readOnlyRootFilesystem: true
+              resources:
+                requests: {cpu: "50m", memory: "64Mi", ephemeral-storage: "64Mi"}
+                limits: {cpu: "500m", memory: "256Mi", ephemeral-storage: "256Mi"}
+              env:
+                - name: GH_APP_ID
+                  valueFrom:
+                    secretKeyRef: {name: github-app-creds, key: app_id}
+                - name: GH_APP_INSTALLATION_ID
+                  valueFrom:
+                    secretKeyRef: {name: github-app-creds, key: installation_id}
+              volumeMounts:
+                - name: app-key
+                  mountPath: /app-key
+                  readOnly: true
+                - name: token
+                  mountPath: /token
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
           containers:
             - name: mirror
               # alpine/git has git + busybox (wget does HTTPS + auth headers), so
@@ -63,14 +99,17 @@ spec:
                   value: "/nas/repos"
                 - name: PUSHGATEWAY_URL
                   value: "http://pushgateway.monitoring.svc.cluster.local:9091"
-                - name: GH_TOKEN
-                  valueFrom:
-                    secretKeyRef:
-                      name: github-mirror-token
-                      key: token
+                # GH_TOKEN is no longer a PAT: the init container writes a 1h
+                # App installation token to /token/token, and the script reads it
+                # via GH_TOKEN_FILE. (A user PAT cannot see org repos.)
+                - name: GH_TOKEN_FILE
+                  value: /token/token
               volumeMounts:
                 - name: nas
                   mountPath: /nas
+                - name: token
+                  mountPath: /token
+                  readOnly: true
                 - name: work
                   mountPath: /work
                 - name: scripts
@@ -87,6 +126,18 @@ spec:
             # /work/.gitconfig, never in the URL or `ps`); emptyDir so it's wiped.
             - name: work
               emptyDir: {}
+            # App private key (SOPS) — mounted read-only into the init container only.
+            - name: app-key
+              secret:
+                secretName: github-app-creds
+                items:
+                  - key: private_key
+                    path: private-key.pem
+                defaultMode: 0400
+            # in-memory handoff of the short-lived token: init writes, mirror reads.
+            - name: token
+              emptyDir:
+                medium: Memory
             - name: scripts
               configMap:
                 name: github-mirror-script

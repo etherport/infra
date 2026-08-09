@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: backups
 resources:
   - 01-token.sops.yaml
+  - 01b-app-creds.sops.yaml
   - 02-mirror-script.configmap.yaml
   - 03-cronjob.yaml
   - 04-alerts.yaml

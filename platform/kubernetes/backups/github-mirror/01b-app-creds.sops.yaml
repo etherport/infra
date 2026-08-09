@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Secret
+metadata:
+    name: github-app-creds
+    namespace: backups
+type: Opaque
+stringData:
+    app_id: ENC[AES256_GCM,data:Hjm+b60oDw==,iv:jcRnelmI0ure8qfA+v/bBjyn0JbZFMOIzl2Xgyr8bcQ=,tag:p2N937SegfX5w/MZFhgY/w==,type:str]
+    installation_id: ENC[AES256_GCM,data:Qo8FqDQof1J3,iv:XMJqd98ZXCQHC4Prvzum7dWLPO9neak4h/rqkDG9tks=,tag:D/BzVgXgIwqYmVjUeCqisw==,type:str]
+    private_key: ENC[AES256_GCM,data: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,iv:eSEiSbPfzlCxey97Fv93SKczneU0G+2jeYe6ec18i7k=,tag:7mC6MCdnmM1DG6526CZI3w==,type:str]
+sops:
+    kms: []
+    gcp_kms: []
+    azure_kv: []
+    hc_vault: []
+    age:
+        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAzeG1jQXoyclhtY2FrNGhJ
+            aWVaQ3RoOTRUTjVBaUltdlZ6NEQ1L2E3MzJjCkhmWmZrV2E2Q3dpOHFTSW5NRUQ5
+            RzFGdUx1Z2xYcmo4QVZWUjRnbm4rTEUKLS0tIDcwS2l3cFJjNnpvNEo1M2prN1ps
+            T3FCaVlFL2J6SkR5Z1pmRTRiM2xCNHcKOpbjwkOjCnu0nwnTyF1NrW19WUP1WBvx
+            mfJIJ2OG55YByA2XbnA0SSFkYyMlQhS+gdCbnpQ6jSpmSYMXGoOrVA==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBWNlI5Z2QvWU5SL2Jxb0Rz
+            R3JLQ2NRbFBLVkw4T3d6a1R1c0lsTTBtYVRnCm5aQ1MzSm5uZk51YTlYblFDYlho
+            SEVzQkVBRlVzOThrWVFUVmZnNysvTkUKLS0tIG05U2Rzc3NFaXdlVjROTVZ6bWZY
+            RTRZM3d5REdzYURkSkYvcmhPbFI0bHcKzljb1ta6pJGtefxxNlgNlBdbtWRQC/Dv
+            Ep4baQXxZlfly6r0gDYUoHWu2d4rtFYVqVEIyxbbjHZh6kpnJCFPuA==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-08-09T21:09:21Z"
+    mac: ENC[AES256_GCM,data:aRQW3udm4GAHUUFWfkqiT5rfFEXBRlcCMFUEYcvebOUoHIQhf5juch+iyo4qlKgssFw6I0p9eh8ueYmK95JdrkGj6RU1kue5vKhPY9hepqgKbf2m1SPC8KdaD+3+GkmQWtPGD7CvhrAgu52UETzU9xxEsNezTrg6UCjq6/+gGKM=,iv:J6w82OgmBfOT5J3N3UrK5DpUSf5c7EQvBhQnT8SQZs4=,tag:EgYc/i0BHkzcTp8XIoXhXA==,type:str]
+    pgp: []
+    encrypted_regex: ^(data|stringData)$
+    version: 3.9.4

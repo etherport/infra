@@ -18,11 +18,52 @@ data:
   # curl/jq/runtime-installs are needed (verified 2026-08-06). Repo full-names are
   # a restricted charset ([A-Za-z0-9._/-]) so grep/sed parsing of the API JSON is
   # safe.
+  # Mints a 1h GitHub App INSTALLATION token for the mirror (init container).
+  # alpine/git has no openssl, so the RS256 JWT is signed here and handed over
+  # via a shared in-memory emptyDir. Requests contents:read ONLY.
+  gh-app-token-init.sh: |
+    #!/bin/sh
+    set -eu
+    : "${GH_APP_ID:?}"; : "${GH_APP_INSTALLATION_ID:?}"
+    KEY=/app-key/private-key.pem
+    OUT=/token/token
+
+    b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+    now=$(date +%s)
+    hdr='{"alg":"RS256","typ":"JWT"}'
+    pl="{\"iat\":$((now - 60)),\"exp\":$((now + 540)),\"iss\":\"${GH_APP_ID}\"}"
+    uns="$(printf '%s' "$hdr" | b64url).$(printf '%s' "$pl" | b64url)"
+    sig="$(printf '%s' "$uns" | openssl dgst -sha256 -sign "$KEY" | b64url)"
+    jwt="${uns}.${sig}"
+
+    resp="$(wget -q -O - --header="Authorization: Bearer ${jwt}" \
+      --header="Accept: application/vnd.github+json" \
+      --header="X-GitHub-Api-Version: 2022-11-28" \
+      --header="Content-Type: application/json" \
+      --post-data='{"permissions":{"contents":"read"}}' \
+      "https://api.github.com/app/installations/${GH_APP_INSTALLATION_ID}/access_tokens")"
+
+    # extract "token":"..."  (token charset is safe for this)
+    tok="$(printf '%s' "$resp" | tr ',' '\n' | grep '"token"' | head -1 | sed -E 's/.*"token" *: *"([^"]+)".*/\1/')"
+    if [ -z "$tok" ]; then
+      echo "[mint] FAILED to obtain installation token" >&2
+      printf '%s' "$resp" | tr ',' '\n' | grep -i 'message' >&2 || true
+      exit 1
+    fi
+    printf '%s' "$tok" > "$OUT"
+    chmod 0400 "$OUT" 2>/dev/null || true
+    echo "[mint] installation token written (contents:read, ~1h)"
+
   mirror-repos.sh: |
     #!/bin/sh
     set -eu
 
-    : "${GH_TOKEN:?GH_TOKEN (read-only PAT) must be set}"
+    # Token comes from the App-minted file (GH_TOKEN_FILE) written by the
+    # mint-token init container; GH_TOKEN is still honoured for manual runs.
+    if [ -n "${GH_TOKEN_FILE:-}" ] && [ -r "${GH_TOKEN_FILE}" ]; then
+      GH_TOKEN="$(cat "${GH_TOKEN_FILE}")"
+    fi
+    : "${GH_TOKEN:?GH_TOKEN or GH_TOKEN_FILE must be set}"
     GH_OWNER="${GH_OWNER:-etherport}"
     DEST="${DEST_DIR:-/nas/repos}"
     API="https://api.github.com"
@@ -36,11 +77,17 @@ data:
     # via GIT_CONFIG_* env vars so it applies to every git command without the
     # token ever appearing in a URL, `ps`, or the mirror's stored config/reflog.
     AUTH_B64="$(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 | tr -d '\n')"
-    export GIT_CONFIG_COUNT=2
+    export GIT_CONFIG_COUNT=3
     export GIT_CONFIG_KEY_0="http.extraHeader"
     export GIT_CONFIG_VALUE_0="Authorization: Basic ${AUTH_B64}"
     export GIT_CONFIG_KEY_1="safe.directory"
     export GIT_CONFIG_VALUE_1="*"
+    # Disable auto-gc: `git clone --mirror` of a big repo (infra) kicks off a
+    # background `git gc --auto` that still holds the repo lock when `bundle
+    # create` runs -> "Another git process seems to be running in this
+    # repository". These clones are throwaway, so gc buys nothing.
+    export GIT_CONFIG_KEY_2="gc.auto"
+    export GIT_CONFIG_VALUE_2="0"
 
     mkdir -p "${DEST}"
 
@@ -81,6 +128,21 @@ data:
       exit 1
     fi
 
+    # SELF-CALIBRATING COMPLETENESS GUARD. A PARTIAL discovery is the dangerous
+    # case: the job "succeeds" while quietly backing up a subset (this is exactly
+    # how the user-PAT era silently mirrored 1 of 6 repos, and a throttled API
+    # response reproduced it 2026-08-09). Compare against how many bundles we
+    # already have: fewer repos than last time means the API lied to us, not that
+    # repos vanished. Deleting a repo is rare and deliberate -> override with
+    # ALLOW_SHRINK=1 for that one run.
+    prev="$(ls -1 "${DEST}"/*.bundle 2>/dev/null | grep -c . || true)"
+    if [ "${prev:-0}" -gt 0 ] && [ "${total}" -lt "${prev}" ] && [ "${ALLOW_SHRINK:-0}" != "1" ]; then
+      echo "[mirror] ERROR: discovered ${total} repos but ${prev} bundles already exist —" >&2
+      echo "[mirror]        refusing to run on a likely PARTIAL listing (throttled/expired token?)." >&2
+      echo "[mirror]        Existing bundles are left untouched. Set ALLOW_SHRINK=1 if a repo was really removed." >&2
+      exit 1
+    fi
+
     fail=0
     ok=0
     for name in ${repos}; do
@@ -89,15 +151,25 @@ data:
       printf '[mirror] %s ... ' "${name}"
       if git clone --quiet --mirror "${url}" "${work}/repo.git" 2>"${work}/err"; then
         tmp="${DEST}/.${name}.bundle.tmp"
+        # `git bundle create` takes a <output>.lock next to its target. If a run
+        # dies mid-bundle the lock survives on the NFS share and EVERY later run
+        # fails with "Another git process seems to be running in this
+        # repository" — a single failure would wedge that repo's backup forever
+        # (hit for real on infra, 2026-08-09). Clear our own stale artifacts
+        # first; they are ours by construction (dot-prefixed, per-repo).
+        rm -f "${tmp}" "${tmp}.lock"
         # Atomic publish: build+verify to a temp file, then mv into place so the
         # 01:10 PT s3-sync never uploads a half-written bundle.
-        if git -C "${work}/repo.git" bundle create "${tmp}" --all >/dev/null 2>&1 \
-           && git -C "${work}/repo.git" bundle verify "${tmp}" >/dev/null 2>&1; then
+        if git -C "${work}/repo.git" bundle create "${tmp}" --all >"${work}/bundle.log" 2>&1 \
+           && git -C "${work}/repo.git" bundle verify "${tmp}" >>"${work}/bundle.log" 2>&1; then
           mv -f "${tmp}" "${DEST}/${name}.bundle"
           echo "ok ($(du -h "${DEST}/${name}.bundle" | cut -f1))"
           ok=$((ok + 1))
         else
-          echo "FAILED (bundle)"; rm -f "${tmp}"; fail=$((fail + 1))
+          # surface WHY (disk full, bad ref, verify mismatch) — an opaque
+          # "FAILED (bundle)" is unactionable at 00:40.
+          echo "FAILED (bundle): $(tail -2 "${work}/bundle.log" 2>/dev/null | tr '\n' ' ')"
+          rm -f "${tmp}"; fail=$((fail + 1))
         fi
       else
         echo "FAILED (clone): $(tail -1 "${work}/err" 2>/dev/null)"; fail=$((fail + 1))
