@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: cloudflare-ddns
 
 resources:
+  - 03-ghcr-etherport.sops.yaml
   - namespace.yaml
   - rbac.yaml
   - configmap.yaml

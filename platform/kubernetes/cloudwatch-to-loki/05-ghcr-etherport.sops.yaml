@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Secret
+metadata:
+    name: ghcr-etherport
+    namespace: cloudwatch-to-loki
+type: kubernetes.io/dockerconfigjson
+stringData:
+    .dockerconfigjson: ENC[AES256_GCM,data:CoXPgSVVN/oX8//wTY6eKbJHNXIH0V7iMkphW8NRYs/7of03I+Zuuv/KZ4Ykcmencb7okEhbHXMRicpGLr+PXecHL7q+lhg5uM6ngarJxZDedWsFvXdZx3GsljHIxSk5oLR0vn/01VzF6B16q8EcdEOD7ui4JtL/KthaShI0NeRBoXBEPtUl78aOpwxkabjn5ry9K+IoU3GGHdp/O4m/DLvKzzSwrGfWCzVcPxJV+BBlp0iJuIDenRQJ+rsLOGhocU7upzUynZjF3YPiy9LwjvwwSZAubZDDsyej8FTqfVE=,iv:6cnBeyk2f/86L0G4gCcOsGhK8AJTDev+SoftcOO+/Yk=,tag:I0yMK3zXDBqOLQbf2qSSKA==,type:str]
+sops:
+    kms: []
+    gcp_kms: []
+    azure_kv: []
+    hc_vault: []
+    age:
+        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBxWnRHbWFrZ2xvOHJ4NUlO
+            ZkhuSHdES2xCOEFmOHY2ZWRRQWM5OEV1WWpnCjdWeTgrOGZOcTJpSWxiaG1FR2Jj
+            eEJOSmN2NXNzNkRjTDd1Y1VlU0dpWkUKLS0tIGk2R1BpMzBUWm1QWnRFcGxMS3FE
+            U2xQaGhqVHdveExja2dudEdGZ0NNczQKln/6sGJKDsnkim8BiEiK5cHizd/jVBvR
+            A8edjCljcWVGPhXEtpIY7plrXGuBzs2EL7gJA0iKyhZO/5LvUjdCmg==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB1aW1UUjZsNjhvd2RKaitF
+            Tzc2eTZUdmRDSHd6ZVorbE9yRzJMbVdhN0QwCmEyMEtSQU5nN1o5dHJ2ZnE1WVpK
+            RjlzbHNHZFdtQldOeVI0eVoyRSt3bW8KLS0tIHNFWWp6bTh6UEZMaTBiSVdQN1ZC
+            cUF6bndTWDVacnhQNlJUd3ZCakp1cHcKmorTYY3idrAnWUxAnQw197+kwAooVgm/
+            xZuEm58uBeiWMvcqtX3LP0/OqGqgsughZ4kiyNFz6w7XCvszfm+JWw==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-08-09T07:37:07Z"
+    mac: ENC[AES256_GCM,data:6b/Dat0+/2pR7XmZKLgGs1gfHlqoJptvoZaNAZYsf6ovm62V3fUZqXfZWhOAxaZbiwK69J+i5RCldcUXhyXWQ71jypqGUJU/RcrVyQdbZTyoG0om8ACilB2j8eRg79YFStkBcS/byKEQBhkWD0fTiZEOfxvuh7YAqyTRhSfxmCA=,iv:AIdGVa/IXf9N34lddQEtnhIKeeL+IoZLp8hCORCQcF0=,tag:Z2JWF06ZQnwfdaQFF4VNZw==,type:str]
+    pgp: []
+    encrypted_regex: ^(data|stringData)$
+    version: 3.9.4

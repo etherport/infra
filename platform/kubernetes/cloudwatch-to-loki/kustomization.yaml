@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: cloudwatch-to-loki
 
 resources:
+  - 05-ghcr-etherport.sops.yaml
   - 00-namespace.yaml
   - 02-script-configmap.yaml
   - 03-rbac.yaml
