@@ -15,6 +15,44 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-08-09 (cont.) — GitHub App live; repo mirror fixed (Phase 2a+2c)
+
+**Created the `etherport-automation` GitHub App** (id 4539969, installation 152499241,
+org-wide; `actions:write` / `contents:write` / `metadata:read` / `packages:read`) and put
+App ID + installation ID + PEM in the SOPS bundle (plaintext PEM shredded off the devbox —
+SOPS is the only copy). New `scripts/gh-app-token.sh` mints 1h installation tokens
+(RS256 JWT -> `/app/installations/<id>/access_tokens`) with optional `--permissions` /
+`--repositories` for per-use least privilege. Proof it solves the migration fallout: an App
+token enumerates **all 6** org repos where the user PAT saw **1**.
+
+**Phase 2c done — the nightly repo mirror now uses an App token and backs up 6/6 repos.**
+A `mint-token` init container (`alpine/openssl:3.5.7`, because `alpine/git` has no openssl)
+signs the JWT and hands a contents:read-scoped token to the mirror through an in-memory
+emptyDir; creds live in the `github-app-creds` SOPS secret.
+
+**Three real bugs found while testing (all fixed):**
+1. **Stale bundle lock wedges a repo permanently.** `git bundle create` leaves an
+   `<output>.lock` on the NFS share if a run dies mid-bundle; every later run then fails
+   *"Another git process seems to be running"*. `infra` was stuck this way (a zero-byte
+   `.infra.bundle.tmp.lock` dated 2029 from the NAS clock). The script now clears its own
+   stale `.tmp`/`.lock` first — and bundle errors are surfaced instead of an opaque
+   "FAILED (bundle)", which is what made this take three runs to diagnose.
+2. **Silent PARTIAL backup.** The empty-discovery guard only caught *0* repos, so a
+   throttled/under-scoped listing would back up a subset and exit 0 — the very failure this
+   whole workstream exists to fix. Added a **self-calibrating** guard: discovering fewer
+   repos than bundles already on disk = refuse and leave existing bundles intact
+   (`ALLOW_SHRINK=1` overrides for a genuine repo deletion). It immediately proved itself by
+   catching #3.
+3. **Flux reverts `kubectl apply`.** The 1-repo runs during testing weren't GitHub
+   throttling (my first theory) — Flux was reconciling the CronJob back to git's PAT
+   version between my manual applies. The CronJob has to ship via git. Same class as the
+   `suspend: false` trap from the cutover.
+
+**Remaining Phase 2:** 2b Flux git auth -> App (then re-disable deploy keys, as the owner
+asked), 2d devbox dispatch -> App token (the dispatch PAT still 404s on the org), 2e GHCR
+pull token decision, 2f retire both old PATs + drop the stale `sparked-diamond` OIDC trust
+path + refresh credential-inventory/CLAUDE.md.
+
 ## 2026-08-09 — GitHub org migration cutover: sparked-diamond → etherport (LIVE)
 
 Transferred all 6 repos from the `sparked-diamond` user to the new **`etherport` org**
