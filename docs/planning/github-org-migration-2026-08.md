@@ -135,3 +135,79 @@ Because the **OIDC dual-trust keeps the old path valid** throughout, and the swe
 a branch until 1.5, the safe rollback at any point before merge is: transfer repos back to
 `sparked-diamond`, do nothing else. After merge, roll back = `git revert` the sweep +
 transfer back + re-register the runner to the old repo.
+
+---
+
+# Phase 2 — GitHub App (draft 2026-08-09)
+
+**Why:** the migration left three user-scoped credentials that can't reach the org, plus a
+deploy-key dependency the org disables by policy:
+- `github_dispatch_pat` → **404s** on `etherport/infra` (devbox can't dispatch workflows).
+- `github-mirror-token` → enumerates **1/6** org repos (nightly backup is degraded; no alert
+  because the guard only fires on 0).
+- GHCR pulls use the org-owner's **classic PAT** (stopgap: `ghcr-cue`/`cue-ghcr`/`ghcr-etherport`).
+- Flux git auth uses **deploy keys**, which the org disables by policy (re-enabled manually;
+  owner wants them off again).
+
+**One GitHub App on the `etherport` org replaces all of them** with short-lived (1h)
+installation tokens minted from a single non-expiring private key — no PAT-expiry treadmill,
+scoped per use, and it lets us re-disable deploy keys.
+
+## 2a. Create the App — OWNER (GitHub UI)
+`etherport` org → **Settings → Developer settings → GitHub Apps → New GitHub App**:
+- **Name:** `wind-automation` (or `etherport-automation`)
+- **Homepage URL:** anything (e.g. `https://etherport.net`)
+- **Webhook:** **uncheck Active** (no webhook)
+- **Repository permissions:**
+  - **Contents: Read and write** — Flux git read + image-automation digest-pin pushes + mirror clone
+  - **Metadata: Read-only** (auto)
+  - **Actions: Read and write** — devbox `workflow_dispatch`
+  - **Packages: Read-only** — GHCR image pulls
+- **Where can this App be installed:** Only on this account.
+- **Generate a private key** → download the `.pem`.
+- **Install** the App on the org → **All repositories**.
+- Give the agent: **App ID**, **Installation ID** (from the install URL / installations API),
+  and the **PEM** (drop on the devbox like the PAT; agent encrypts to SOPS + shreds plaintext).
+
+## 2b. Flux git auth → App — AGENT (then re-disable deploy keys)
+Flux v2 supports GitHub App auth natively. Create a secret with `githubAppID`,
+`githubAppInstallationID`, `githubAppPrivateKey` and point the `flux-system` GitRepository at
+it (switch the source to HTTPS `https://github.com/etherport/infra` with `.spec.secretRef` →
+the App secret; drop the SSH `identity` deploy-key secret). Verify Flux still reconciles +
+image-automation still pushes digest commits. **Then the owner re-disables deploy keys**
+org-wide (both `flux-system` + `flux-image-automation` keys become dead) — closes the
+temporary policy exception.
+
+## 2c. Mirror backup → App token — AGENT (fixes 1/6)
+`alpine/git` has no `openssl`, so add a tiny **init container** (an image with openssl, e.g.
+`alpine/openssl` or a minimal python) that mints an installation token (RS256 JWT → `POST
+/app/installations/{id}/access_tokens`, scoped `contents:read`) and writes it to a shared
+`emptyDir`; the existing git step reads it as `GH_TOKEN`. Ship the JWT→token logic as a
+reusable `scripts/gh-app-token.sh` (also used by 2d). Enumeration already targets
+`/orgs/etherport/repos` (done in the cutover). Retire `github-mirror-token`.
+
+## 2d. Devbox dispatch → App token — AGENT (replaces the dead PAT)
+Devbox has openssl. Replace the `github_dispatch_pat` read in the dispatch helper
+(`infra/devbox/audit-helpers.sh` + `resume-claude-sessions.sh` etc.) with a call to
+`scripts/gh-app-token.sh` (scoped `actions:write`) → dispatch against `etherport/infra`.
+Retire `github_dispatch_pat`.
+
+## 2e. GHCR pulls — AGENT (decision)
+k8s pull secrets are static dockerconfigjson, but installation tokens are 1h. Two options:
+- **(A) simplest:** a dedicated **org-scoped classic PAT** (`read:packages` only) in the
+  `ghcr-*` secrets — one narrow standing credential, no refresher. Low blast radius.
+- **(B) purest:** a CronJob every ~45m that mints an App installation token
+  (`packages:read`) and refreshes the `ghcr-*` secrets. No standing PAT, more moving parts.
+Recommend **(A)** for a homelab unless we want zero standing tokens; revisit if it bugs us.
+
+## 2f. Cleanup — AGENT
+- Delete `github_dispatch_pat` + `github-mirror-token` on GitHub; remove from SOPS.
+- **Drop the old `sparked-diamond/*` OIDC trust path** (revert the dual-trust to etherport-only)
+  after a full CI run is confirmed green on `etherport/infra`.
+- Re-disable deploy keys (2b).
+- Update `docs/reference/credential-inventory.md` + `CLAUDE.md` (GitHub section → the App;
+  git auth → App; GHCR → org packages + pull secret).
+
+**Sequencing:** 2a (owner) → 2b (Flux, most impactful) → 2c/2d (token consumers) → 2e (pulls)
+→ 2f (cleanup). Each is independently verifiable; nothing here has a hard deadline now that
+the cluster is stable.
