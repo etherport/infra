@@ -36,7 +36,7 @@ YAML in this repo when a new tag matches the policy.
 | `velero/velero-plugin-for-aws`           | `velero-plugin-aws` | semver `>=1.0.0`                                    |
 | `cloudflare/cloudflared`                 | `cloudflared`    | per-app pattern in `clusters/wind/image-automation/`   |
 | `blackbox-exporter`                      | `blackbox-exporter` | per-app pattern in `clusters/wind/image-automation/`|
-| `ghcr.io/etherport/cue:latest`     | `cue-api`        | tracks moving `:latest`, reflects its digest (see below) |
+| `ghcr.io/sparked-diamond/cue:latest`     | `cue-api`        | tracks moving `:latest`, reflects its digest (see below) |
 | `home-assistant`, `ollama`, `open-webui`, `wikijs`, `plex`, `rclone`, `technitium` | per-app | per-app pattern in `clusters/wind/image-automation/` |
 
 `cue` is the **one exception** to "`ghcr.io/etherport/* = Bucket C`":

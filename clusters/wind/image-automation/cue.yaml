@@ -1,6 +1,6 @@
 # Flux Image Automation for cue (etherport/cue) — the deploy mechanism.
 #
-# cue is an active-dev app deployed as ghcr.io/etherport/cue:latest. A
+# cue is an active-dev app deployed as ghcr.io/sparked-diamond/cue:latest. A
 # `kubectl rollout restart` does NOT work (the Deployment is Flux-managed; Flux's
 # SSA re-apply strips the restartedAt annotation and reverts the rollout — proven
 # 2026-06-25). So instead, automation tracks the moving :latest tag and pins its
@@ -18,7 +18,7 @@ metadata:
   name: cue
   namespace: flux-system
 spec:
-  image: ghcr.io/etherport/cue
+  image: ghcr.io/sparked-diamond/cue
   interval: 5m          # active dev — scan often so deploys land within ~minutes
   secretRef:
     name: cue-ghcr      # ghcr read:packages pull secret (private package)
