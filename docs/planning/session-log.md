@@ -15,6 +15,43 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-08-09 — GitHub org migration cutover: sparked-diamond → etherport (LIVE)
+
+Transferred all 6 repos from the `sparked-diamond` user to the new **`etherport` org**
+and cut the homelab over. Cluster healthy throughout the tail (8/8 Ready, 0 image-pull
+failures, Flux Ready, self-hosted runner active on etherport/infra).
+
+**Done:** dual-trust OIDC applied (AWS trusts both repo paths) → runner re-registered to
+`etherport/infra` (unit `actions.runner.etherport-infra.gh-runner`) → merged the sweep
+(GHCR paths, Flux source URL, mirror→org enumeration, git remotes, docs) → 4 utility images
+rebuilt into the org (push-triggered by the merge touching the workflow files).
+
+**Gotchas hit (all real, all resolved):**
+- **GHCR packages do NOT transfer with a repo** — they're account-owned. The 5 images stayed
+  under the `sparked-diamond` user. Rebuilt the 4 infra-built ones to `etherport` via the
+  push-triggered image workflows; **cue** is built in the separate cue repo → kept at
+  `sparked-diamond/cue` (handed to the cue agent; cue-api + Flux image-automation still point
+  there).
+- **etherport org keeps packages PRIVATE + disables making them public** → added a
+  `ghcr-etherport` dockerconfigjson pull secret (SOPS) to backups/cloudflare-ddns/
+  cloudwatch-to-loki + `imagePullSecrets` on the SAs (base s3-sync SA propagates to the
+  prefixed per-share SAs). ansible-runner is CI-only (workflow GITHUB_TOKEN pulls it).
+- **Flux deploy keys were DISABLED by an org policy** (new-org default) → the transferred
+  keys showed "Disabled by etherport". Owner re-enabled deploy keys org-wide → keys
+  reactivated → Flux pulled the merge. Had to manually patch the live GitRepository URL to
+  etherport first (the URL fix was inside the commit Flux couldn't fetch — chicken-and-egg).
+- **User-scoped PATs can't reach org repos:** the dispatch PAT 404s on etherport/infra, and
+  the mirror PAT enumerated only 1/6 repos. Both are superseded by the Phase-2 GitHub App.
+
+**Remaining (Phase 2 — the GitHub App fixes most):**
+1. **GitHub App on etherport** → replaces the mirror PAT (fix 1/6 enumeration), the dead
+   dispatch PAT, and ideally the ghcr pull token (currently the org-owner's classic PAT).
+2. **cue repo** (cue agent): republish image to `ghcr.io/etherport/cue`, then infra flips
+   cue-api + image-automation + the pull secret.
+3. **Drop the old `sparked-diamond/infra` OIDC trust path** once a full CI run is verified.
+4. **Disable deploy keys again** after the App is in place (owner asked to remember this).
+5. Docs: credential-inventory, CLAUDE.md.
+
 ## 2026-07-29 (cont. 2) — Postgres HA restored 3/3, CNPG PVC alert, Phase-1 MAB blocker
 
 **Postgres HA fully restored:** re-cloned the 2 stuck replicas (-1 wedged mid-resize, -6
