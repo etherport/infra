@@ -4,7 +4,7 @@ metadata:
   name: github-mirror-script
   namespace: backups
 data:
-  # Mirror every repo owned by the sparked-diamond GitHub account into a single
+  # Mirror every repo owned by the etherport GitHub account into a single
   # git bundle per repo under the NAS Backups share (repos/). The existing
   # s3-sync-backups CronJob then sweeps that folder to
   # s3://archive.wind.etherport.net/objects/backups/repos/ — so this job only has
@@ -23,7 +23,7 @@ data:
     set -eu
 
     : "${GH_TOKEN:?GH_TOKEN (read-only PAT) must be set}"
-    GH_OWNER="${GH_OWNER:-sparked-diamond}"
+    GH_OWNER="${GH_OWNER:-etherport}"
     DEST="${DEST_DIR:-/nas/repos}"
     API="https://api.github.com"
     PUSHGATEWAY_URL="${PUSHGATEWAY_URL:-}"
@@ -44,9 +44,10 @@ data:
 
     mkdir -p "${DEST}"
 
-    # --- enumerate owner-affiliated repos (all private) via /user/repos ---
-    # Filter to full_names that begin with the owner login so a token that can
-    # also see other orgs' repos never pulls them in.
+    # --- enumerate the org's repos (all private) via /orgs/<org>/repos ---
+    # GH_OWNER is the etherport ORG (post-migration). Filter to full_names under
+    # that owner so nothing outside the org is ever pulled. (Pre-migration this
+    # used /user/repos?affiliation=owner; the repos now belong to the org.)
     repos=""
     page=1
     while : ; do
@@ -55,7 +56,7 @@ data:
         --header="Accept: application/vnd.github+json" \
         --header="X-GitHub-Api-Version: 2022-11-28" \
         --header="User-Agent: wind-github-mirror" \
-        "${API}/user/repos?per_page=100&page=${page}&affiliation=owner")"
+        "${API}/orgs/${GH_OWNER}/repos?per_page=100&page=${page}")"
       names="$(printf '%s' "$body" \
         | grep -oE "\"full_name\": *\"${GH_OWNER}/[A-Za-z0-9._-]+\"" \
         | sed -E 's/.*"'"${GH_OWNER}"'\/([A-Za-z0-9._-]+)"/\1/' || true)"

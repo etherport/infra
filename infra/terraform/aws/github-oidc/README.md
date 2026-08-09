@@ -6,7 +6,7 @@ CI. **Cutover complete** — every AWS-touching workflow assumes the
 
 ## What it creates
 - An IAM **OIDC provider** for `token.actions.githubusercontent.com`.
-- Role **`gh-actions-terraform`** trusted ONLY by `repo:sparked-diamond/infra` on
+- Role **`gh-actions-terraform`** trusted ONLY by `repo:etherport/infra` on
   `main` + `pull_request`.
 - Permissions = AWS-managed **`PowerUserAccess`** (all non-IAM services CI's
   terraform touches) **+** `gh-actions-terraform-iam` (scoped IAM/OIDC writes, with

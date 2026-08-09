@@ -26,7 +26,7 @@ SESSIONS=(
   infra        # migrated off the mini 2026-06-18
 )
 CODE="${HOME}/code"
-GH="git@github.com:sparked-diamond"
+GH="git@github.com:etherport"
 
 log() { echo "$(date '+%FT%T') resume: $*"; }
 

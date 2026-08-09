@@ -73,7 +73,7 @@ jobs:
     name: ansible ${{ github.event.inputs.playbook }} ${{ github.event.inputs.action }}${{ github.event.inputs.limit != '' && format(' --limit {0}', github.event.inputs.limit) || '' }}
     runs-on: [self-hosted, lifecycle]
     container:
-      image: ghcr.io/sparked-diamond/ansible-runner:main
+      image: ghcr.io/etherport/ansible-runner:main
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

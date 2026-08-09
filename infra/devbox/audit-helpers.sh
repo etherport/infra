@@ -32,7 +32,7 @@ case "${1:-}" in
     path="${2:?usage: gh-get <api-path>}"
     tok="$(sops_get github_dispatch_pat)"
     curl -fsS -H "Authorization: Bearer $tok" -H "Accept: application/vnd.github+json" \
-      "https://api.github.com/repos/sparked-diamond/infra/${path}"
+      "https://api.github.com/repos/etherport/infra/${path}"
     ;;
   dispatch-issue)
     # audit-helpers.sh dispatch-issue <clean|drift> [summary-file]
@@ -53,7 +53,7 @@ case "${1:-}" in
     fi
     tok="$(sops_get github_dispatch_pat)"
     curl -fsS -X POST -H "Authorization: Bearer $tok" -H "Accept: application/vnd.github+json" \
-      "https://api.github.com/repos/sparked-diamond/infra/actions/workflows/post-doc-drift-issue.yml/dispatches" \
+      "https://api.github.com/repos/etherport/infra/actions/workflows/post-doc-drift-issue.yml/dispatches" \
       -d "{\"ref\":\"main\",\"inputs\":{\"clean\":\"${clean}\",\"summary_b64\":\"${b64}\"}}"
     echo "dispatched post-doc-drift-issue (clean=${clean})"
     ;;

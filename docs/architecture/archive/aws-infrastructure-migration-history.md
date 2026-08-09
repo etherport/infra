@@ -38,7 +38,7 @@ CF Access enablement: [`../../runbooks/archive/cloudflare-access-enable.md`](../
 |--------|-------------|
 | `load-balancing/` | ALB + WAF decom'd — CF Tunnel + CF Access |
 | `route53/` | etherport.net + `aws.etherport.net` private zone deleted — CF is authoritative now |
-| `cloudflare-personal/` | migrated to [sparked-diamond/personal-web](https://github.com/sparked-diamond/personal-web) `terraform/cloudflare-dns/` |
+| `cloudflare-personal/` | migrated to [sparked-diamond/personal-web](https://github.com/etherport/personal-web) `terraform/cloudflare-dns/` |
 
 ### Certificate + SES cleanup (2026-05-27)
 
@@ -47,7 +47,7 @@ CF Access enablement: [`../../runbooks/archive/cloudflare-access-enable.md`](../
   longer have an ALB consumer (HA moved to in-cluster TLS).
 - **SES:** the personal-domain SES bits (grahamsmith.net, smithforsb.com, stopthecastle.com
   identities + DKIM + `g@grahamsmith.net` email identity) moved to the
-  [personal-web](https://github.com/sparked-diamond/personal-web) repo. Only `etherport.net`
+  [personal-web](https://github.com/etherport/personal-web) repo. Only `etherport.net`
   stays here.
 
 ## ddns-updater: Route53 → Cloudflare REST API (2026-05-27)

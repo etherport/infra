@@ -41,22 +41,22 @@ jobs:
           context: platform/kubernetes/cloudwatch-to-loki/image
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ghcr.io/sparked-diamond/cloudwatch-to-loki:main
-            ghcr.io/sparked-diamond/cloudwatch-to-loki:sha-${{ github.sha }}
+            ghcr.io/etherport/cloudwatch-to-loki:main
+            ghcr.io/etherport/cloudwatch-to-loki:sha-${{ github.sha }}
 
       # First-time setup for a NEW package: GITHUB_TOKEN can't flip visibility on
       # a user-owned package, so the first build pushes a PRIVATE package and the
       # CronJob would ImagePullBackOff. One-time manual step:
-      #   https://github.com/users/sparked-diamond/packages/container/cloudwatch-to-loki/settings
+      #   https://github.com/orgs/etherport/packages/container/cloudwatch-to-loki/settings
       #   -> set visibility to Public.
       # (Same gotcha documented in cloudflare-ddns-image.yml.)
       - name: Verify image is publicly pullable
         if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
-          TOKEN=$(curl -fsS "https://ghcr.io/token?scope=repository:sparked-diamond/cloudwatch-to-loki:pull" | jq -r .token)
+          TOKEN=$(curl -fsS "https://ghcr.io/token?scope=repository:etherport/cloudwatch-to-loki:pull" | jq -r .token)
           if curl -fsS -H "Authorization: Bearer $TOKEN" \
-               "https://ghcr.io/v2/sparked-diamond/cloudwatch-to-loki/manifests/main" \
+               "https://ghcr.io/v2/etherport/cloudwatch-to-loki/manifests/main" \
                -o /dev/null; then
             echo "::notice::cloudwatch-to-loki:main is publicly pullable"
           else

@@ -58,11 +58,12 @@ jobs:
     # times out from the same source IP).
     runs-on: [self-hosted, lifecycle]
     container:
-      image: ghcr.io/sparked-diamond/ansible-runner:main
-      # GHCR package is currently private (the make-public PATCH in
-      # ansible-runner-image.yml targets /orgs/sparked-diamond which
-      # returns 404 because sparked-diamond is a user, not an org).
-      # Auth-pull with the workflow's GITHUB_TOKEN until that's fixed.
+      image: ghcr.io/etherport/ansible-runner:main
+      # GHCR package auth-pulled with the workflow's GITHUB_TOKEN. NB (org
+      # migration 2026-08): the namespace is now the etherport ORG, so the
+      # make-public PATCH via /orgs/etherport should now work — the old
+      # user-namespace 404 no longer applies. Revisit visibility per Phase 2.4
+      # of docs/planning/github-org-migration-2026-08.md.
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

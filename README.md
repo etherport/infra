@@ -248,7 +248,7 @@ Restore procedures + RTO/RPO targets:
 | `etherport.net` public | Cloudflare (since 2026-05-25) | DNSSEC-signed, ~30 records. Manage via `infra/terraform/cloudflare/`. Route53 zone deleted. |
 | `aws.etherport.net` private | Deleted 2026-05-27 | Never had real content; private zone removed with route53 module decom |
 | `wind.etherport.net` internal | Technitium (in-cluster pair + dns-fallback VM + AWS edge-box replica) | MetalLB VIP 10.10.201.5 |
-| 3 personal zones (grahamsmith / smithforsb / stopthecastle) | Cloudflare, DNSSEC enabled | Owned by [sparked-diamond/personal-web](https://github.com/sparked-diamond/personal-web) (split out 2026-05-27); SES domain identities + email forwarding recipients live there too. The forwarding Lambda itself stays in this repo. |
+| 3 personal zones (grahamsmith / smithforsb / stopthecastle) | Cloudflare, DNSSEC enabled | Owned by [etherport/personal-web](https://github.com/etherport/personal-web) (split out 2026-05-27); SES domain identities + email forwarding recipients live there too. The forwarding Lambda itself stays in this repo. |
 | DDNS writers | ddns-updater Lambda + cloudflare-ddns CronJob | ✅ **Migrated to the Cloudflare API** (2026-06). The CronJob writes `wind`/`wan1`/`wan2`/`sip` to the active WAN every minute. See `platform/kubernetes/cloudflare-ddns/README.md`. |
 
 Module docs: `infra/terraform/cloudflare/README.md`. CF Free plan + ALB
@@ -345,7 +345,7 @@ gh workflow run ansible-k8s-node-fixes.yml # K8s node OS-level fixes
 ```
 
 The container image used by these workflows is built by
-`ansible-runner-image.yml` (published to ghcr.io/sparked-diamond).
+`ansible-runner-image.yml` (published to ghcr.io/etherport).
 
 ### Kubespray
 

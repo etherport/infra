@@ -37,7 +37,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: ddns
-              image: ghcr.io/sparked-diamond/cloudflare-ddns:main
+              image: ghcr.io/etherport/cloudflare-ddns:main
               imagePullPolicy: Always
               command: ["/bin/bash", "-lc"]
               args:

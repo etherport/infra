@@ -1,6 +1,6 @@
 # github-repo-mirror — off-GitHub backup of all repos → NAS → S3
 
-Nightly CronJob that mirrors **every repo owned by the `sparked-diamond` GitHub
+Nightly CronJob that mirrors **every repo owned by the `etherport` GitHub
 account** into a single `git bundle` per repo on the NAS, from where the existing
 `s3-sync-backups` job sweeps them to S3. This is the disaster-recovery copy of the
 source of truth: until this existed, the only copies of the repos were GitHub plus
@@ -9,7 +9,7 @@ whatever working clones happened to be on the devbox/mini.
 ## Flow
 
 ```
-GitHub (sparked-diamond, private)
+GitHub (etherport, private)
    │  git clone --mirror  (00:40 PT, this CronJob)
    ▼
 NAS  sequoia:/var/nfs/shared/Backups/repos/<name>.bundle   (one file per repo)
@@ -36,16 +36,16 @@ discarded; only the bundle is kept.
 # from the NAS share or the S3 object:
 git clone infra.bundle infra
 cd infra
-git remote set-url origin git@github.com:sparked-diamond/infra.git
+git remote set-url origin git@github.com:etherport/infra.git
 git push --mirror origin        # only if repopulating an empty GitHub repo
 ```
 
 ## The token
 
 `github-mirror-token` (SOPS) holds a **fine-grained, read-only PAT** owned by the
-`sparked-diamond` account:
+`etherport` account:
 
-- **Resource owner:** sparked-diamond
+- **Resource owner:** etherport
 - **Repository access:** All repositories
 - **Permissions:** *Contents: Read-only* (clone) + *Metadata: Read-only* (auto;
   needed to enumerate via `/user/repos`)
@@ -60,7 +60,7 @@ rotate ahead of expiry. On the **devbox** (which holds the SOPS age key):
 
 ```sh
 # 1. Mint a new fine-grained PAT on github.com (same scopes: Contents:read +
-#    Metadata:read, all repos, owner sparked-diamond). Save it to a temp file.
+#    Metadata:read, all repos, owner etherport). Save it to a temp file.
 # 2. Drop it into the encrypted secret WITHOUT it ever hitting git plaintext:
 cd ~/code/infra
 NEW=$(tr -d '[:space:]' < /path/to/new-pat)

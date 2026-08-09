@@ -67,7 +67,7 @@ Builds the `aws-s3-sync` container for Kubernetes backup jobs.
 
 **Path:** `platform/kubernetes/backups/aws-s3/image/`
 
-**Image:** `ghcr.io/sparked-diamond/aws-s3-sync:main`
+**Image:** `ghcr.io/etherport/aws-s3-sync:main`
 
 **Purpose:** Sync Kubernetes backups to S3 buckets
 
@@ -77,7 +77,7 @@ Builds the `cloudflare-ddns` container for dynamic DNS updates.
 
 **Path:** `platform/kubernetes/cloudflare-ddns/image/`
 
-**Image:** `ghcr.io/sparked-diamond/cloudflare-ddns:main`
+**Image:** `ghcr.io/etherport/cloudflare-ddns:main`
 
 **Purpose:** Update Cloudflare DNS records when the homelab IP changes (Route53 retired 2026-05-27; DNS is authoritative on Cloudflare)
 
@@ -121,8 +121,8 @@ jobs:
           context: path/to/image
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ghcr.io/sparked-diamond/<name>:main
-            ghcr.io/sparked-diamond/<name>:sha-${{ github.sha }}
+            ghcr.io/etherport/<name>:main
+            ghcr.io/etherport/<name>:sha-${{ github.sha }}
 ```
 
 ### Terraform Workflow Considerations

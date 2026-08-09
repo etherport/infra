@@ -52,7 +52,7 @@ jobs:
     # still works if the cluster is offline (same rationale as proxmox).
     runs-on: [self-hosted, lifecycle]
     container:
-      image: ghcr.io/sparked-diamond/ansible-runner:main
+      image: ghcr.io/etherport/ansible-runner:main
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

@@ -1,6 +1,6 @@
 [Unit]
 Description=Weekly live-anchored doc/IaC drift audit (headless claude; docs-only auto-fix)
-Documentation=https://github.com/sparked-diamond/infra/blob/main/infra/devbox/doc-drift-audit-prompt.md
+Documentation=https://github.com/etherport/infra/blob/main/infra/devbox/doc-drift-audit-prompt.md
 After=network-online.target
 Wants=network-online.target
 

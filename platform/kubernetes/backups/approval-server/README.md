@@ -8,7 +8,7 @@ for the full design.
 
 ## What it is
 - **Deployment + Service `backup-approval`** (this dir), reusing the
-  `ghcr.io/sparked-diamond/aws-s3-sync` image and running
+  `ghcr.io/etherport/aws-s3-sync` image and running
   `approval-server.py` (in that image's `scripts/`). Pure stdlib HTTP; S3 via
   the bundled aws-cli.
 - Exposed at **`backup-approve.wind.etherport.net`** via the Cloudflare tunnel,

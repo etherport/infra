@@ -23,7 +23,7 @@ spec:
         # docs/runbooks/ai-advisor-phase3-enable.md.
         ai_remediation: "auto"
       annotations:
-        runbook_url: "https://github.com/sparked-diamond/infra/blob/main/docs/runbooks/alerts/NodeLocalDNSHighErrorRate.md"
+        runbook_url: "https://github.com/etherport/infra/blob/main/docs/runbooks/alerts/NodeLocalDNSHighErrorRate.md"
         summary: "NodeLocalDNS error rate is high on {{ $labels.instance }}"
         description: "NodeLocalDNS on {{ $labels.instance }} has {{ $value }} SERVFAIL/sec"
 

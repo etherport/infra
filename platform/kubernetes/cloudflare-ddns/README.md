@@ -6,7 +6,7 @@ the Cloudflare API.
 
 > **Migration note (2026-05-27):** this module was renamed from
 > `route53-ddns` and rewritten to call the Cloudflare API (curl) instead
-> of aws-cli + Route53; the image (`ghcr.io/sparked-diamond/cloudflare-ddns:main`)
+> of aws-cli + Route53; the image (`ghcr.io/etherport/cloudflare-ddns:main`)
 > no longer bundles aws-cli. See
 > `docs/runbooks/archive/cloudflare-ddns-migration.md` for the record.
 

@@ -60,7 +60,7 @@ spec:
       valuesKey: values.yaml
   values:
     runnerScaleSetName: "homelab-runner"
-    githubConfigUrl: "https://github.com/sparked-diamond/infra"
+    githubConfigUrl: "https://github.com/etherport/infra"
     minRunners: 0
     maxRunners: 3
     containerMode:

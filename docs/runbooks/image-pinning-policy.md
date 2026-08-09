@@ -36,10 +36,10 @@ YAML in this repo when a new tag matches the policy.
 | `velero/velero-plugin-for-aws`           | `velero-plugin-aws` | semver `>=1.0.0`                                    |
 | `cloudflare/cloudflared`                 | `cloudflared`    | per-app pattern in `clusters/wind/image-automation/`   |
 | `blackbox-exporter`                      | `blackbox-exporter` | per-app pattern in `clusters/wind/image-automation/`|
-| `ghcr.io/sparked-diamond/cue:latest`     | `cue-api`        | tracks moving `:latest`, reflects its digest (see below) |
+| `ghcr.io/etherport/cue:latest`     | `cue-api`        | tracks moving `:latest`, reflects its digest (see below) |
 | `home-assistant`, `ollama`, `open-webui`, `wikijs`, `plex`, `rclone`, `technitium` | per-app | per-app pattern in `clusters/wind/image-automation/` |
 
-`cue` is the **one exception** to "`ghcr.io/sparked-diamond/* = Bucket C`":
+`cue` is the **one exception** to "`ghcr.io/etherport/* = Bucket C`":
 it's an internally-built image but Flux-managed (Bucket A) because its
 tags are unsortable `sha-<commit>` plus a moving `:latest`, so automation
 tracks `:latest` and pins its reflected digest — see
@@ -63,7 +63,7 @@ charts, and (when not Flux-managed) container images. Renovate opens a
 PR per bump.
 
 `renovate.json` **disables Renovate** for the Bucket-A images (so Flux
-owns them) and for everything in `ghcr.io/sparked-diamond/*` (Bucket C
+owns them) and for everything in `ghcr.io/etherport/*` (Bucket C
 below). ⚠️ The Docker disable list is **incomplete**: it omits the three
 Bucket-A images added since the original write-up —
 `velero-plugin-for-aws`, `cloudflared`, and `blackbox-exporter` — so add
@@ -88,10 +88,10 @@ Images we build ourselves and push to GHCR. The CI workflow tags both
 
 | Image                                        | Built by workflow                       |
 |----------------------------------------------|-----------------------------------------|
-| `ghcr.io/sparked-diamond/aws-s3-sync:main`   | `.github/workflows/aws-s3-sync-image.yml` |
-| `ghcr.io/sparked-diamond/cloudflare-ddns:main`  | `.github/workflows/cloudflare-ddns-image.yml` |
-| `ghcr.io/sparked-diamond/ansible-runner:main`| `.github/workflows/ansible-runner-image.yml` |
-| `ghcr.io/sparked-diamond/cloudwatch-to-loki:main`| `.github/workflows/cloudwatch-to-loki-image.yml` |
+| `ghcr.io/etherport/aws-s3-sync:main`   | `.github/workflows/aws-s3-sync-image.yml` |
+| `ghcr.io/etherport/cloudflare-ddns:main`  | `.github/workflows/cloudflare-ddns-image.yml` |
+| `ghcr.io/etherport/ansible-runner:main`| `.github/workflows/ansible-runner-image.yml` |
+| `ghcr.io/etherport/cloudwatch-to-loki:main`| `.github/workflows/cloudwatch-to-loki-image.yml` |
 
 **Trade-off accepted:** `:main` is moving. Restarting a pod after a
 new push pulls the new image. That's deliberate — `imagePullPolicy:
@@ -171,7 +171,7 @@ new image → decide bucket → wire it
 ## Last audit
 
 2026-06-28 — re-verified against `clusters/wind/image-automation/`,
-`renovate.json`, and the `sparked-diamond` GHCR org after H30 (digest
+`renovate.json`, and the `etherport` GHCR org after H30 (digest
 pinning, 2026-06-24) and the `cue` `:latest`-tracking automation landed.
 Bucket A now also covers `cloudflared`, `blackbox-exporter`, and `cue`;
 Bucket C gained `cloudwatch-to-loki`. Noted gap: the `renovate.json`

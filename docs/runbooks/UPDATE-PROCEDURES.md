@@ -203,7 +203,7 @@ ansible dns_servers,vpn_servers \
 **View open PRs:**
 ```bash
 gh pr list --label renovate
-# Or: https://github.com/sparked-diamond/infra/pulls
+# Or: https://github.com/etherport/infra/pulls
 ```
 
 > The `gh` CLI is **not** installed on the devbox — triage from a host that has it
@@ -314,7 +314,7 @@ until you trigger a rebuild.
 **2. Verify Flux image automation is actually firing for the Renovate-deny-listed
 images** (`ollama`, `open-webui`, `technitium/dns-server`, `requarks/wiki`,
 `plexinc/pms-docker`, `rclone/rclone`, `home-assistant`, `python`, `busybox`,
-`sparked-diamond/*` — Flux owns these via `ImagePolicy` CRDs):
+`etherport/*` — Flux owns these via `ImagePolicy` CRDs):
 
 ```bash
 kubectl get imagepolicy -n flux-system
@@ -405,7 +405,7 @@ kubectl annotate node <node-name> kured.dev/reboot-in-progress-
 ```
 
 ### Renovate Not Creating PRs
-1. Check: https://developer.mend.io/github/sparked-diamond/infra
+1. Check: https://developer.mend.io/github/etherport/infra
 2. Look for "Action Required" issues
 3. Verify `renovate.json` is valid
 

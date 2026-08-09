@@ -41,6 +41,12 @@ locals {
   account_id        = "830881980142"
   repo              = "sparked-diamond/infra"
   repo_personal_web = "sparked-diamond/personal-web"
+  # Org migration (2026-08): repos move sparked-diamond (user) -> etherport (org).
+  # The OIDC `sub` claim embeds the repo path, so the trust must accept BOTH during
+  # the cutover (CI keeps AWS across the transfer). Drop the *_old paths after the
+  # move is verified. See docs/planning/github-org-migration-2026-08.md.
+  repo_new              = "etherport/infra"
+  repo_personal_web_new = "etherport/personal-web"
 }
 
 # GitHub's OIDC identity provider. One per account. If it already exists,
@@ -78,6 +84,7 @@ data "aws_iam_policy_document" "trust" {
       variable = "token.actions.githubusercontent.com:sub"
       values = [
         "repo:${local.repo}:ref:refs/heads/main",
+        "repo:${local.repo_new}:ref:refs/heads/main",
       ]
     }
   }
@@ -143,7 +150,7 @@ data "aws_iam_policy_document" "trust_plan" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${local.repo}:pull_request"]
+      values   = ["repo:${local.repo}:pull_request", "repo:${local.repo_new}:pull_request"]
     }
   }
 }
@@ -241,6 +248,8 @@ data "aws_iam_policy_document" "trust_personal_web" {
       values = [
         "repo:${local.repo_personal_web}:ref:refs/heads/main",
         "repo:${local.repo_personal_web}:pull_request",
+        "repo:${local.repo_personal_web_new}:ref:refs/heads/main",
+        "repo:${local.repo_personal_web_new}:pull_request",
       ]
     }
   }

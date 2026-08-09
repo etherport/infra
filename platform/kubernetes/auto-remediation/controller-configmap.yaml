@@ -295,7 +295,7 @@ data:
     # so the advisor reads commit history + runbooks via the public API
     # instead of shelling out to git. Token is optional — unauth requests
     # work but the 60/hr rate limit makes them unreliable.
-    GITHUB_REPO = os.environ.get('GITHUB_REPO', 'sparked-diamond/infra')
+    GITHUB_REPO = os.environ.get('GITHUB_REPO', 'etherport/infra')
     GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')
     # Max silence TTL the advisor can set (hours). Anything beyond this
     # should be a human-led operational decision.

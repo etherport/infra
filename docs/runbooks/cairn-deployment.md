@@ -2,8 +2,8 @@
 
 `cairn` is the native macOS iCloud → NAS backup agent that replaces the bash backup suite
 (`infra/macos/mini/*.sh`). **Design + code live in its own repo** —
-[`sparked-diamond/cairn`](https://github.com/sparked-diamond/cairn) (cloned at `~/code/cairn`);
-see [`cairn/DESIGN.md`](https://github.com/sparked-diamond/cairn/blob/main/DESIGN.md). This runbook
+[`etherport/cairn`](https://github.com/etherport/cairn) (cloned at `~/code/cairn`);
+see [`cairn/DESIGN.md`](https://github.com/etherport/cairn/blob/main/DESIGN.md). This runbook
 is infra's part only: **how cairn is built, signed, permissioned, scheduled, and monitored on the
 mini**, and how to cut over from the bash suite. Tracker: M103 in
 [`../planning/outstanding-work.md`](../planning/outstanding-work.md).
@@ -20,7 +20,7 @@ All categories run on cairn via launchd; the 4 bash backup agents (`net.wind.icl
 (reversible). Grafana dashboards + Prometheus alerts were rewritten to the `cairn_*` label schema;
 the stale bash Pushgateway groups were deleted; `mini-health.sh` EXPECT was updated to the cairn
 agents. **Step-by-step install / config / metrics / gotchas now live in the cairn repo
-[`README.md`](https://github.com/sparked-diamond/cairn/blob/main/README.md)** — this runbook keeps
+[`README.md`](https://github.com/etherport/cairn/blob/main/README.md)** — this runbook keeps
 the infra-specific deployment + the cutover record + rollback.
 
 ### Operational findings that bit during cutover (don't relearn these)

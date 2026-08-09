@@ -46,15 +46,17 @@ jobs:
           context: infra/ci/ansible-runner
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ghcr.io/sparked-diamond/ansible-runner:main
-            ghcr.io/sparked-diamond/ansible-runner:sha-${{ github.sha }}
+            ghcr.io/etherport/ansible-runner:main
+            ghcr.io/etherport/ansible-runner:sha-${{ github.sha }}
 
       # No automated make-public: the GitHub API endpoint requires
       # PAT scope `delete:packages` (or admin:packages, which a workflow's
       # GITHUB_TOKEN does NOT receive even when `permissions: packages:
-      # write` is set). User-owned namespaces (sparked-diamond is a user,
-      # not an org) also use /users/, not /orgs/ — the previous PATCH
+      # write` is set). NB (org migration 2026-08): the namespace is now the
+      # etherport ORG, so the /orgs/ package API applies (the old /users/
+      # workaround for the sparked-diamond USER can be simplified — revisit per
+      # Phase 2.4 of docs/planning/github-org-migration-2026-08.md). The PATCH
       # silently 404'd. Manual one-time flip via
-      # https://github.com/users/sparked-diamond/packages/container/ansible-runner/settings
+      # https://github.com/orgs/etherport/packages/container/ansible-runner/settings
       # is sufficient since GHCR package visibility persists across image
       # rebuilds.

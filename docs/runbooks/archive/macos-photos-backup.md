@@ -86,7 +86,7 @@ brew install pipx grafana-alloy && pipx install osxphotos
 #    (osxphotos → ~/.local/bin/osxphotos; alloy → /opt/homebrew/bin/alloy)
 
 # 2. clone the repo (so the plists/scripts resolve)
-git clone git@github.com:sparked-diamond/infra.git ~/code/infra
+git clone git@github.com:etherport/infra.git ~/code/infra
 
 # 3. one-time library setup (interactive, see infra/macos/mini/README.md "Owner one-time setup"):
 #    create the sparsebundle, create a Photos library inside it, sign into iCloud,

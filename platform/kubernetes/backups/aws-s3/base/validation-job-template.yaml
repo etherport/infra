@@ -23,7 +23,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: validate
-          image: ghcr.io/sparked-diamond/aws-s3-sync:main
+          image: ghcr.io/etherport/aws-s3-sync:main
           imagePullPolicy: Always
           command: ["/bin/bash", "-lc"]
           args:

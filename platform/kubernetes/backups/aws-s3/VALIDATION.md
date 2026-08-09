@@ -65,7 +65,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: validate
-          image: ghcr.io/sparked-diamond/aws-s3-sync:main
+          image: ghcr.io/etherport/aws-s3-sync:main
           command: ["/bin/bash", "-lc"]
           args:
             - |
@@ -170,7 +170,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: validate
-          image: ghcr.io/sparked-diamond/aws-s3-sync:main
+          image: ghcr.io/etherport/aws-s3-sync:main
           command: ["/bin/bash", "-lc"]
           args:
             - |
@@ -533,7 +533,7 @@ The validation script requires:
 - `parallel` or `xargs` - Parallel execution
 - `aws` CLI - S3 API access
 
-These are all included in the `ghcr.io/sparked-diamond/aws-s3-sync:main` container image.
+These are all included in the `ghcr.io/etherport/aws-s3-sync:main` container image.
 
 ## FAQ
 

@@ -32,7 +32,7 @@ spec:
               # rationale lives in image/Dockerfile. :main is mutable, so
               # imagePullPolicy: Always picks up new builds (same scheme as
               # cloudflare-ddns / aws-s3-sync). Script still mounted from the CM.
-              image: ghcr.io/sparked-diamond/cloudwatch-to-loki:main
+              image: ghcr.io/etherport/cloudwatch-to-loki:main
               imagePullPolicy: Always
               command: ["python", "/scripts/forward.py"]
               env:

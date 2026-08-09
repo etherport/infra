@@ -212,7 +212,7 @@ Remove human credentials entirely - only CI/CD can deploy:
 │  1. GitHub Actions workflow triggered on PR merge                       │
 │                                                                         │
 │  2. GitHub signs a JWT token proving:                                   │
-│     - Repository: sparked-diamond/infra                                 │
+│     - Repository: etherport/infra                                 │
 │     - Branch: main                                                      │
 │     - Workflow: deploy.yml                                              │
 │                                                                         │
