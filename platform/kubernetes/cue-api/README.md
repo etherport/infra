@@ -5,7 +5,7 @@ Single-owner **dev** deployment of the Cue API (Node 24 + Fastify), in the
 and spends on an LLM key, so public exposure is deliberately minimal.
 
 ## Image
-Built by GitHub Actions in the app repo (`sparked-diamond/cue`,
+Built by GitHub Actions in the app repo (`etherport/cue`,
 `.github/workflows/build-image.yml`) → **`ghcr.io/sparked-diamond/cue`** (private
 package). The cluster pulls it via the `ghcr-cue` imagePullSecret. There is no
 local Docker build — CI is the source of truth.

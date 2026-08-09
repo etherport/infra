@@ -123,7 +123,7 @@ spec:
         # secret `ai-advisor-github` with key `token` to populate
         # (fine-grained PAT, public-repo read access only).
         - name: GITHUB_REPO
-          value: "sparked-diamond/infra"
+          value: "etherport/infra"
         - name: GITHUB_TOKEN
           valueFrom:
             secretKeyRef:

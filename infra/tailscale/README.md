@@ -41,7 +41,7 @@ The GH Action lives at `.github/workflows/tailscale-policy.yml`.
    "Prevent edits in the admin console". Optional but recommended
    — prevents drift from someone editing in the web UI directly.
 5. **Set External reference** on the same page to
-   `https://github.com/sparked-diamond/infra/blob/main/infra/tailscale/policy.hujson`.
+   `https://github.com/etherport/infra/blob/main/infra/tailscale/policy.hujson`.
    This is just a banner for human admins pointing at the source
    of truth.
 

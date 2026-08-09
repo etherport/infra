@@ -22,7 +22,7 @@ brew install --cask tailscale 1password nordvpn visual-studio-code
 
 # 4. Clone homelab repo
 mkdir -p ~/code && cd ~/code
-git clone https://github.com/sparked-diamond/infra.git
+git clone https://github.com/etherport/infra.git
 
 # 5. Run setup script (see below)
 ~/code/infra/scripts/setup-terminal.sh

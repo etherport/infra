@@ -293,8 +293,8 @@ Built and published automatically via GitHub Actions:
 - **Trigger**: Changes to `platform/kubernetes/backups/aws-s3/image/**`
 - **Registry**: GitHub Container Registry (GHCR)
 - **Tags**:
-  - `ghcr.io/sparked-diamond/aws-s3-sync:main` (latest)
-  - `ghcr.io/sparked-diamond/aws-s3-sync:sha-{commit}` (specific version)
+  - `ghcr.io/etherport/aws-s3-sync:main` (latest)
+  - `ghcr.io/etherport/aws-s3-sync:sha-{commit}` (specific version)
 
 ### Base Image
 
@@ -692,7 +692,7 @@ Changes to `image/**` trigger automatic rebuild via GitHub Actions.
 To use a specific image version:
 ```yaml
 # In base/cronjob.yaml
-image: ghcr.io/sparked-diamond/aws-s3-sync:sha-{commit-hash}
+image: ghcr.io/etherport/aws-s3-sync:sha-{commit-hash}
 ```
 
 ### Rotate AWS Credentials

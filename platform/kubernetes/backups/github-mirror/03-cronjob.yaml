@@ -58,7 +58,7 @@ spec:
                   ephemeral-storage: "8Gi"
               env:
                 - name: GH_OWNER
-                  value: "sparked-diamond"
+                  value: "etherport"
                 - name: DEST_DIR
                   value: "/nas/repos"
                 - name: PUSHGATEWAY_URL

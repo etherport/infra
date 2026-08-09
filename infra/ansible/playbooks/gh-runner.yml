@@ -22,7 +22,7 @@
     runner_version: "2.328.0"
     runner_user: ubuntu
     runner_home: /home/{{ runner_user }}/actions-runner
-    repo_url: https://github.com/sparked-diamond/infra
+    repo_url: https://github.com/etherport/infra
     runner_name: "{{ inventory_hostname }}"
     # Labels: keep 'homelab-runner' so existing workflows (runs-on: homelab-runner)
     # auto-dispatch. Add 'lifecycle' for workflows specifically targeting this
@@ -166,7 +166,7 @@
         cmd: ./svc.sh install {{ runner_user }}
         chdir: "{{ runner_home }}"
       args:
-        creates: "/etc/systemd/system/actions.runner.sparked-diamond-infra.{{ runner_name }}.service"
+        creates: "/etc/systemd/system/actions.runner.etherport-infra.{{ runner_name }}.service"
 
     # ---- L11 fix: durable workspace cleanup via runner job-started hook ----
     # Some workflows (terraform-* in particular) interact with the work dir
@@ -236,7 +236,7 @@
 
     - name: Start + enable runner service
       ansible.builtin.systemd:
-        name: "actions.runner.sparked-diamond-infra.{{ runner_name }}.service"
+        name: "actions.runner.etherport-infra.{{ runner_name }}.service"
         state: started
         enabled: true
         daemon_reload: true
@@ -257,7 +257,7 @@
         if [ "{{ ansible_connection }}" = "local" ]; then
           # Defer 10s so this play and its calling workflow can finish.
           systemd-run --unit=runner-deferred-restart --on-active=10s \
-            systemctl restart actions.runner.sparked-diamond-infra.{{ runner_name }}.service
+            systemctl restart actions.runner.etherport-infra.{{ runner_name }}.service
         else
-          systemctl restart actions.runner.sparked-diamond-infra.{{ runner_name }}.service
+          systemctl restart actions.runner.etherport-infra.{{ runner_name }}.service
         fi

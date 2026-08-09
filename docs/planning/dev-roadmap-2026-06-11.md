@@ -63,7 +63,7 @@ The four tracks below each carry their own prioritized items. Several items
 | B4 | **Runtime security (Cilium Tetragon, observe-first)** — adds the L7/process/syscall layer Hubble (flow) + Kyverno (admission) leave open. eBPF substrate already present. | M | after H3 |
 | B5 | **SSO / zero-trust for internal UIs** — only `approve.etherport.net` has SSO (CF Access); Grafana is admin-password-only; resolves L14 (advisor public-approval-URL auth gap). | M | extend CF Access to Grafana, or Tailscale Funnel |
 | B6 | **Automated secret rotation** — turn H33's runbook into scheduled rotation for the mechanizable secrets (gh-runner token, Grafana pw) + secret-age alerting. | M | after H33 |
-| B7 | **Supply-chain attestation / SLSA provenance** — capstone once B2+B3 exist; Kyverno requires signature *and* provenance from `repo:sparked-diamond/infra`. | M | after B2+B3 |
+| B7 | **Supply-chain attestation / SLSA provenance** — capstone once B2+B3 exist; Kyverno requires signature *and* provenance from `repo:etherport/infra`. | M | after B2+B3 |
 | B8 | **East-west encryption (Cilium WireGuard mode)** (= M66) — pod-to-pod is cleartext + (pre-H3) unrestricted; mTLS-without-a-mesh, far lighter than Istio. | M | validate MTU vs the 9000 Ceph VLAN |
 
 ## Track C — Platform / capabilities

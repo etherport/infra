@@ -71,7 +71,7 @@ Open residuals are noted inline; they are the only open work in this section.
 - ✅ **M73** (2026-06-28) — Kyverno guardrails ENFORCE (`disallow-latest-tag`, mutate-default-requests, `require-resource-requests`) — ⏳ next: cosign `verifyImages` provenance policy (needs signing setup).
 - ✅ **M74** (2026-06-28) — Tetragon detection pipeline live (4 TracingPolicies → Loki alerts; allowlist-limited export) — ⏳ optional: shell-in-container / kmod / mount policies; enforcement mode.
 - ✅ **M76** (2026-06-26) — fleet SSH **cert-only** cutover (step-ca; static key removed from all 15 hosts) — residuals by design: cloud-init bootstrap seed + packer + appliance keys; ⏳ user removes the bootstrap-only `ANSIBLE_SSH_KEY` GH secret; the mini key copy rolls into [[M71]].
-- ✅ **M103** (2026-06-25/26) — cairn native iCloud backup agent: cutover + CI signed release done; bash suite retired. Repo: [sparked-diamond/cairn](https://github.com/sparked-diamond/cairn); runbook `docs/runbooks/cairn-deployment.md`.
+- ✅ **M103** (2026-06-25/26) — cairn native iCloud backup agent: cutover + CI signed release done; bash suite retired. Repo: [etherport/cairn](https://github.com/etherport/cairn); runbook `docs/runbooks/cairn-deployment.md`.
 - ✅ **H30** (2026-06-24) — supply chain: 111 Actions SHA-pinned, SOPS checksum-verified, all 13 ImagePolicies digest-pinned (in-house `:main` + cue-api `:latest` accepted for now — do NOT "fix" cue-api).
 - ✅ **M82** (2026-06-24) — Terraform is CI-only; devbox dropped standing AWS/PVE creds (dispatches via the M92 PAT).
 - ✅ **M75** (2026-06-24) — IRSA in-cluster AWS workload identity; all workloads migrated, **no static AWS keys in etcd** — ⏳ residual: deactivate/remove the 4 orphaned dedicated IAM keys (NOT the H29 `terraform-homelab` key) — **2 of 4 DONE 2026-07-12** (`velero-backup` + `kubernetes-s3-backup` users/keys/policies deleted, M143); `barman-postgres` + `etcd-backup` remain (etcd-backup is the deliberate host-level static, M71).
@@ -244,7 +244,7 @@ This file foregrounds open/in-progress/gated work._
 ### ✅ M156. Off-GitHub repo backup (GitHub → NAS → S3) — LIVE 2026-08-06
 - **Gap:** the git repos had **no backup off GitHub** — only working clones on devbox/mini. Closed with
   `platform/kubernetes/backups/github-mirror/`: a nightly (00:40 PT) k8s CronJob that `git clone --mirror`s
-  every `sparked-diamond` repo and writes one **`git bundle --all` per repo** to the NAS Backups share
+  every `etherport` repo and writes one **`git bundle --all` per repo** to the NAS Backups share
   (`repos/`), which the existing `s3-sync-backups` sweeps to `s3://archive.wind.etherport.net/objects/backups/`
   at 01:10 PT — no new S3 wiring. Image `alpine/git` (busybox wget does the authed API enumeration; no
   curl/jq/custom image). Atomic `.tmp`+mv publish; empty-discovery guard; `GithubRepoMirrorStale` alert.

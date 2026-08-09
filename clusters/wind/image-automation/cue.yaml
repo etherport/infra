@@ -1,4 +1,4 @@
-# Flux Image Automation for cue (sparked-diamond/cue) — the deploy mechanism.
+# Flux Image Automation for cue (etherport/cue) — the deploy mechanism.
 #
 # cue is an active-dev app deployed as ghcr.io/sparked-diamond/cue:latest. A
 # `kubectl rollout restart` does NOT work (the Deployment is Flux-managed; Flux's

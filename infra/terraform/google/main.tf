@@ -41,7 +41,7 @@ resource "google_project" "cloudflare_zero_trust" {
 
 // --- API enablements on this project ----------------------------------------
 // The CF-Access OAuth IdP itself needs no extra API. These are for the Cue
-// "Find food" feature (sparked-diamond/cue), which calls Places API (New)
+// "Find food" feature (etherport/cue), which calls Places API (New)
 // server-side for nearby-restaurant search.
 //
 // ⚠️ SERVICE ID: Places API (New) is `places.googleapis.com` (its endpoints are

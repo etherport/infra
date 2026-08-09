@@ -10,7 +10,7 @@
 # NOT managed (moved out 2026-05-27):
 # - grahamsmith.net, smithforsb.com, stopthecastle.com SES identities +
 #   DKIM live in the personal-web repo
-#   (sparked-diamond/personal-web :: terraform/ses-email-forward)
+#   (etherport/personal-web :: terraform/ses-email-forward)
 # - g@grahamsmith.net email identity moved there too (it's the personal-
 #   web verified sender used by the fwd_graham receipt rule)
 

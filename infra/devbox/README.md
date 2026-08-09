@@ -40,7 +40,7 @@ agent here **can `workflow_dispatch`** (run the drift sweep, trigger a `terrafor
 apply`, etc.) over the GitHub REST API via a **fine-grained PAT** stored in the SOPS
 ops bundle under `github_dispatch_pat`.
 
-The PAT is scoped to **only `sparked-diamond/infra`** with **Repository permissions →
+The PAT is scoped to **only `etherport/infra``** with **Repository permissions →
 Actions: Read and write** (+ Contents: Read; Metadata: Read is automatic) — the minimum
 to list + dispatch workflows. (A classic PAT with `repo`+`workflow` also works but is
 far broader — avoided.)
@@ -58,11 +58,11 @@ TOK=$(SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops -d \
   infra/ansible/playbooks/secrets/homelab-ops.sops.yaml | yq -r .github_dispatch_pat)
 # run the daily drift sweep on demand:
 curl -fsS -X POST -H "Authorization: Bearer $TOK" -H "Accept: application/vnd.github+json" \
-  https://api.github.com/repos/sparked-diamond/infra/actions/workflows/terraform-drift-detection.yml/dispatches \
+  https://api.github.com/repos/etherport/infra/actions/workflows/terraform-drift-detection.yml/dispatches \
   -d '{"ref":"main"}'
 # apply ONE k8s VM (rolling — see outstanding-work M91):
 curl -fsS -X POST -H "Authorization: Bearer $TOK" -H "Accept: application/vnd.github+json" \
-  https://api.github.com/repos/sparked-diamond/infra/actions/workflows/terraform-proxmox-k8s-vms.yml/dispatches \
+  https://api.github.com/repos/etherport/infra/actions/workflows/terraform-proxmox-k8s-vms.yml/dispatches \
   -d '{"ref":"main","inputs":{"action":"apply","target":"proxmox_virtual_environment_vm.workers[\"k8s-w4\"]"}}'
 ```
 **ZT note:** this lets the devbox agent **trigger CI applies = mutate all infra** —

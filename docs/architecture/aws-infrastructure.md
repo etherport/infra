@@ -236,7 +236,7 @@ All Lambda functions are managed via Terraform modules in `infra/terraform/aws/`
 | Timeout | 30 seconds |
 | Terraform Module | `infra/terraform/aws/email-forward/` |
 
-**Purpose:** Generic per-prefix email forwarder. SES receipt rules deposit incoming emails to S3 under domain-specific prefixes; an S3 ObjectCreated event triggers this Lambda which forwards via SES SendRawEmail to the configured target. Domain-specific receipt rules live in whichever repo owns the domain (etherport.net here, the 3 personal domains in [sparked-diamond/personal-web](https://github.com/sparked-diamond/personal-web) — `terraform/ses-email-forward/`).
+**Purpose:** Generic per-prefix email forwarder. SES receipt rules deposit incoming emails to S3 under domain-specific prefixes; an S3 ObjectCreated event triggers this Lambda which forwards via SES SendRawEmail to the configured target. Domain-specific receipt rules live in whichever repo owns the domain (etherport.net here, the 3 personal domains in [etherport/personal-web](https://github.com/etherport/personal-web) — `terraform/ses-email-forward/`).
 
 ## VPC Route Table
 
@@ -413,7 +413,7 @@ All AWS infrastructure is managed via Terraform under `infra/terraform/aws/`.
 | `compute/` | `aws/compute/terraform.tfstate` | EC2 instances, EIPs, IAM roles, CloudWatch alarms, SNS |
 | `acm/` | `aws/acm/terraform.tfstate` | SSL/TLS certificates (us-west-2): `*.etherport.net`, `*.wind.etherport.net`, `ha.wind.etherport.net`. (Retained; no ALB consumer — HA uses in-cluster TLS.) |
 | `s3/` | `aws/s3/terraform.tfstate` | S3 buckets (velero — now **read-only DR** + a `dr/` prefix on a 30-day→Deep-Archive lifecycle since M137; archive, email-fwd, `postgres-barman.wind.etherport.net` for CNPG Barman WAL/base backups). All buckets carry bucket-policy `Deny` statements on `s3:DeleteBucket` and `s3:DeleteBucketPolicy` for non-root principals. |
-| `ses/` | `aws/ses/terraform.tfstate` | SES domain/email identities + DKIM for **etherport.net only** (personal domains live in the [personal-web](https://github.com/sparked-diamond/personal-web) repo). |
+| `ses/` | `aws/ses/terraform.tfstate` | SES domain/email identities + DKIM for **etherport.net only** (personal domains live in the [personal-web](https://github.com/etherport/personal-web) repo). |
 
 > No `load-balancing/`, `route53/`, or `cloudflare-personal/` modules — those were removed in
 > the CF migration ([Migration history](#migration-history)). Cloudflare is authoritative for
@@ -473,7 +473,7 @@ The following resources exist but are managed manually or by other means:
 The stopthecastle.com / smithforsb.com / grahamsmith.net resources
 (CloudFront, S3, ACM us-east-1, EC2 WordPress, CF DNS, SES domain
 identities, email-forward receipt rules) live in
-[sparked-diamond/personal-web](https://github.com/sparked-diamond/personal-web).
+[etherport/personal-web](https://github.com/etherport/personal-web).
 The email-forward Lambda code itself stays in this repo as a generic
 per-prefix forwarder; personal-web's receipt rules reference it via
 `data "aws_lambda_function"`. See the personal-web README for the

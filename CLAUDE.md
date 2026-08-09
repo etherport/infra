@@ -1,6 +1,6 @@
 # CLAUDE.md — agent entry point for `homelab-infra`
 
-You are working in the **`wind` homelab infrastructure monorepo** (`sparked-diamond/infra`).
+You are working in the **`wind` homelab infrastructure monorepo** (`etherport/infra`).
 Single source of truth for a Proxmox + Kubernetes (Flux GitOps) + AWS + UniFi +
 Cloudflare homelab. **If it's not in git, it doesn't survive a rebuild.**
 

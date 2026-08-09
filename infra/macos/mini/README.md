@@ -5,7 +5,7 @@ host) — things that can't live in k8s/Flux because they need macOS APIs (Photo
 SMB/keychain, `launchd`, tmux). Version-controlled here; installed into the user's
 `~/Library/LaunchAgents` on the mini.
 
-> **iCloud backups now run on [`cairn`](https://github.com/sparked-diamond/cairn)**, not the bash
+> **iCloud backups now run on [`cairn`](https://github.com/etherport/cairn)**, not the bash
 > scripts that used to live here. The per-category bash suite (`*-backup.sh`, `photos-export*.sh`,
 > the `net.wind.{icloud-dav,icloud-files,messages-backup,photos-export}` agents, vdirsyncer) was
 > **retired 2026-06-26** (M103 cutover) and removed from this dir. What remains here is the

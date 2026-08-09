@@ -161,7 +161,7 @@ velero restore create restore-monitoring --from-backup monitoring-daily-<latest>
 #    committed bootstrap manifests, then point Flux at clusters/wind).
 #    These are the gotk-components + gotk-sync that `flux bootstrap` commits.
 kubectl apply -k clusters/wind/flux-system/
-#    (gotk-sync.yaml already targets owner=sparked-diamond repo=infra
+#    (gotk-sync.yaml already targets owner=etherport repo=infra
 #     branch=main path=clusters/wind; reconcile to pull the rest)
 kubectl annotate --overwrite -n flux-system gitrepository/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 kubectl annotate --overwrite -n flux-system kustomization/flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"

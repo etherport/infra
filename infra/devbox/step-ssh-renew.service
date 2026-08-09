@@ -1,6 +1,6 @@
 [Unit]
 Description=Renew the devbox's step-ca SSH user cert (M76)
-Documentation=https://github.com/sparked-diamond/infra/blob/main/docs/planning/m76-ssh-shortlived-plan.md
+Documentation=https://github.com/etherport/infra/blob/main/docs/planning/m76-ssh-shortlived-plan.md
 After=network-online.target
 Wants=network-online.target
 

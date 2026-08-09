@@ -41,17 +41,17 @@ jobs:
           context: platform/kubernetes/cloudflare-ddns/image
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ghcr.io/sparked-diamond/cloudflare-ddns:main
-            ghcr.io/sparked-diamond/cloudflare-ddns:sha-${{ github.sha }}
+            ghcr.io/etherport/cloudflare-ddns:main
+            ghcr.io/etherport/cloudflare-ddns:sha-${{ github.sha }}
 
-      # The legacy "Make package public" step targeted
-      # /orgs/sparked-diamond/... which 404s because sparked-diamond
-      # is a USER, not an Org. For user-owned packages, the
-      # GITHUB_TOKEN can't flip visibility — needs a PAT with
-      # write:packages.
+      # NB (org migration 2026-08): the namespace is now the etherport ORG, so
+      # the /orgs/etherport "Make package public" PATCH should now work (the old
+      # 404 was because sparked-diamond was a USER). Revisit automating this per
+      # Phase 2.4 of docs/planning/github-org-migration-2026-08.md; GITHUB_TOKEN
+      # may still need a PAT with write:packages to flip visibility.
       #
       # First-time setup for any new package: visit
-      # https://github.com/users/sparked-diamond/packages/container/cloudflare-ddns/settings
+      # https://github.com/orgs/etherport/packages/container/cloudflare-ddns/settings
       # and set visibility to Public.
       # The CronJob pod's ImagePullBackOff is the symptom that this
       # step is needed.
@@ -64,9 +64,9 @@ jobs:
         run: |
           set -euo pipefail
           # Anonymous token request — only succeeds for public packages
-          TOKEN=$(curl -fsS "https://ghcr.io/token?scope=repository:sparked-diamond/cloudflare-ddns:pull" | jq -r .token)
+          TOKEN=$(curl -fsS "https://ghcr.io/token?scope=repository:etherport/cloudflare-ddns:pull" | jq -r .token)
           if curl -fsS -H "Authorization: Bearer $TOKEN" \
-               "https://ghcr.io/v2/sparked-diamond/cloudflare-ddns/manifests/main" \
+               "https://ghcr.io/v2/etherport/cloudflare-ddns/manifests/main" \
                -o /dev/null; then
             echo "::notice::cloudflare-ddns:main is publicly pullable"
           else

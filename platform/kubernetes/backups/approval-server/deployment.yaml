@@ -28,7 +28,7 @@ spec:
       containers:
         - name: approval
           # Same image as the sync job — it already has python3 + aws-cli + jq.
-          image: ghcr.io/sparked-diamond/aws-s3-sync:main
+          image: ghcr.io/etherport/aws-s3-sync:main
           imagePullPolicy: Always
           command: ["python3", "/scripts/approval-server.py"]
           ports:

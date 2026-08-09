@@ -24,7 +24,7 @@
     dev_home: /home/ubuntu
     git_user_name: "Graham Smith"
     git_user_email: "graham@etherport.net"
-    repo_ssh_url: "git@github.com:sparked-diamond/infra.git"
+    repo_ssh_url: "git@github.com:etherport/infra.git"
     repo_path: "/home/ubuntu/code/infra"
     swap_gb: 4
     node_major: "22"

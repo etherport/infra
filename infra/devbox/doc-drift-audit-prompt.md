@@ -46,7 +46,7 @@ and `CLAUDE.md` against actual live state:
      - **Needs manual review** — IaC drift + ambiguous doc cases (file + what's wrong + the live value).
        For any item whose fix is to run an **apply workflow**, append a markdown deep-link to that
        workflow's GitHub "Run workflow" page so the operator can one-click review+dispatch it:
-       `[Review & apply →](https://github.com/sparked-diamond/infra/actions/workflows/<file>.yml)`
+       `[Review & apply →](https://github.com/etherport/infra/actions/workflows/<file>.yml)`
        — find the right `<file>` in `.github/workflows/` (e.g. a Terraform stack drift → its
        `terraform-<stack>.yml`; a UDM/switch change → `ansible-unifi.yml`; a base/VM change →
        `ansible-vm-fleet.yml`). The mailer renders these as buttons. Omit the link for pure-doc items.

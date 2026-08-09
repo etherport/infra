@@ -33,7 +33,7 @@ runs:
         set -euo pipefail
         # Self-install the step CLI if absent. The host runner has it system-wide
         # (Phase 2b), but container jobs (ansible-vm-fleet / ansible-proxmox use
-        # ghcr.io/sparked-diamond/ansible-runner) don't — pull the pinned,
+        # ghcr.io/etherport/ansible-runner) don't — pull the pinned,
         # checksum-verified standalone binary into a job-local dir.
         if ! command -v step >/dev/null 2>&1; then
           _sv=0.30.6
