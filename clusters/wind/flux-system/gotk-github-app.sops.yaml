@@ -1,0 +1,45 @@
+# Flux git auth via the etherport-automation GitHub App (Phase 2b).
+# Replaces the SSH deploy key: the etherport org DISABLES deploy keys by policy
+# (they were re-enabled as a temporary exception during the migration), and App
+# installation tokens are short-lived (1h) + auto-refreshed by source-controller.
+# Used by BOTH source-controller (git read) and image-automation-controller
+# (digest-pin pushes) since ImageUpdateAutomation shares this GitRepository.
+apiVersion: v1
+kind: Secret
+metadata:
+    name: flux-github-app
+    namespace: flux-system
+type: Opaque
+stringData:
+    githubAppID: ENC[AES256_GCM,data:z3t4qqzxrQ==,iv:i9coLJrRVrs6CktBXA00wf5lS3mMhMzXpBX1rVzIyeo=,tag:OLvS+huunm6jk3axJb9J+g==,type:str]
+    githubAppInstallationID: ENC[AES256_GCM,data:+DN4zI1E8x6m,iv:dkBODi8VlfWozdIAqQYNT9fgGKYNmJ2TKRPX8QoRX6Q=,tag:yF5mAO4f+U4uZQ1/MJNSTA==,type:str]
+    githubAppPrivateKey: ENC[AES256_GCM,data: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,iv:2PIYaVtYtKz1igXeaDDqrqJSLYTe0KOsgH6zEGcbPsE=,tag:4V21ITPc8R2/hR/bTXBAIg==,type:str]
+sops:
+    kms: []
+    gcp_kms: []
+    azure_kv: []
+    hc_vault: []
+    age:
+        - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB1cHZxc0FkV1VkM1F4T2Yy
+            TExIZ2l2d2JqR1lha2ZuM3g3MjBvWkl1VkhNClRKUlVDS1Jhd1lmWDl2VmRUbmxX
+            Uy9Pek9EU0tQRlI3TGxTMC9EL2Nlc3cKLS0tIDhOTG9uQytGUllPcjN4azdnWDJm
+            QW9uSlVCLytiZWlQa3ZERlYzNGxCQ0EK3Sivm9B5IHiWxB2cpVoxxxFsKhVhoujf
+            qK+YWNqSEEWmIEU7ivHhAPwsQjeomqa6TabTMuPGinHSYZGb09egxQ==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBmcmI0TExheUxFdk5qaThr
+            bTBicmltNjdiTHFjMVo1Y2YyMXNGSlpsQmpFClJVempzR2E5ZXJGNU1lZmRVQzd6
+            dHpNUEpBdjNCQ01mcndIUnVvY05ZZmcKLS0tIHBpUmZqMjMwRGZCQnQvMWo1ME4z
+            Yy9FVk5CRkhXRnczcVAxbXorNURFNWMKxcJCsi9kLwsQ8ggxwQniUEkSwd2P/9Q8
+            L/LEqQsPDDumN2bASHAWBulHE0eQG/YQl4qw80ggUPPnSLdyalQZew==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2026-08-10T15:48:32Z"
+    mac: ENC[AES256_GCM,data:BJgIBtAFCCr2aDWBWWwpdAHjD2zzFty6JP0lJOwmgFycrqCQqusNHj/Fz2ZbTI//KkZWlSyNXqo0DHSUHqJ05bzAWdc2r1SyKjkfEe+nqJptRmJJuPmmcDmmo5ou0uEC1ZKPfHdvOogCcJ37KbRPOQwal1OfmwjrTQks72QgF5w=,iv:rKsE12vvSlwELH1NsiJ51tg0y/7a4tuiWCrN23vKlOI=,tag:sLXthoPWfogZcgAltMfuLQ==,type:str]
+    pgp: []
+    encrypted_regex: ^(data|stringData)$
+    version: 3.9.4
