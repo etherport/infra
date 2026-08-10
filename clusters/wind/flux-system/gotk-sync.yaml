@@ -10,9 +10,16 @@ spec:
   interval: 1m0s
   ref:
     branch: main
+  # Phase 2b: GitHub App auth (etherport-automation) over HTTPS, replacing the
+  # SSH deploy key. The etherport org disables deploy keys by policy; App
+  # installation tokens are short-lived (1h), refreshed by source-controller.
+  # image-automation-controller shares this source, so its digest-pin pushes use
+  # the same App identity (needs contents:write, which the App has).
+  # ROLLBACK: url -> ssh://git@github.com/etherport/infra, secretRef -> flux-system
+  # (the SSH deploy-key secret is deliberately retained for that fallback).
   secretRef:
-    name: flux-system
-  url: ssh://git@github.com/etherport/infra
+    name: flux-github-app
+  url: https://github.com/etherport/infra
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
