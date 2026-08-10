@@ -17,6 +17,10 @@ spec:
   # the same App identity (needs contents:write, which the App has).
   # ROLLBACK: url -> ssh://git@github.com/etherport/infra, secretRef -> flux-system
   # (the SSH deploy-key secret is deliberately retained for that fallback).
+  # provider: github is REQUIRED alongside a githubApp* secret — without it
+  # source-controller refuses with "has github app data but provider is not set
+  # to github" (it does not infer the provider from the secret's shape).
+  provider: github
   secretRef:
     name: flux-github-app
   url: https://github.com/etherport/infra
