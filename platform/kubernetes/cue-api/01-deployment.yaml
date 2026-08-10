@@ -51,7 +51,7 @@ spec:
           # work here (Flux SSA strips the annotation); image automation is the trigger.
           # BOTH image lines (migrate init + app) carry the marker so they pin the SAME
           # digest — migration + serving code stay in lockstep (no schema-ahead-of-code).
-          image: ghcr.io/etherport/cue:latest@sha256:bb93b8575136b7dd619ec8c1a2996ae13466d8345b86666eb5812d576e5ec9ad # {"$imagepolicy": "flux-system:cue-api"}
+          image: ghcr.io/etherport/cue:latest@sha256:2489541c55945ca0ccd33dd9e5eab0907c0cd6821cd99d62d750c84b5f6579b8 # {"$imagepolicy": "flux-system:cue-api"}
           imagePullPolicy: Always
           command: ['node', 'dist/db/migrate.js']
           env:
@@ -76,7 +76,7 @@ spec:
           # work here (Flux SSA strips the annotation); image automation is the trigger.
           # BOTH image lines (migrate init + app) carry the marker so they pin the SAME
           # digest — migration + serving code stay in lockstep (no schema-ahead-of-code).
-          image: ghcr.io/etherport/cue:latest@sha256:bb93b8575136b7dd619ec8c1a2996ae13466d8345b86666eb5812d576e5ec9ad # {"$imagepolicy": "flux-system:cue-api"}
+          image: ghcr.io/etherport/cue:latest@sha256:2489541c55945ca0ccd33dd9e5eab0907c0cd6821cd99d62d750c84b5f6579b8 # {"$imagepolicy": "flux-system:cue-api"}
           imagePullPolicy: Always
           ports:
             - name: http
