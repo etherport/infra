@@ -55,10 +55,12 @@ pod (projected SA token, aud=sts.amazonaws.com, iss=<bucket-url>)
 ## ⚠️ If you change `--service-account-issuer` (durable gotchas)
 
 Changing the issuer is disruptive (restarts the kube-apiserver static pod on each CP)
-**and** has three non-obvious ways to break the whole cluster. There is **no HA API
-VIP** — cp1 (`10.10.201.50`) IS the `controlPlaneEndpoint`, so roll the CPs one at a
-time, **cp1 LAST**. Persist the change in the kubespray inventory above (never leave a
-hand-edit of the static manifests — a kubespray run reverts it). Then:
+**and** has three non-obvious ways to break the whole cluster. The `controlPlaneEndpoint`
+is now the HA API VIP `k8s-api.wind.etherport.net:6443` → `10.10.201.49` (kube-vip,
+ARP/L2, live since 2026-08-04 — see CLAUDE.md §3 H47), not a single CP; still roll the
+CPs one at a time, **cp1 LAST** (it's the etcd leader). Persist the change in the
+kubespray inventory above (never leave a hand-edit of the static manifests — a
+kubespray run reverts it). Then:
 
 1. **⚠️ Pin `--api-audiences` or you 401 ALL in-cluster auth.** `--api-audiences`
    **defaults to the FIRST `--service-account-issuer`**. Changing the first issuer

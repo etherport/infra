@@ -96,7 +96,8 @@ UniFi creates a fixed set of built-in zones; custom zones sit on top. The five c
 | **Infrastructure** | custom | Unifi/212 | Protect/Talk/Access appliance fleet. `Internal↔Infrastructure Allow All` (broad — tightening is a deferred follow-up); →Gateway/→External auto-created. |
 | **Security** | custom | Security/205 | SimpliSafe. Default block to all other zones; →External + →Gateway allowed (monitoring + DHCP/DNS). No internal-DNS rule. L2 Network Isolation retired — the zone is sole enforcement. |
 
-Built-in zones in use: **Internal** (Default/199 only; `Internal→Internal Allow All`), **External**
+Built-in zones in use: **Internal** (shared by Default/199, Clients/202, vSAN/209, Ceph/210, and
+Inter-VLAN/4040; `Internal→Internal Allow All`), **External**
 (WAN1/WAN2/LTE; inbound blocked + named exceptions), **Gateway** (the UDM itself), **VPN** (the UDM backup
 WireGuard tunnel; see note), **Hotspot** (Guest/206), **DMZ** (unused).
 

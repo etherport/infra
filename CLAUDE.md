@@ -326,7 +326,7 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   (this cost ~7 reboots + 3 incidents). Also: a **VM graceful shutdown HANGS** if an un-drainable single-instance CNPG pod (PDB
   minAvailable=1, e.g. `cue-db`) sits on it (RBD won't unmount) — drain evicts what it can, then
   `kubectl delete pod` the PDB-blocked ones before any node reboot.
-- **Authentik is the SSO IdP** at **`auth.wind.etherport.net`** (goauthentik 2024.12, embedded outpost;
+- **Authentik is the SSO IdP** at **`auth.wind.etherport.net`** (goauthentik 2026.5.3, embedded outpost;
   shared HA postgres DB). It now gates internal apps (kills "internal = trusted", H38). **OIDC** apps
   (Grafana, wiki.js, Open WebUI) + a domain-level **forward-auth** proxy provider gating the browser
   admin UIs (Proxmox/IPMI/PDU/UPS/Technitium DNS/Traefik dashboard) via the Traefik
