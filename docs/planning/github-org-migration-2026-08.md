@@ -211,3 +211,28 @@ Recommend **(A)** for a homelab unless we want zero standing tokens; revisit if 
 **Sequencing:** 2a (owner) → 2b (Flux, most impactful) → 2c/2d (token consumers) → 2e (pulls)
 → 2f (cleanup). Each is independently verifiable; nothing here has a hard deadline now that
 the cluster is stable.
+
+### Phase 2b — DONE 2026-08-10 (Flux git auth -> GitHub App)
+
+`GitRepository/flux-system` now uses **HTTPS + the etherport-automation App**
+(`provider: github`, `secretRef: flux-github-app`) instead of the SSH deploy key.
+Ready=True; kustomization + image-automation both healthy on the App identity.
+
+**Gotchas hit:**
+- **`provider: github` is REQUIRED** alongside a `githubApp*` secret. Without it
+  source-controller refuses: *"has github app data but provider is not set to
+  github"* — it does not infer the provider from the secret's shape.
+- **Chicken-and-egg:** the commit that switches Flux to HTTPS can't be fetched if the
+  current SSH path is broken. Patch the live GitRepository (`kubectl patch`) to break
+  the deadlock, then let git catch up — and remember Flux will revert any live patch
+  the moment it applies a commit that lacks the same change.
+- Ship the credentials secret in a SEPARATE, EARLIER commit than the GitRepository
+  flip; kustomize apply order is not guaranteed within one revision.
+- GitHub **SSH (port 22) was timing out** from the cluster during this work, which is
+  what wedged the deploy-key path — HTTPS also routes around that class of failure.
+
+**Owner follow-up now unblocked:** re-disable deploy keys org-wide (the temporary
+migration exception). The SSH deploy-key secret `flux-system` is deliberately retained
+in-cluster as a rollback target; the *org policy* can be re-tightened independently.
+NB the image-automation **push** path shares this source and reports healthy, but is
+only truly proven on the next digest-pin commit.
