@@ -38,9 +38,11 @@ provider "aws" {
 }
 
 locals {
-  account_id        = "830881980142"
-  repo              = "sparked-diamond/infra"
-  repo_personal_web = "sparked-diamond/personal-web"
+  account_id = "830881980142"
+  # 2f (2026-08-13): the sparked-diamond subject paths were REMOVED once the
+  # etherport trusts were verified working — the repos no longer live there, so
+  # they could only ever be a stale grant. Kept as comments for provenance:
+  #   old: repo:sparked-diamond/infra:...  /  repo:sparked-diamond/personal-web:...
   # Org migration (2026-08). The etherport org enables "unique numerical
   # identifiers in the OIDC subject claim", so GitHub presents
   #   repo:etherport@<org_id>/infra@<repo_id>:ref:refs/heads/main
@@ -97,7 +99,6 @@ data "aws_iam_policy_document" "trust" {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        "repo:${local.repo}:ref:refs/heads/main",
         "repo:${local.repo_new}:ref:refs/heads/main",
         "repo:${local.repo_new_plain}:ref:refs/heads/main",
       ]
@@ -166,7 +167,6 @@ data "aws_iam_policy_document" "trust_plan" {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        "repo:${local.repo}:pull_request",
         "repo:${local.repo_new}:pull_request",
         "repo:${local.repo_new_plain}:pull_request",
       ]
@@ -265,8 +265,6 @@ data "aws_iam_policy_document" "trust_personal_web" {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        "repo:${local.repo_personal_web}:ref:refs/heads/main",
-        "repo:${local.repo_personal_web}:pull_request",
         "repo:${local.repo_personal_web_new}:ref:refs/heads/main",
         "repo:${local.repo_personal_web_new}:pull_request",
         "repo:${local.repo_personal_web_plain}:ref:refs/heads/main",
