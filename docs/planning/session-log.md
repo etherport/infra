@@ -15,6 +15,64 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-08-13 — CI restored: the org's numeric-ID OIDC claim (4-day outage) + Phase 2b/2d/2e
+
+**Root-caused a 4-day, cluster-wide CI outage that had gone unnoticed.** Every workflow that
+assumes an AWS role had failed since 2026-08-09 (the org cutover) with
+`Not authorized to perform sts:AssumeRoleWithWebIdentity`. The trust policy *looked* correct —
+verified directly against IAM, it did contain `repo:etherport/infra:ref:refs/heads/main`.
+Decoding a real OIDC token (temporary `oidc-debug` workflow) showed why:
+
+    sub = repo:etherport@314430121/infra@1010293991:ref:refs/heads/main
+
+The **etherport org enables "unique numerical identifiers in the OIDC subject claim"**, so
+GitHub appends the org ID and repo ID. AWS returns a bare "Not authorized" for a
+non-matching sub — indistinguishable from a missing trust, which is what made this expensive
+to find. **Lesson: when an OIDC assume-role fails but the trust looks right, decode the token
+and compare the actual `sub` — don't trust the policy read alone.**
+
+Fixed by trusting both claim forms (the numeric-ID form is *stronger*: IDs are immutable, so a
+re-claimed org/repo name can't impersonate the trust). Chicken-and-egg: the fix is a TF apply
+that runs on CI, and CI was the broken thing — and `terraform-homelab` is deliberately denied
+`iam:UpdateAssumeRolePolicy` (H29 anti-escalation). Broke it with owner-run CloudShell
+commands, then reconciled TF to match: apply now reports **0 added, 0 changed, 0 destroyed**,
+and `cloud-tag-drift` is green reporting `Untagged: 0` (i.e. genuinely reaching AWS Config).
+The stale `sparked-diamond` subject paths were dropped in the same pass (2f item).
+
+**Phase 2b — Flux git auth → GitHub App.** HTTPS + `provider: github` + `flux-github-app`
+secret, replacing the SSH deploy key; deploy keys then deleted and the orphaned SSH secret
+removed from the cluster. Proven by four real `chore(deps)` digest-pin commits authored by
+Flux. Gotcha: `provider: github` is REQUIRED alongside a `githubApp*` secret or
+source-controller refuses ("has github app data but provider is not set to github").
+
+**Phase 2d — dispatch + ARC.** devbox `audit-helpers.sh` mints per-call scoped App tokens.
+The in-cluster ARC runner was **removed**, not fixed: nothing used it (all 62 jobs target
+`ubuntu-latest` or `[self-hosted, lifecycle]`, and comments explain in-cluster runners are
+deliberately avoided), and keeping it would have required granting the App
+`Administration:write`. Gotcha: ARC finalizers wedge namespace deletion once the controller is
+pruned — strip them manually.
+
+**Phase 2e — GHCR pull token.** GHCR **rejects GitHub App installation tokens** (403, tested
+across full/scoped/app-slug variants with packages repo-linked), and classic PATs are always
+user-owned — so this credential genuinely cannot move to the App. Monitoring is the mitigation:
+the token expiry now feeds `credential_expiry_timestamp_seconds{credential="ghcr_pull_token"}`
+and the existing <30-day alert. **It expires 2026-08-31 and EVERY pull secret in the cluster is
+the same token** — on expiry all private image pulls fail cluster-wide.
+
+**Two false alarms worth recording:**
+- **Status emails never stopped.** Loki shows `[service-status-report] sent:` every day
+  07-31→08-13. My first check (`kube_job_status_succeeded`) implied a gap but only covers
+  *retained* jobs — a misleading signal. The "1 down" in those emails was cloud-tag-drift.
+- **The devbox SSH key was never removed.** A transient `Permission denied (publickey)` (same
+  day GitHub SSH was timing out for Flux) led me to conclude the key was deleted; the
+  fingerprint matched all along and auth recovered on retry. Retry before concluding a
+  credential is gone.
+
+**Open:** the `s3-sync-backups` share failed once on an `.sync-locks/rclone-gdrive.lock` race
+(the lock vanished mid-sync -> non-zero exit; `.sync-locks` is already excluded, so a
+non-excluded pass touches it) — a retry is running. Owner: flip the 4 utility GHCR packages
+public, and rotate the GHCR token before 08-31.
+
 ## 2026-08-09 (cont.) — GitHub App live; repo mirror fixed (Phase 2a+2c)
 
 **Created the `etherport-automation` GitHub App** (id 4539969, installation 152499241,
