@@ -30,7 +30,10 @@ case "${1:-}" in
     # Actions/Contents reads — e.g. `gh-get actions/runs?per_page=1` or `gh-get contents/README.md`.
     # It will 403 on issues; read IaC-drift signal from the drift-status ConfigMap via kubectl instead.
     path="${2:?usage: gh-get <api-path>}"
-    tok="$(sops_get github_dispatch_pat)"
+    # GitHub App installation token (1h), scoped read-only for this call. The old
+    # github_dispatch_pat was USER-scoped and 404s on org repos after the
+    # sparked-diamond -> etherport migration.
+    tok="$("$(dirname "$0")/../../scripts/gh-app-token.sh" --from-sops --permissions '{"actions":"read","contents":"read"}')"
     curl -fsS -H "Authorization: Bearer $tok" -H "Accept: application/vnd.github+json" \
       "https://api.github.com/repos/etherport/infra/${path}"
     ;;
@@ -51,7 +54,8 @@ case "${1:-}" in
       [ -f "$f" ] || { echo "summary file not found: $f" >&2; exit 3; }
       b64="$(base64 -w0 "$f")"
     fi
-    tok="$(sops_get github_dispatch_pat)"
+    # App token scoped to actions:write only (least privilege per mint).
+    tok="$("$(dirname "$0")/../../scripts/gh-app-token.sh" --from-sops --permissions '{"actions":"write"}')"
     curl -fsS -X POST -H "Authorization: Bearer $tok" -H "Accept: application/vnd.github+json" \
       "https://api.github.com/repos/etherport/infra/actions/workflows/post-doc-drift-issue.yml/dispatches" \
       -d "{\"ref\":\"main\",\"inputs\":{\"clean\":\"${clean}\",\"summary_b64\":\"${b64}\"}}"
