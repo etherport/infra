@@ -120,7 +120,6 @@ resources:
   - ../../platform/kubernetes/tailscale
   - ../../platform/kubernetes/wireguard
   # CI/CD
-  - ../../platform/kubernetes/github-actions-runner
   # Certificate management
   - ../../platform/kubernetes/unifi-cert-sync
   # UDM / Protect controller-DB + core-config nightly backup to S3
