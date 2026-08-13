@@ -41,12 +41,26 @@ locals {
   account_id        = "830881980142"
   repo              = "sparked-diamond/infra"
   repo_personal_web = "sparked-diamond/personal-web"
-  # Org migration (2026-08): repos move sparked-diamond (user) -> etherport (org).
-  # The OIDC `sub` claim embeds the repo path, so the trust must accept BOTH during
-  # the cutover (CI keeps AWS across the transfer). Drop the *_old paths after the
-  # move is verified. See docs/planning/github-org-migration-2026-08.md.
-  repo_new              = "etherport/infra"
-  repo_personal_web_new = "etherport/personal-web"
+  # Org migration (2026-08). The etherport org enables "unique numerical
+  # identifiers in the OIDC subject claim", so GitHub presents
+  #   repo:etherport@<org_id>/infra@<repo_id>:ref:refs/heads/main
+  # NOT the plain repo:etherport/infra:... form. Verified from a real token
+  # (see the oidc-debug workflow); trusting the plain form silently fails every
+  # AssumeRoleWithWebIdentity with "Not authorized", which is what broke ALL
+  # OIDC workflows for 4 days after the transfer.
+  # Pinning the numeric IDs is also STRONGER than names: IDs are immutable, so a
+  # renamed/re-claimed org or repo name cannot impersonate this trust.
+  org_id               = "314430121"
+  repo_id_infra        = "1010293991"
+  repo_id_personal_web = "1204533217"
+  # Trust BOTH forms: the org setting can be toggled, and only the matching form
+  # is ever presented. Listing both makes the stack work either way (and makes
+  # the bootstrap possible: toggling the setting OFF restores CI, CI then applies
+  # this stack, after which the setting can be turned back ON safely).
+  repo_new                = "etherport@${local.org_id}/infra@${local.repo_id_infra}"
+  repo_new_plain          = "etherport/infra"
+  repo_personal_web_new   = "etherport@${local.org_id}/personal-web@${local.repo_id_personal_web}"
+  repo_personal_web_plain = "etherport/personal-web"
 }
 
 # GitHub's OIDC identity provider. One per account. If it already exists,
@@ -85,6 +99,7 @@ data "aws_iam_policy_document" "trust" {
       values = [
         "repo:${local.repo}:ref:refs/heads/main",
         "repo:${local.repo_new}:ref:refs/heads/main",
+        "repo:${local.repo_new_plain}:ref:refs/heads/main",
       ]
     }
   }
@@ -150,7 +165,11 @@ data "aws_iam_policy_document" "trust_plan" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${local.repo}:pull_request", "repo:${local.repo_new}:pull_request"]
+      values = [
+        "repo:${local.repo}:pull_request",
+        "repo:${local.repo_new}:pull_request",
+        "repo:${local.repo_new_plain}:pull_request",
+      ]
     }
   }
 }
@@ -250,6 +269,8 @@ data "aws_iam_policy_document" "trust_personal_web" {
         "repo:${local.repo_personal_web}:pull_request",
         "repo:${local.repo_personal_web_new}:ref:refs/heads/main",
         "repo:${local.repo_personal_web_new}:pull_request",
+        "repo:${local.repo_personal_web_plain}:ref:refs/heads/main",
+        "repo:${local.repo_personal_web_plain}:pull_request",
       ]
     }
   }
