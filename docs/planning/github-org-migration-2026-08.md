@@ -236,3 +236,27 @@ migration exception). The SSH deploy-key secret `flux-system` is deliberately re
 in-cluster as a rollback target; the *org policy* can be re-tightened independently.
 NB the image-automation **push** path shares this source and reports healthy, but is
 only truly proven on the next digest-pin commit.
+
+### Phase 2d — DONE 2026-08-13 (dispatch + ARC)
+
+- **devbox dispatch → App tokens.** `infra/devbox/audit-helpers.sh` mints a scoped
+  installation token per call (`actions:read`+`contents:read` for the API read path,
+  `actions:write` for the workflow dispatch) instead of reading `github_dispatch_pat`.
+  Verified live — the read path returns data where the user PAT 404s.
+- **In-cluster ARC runner REMOVED** (2 HelmReleases + secret + namespace). It had been
+  broken since the migration and **nothing used it**: all 62 workflow jobs target
+  `ubuntu-latest` (33) or `[self-hosted, lifecycle]` (29), and the only `homelab-runner`
+  references in workflows are comments explaining that in-cluster runners are
+  *deliberately avoided* (they can't manage the cluster/Proxmox when the cluster is
+  down). The VM lifecycle runner also carries the `homelab-runner` label, so it would
+  win those jobs anyway.
+  **Why removed rather than fixed:** ARC's App auth worked (it obtained an installation
+  token), but creating a *runner registration token* needs **Administration:write** —
+  power over repo settings, collaborators and deploy keys — which is far too much to
+  grant for a component with no consumers. Note the 403 message changed from "not
+  accessible by personal access token" to "**by integration**", which is the tell that
+  the App itself (not the old PAT) lacked the scope.
+  **Gotcha:** ARC finalizers (`autoscalingrunnerset/listener/ephemeralrunner` +
+  `actions.github.com/cleanup-protection`) wedge namespace deletion — they try to
+  deregister from GitHub, which 403s, and once the controller is pruned nothing ever
+  clears them. Strip the finalizers manually to let the namespace go.
