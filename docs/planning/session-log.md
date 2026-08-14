@@ -55,6 +55,20 @@ headless agent can't do. rc=1 now echoes the plan tail into a collapsed log grou
 plan jobs. A plan *error* renders no attribute values (unlike a diff), so this does not
 regress the M121 redaction posture.
 
+**5. Found while double-checking the pull-secret story: a live dependency outside git**
+(`5e17e22b`). Verified anonymously that `aws-s3-sync`, `cloudflare-ddns` and
+`cloudwatch-to-loki` are public org packages and only `cue` still requires auth — so the two
+remaining secrets are correct. But the sweep turned up that `backup-approval` runs as
+`serviceAccountName: s3-sync`, and **the Flux build renders no such SA**: the aws-s3 base SA
+of that name is only consumed through the per-share overlays, each applying a `namePrefix`,
+so the cluster gets seven prefixed SAs and no plain one. The name resolved only because a
+Velero restore recreated the object in May (`post-migration-20260512-2102`) — no Flux
+ownership, no managedFields. A rebuild from git would have left backup-approval with a
+missing ServiceAccount and taken the M94 delete-approval flow down silently. Now declared in
+`approval-server/serviceaccount.yaml`; Flux has adopted the live object (label present, the
+stale `ghcr-etherport` reference dropped, deployment still 1/1). The name is load-bearing for
+M75 IRSA (`system:serviceaccount:backups:s3-sync`), so it stays as-is and needs no AWS change.
+
 **Owner follow-ups still open:** rotate `cue-ghcr-pull-homelab` (classic PAT, `read:packages`)
 before **2026-08-31** — `cue/ghcr-cue` + `flux-system/cue-ghcr` depend on it; delete the
 superseded fine-grained PATs (`infra-dispatch`, `repo-backup-read`,
