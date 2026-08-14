@@ -54,10 +54,27 @@ near-real-time gate alerts; STT investigation added; NEW: an LLM manager for HA
 read-only SSH/psql and even `git add`/`git push` mid-session; work continued by
 splitting compound commands and retrying later.
 
-**Next steps:** design doc for the phased build (alerts → correlation → history →
-STT/vision) with costed hosted-vs-local comparison; get operator OK for a vision-GGUF
-spike on gpu1; get `protect-tf` into the SOPS bundle (proper API access instead of the
-SSH+psql workaround).
+**Continued (same day): power analysis + design doc.** Operator asked for GPU
+power/cost before approving work. Measured live: P40 = 10 W empty-idle, **54 W
+model-resident-idle (no downclock with VRAM allocated — the dominant cost)**, 191 W
+generating at 26 tok/s; whole pve host = **126 W wall (~$27/mo @ $0.30/kWh)**. Verdict
+in the scoping doc: local ~$1/mo (on-demand) vs ~$11/mo (resident); newer GPU saves
+~$8–9/mo → capability decision only; hosted Haiku 4.5 text ≈ $3–10/mo (no cost win,
+privacy loss). Also tested the operator's fan hypothesis: chassis fans pinned at
+5800–6000 rpm for 30 days with `TEMP_GPU` at 28 °C → BMC fan **policy** (or
+passive-GPU presence floor), not P40 heat; flagged the BMC fan-mode setting as the
+lever (A5). Operator decided: keep the P40 for now, newer GPU stays on the table.
+
+**Design doc drafted** (`llm-camera-monitoring-design-2026-08.md`): `lookout` service —
+Protect integration-API WebSocket intake → rule pre-filter → qwen2.5:14b triage with
+dedup/suppression → ntfy push + SES digest + postgres event store (NOT Loki); Phase 2
+HA correlation (tier tax: home-automation + postgres allowlists) + NL history; Phase 3
+event-triggered STT (RTSPS from the NVR :7441 → ffmpeg audio → faster-whisper) +
+snapshot vision. HA LLM manager scoped as a sibling (HA-native conversation agent on
+ollama). Operator actions A1–A5 listed in the design doc §6.
+
+**Next steps:** operator does A1 (enable RTSP per camera) + A2 (protect-tf → SOPS) +
+A4 (vision spike OK); then Phase-1 build on approval.
 
 ## 2026-08-14 — GitHub tidy-up complete: cue App runtime, pull-secret cleanup, GCP drift green
 

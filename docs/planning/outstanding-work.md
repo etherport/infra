@@ -315,9 +315,16 @@ This file foregrounds open/in-progress/gated work._
   **P40/CUDA-13 risk RESOLVED** (ollama's CUDA-12 runner runs sm_61; driver 580 = final
   Pascal branch); webhook payloads are rich (directional line-crossing, smart types,
   scores) but HA discards them; Protect does NOT transcribe (no AI Port).
-- ⏳ next: design doc (phased: alerts → correlation → history → STT/vision) with a
-  costed hosted-vs-local comparison; ⏳ vision-GGUF spike on gpu1 (needs operator OK);
-  ⚠️ residual: `protect-tf` key still 1P-only (enumeration used SSH+psql workaround).
+- ✅ **Design doc drafted 2026-08-14**:
+  [`llm-camera-monitoring-design-2026-08.md`](llm-camera-monitoring-design-2026-08.md) —
+  `lookout` service, phased alerts→HA-correlation/history→STT/vision, operator action
+  list A1–A5. Power/cost measured (P40: 10 W empty / 54 W model-resident / 191 W
+  generating; whole pve host 126 W wall; newer GPU = capability not power play;
+  chassis fans pinned 5800–6000 rpm regardless of the 28 °C GPU → BMC fan policy).
+- ⏳ awaiting operator: **A1** enable RTSP on Gate/Access Road/Intercom/Front Door
+  (audio for STT); **A2** `protect-tf` key → SOPS bundle; **A4** OK the qwen2.5vl:7b
+  spike on gpu1; then Phase-1 build approval.
+  ⚠️ residual: enumeration used the SSH+psql workaround until A2 lands.
 
 ### 🟡 H46. home-assistant hardening — de-privileged ✅ + PSS baseline ✅ (d6705d4); netpol tier ⏳
 - ✅ 2026-07-25: `privileged: true` was cargo cult (network integrations only, no devices;
