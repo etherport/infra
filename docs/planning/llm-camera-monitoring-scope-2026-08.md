@@ -112,6 +112,40 @@ Key facts that bound the design:
 - Node RAM (12 GB) is *smaller* than the 32b model — that model lives in VRAM. Adding a
   vision model concurrently needs a VRAM budget, not just disk.
 
+### GPU power / cost analysis (measured 2026-08-14, DCGM + nvidia-smi)
+
+Measured on the P40 (driver 580.105.08, ollama 0.32.13, qwen2.5:14b Q4):
+
+| State | Draw | Notes |
+|---|---|---|
+| Idle, no model in VRAM | **~10 W** | 30-day Prometheus average is 10.9 W — the GPU is essentially always in this state today |
+| **Model resident in VRAM, idle** | **~54 W** | ⚠️ The P40 does NOT downclock while VRAM is allocated (stays at 1303 MHz). This is the dominant cost of a near-real-time design |
+| Generating | ~191 W @ 99% util | ~26 tok/s generation, ~490 tok/s prefill on qwen2.5:14b |
+
+Cost model at an assumed **$0.30/kWh** (scale linearly for the actual tariff):
+
+- **Inference bursts are negligible.** ~150 LLM calls/day × ~6 s ≈ 15 GPU-minutes/day
+  ≈ **~$0.5–1/month** marginal. Per-event vision snapshots (~94/day × ~3 s) add cents.
+- **The resident-model penalty is the real number.** Keeping a model loaded 24/7 for
+  "someone at the gate now" latency = +44 W continuous ≈ 32 kWh/mo ≈ **~$10/month**.
+  On-demand loading instead costs ~nothing but adds ~5–15 s model-load latency per
+  cold event. ⏳ Worth a spike: locking low idle clocks (`nvidia-smi -lgc`) while
+  resident may cut the 54 W substantially — unverified.
+- **A newer GPU is NOT justified on power.** Modern cards idle ~10–20 W with VRAM
+  allocated, saving ~$8–9/month over a resident P40 — a 4–5-year payback on even a
+  ~$450 card. A new GPU is a capability decision (bigger/faster models, proper
+  CUDA-13-era support, NVENC for frame pipelines), not a power saving.
+- **Hosted comparison (Claude Haiku 4.5, $1/$5 per MTok — cheapest current Anthropic
+  model):** text-only event alerting ≈ $3–10/month depending on batching + prompt
+  caching; adding one vision snapshot per smart event ≈ +$6–8/month. So hosted-text
+  ≈ local-resident in cost; hosted-vision means household images to a third party,
+  which the operator gated on being very cheap. Anthropic models don't take audio —
+  STT is local (whisper on P40 or even CPU) or a separate hosted STT service either way.
+
+**Net:** the GPU is sunk hardware and the workload is light; local inference costs
+~$1/mo (on-demand) to ~$11/mo (always-resident) in electricity. The design choice is
+latency-vs-residency, not local-vs-hosted on cost grounds.
+
 ### Existing alerting / LLM plumbing to reuse (do NOT rebuild)
 - **`ai-advisor`** — already does LLM analysis of alerts and emails via SES + IRSA.
   Dashboard: `platform/kubernetes/monitoring/dashboards/ai-advisor.yaml`. **This is the
