@@ -283,7 +283,16 @@ This file foregrounds open/in-progress/gated work._
   packages default to **private**, which is why pull secrets briefly proliferated (now back to
   the 2 genuinely needed); (4) `envFrom: secretRef` does not roll pods — bump a config-rev
   annotation.
-- ⏳ **Owner follow-ups:** rotate `cue-ghcr-pull-homelab` before **2026-08-31**; delete the
+- ✅ **GHCR pull token ROTATED 2026-08-14** (`40e2ecd9`): new classic PAT, scope verified as
+  exactly `read:packages` and validated against GHCR (manifest 200) *before* being written.
+  Updated in all **three** places — `cue/ghcr-cue`, `flux-system/cue-ghcr`, and
+  `ghcr_pull_token` in the ops bundle (missing the bundle would leave the expiry monitor
+  watching the retired token). Minted with **no expiry** deliberately: read-only package scope
+  traded against the rotation treadmill. Because a non-expiring token can never emit an expiry
+  timestamp, monitoring switched from expiry to **validity** (`97b69069`) — `credential_valid`
+  {0,1} + `credential_nonexpiring`, with a new critical `CredentialRevoked` alert. Silence now
+  means only "the weekly check did not run", which `CredentialExpiryCheckStale` already covers.
+- ⏳ **Owner follow-ups:** delete the
   superseded fine-grained PATs (`infra-dispatch`, `repo-backup-read`, `homelab-actions-runner`,
   `claude-cli (graham-mac)` — **keep** `cue-bug-triage`); delete the 5 orphaned packages still
   under the old `sparked-diamond` user account; retire the `CUE_GITHUB_TOKEN` fallback once the

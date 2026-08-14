@@ -69,8 +69,29 @@ missing ServiceAccount and taken the M94 delete-approval flow down silently. Now
 stale `ghcr-etherport` reference dropped, deployment still 1/1). The name is load-bearing for
 M75 IRSA (`system:serviceaccount:backups:s3-sync`), so it stays as-is and needs no AWS change.
 
-**Owner follow-ups still open:** rotate `cue-ghcr-pull-homelab` (classic PAT, `read:packages`)
-before **2026-08-31** — `cue/ghcr-cue` + `flux-system/cue-ghcr` depend on it; delete the
+**6. GHCR pull token rotated + the monitor rebuilt around it** (`40e2ecd9`, `97b69069`).
+Validated the new PAT against GitHub and GHCR *before* writing it anywhere — scope came back as
+exactly `read:packages`, manifest pull 200 — then updated all three locations. The third,
+`ghcr_pull_token` in the ops bundle, is the easy miss: updating only the two cluster secrets
+leaves the expiry check monitoring the retired credential, alarming on a token nothing uses
+while the live one goes unwatched. Flux applied, both live secrets match, and a forced
+`ImageRepository` scan succeeded (13 tags) — that scan is the real proof, since it is Flux
+authenticating to GHCR with the new credential. Plaintext shredded and swept for: no copy
+anywhere in `$HOME`, none in shell history.
+
+Owner minted it with **no expiry**, reasoning that read-only package scope makes it a fair
+trade against the rotation treadmill — agreed, though worth recording that classic
+`read:packages` grants read to *every* private package the account can see, which today is
+exactly one (`cue`). The consequence was a monitoring hole: GitHub returns no expiration header,
+so the check emitted **no series at all**, and absence is indistinguishable from a broken check.
+Rebuilt the probe around **validity** instead, which is the failure mode that still applies —
+a non-expiring token can still be revoked. It now separates the HTTP verdict from the header
+grep (a 401 and a 200-with-no-expiry both produce "no expiry header"), emits
+`credential_valid{0,1}` plus `credential_nonexpiring`, and a new critical `CredentialRevoked`
+alert fires on `credential_valid == 0`. That failure hides well otherwise: running pods keep
+serving from cached layers, so a revoked pull token surfaces only at the next reschedule.
+
+**Owner follow-ups still open:** delete the
 superseded fine-grained PATs (`infra-dispatch`, `repo-backup-read`,
 `homelab-actions-runner`, `claude-cli (graham-mac)` — keep `cue-bug-triage`); delete the 5
 orphaned packages still under the old `sparked-diamond` user account.
