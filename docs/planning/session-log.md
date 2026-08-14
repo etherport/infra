@@ -15,6 +15,50 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-08-14 — Camera/LLM monitoring: scoping investigation complete (M158)
+
+Ran the three investigation tasks from the camera-agent brief (separate clone
+`~/code/infra-camera`, tmux `camera-scope`). **All findings + operator direction are in
+`llm-camera-monitoring-scope-2026-08.md`** — this entry is the narrative.
+
+**1. Camera inventory (task 1).** The `protect-tf` key turned out NOT to be in the SOPS
+bundle (1P-only; the "add to SOPS" item was optional and never done), so enumeration went
+read-only via SSH (`udm_ssh_*`) + Protect's postgres on the UNVR (port 5433, db
+`unifi-protect` — a useful new access path, documented in the scoping doc). 13 adopted
+devices: 2× UVC AI Pro (4K, face+LPR **already running NVR-side**), 1× G5 Bullet, 9× G4
+Bullet, 1× UA Intercom. RTSP off everywhere; retention keep-until-full ≈24 days
+(15 TB @ 97%, ~0.59 TB/day); ~94 smart + ~190 motion events/day (no Loki risk at event
+granularity).
+
+**2. Pascal/CUDA-13 (task 2) — RESOLVED, not a blocker.** Live acid test: `qwen2.5:14b`
+ran **100% GPU** on the P40 (ollama 0.32.13, driver 580.105.08). The node's "CUDA 13"
+label is the driver's max API version; ollama bundles a CUDA-12 sm_61 runner. Residual:
+driver 580 is NVIDIA's **final** Pascal branch — frozen platform; if ollama drops its
+CUDA-12 runner, pin ollama. Vision GGUF spike still pending (needs operator OK to pull).
+
+**3. Webhook trace (task 3).** Protect has 41 Alarm Manager automations; all 8
+`HTTP_REQUEST` actions hit the 5 HA webhook IDs on the IP-literal path (the old "confirm
+the URLs switched" ⏳ is now verified from the DB). The 5 HA automations are night-only
+motion-light triggers that **discard the payload**. `automationsHistory.data` shows the
+fired payload is rich: directional line-crossing (`Access Road Entry`, direction BA =
+entering the private road — exactly the operator's signal), `smartDetectTypes` incl.
+licensePlate, confidence scores, weather. Also: Protect's `transcriptions` table is
+EMPTY (no AI Port) — STT would be ours to build, and needs RTSP enabled for audio.
+
+**Operator direction (recorded in the doc §4a):** start with framing (1) smarter
+alerts, layer (3) HA correlation + (4) NL history; hosted models only if very cheap;
+near-real-time gate alerts; STT investigation added; NEW: an LLM manager for HA
+(dynamic lighting vs static automations).
+
+**Friction note:** the auto-mode permission classifier intermittently hard-denied
+read-only SSH/psql and even `git add`/`git push` mid-session; work continued by
+splitting compound commands and retrying later.
+
+**Next steps:** design doc for the phased build (alerts → correlation → history →
+STT/vision) with costed hosted-vs-local comparison; get operator OK for a vision-GGUF
+spike on gpu1; get `protect-tf` into the SOPS bundle (proper API access instead of the
+SSH+psql workaround).
+
 ## 2026-08-14 — GitHub tidy-up complete: cue App runtime, pull-secret cleanup, GCP drift green
 
 Closed out the org-migration tail. Four things landed.

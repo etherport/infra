@@ -100,11 +100,15 @@ Key facts that bound the design:
   (time-sliced, so `nvidia.com/gpu.shared: 2`), node has 8 vCPU / ~12 GB RAM.
 - **Ollama** runs there (`ollama` ns) with **text-only** models loaded:
   `qwen2.5:14b` (9 GB) and `qwen2.5:32b` (19 GB). **No vision model is present.**
-- ⚠️ **The P40 is Pascal (sm_61) and this is the key hardware risk.** The node reports
-  CUDA runtime 13.0, and NVIDIA dropped Pascal support in CUDA 13 — **verify before
-  committing to a design**, because it determines whether newer vision-model runtimes
-  and container images will run here at all. Pascal also has weak FP16, so quantised
-  GGUF (Q4/Q8) via ollama is the realistic path rather than FP16 transformers.
+- ✅ **RESOLVED 2026-08-14: the Pascal/CUDA-13 fear does not block us.** Verified live:
+  `qwen2.5:14b` runs **100% GPU** on the P40 under ollama **0.32.13** with driver
+  **580.105.08**. The node's "CUDA runtime 13.0" label is just the driver's max
+  supported API version; ollama bundles its own CUDA-12 runner compiled for sm_61.
+  Quantised GGUF vision models (qwen2.5-VL/llava class) are expected to run the same
+  way. ⚠️ Residual risk: **driver 580.x is NVIDIA's final Pascal branch** — the
+  platform is frozen. If ollama ever drops its CUDA-12 runner, gpu1 stops upgrading
+  (pin the ollama version at that point). Pascal's weak FP16 still means GGUF
+  quantised via ollama, not FP16 transformers.
 - Node RAM (12 GB) is *smaller* than the 32b model — that model lives in VRAM. Adding a
   vision model concurrently needs a VRAM budget, not just disk.
 
@@ -146,6 +150,37 @@ Key facts that bound the design:
 
 ---
 
+### Webhook path + payload (traced 2026-08-14)
+
+- **Protect Alarm Manager has 41 live automations** (queried from the `automations`
+  table). 8 are `HTTP_REQUEST` actions and **all point at the 5 HA webhook IDs** via the
+  working IP-literal path (`http://10.10.201.70:8088/api/webhook/<id>`) — the
+  outstanding "confirm all Alarm Manager URLs switched" item is effectively verified.
+  The other 34 actions are `SEND_NOTIFICATION` (Protect app push).
+- **The 5 HA webhook automations are night-only motion-light triggers and DISCARD the
+  payload** (no `trigger.json` references in `/config/automations.yaml`). Nothing
+  consumes the event content today.
+- **The fired-trigger payload is rich** (verified from `automationsHistory.data`, which
+  records exactly what a webhook body's `alarm.triggers[]` carries). A real
+  "Access Road Entry" firing contained: `key: line_crossed`, device MAC, eventId,
+  timestamps, `sourceEvent` with `type: smartDetectLine`, **confidence score**,
+  **`smartDetectTypes: ["licensePlate","vehicle"]`**, per-line directional counts
+  (`persons/vehicles A2B vs B2A`), line status `enter`, the line's configured
+  direction/objectTypes, and **weather at event time**. Motion events are leaner
+  (no smart types, score 0).
+- **Directional "entering the private road" filtering already exists**: the
+  "Access Road Entry" line (direction `BA`) on the AI Pro and "Gate Entry" on Gate are
+  line-crossing automations that fire only on entry — precisely the operator's
+  street-traffic-vs-entry distinction, computed camera-side. Loitering automations
+  cover Access Rd/Gate/Driveway Lower/Intercom.
+- **Protect's `transcriptions` table is EMPTY** and `aiFeatureSettings` is `{}`, no AI
+  Port is paired (`isPairedWithAiPort: false` everywhere) — Protect does **not**
+  transcribe audio today; speech-to-text would be built by us (audio comes only via
+  RTSP(S), which is currently disabled).
+- Per-event **thumbnails** exist in the DB (`thumbnails`, `packageThumbnails`,
+  `detectedThumbnails` in event metadata) and via the integration API — a snapshot
+  source for vision analysis that does not need RTSP.
+
 ## 4a. Operator direction (answered 2026-08-14)
 
 The operator answered §4. Direction:
@@ -167,9 +202,13 @@ The operator answered §4. Direction:
    encode this.)
 5. **Latency: as close to real-time as possible** for "someone at the gate now".
 6. **NEW ask (not in the original framings): investigate near-real-time speech-to-text
-   on camera audio**, feeding both alerts and history. Note: the Protect DB has a
-   `transcriptions` table — check whether Protect already transcribes before building
-   anything.
+   on camera audio**, feeding both alerts and history. (Checked: Protect's
+   `transcriptions` table is empty — no built-in transcription without AI Port
+   hardware; we'd build STT ourselves, which requires enabling RTSP(S) for audio.)
+7. **NEW ask (2026-08-14, mid-session): an AI/LLM manager for Home Assistant** —
+   dynamic control (e.g. lighting) replacing the fairly static pre-programmed
+   automations. Separate deliverable from camera alerting, but shares the LLM
+   plumbing and the HA integration surface; scope it alongside framing (3).
 
 ## 4. Open questions for the operator (superseded — see §4a)
 
@@ -188,14 +227,16 @@ The operator answered §4. Direction:
 
 1. ✅ **Enumerate the cameras** — done 2026-08-14, see the inventory in §2 (done via
    SSH + Protect DB since the `protect-tf` key turned out not to be in SOPS).
-2. **Confirm the Pascal/CUDA-13 question** on gpu1 and test one quantised vision model
-   (e.g. a llava/qwen-VL GGUF) under ollama. This is a ~1 hour spike that de-risks the
-   whole project — if vision inference won't run on the P40, framings (2) and (3)
-   need either new hardware or a hosted API.
-3. **Trace one real Protect event end-to-end** through the existing webhook path to see
-   exactly what payload arrives and what it already contains.
+2. ✅ **Pascal/CUDA-13 confirmed viable 2026-08-14** (see §2 compute) — GPU inference
+   works under ollama's bundled CUDA-12 runner; driver 580 = final Pascal branch.
+   ⏳ Still to do: pull ONE quantised vision GGUF (operator approval required — VRAM/
+   disk) and benchmark a snapshot-description round-trip.
+3. ✅ **Webhook path traced 2026-08-14** (see §2 webhook findings) — payload is rich
+   (directional line-crossing, smart types, scores); HA currently discards it.
 4. Only then design. Prefer extending `ai-advisor` over a new service if the answer is
-   framing (1).
+   framing (1). **→ Next step as of 2026-08-14: write the design doc** for the layered
+   build in §4a (alerts → correlation → history → STT/vision), with a costed
+   hosted-vs-local comparison for the vision/STT pieces.
 
 ## 6. Reading list
 

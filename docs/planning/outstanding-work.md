@@ -299,6 +299,26 @@ This file foregrounds open/in-progress/gated work._
   App path is confirmed exercised.
 
 
+### 🟡 M158. LLM camera/security monitoring — scoping DONE 2026-08-14, design next
+- **Want (operator, 2026-08-14):** start with **smarter alerts from existing Protect
+  detections** (too many meaningless notifications today; many turned off), then layer
+  **HA cross-source correlation**, **natural-language history search**, **speech-to-text
+  on camera audio** (text summaries instead of listening through video), and a hosted
+  **vision model only if very cheap/free**. Near-real-time for "someone at the gate now".
+  All cameras; Access Road/Gate most active; on Access Road only *entry* traffic matters
+  (street traffic is noise). NEW related ask: an **AI/LLM manager for HA** (dynamic
+  lighting control vs static automations).
+- ✅ **Scoping/investigation complete** — full detail in
+  [`llm-camera-monitoring-scope-2026-08.md`](llm-camera-monitoring-scope-2026-08.md):
+  13-device inventory (2× AI Pro with NVR-side face+LPR already ON); RTSP disabled
+  everywhere; keep-until-full ≈24-day retention (15 TB @97%); ~94 smart events/day;
+  **P40/CUDA-13 risk RESOLVED** (ollama's CUDA-12 runner runs sm_61; driver 580 = final
+  Pascal branch); webhook payloads are rich (directional line-crossing, smart types,
+  scores) but HA discards them; Protect does NOT transcribe (no AI Port).
+- ⏳ next: design doc (phased: alerts → correlation → history → STT/vision) with a
+  costed hosted-vs-local comparison; ⏳ vision-GGUF spike on gpu1 (needs operator OK);
+  ⚠️ residual: `protect-tf` key still 1P-only (enumeration used SSH+psql workaround).
+
 ### 🟡 H46. home-assistant hardening — de-privileged ✅ + PSS baseline ✅ (d6705d4); netpol tier ⏳
 - ✅ 2026-07-25: `privileged: true` was cargo cult (network integrations only, no devices;
   Multus vlan202 wired by the CNI) — removed (`allowPrivilegeEscalation: false`), pod
