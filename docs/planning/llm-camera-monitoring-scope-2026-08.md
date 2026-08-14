@@ -47,9 +47,53 @@ retention and an index. Pick before designing.
   (`platform/kubernetes/home-automation/ingressroute-webhook.yaml`). **This is the
   existing, working camera→cluster event path and the obvious foundation to build on.**
 - SSH to the Protect host uses `udm_ssh_user` / `udm_ssh_password` from the SOPS bundle.
-- **Not yet enumerated:** camera count, models, resolutions, whether they have on-device
-  smart detections, current retention depth, and whether RTSP(S) streams are enabled.
-  **Do this first** — it bounds every option below.
+- ⚠️ **The `protect-tf` integration key is NOT in the SOPS bundle** (contrary to what the
+  agent brief assumed) — it exists only in 1Password; adding it to SOPS is a still-open
+  optional item (outstanding-work ~L699, session-log 2026-06-15). Headless enumeration
+  below was done **read-only via SSH + the Protect PostgreSQL** instead (instance
+  `/srv/postgresql/14/protect`, port `5433`, socket `/var/run/postgresql`, db
+  `unifi-protect` — `psql -U postgres` as root works). A production integration should
+  get the key into SOPS rather than lean on root SSH + DB reads.
+
+### Camera inventory (enumerated 2026-08-14, from the Protect DB)
+
+**13 adopted devices** — 12 cameras + 1 doorbell/intercom — on VLAN 212, all recording
+mode **`always`**, all on firmware 5.4.122 (intercom 1.11.23.0). Protect **7.1.87** on a
+UNVR (aarch64). One additional **stale unadopted** `cameras` row ("Access Road", MAC
+`28704E16EBAA`, last seen 2026-04-04) is a replaced unit — ignore it.
+
+| Camera | Model | IP | Max stream | Smart detections enabled |
+|---|---|---|---|---|
+| Access Road | **UVC AI Pro** | .226 | 3840×2160@30 h264 | person, vehicle, animal, **face**, **licensePlate** + 9 audio types |
+| Gate | **UVC AI Pro** | .172 | 3840×2160@30 h265 | person, vehicle, animal, **face**, **licensePlate** + 10 audio types |
+| Path | UVC G5 Bullet | .107 | 2688×1512@30 h264 | person, vehicle, animal + smoke/CO/baby-cry audio |
+| Driveway Mid | UVC G4 Bullet | .103 | 2688×1512@24 h265 | person, vehicle, animal + audio; `videoMode: lprNoneReflex` (LPR-assist) |
+| Basement, Chapel, Deck, Driveway Lower, Driveway Upper, Front Door, Living Room, Workroom | UVC G4 Bullet ×8 | .111/.108/.110/.109/.105/.104/.106/.125 | 2688×1512@24 h265 | person, vehicle (animal-capable, not enabled) |
+| Driveway Gate - Entry | UA Intercom | .115 | 1200×1600@30 h264 | none (no smart detect) |
+
+Key facts that bound the design:
+
+- **NVR-level `smartDetection`: `{enable: true, faceRecognition: true,
+  licensePlateRecognition: true}`** — Protect is *already* running face recognition and
+  LPR (there is a dedicated `smart_detect_face` postgres DB on the console). The two AI
+  Pros produce face + plate detections; richer metadata than framing (1) assumed.
+- **RTSP(S) is DISABLED on every channel of every camera** (`isRtspEnabled: false`
+  across all 39 channels; each camera has High/Medium/Low). Any frame/clip pipeline
+  needs either per-camera RTSP enablement (Protect UI change — operator) or snapshot
+  pulls via the integration API.
+- **Retention is keep-until-full, ~24 days**: no `recordingRetentionDurationMs` set,
+  `autoRetentionEnabled: false`; UNVR volume is **15 TB at 97% used** with
+  ~557 GB/day HQ + ~34 GB/day LQ (≈0.59 TB/day) → ≈24 days of depth. Framing (4)
+  ("last Tuesday" queries) is bounded by this window unless events/frames are archived
+  elsewhere.
+- **Event volume is modest** (last 7 days): motion 1 355 (~190/day), smartDetectZone
+  543, smartDetectLine 65, smartAudioDetect 47, loiter 5 → **~94 smart events/day,
+  ~280 events/day total**. At this rate an event-level (not frame-level) pipeline is
+  nowhere near Loki's danger zone, and LLM-per-event costs are small.
+- Protect also keeps `transcriptions`, `detections`, `smartDetectTracks`, heatmaps and
+  per-event `thumbnails`/`packageThumbnails` tables — there is more queryable signal
+  on-box than the webhook payloads expose. `aiFeatureSettings` is empty and
+  `isAiReportingEnabled: false` (no UniFi cloud AI reporting).
 
 ### Compute for inference
 - **`k8s-gpu1`** — **Tesla P40, 24 GB VRAM**, `nvidia.com/gpu.replicas = 2`
@@ -102,7 +146,32 @@ retention and an index. Pick before designing.
 
 ---
 
-## 4. Open questions for the operator
+## 4a. Operator direction (answered 2026-08-14)
+
+The operator answered §4. Direction:
+
+1. **Framing: start with (1) — smarter alerts from existing detections.** Many Protect
+   notifications have been turned off because they were annoying; the want is *fewer,
+   smarter alerts with more context*. Then layer on: **(3) cross-source correlation**
+   with anything pullable from Home Assistant (e.g. security-system events), and
+   **(4) natural-language history search**. **(2) vision model: only if very cheap or
+   free** when hosted; local depends on the gpu1 verdict.
+2. **Hosted inference is acceptable if very cheap or free** — not local-only dogma,
+   but cost-gated.
+3. **The failure being fixed:** too many meaningless alerts; the important ones drown.
+   Also: *"don't like having to watch video / listen through voices"* — wants **text
+   summaries first**, including of speech.
+4. **All cameras matter; Access Road + Gate are the most active.** On Access Road,
+   normal street traffic is noise — **traffic entering the private road** is the
+   signal. (A directional/zone distinction — smartDetectLine/zone data may already
+   encode this.)
+5. **Latency: as close to real-time as possible** for "someone at the gate now".
+6. **NEW ask (not in the original framings): investigate near-real-time speech-to-text
+   on camera audio**, feeding both alerts and history. Note: the Protect DB has a
+   `transcriptions` table — check whether Protect already transcribes before building
+   anything.
+
+## 4. Open questions for the operator (superseded — see §4a)
 
 1. **Which framing (1–4 in §1) is the actual want?** Biggest single decision.
 2. **Local-only inference, or is a hosted vision API acceptable?** Drives everything.
@@ -117,8 +186,8 @@ retention and an index. Pick before designing.
 
 ## 5. Suggested first steps for whoever picks this up
 
-1. **Enumerate the cameras** via the Protect read-only API — count, models, detection
-   capabilities, retention. Everything else is guesswork until this exists.
+1. ✅ **Enumerate the cameras** — done 2026-08-14, see the inventory in §2 (done via
+   SSH + Protect DB since the `protect-tf` key turned out not to be in SOPS).
 2. **Confirm the Pascal/CUDA-13 question** on gpu1 and test one quantised vision model
    (e.g. a llava/qwen-VL GGUF) under ollama. This is a ~1 hour spike that de-risks the
    whole project — if vision inference won't run on the P40, framings (2) and (3)
