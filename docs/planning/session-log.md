@@ -91,6 +91,18 @@ grep (a 401 and a 200-with-no-expiry both produce "no expiry header"), emits
 alert fires on `credential_valid == 0`. That failure hides well otherwise: running pods keep
 serving from cached layers, so a revoked pull token surfaces only at the next reschedule.
 
+⚠️ **And that change broke the check — caught only by dispatching it** (`ccdb403a`). The
+workflow was green on 08-13 and failed on its first run after the rotation. Cause:
+`EXP=$(grep -i '^github-authentication-token-expiration:' ... | sed | tr)` — a non-expiring
+token means grep matches **nothing**, exits 1, `pipefail` propagates it and `set -e` kills the
+step. It failed with **zero output**, because every line before it appends to `$METRICS` rather
+than stdout, so the log showed only `exit code 1` — the worst possible symptom for a monitoring
+job. Fixed with `|| true` on that pipeline plus converting a `[ -n "$TS" ] && echo` to a real
+`if` (same trap, one line down). **The lesson is the reusable part: my local dry-run passed
+because I ran the snippet WITHOUT `set -euo pipefail`. A dry-run under different shell flags is
+testing a different program.** Re-dispatched: green, metrics pushed, and
+`credential_valid{credential="ghcr_pull_token"} = 1` confirmed live in Prometheus.
+
 **Owner follow-ups still open:** delete the
 superseded fine-grained PATs (`infra-dispatch`, `repo-backup-read`,
 `homelab-actions-runner`, `claude-cli (graham-mac)` — keep `cue-bug-triage`); delete the 5
