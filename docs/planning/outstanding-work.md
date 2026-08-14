@@ -263,6 +263,33 @@ This file foregrounds open/in-progress/gated work._
 > H46 + M150–M153 from the 2026-07-25 remote-access/ZT review
 > (`remote-access-zt-review-2026-07-25.md`).
 
+### ✅ M157. GitHub org migration (`sparked-diamond` → `etherport`) + GitHub App auth — DONE 2026-08-14
+- **Why:** consolidate everything under the `etherport` name, and stop the treadmill of
+  expiring per-purpose PATs. Full runbook + every gotcha: [`github-org-migration-2026-08.md`](github-org-migration-2026-08.md).
+- ✅ **Phase 1 — org + transfers:** org `etherport` created; all 6 repos transferred (cairn, cue,
+  cue-certs, gs-brand, infra, personal-web). Self-hosted runner re-registered against the org repo.
+- ✅ **Phase 2 — GitHub Apps replace PATs.** Installation tokens are 1h and minted per-use with
+  explicit `--permissions`, so nothing long-lived sits on disk. `scripts/gh-app-token.sh`
+  (RS256 JWT → installation token, reads the key from the SOPS bundle) is the shared minter;
+  the github-mirror CronJob mints in an init container (alpine/git has no `openssl`); Flux uses
+  native App auth (`provider: github` + `githubApp*` secret — **`provider: github` is required**,
+  source-controller does not infer it); `cue-app-runtime` (`{issues:write, metadata:read}`,
+  `etherport/cue` only) is wired into cue-api.
+- ⚠️ **GHCR rejects App installation tokens** — package pulls still need a classic PAT
+  (`cue-ghcr-pull-homelab`, `read:packages`). That is a GHCR limitation, not a config miss.
+- **Gotchas that cost real time:** (1) a **user-scoped PAT cannot see org repos** — the mirror
+  silently backed up 1 of 6 until the App landed; (2) the org emits **numeric-ID OIDC subject
+  claims** → 4-day CI outage, see the entry below / `github-oidc-numeric-id-claim`; (3) org
+  packages default to **private**, which is why pull secrets briefly proliferated (now back to
+  the 2 genuinely needed); (4) `envFrom: secretRef` does not roll pods — bump a config-rev
+  annotation.
+- ⏳ **Owner follow-ups:** rotate `cue-ghcr-pull-homelab` before **2026-08-31**; delete the
+  superseded fine-grained PATs (`infra-dispatch`, `repo-backup-read`, `homelab-actions-runner`,
+  `claude-cli (graham-mac)` — **keep** `cue-bug-triage`); delete the 5 orphaned packages still
+  under the old `sparked-diamond` user account; retire the `CUE_GITHUB_TOKEN` fallback once the
+  App path is confirmed exercised.
+
+
 ### 🟡 H46. home-assistant hardening — de-privileged ✅ + PSS baseline ✅ (d6705d4); netpol tier ⏳
 - ✅ 2026-07-25: `privileged: true` was cargo cult (network integrations only, no devices;
   Multus vlan202 wired by the CNI) — removed (`allowPrivilegeEscalation: false`), pod

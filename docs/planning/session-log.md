@@ -15,6 +15,54 @@ the tracker's archived "Recently completed" blocks — now in
 
 ---
 
+## 2026-08-14 — GitHub tidy-up complete: cue App runtime, pull-secret cleanup, GCP drift green
+
+Closed out the org-migration tail. Four things landed.
+
+**1. `cue-app-runtime` GitHub App wired into cue-api.** The cue agent's *first* App proposal
+was refused: `cue-ci-monitor` requested no `issues:write` (so it couldn't do the job it was
+for) while being readable from an internet-facing pod that also had reach to `cue-certs`
+(iOS signing certs). The replacement was independently verified before adoption —
+`{issues:write, metadata:read}`, installed on `etherport/cue` only. Credentials
+(`CUE_GITHUB_APP_ID` / `_INSTALLATION_ID` / `_KEY`) went into
+`platform/kubernetes/cue-api/03-secret-app.sops.yaml`. That secret is consumed via
+`envFrom: secretRef`, which does **not** roll pods on change, so the deployment's config-rev
+annotation was bumped (`2026-08-14-github-app-runtime`) to force it. Verified live: both
+pods carry all three vars. `CUE_GITHUB_TOKEN` remains as a fallback and should be retired
+once the App path is confirmed exercised.
+
+**2. Redundant GHCR pull secrets removed.** Org packages default to **private**, which is
+why several pull secrets appeared during the migration; the packages are public again, so
+those were unwound. Exactly two dockerconfigjson secrets remain cluster-wide —
+`cue/ghcr-cue` and `flux-system/cue-ghcr` (the `cue` image is genuinely private) — plus the
+manual `backups/ghcr-etherport` leftover was deleted. `backups/aws-s3/base/serviceaccount.yaml`
+carries a comment explaining the re-add procedure if visibility ever flips back.
+
+**3. GCP drift detection: green.** After the owner fixed the WIF binding in Cloud Shell, the
+immediate re-dispatch still failed — but the failing step had **moved** from
+"Configure GCP credentials (WIF)" to `terraform plan`, which is the tell: the auth action
+only *writes* an external-account credential file, and the token exchange is lazy, so the
+first real API call is inside `plan`. A second dispatch ~10 min later returned `rc=0` with
+**no config change in between** — GCP IAM/WIF propagation lag. **Re-run once before
+diagnosing a GCP auth-adjacent failure.** Current state: all **26 jobs green**, google
+`rc=0` (no drift), no open `tf-drift` issue.
+
+**4. Fixed a real observability gap found along the way** (`9bf63693`). The drift workflow
+sent plan output only to `$GITHUB_STEP_SUMMARY`, and its redact + upload-artifact steps are
+gated on `drifted == 'true'` (rc=2). An **errored** stack (rc=1) therefore left nothing in
+the job log but `rc=1` — diagnosing it required opening the run in a browser, which a
+headless agent can't do. rc=1 now echoes the plan tail into a collapsed log group in both
+plan jobs. A plan *error* renders no attribute values (unlike a diff), so this does not
+regress the M121 redaction posture.
+
+**Owner follow-ups still open:** rotate `cue-ghcr-pull-homelab` (classic PAT, `read:packages`)
+before **2026-08-31** — `cue/ghcr-cue` + `flux-system/cue-ghcr` depend on it; delete the
+superseded fine-grained PATs (`infra-dispatch`, `repo-backup-read`,
+`homelab-actions-runner`, `claude-cli (graham-mac)` — keep `cue-bug-triage`); delete the 5
+orphaned packages still under the old `sparked-diamond` user account.
+
+---
+
 ## 2026-08-13 — CI restored: the org's numeric-ID OIDC claim (4-day outage) + Phase 2b/2d/2e
 
 **Root-caused a 4-day, cluster-wide CI outage that had gone unnoticed.** Every workflow that
