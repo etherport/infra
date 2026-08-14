@@ -263,8 +263,14 @@ The operator answered §4. Direction:
    SSH + Protect DB since the `protect-tf` key turned out not to be in SOPS).
 2. ✅ **Pascal/CUDA-13 confirmed viable 2026-08-14** (see §2 compute) — GPU inference
    works under ollama's bundled CUDA-12 runner; driver 580 = final Pascal branch.
-   ⏳ Still to do: pull ONE quantised vision GGUF (operator approval required — VRAM/
-   disk) and benchmark a snapshot-description round-trip.
+   ✅ **Vision spike PASSED (2026-08-14, operator-approved pull):** `qwen2.5vl:7b`
+   (6.0 GB disk, 5.9 GB VRAM) runs **100% GPU** on the P40. On a real event
+   thumbnail (640×360) it produced an accurate, alert-grade description ("a man
+   walking down a driveway… green shirt, dark pants, moving away from the camera
+   towards a parked car") and even OCR'd the OSD overlay (camera name + timestamp).
+   Timings: **cold ≈ 24 s** (18 s model load + inference), **warm ≈ 5–6 s** per
+   snapshot (image prefill ~1.1K tokens @ 337 tok/s, generation 47 tok/s). Local
+   vision for framing (2) is confirmed viable — no hosted API needed.
 3. ✅ **Webhook path traced 2026-08-14** (see §2 webhook findings) — payload is rich
    (directional line-crossing, smart types, scores); HA currently discards it.
 4. Only then design. Prefer extending `ai-advisor` over a new service if the answer is

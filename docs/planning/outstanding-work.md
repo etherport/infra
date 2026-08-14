@@ -321,9 +321,14 @@ This file foregrounds open/in-progress/gated work._
   list A1–A5. Power/cost measured (P40: 10 W empty / 54 W model-resident / 191 W
   generating; whole pve host 126 W wall; newer GPU = capability not power play;
   chassis fans pinned 5800–6000 rpm regardless of the 28 °C GPU → BMC fan policy).
+- ✅ **A4 vision spike PASSED 2026-08-14** (operator approved the pull): qwen2.5vl:7b
+  runs 100% GPU on the P40, warm ≈5–6 s/snapshot, alert-grade descriptions + OSD OCR.
+- ✅ Real tariff captured (SCE TOU-D-PRIME, blended $0.365/kWh, ≈$0.32/kWh for 24/7
+  loads) — saved to agent memory `sce-electricity-rates`; pve host ≈13.5% of the bill.
 - ⏳ awaiting operator: **A1** enable RTSP on Gate/Access Road/Intercom/Front Door
-  (audio for STT); **A2** `protect-tf` key → SOPS bundle; **A4** OK the qwen2.5vl:7b
-  spike on gpu1; then Phase-1 build approval.
+  (audio for STT — operator said "shortly", 2026-08-14); **A2** `protect-tf` key →
+  SOPS bundle (edit `homelab-ops.sops.yaml` in ANY checkout — same repo — commit+push);
+  then Phase-1 build approval.
   ⚠️ residual: enumeration used the SSH+psql workaround until A2 lands.
 
 ### 🟡 H46. home-assistant hardening — de-privileged ✅ + PSS baseline ✅ (d6705d4); netpol tier ⏳
