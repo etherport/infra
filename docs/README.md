@@ -178,6 +178,7 @@ captured yet.
 |----------|-------------|
 | [outstanding-work.md](planning/outstanding-work.md) | **Source of truth** for prioritized open work (C/H/M/L tiers) + completed index |
 | [session-log.md](planning/session-log.md) | **Narrative journal** of each working session (what/why/how-to-resume), newest first |
+| [llm-camera-monitoring-scope-2026-08.md](planning/llm-camera-monitoring-scope-2026-08.md) | 📋 SCOPING ONLY — LLM/vision monitoring of Protect camera + security activity: live hardware+software inventory (P40/24GB, text-only ollama, read-only Protect API), the 4 candidate framings, constraints (Loki headroom, netpol tiers, alert fatigue, Pascal/CUDA-13 risk), open operator questions |
 | [dot1x-mab-design-2026-07-29.md](planning/dot1x-mab-design-2026-07-29.md) | 802.1X/MAB design for exposed switch ports (#18 phase 2) — capability matrix (Flex-Mini can't), MAC-pin → MAB → alerting phases, rollback |
 | [remote-access-zt-review-2026-07-25.md](planning/remote-access-zt-review-2026-07-25.md) | Remote-access topology + ZT review after the CF-Access-off-Plex + TS sole-advertiser changes — path matrix, exposure table, fix queue (H46, M150–M153) |
 | [dev-roadmap-2026-06-11.md](planning/dev-roadmap-2026-06-11.md) | Forward-looking build backlog (4-track review) — dated snapshot kept live; `outstanding-work.md` is the status |
