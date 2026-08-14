@@ -145,6 +145,19 @@ spec:
           annotations:
             summary: "Credential {{ $labels.credential }} expires in <30 days"
             description: "{{ $labels.credential }} expires at {{ $value | humanizeTimestamp }}. Rotate BEFORE expiry: the dispatch PAT gates ALL Terraform ops (M82); CF service tokens gate Alexa->HA / HealthKit ingest / the cue health probe. Rotation: GH -> settings/tokens (fine-grained); CF tokens -> terraform taint the token resource + apply + update the consumer secret."
+        # A credential minted with NO expiry (ghcr_pull_token since 2026-08-14)
+        # can never trip CredentialExpirySoon — but it can still be REVOKED, by
+        # hand or by GitHub. This is the monitor that still applies to it.
+        # Deliberately no absent(): a missing series means the weekly check did
+        # not run, which CredentialExpiryCheckStale already covers.
+        - alert: CredentialRevoked
+          expr: credential_valid == 0
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "Credential {{ $labels.credential }} is REJECTED by its provider"
+            description: "The weekly check authenticated with {{ $labels.credential }} and the provider refused it (non-200). For ghcr_pull_token this breaks cue image pulls AND Flux image automation as soon as anything needs a fresh pull — running pods survive on cached layers, so it can sit silent until a reschedule. Re-mint a classic PAT with read:packages and update ALL THREE locations: cue/ghcr-cue, flux-system/cue-ghcr, and ghcr_pull_token in the ops bundle."
         - alert: CredentialExpiryCheckStale
           expr: absent(credential_expiry_check_last_run_timestamp_seconds) or (time() - credential_expiry_check_last_run_timestamp_seconds) > 8*24*3600
           for: 6h
