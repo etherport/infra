@@ -53,11 +53,20 @@ Everything marked **"SOPS"** below is encrypted to this key. The path column is 
 
 ## 4. GitHub
 
+> **2026-08 org migration + GitHub App.** The repos moved from the `sparked-diamond`
+> USER to the **`etherport` ORG**. User-scoped PATs cannot see org repos at all, so the
+> PAT-based credentials were replaced by a **GitHub App** minting 1h installation tokens.
+> The App private key does **not expire** — this ended the PAT rotation treadmill.
+
 | Credential | Type | Stored | Consumers | Rotation / notes |
 |---|---|---|---|---|
-| `github_dispatch_pat` | fine-grained PAT (Actions:write) | SOPS `homelab-ops.sops.yaml` | devbox dispatches CI workflows (TF applies) via REST | **expires ~2026-09-18** — renew before then. Small blast radius (M92). |
-| GH Actions runner reg | registration token/secret | SOPS `github-actions-runner/secret.sops.yaml` | self-hosted `lifecycle` runner | — |
-| GHCR pull secrets | image-pull token | SOPS `cue-api/04-secret-ghcr.sops.yaml`, `image-automation/cue-ghcr-secret.sops.yaml` | pulling private cue images | — |
+| **`etherport-automation` App** (id `4539969`, installation `152499241`) | App private key (PEM) → 1h installation tokens | SOPS `homelab-ops.sops.yaml` (`github_app_id`, `github_app_installation_id`, `github_app_private_key`); k8s `flux-system/flux-github-app`, `backups/github-app-creds` | **Flux git** (HTTPS + `provider: github`), **repo-mirror backup**, **devbox dispatch** (`scripts/gh-app-token.sh`) | Key does NOT expire — rotate on compromise only. Perms: contents:write, actions:write, metadata:read, packages:read. Mint scoped per use (`--permissions`). |
+| **`cue-ci-monitor` App** | App private key | cue repo's own secret store (infra holds no copy) | cue CI monitoring + `cue-certs` clone for fastlane match | Scoped Actions:read + Contents:read on `cue` + `cue-certs` ONLY — deliberately not the org-wide App. |
+| GHCR pull token | classic PAT, `read:packages` ONLY | SOPS `ghcr_pull_token`; k8s `ghcr-etherport` (backups/cloudflare-ddns/cloudwatch-to-loki), `cue/ghcr-cue`, `flux-system/cue-ghcr` | pulling private `ghcr.io/etherport/*` images | ⚠️ **EXPIRES 2026-08-31** and EVERY pull secret is the SAME token → on expiry all private pulls fail cluster-wide. **Cannot move to the App: GHCR rejects App installation tokens (403, tested).** Classic PATs are always user-owned. Monitored via `credential_expiry_timestamp_seconds{credential="ghcr_pull_token"}` + the <30d alert. |
+| ~~`github_dispatch_pat`~~ | RETIRED 2026-08-13 | — | — | Replaced by the App (it 404'd on org repos). Delete on GitHub if still listed. |
+| ~~`github-mirror-token`~~ | RETIRED 2026-08-13 | — | — | Replaced by the App. It could only see 1 of 6 org repos — a silently near-empty backup. |
+| ~~Flux SSH deploy keys~~ | RETIRED 2026-08-13 | — | — | Deploy keys are disabled org-wide; Flux uses the App over HTTPS. |
+| GHCR pull secrets for the 4 utility images | dockerconfigjson | k8s (see above) | aws-s3-sync, cloudflare-ddns, cloudwatch-to-loki | ⏳ Become **unnecessary** once those packages are flipped back to **public** (they were public pre-migration). `cue` stays private, so the token is still required regardless. |
 
 ## 5. step-ca provisioner
 

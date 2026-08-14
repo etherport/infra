@@ -44,6 +44,21 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
 
 ## 3. Operating model (how change actually ships)
 
+- **⚠️ The repos live in the `etherport` GitHub ORG** (moved from the `sparked-diamond`
+  USER 2026-08-09). Six repos: `infra`, `cue`, `cue-certs`, `cairn`, `gs-brand`,
+  `personal-web`. **User-scoped PATs cannot see org repos at all** — that single fact
+  caused every post-migration breakage. Automation authenticates via the
+  **`etherport-automation` GitHub App** (id `4539969`, installation `152499241`) →
+  `scripts/gh-app-token.sh --from-sops` mints 1h installation tokens (`--permissions`
+  to scope per use). The App key does **not expire**. Flux git auth is HTTPS + the App
+  (`provider: github` is REQUIRED alongside a `githubApp*` secret). **Deploy keys are
+  disabled org-wide.** ⚠️ **GHCR rejects App tokens (403)** — private image pulls still
+  need the classic `read:packages` PAT (`ghcr_pull_token`), which is why that one
+  credential still has an expiry. ⚠️ **The org emits NUMERIC-ID OIDC subject claims**
+  (`repo:etherport@314430121/infra@1010293991:...`, not the plain form) — if an AWS
+  assume-role fails while the trust "looks right", decode the token's actual `sub`.
+  Your **personal** Tailscale identity `sparked-diamond@github` is UNCHANGED — never
+  sweep it. Full history: `docs/planning/github-org-migration-2026-08.md`.
 - **GitOps, branch = `main`.** Flux watches `main` → `clusters/wind`. Editing a
   manifest does nothing until committed + pushed + reconciled. The headless agent
   hosts auto-push to `main` (no branch protection — single-owner repo, accepted risk
