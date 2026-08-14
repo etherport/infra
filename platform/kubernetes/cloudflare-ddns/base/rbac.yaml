@@ -3,5 +3,3 @@ kind: ServiceAccount
 metadata:
   name: cloudflare-ddns
   namespace: cloudflare-ddns
-imagePullSecrets:
-  - name: ghcr-etherport

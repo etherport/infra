@@ -4,7 +4,6 @@ kind: Kustomization
 namespace: backups
 
 resources:
-  - 05-ghcr-etherport.sops.yaml
   # Note: namespace.yaml removed to avoid collision when multiple shares
   # are included. Namespace is now defined in daily-report/namespace.yaml
   - serviceaccount.yaml

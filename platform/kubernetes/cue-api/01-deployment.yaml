@@ -25,7 +25,7 @@ spec:
         backup.velero.io/backup-volumes-excludes: ""
         # Bump to roll the pods after a cue-app secret change (envFrom is only
         # read at pod start; GitOps-native restart — no kubectl rollout).
-        cue.wind/config-rev: "2026-07-11-apple-bundle-id"
+        cue.wind/config-rev: "2026-08-14-github-app-runtime"
     spec:
       terminationGracePeriodSeconds: 15 # app does graceful SIGTERM <=10s
       serviceAccountName: cue-api # M75 IRSA — assumes wind-irsa-cue-media (S3 media bucket)
