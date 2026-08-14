@@ -129,7 +129,14 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           case "$rc" in
             0) echo "drifted=false" >> "$GITHUB_OUTPUT" ;;
-            1) echo "drifted=error" >> "$GITHUB_OUTPUT"; exit 1 ;;
+            1) # A plan ERROR renders no attribute values (unlike a diff), and the
+               # redact+upload steps below are gated on drifted==true — so without
+               # this echo the failure is invisible in the job LOG and only a repo
+               # admin reading the step summary in the UI can see why. Print it.
+               echo "::group::terraform plan error output"
+               tail -c 4000 plan.txt
+               echo "::endgroup::"
+               echo "drifted=error" >> "$GITHUB_OUTPUT"; exit 1 ;;
             2) echo "drifted=true"  >> "$GITHUB_OUTPUT" ;;
           esac
 
@@ -246,7 +253,14 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           case "$rc" in
             0) echo "drifted=false" >> "$GITHUB_OUTPUT" ;;
-            1) echo "drifted=error" >> "$GITHUB_OUTPUT"; exit 1 ;;
+            1) # A plan ERROR renders no attribute values (unlike a diff), and the
+               # redact+upload steps below are gated on drifted==true — so without
+               # this echo the failure is invisible in the job LOG and only a repo
+               # admin reading the step summary in the UI can see why. Print it.
+               echo "::group::terraform plan error output"
+               tail -c 4000 plan.txt
+               echo "::endgroup::"
+               echo "drifted=error" >> "$GITHUB_OUTPUT"; exit 1 ;;
             2) echo "drifted=true"  >> "$GITHUB_OUTPUT" ;;
           esac
 
