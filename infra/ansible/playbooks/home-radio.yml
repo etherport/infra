@@ -1,0 +1,148 @@
+---
+# home-radio (VM 1007, 10.10.201.41) — Z-Wave + Zigbee radio host for Home Assistant.
+#
+# The combo stick (Silicon Labs CP2105 dual-UART, 10c4:ea70, serial 00C3AED7 —
+# Nortek HUSBZB-1 signature) is attached to the PVE host and passed through to
+# this VM. It exposes TWO serial ports: interface 00 = Z-Wave, 01 = Zigbee.
+#
+# WHY THIS VM EXISTS: Home Assistant runs as a k8s pod. Passing USB into a worker
+# would PIN HA to one node forever (node patching becomes HA downtime) and would
+# reopen the privilege drop from H46. Instead this VM does ONE job — expose both
+# radios as TCP ports — and everything else stays in the cluster:
+#   Z-Wave : zwave-js-ui (k8s) -> tcp://10.10.201.41:3333 -> ttyUSB0
+#   Zigbee : HA ZHA integration -> socket://10.10.201.41:6638 -> ttyUSB1
+# That deliberately avoids zigbee2mqtt, which would need an MQTT broker this
+# estate does not have.
+#
+# ⚠️ THE LANDMINE THIS PLAYBOOK EXISTS TO PREVENT (same root cause as M91's
+# i6300esb watchdog): the Ubuntu cloud image does NOT ship
+# `linux-modules-extra-$(uname -r)`, so `cp210x` is ABSENT — the USB device
+# enumerates in `lsusb` but NO /dev/ttyUSB* appears and the radios are invisible.
+# It is per-kernel-version, so a kernel bump silently takes the radios away
+# again. We install the versioned package AND the `linux-generic` meta so future
+# kernels pull modules-extra automatically, then ASSERT the module is really
+# there rather than trusting apt's exit code.
+#
+#   dispatch: ansible-vm-fleet.yml → playbook=home-radio, inventory=wind,
+#             action=apply, limit=home-radio
+- name: Configure home-radio (Z-Wave + Zigbee serial bridge)
+  hosts: "{{ target_hosts | default('home-radio') }}"
+  become: true
+  vars:
+    zwave_tcp_port: 3333
+    zigbee_tcp_port: 6638
+    # Only the k8s pod network + the Servers VLAN should reach the raw radios.
+    # A raw serial port is an unauthenticated control channel for the whole
+    # Z-Wave/Zigbee network — do not expose it broadly.
+    allowed_sources:
+      - "10.42.0.0/16"      # k8s pod CIDR (HA + zwave-js-ui)
+      - "10.10.201.0/24"    # Servers VLAN
+
+  tasks:
+    - name: Install kernel modules-extra (provides cp210x) + the tracking meta
+      ansible.builtin.apt:
+        name:
+          - "linux-modules-extra-{{ ansible_kernel }}"
+          - linux-generic
+        state: present
+        update_cache: true
+      register: modules_extra
+
+    - name: Load the cp210x USB-serial driver
+      community.general.modprobe:
+        name: cp210x
+        state: present
+
+    # Belt and braces: modalias autoloads cp210x when the device is present, but
+    # assert rather than assume — this is exactly what silently failed before.
+    - name: ASSERT cp210x is available for the RUNNING kernel
+      ansible.builtin.stat:
+        path: "/lib/modules/{{ ansible_kernel }}/kernel/drivers/usb/serial/cp210x.ko.zst"
+      register: cp210x_mod
+      failed_when: not cp210x_mod.stat.exists
+
+    # Stable names: ttyUSB0/ttyUSB1 ordering is NOT guaranteed across reboots or
+    # re-enumeration, and silently swapping the Z-Wave and Zigbee ports would
+    # point each controller at the wrong radio. Bind by USB interface number.
+    - name: Install udev rules giving each radio a stable symlink
+      ansible.builtin.copy:
+        dest: /etc/udev/rules.d/99-home-radio.rules
+        mode: "0644"
+        content: |
+          # CP2105 dual-UART (HUSBZB-1). Interface 00 = Z-Wave, 01 = Zigbee.
+          SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea70", ENV{ID_USB_INTERFACE_NUM}=="00", SYMLINK+="zwave"
+          SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea70", ENV{ID_USB_INTERFACE_NUM}=="01", SYMLINK+="zigbee"
+      register: udev_rules
+
+    - name: Reload udev rules
+      ansible.builtin.command: udevadm control --reload-rules
+      changed_when: false
+      when: udev_rules.changed
+
+    - name: Re-trigger udev so the symlinks appear without a reboot
+      ansible.builtin.command: udevadm trigger --subsystem-match=tty
+      changed_when: false
+      when: udev_rules.changed
+
+    - name: ASSERT both radio symlinks exist
+      ansible.builtin.stat:
+        path: "/dev/{{ item }}"
+      register: radio_links
+      failed_when: not radio_links.stat.exists
+      loop:
+        - zwave
+        - zigbee
+
+    - name: Install ser2net
+      ansible.builtin.apt:
+        name: ser2net
+        state: present
+
+    # ser2net 4.x uses YAML. 115200 8N1 for both radios (Z-Wave 500/700 and
+    # EZSP Zigbee both default to 115200 on this stick).
+    - name: Configure ser2net to expose both radios over TCP
+      ansible.builtin.copy:
+        dest: /etc/ser2net.yaml
+        mode: "0644"
+        content: |
+          %YAML 1.1
+          ---
+          # Managed by infra/ansible/playbooks/home-radio.yml — do not hand-edit.
+          connection: &zwave
+            accepter: tcp,{{ zwave_tcp_port }}
+            enable: on
+            options:
+              kickolduser: true
+            connector: serialdev,/dev/zwave,115200n81,local
+
+          connection: &zigbee
+            accepter: tcp,{{ zigbee_tcp_port }}
+            enable: on
+            options:
+              kickolduser: true
+            connector: serialdev,/dev/zigbee,115200n81,local
+      notify: restart ser2net
+
+    - name: Enable and start ser2net
+      ansible.builtin.systemd:
+        name: ser2net
+        enabled: true
+        state: started
+
+    - name: Flush handlers before verifying
+      ansible.builtin.meta: flush_handlers
+
+    - name: ASSERT both TCP ports are listening
+      ansible.builtin.wait_for:
+        port: "{{ item }}"
+        host: 127.0.0.1
+        timeout: 20
+      loop:
+        - "{{ zwave_tcp_port }}"
+        - "{{ zigbee_tcp_port }}"
+
+  handlers:
+    - name: restart ser2net
+      ansible.builtin.systemd:
+        name: ser2net
+        state: restarted
