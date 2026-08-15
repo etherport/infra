@@ -38,6 +38,7 @@ on:
           - step-ca-remove-static-key  # M76: strip the static automation key — run ONLY after cert auth verified
           - runner-egress      # diagnostic: print the CI runner's public egress IP (localhost; M110 conn debug)
           - node-exporter      # standalone node_exporter only (H42) — for hosts where full base.yml is unsafe (pve!)
+          - home-radio         # VM 1007: Z-Wave/Zigbee serial bridge (ser2net) for HA — inventory=wind limit=home-radio
           - k8s-unattended-upgrades  # M116: security-only auto-patching on k8s nodes (reboots via kured) — inventory=wind limit=k8s_cluster
       inventory:
         description: 'Which inventory file(s)'
