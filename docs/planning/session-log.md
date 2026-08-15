@@ -76,6 +76,78 @@ ollama). Operator actions A1–A5 listed in the design doc §6.
 **Next steps:** operator does A1 (enable RTSP per camera) + A2 (protect-tf → SOPS) +
 A4 (vision spike OK); then Phase-1 build on approval.
 
+## 2026-08-15 — On-site: NAS cache recovery, DNS root-cause, mini unstuck + the Z-Wave/Zigbee radio bridge
+
+Owner was physically at the rack with ~1h. Split into what genuinely needed hands vs what
+didn't — the radio work turned out to need no physical presence at all.
+
+**DNS "outage" on the client network — not a drift.** Symptom: internal names unresolvable.
+Owner reported the UDM was handing out `10.10.199.1` as DNS. Read the live UDM config: the
+**Clients VLAN 202 DHCP was correct and unchanged** (`.5`, `.6`, `44.240.60.80`). The real
+cause was that the client had landed on the **untagged Default network**, where
+`dhcpd_dns_enabled = False` — so the UDM serves *itself*, and its dnsmasq only forwards to
+external upstreams. Owner found it: **a switch port profile had reverted to Default.**
+⚠️ Two latent instances of the same shape remain: the **Default** and **Security (VLAN 205)**
+networks both have `dhcpd_dns_enabled=False`, so anything landing there gets no internal DNS.
+Worth declaring DNS on both in the unifi TF (`default` currently declares no DHCP DNS at all,
+so a future apply could also wipe a UI-set value).
+
+**UNAS cache recovery.** `UnasMdArrayDegraded` was firing. Scaled **garage to 0 first** — it is
+velero's primary backup repo with data blocks on the NAS, and would have wedged on stale NFS
+handles — and annotated it `kustomize.toolkit.fluxcd.io/reconcile=disabled`, because Flux
+reconciles every 10m and would have restarted it straight onto a dead mount. Owner found the
+**M.2 latch was stuck**; both drives reseated fine once freed. Booting with the drives *out*
+put the **pool offline**, which settles it: that cache tier is not optional.
+Post-reseat: **md3 (raid6, 46.8 TB of actual data) is 8/8 healthy**, md0 healthy, and md4 (cache
+mirror) still `[2/1] [_U]`. ⚠️ Three mdstat samples over ~3 minutes showed **no recovery line
+and no change**, so the kernel was not resyncing even though the UI said "rebuilding" — the UI
+may mean cache *repopulation*, not an md resync. Left to the existing hourly check;
+`UnasMdArrayDegraded` clears by itself if it completes. Garage restored, annotation removed,
+verified serving live velero/kopia reads.
+
+**Mini.** FileVault disabled by owner, host back up, auto-login configured. `CairnAgentDead`
+and `MiniHealthStale` cleared; `CairnJobsFailing` + 16 `ICloudBackup*` still firing. Devbox SSH
+to it is still refused (the mini is NOT one of the 15 hosts trusting the step-ca user CA) —
+owner needs to add the devbox pubkey before I can verify cairn directly. ⚠️ With FileVault off,
+the mini's disk holds an **unencrypted copy of the primary SOPS age key**; if cairn does not
+need it, removing it shrinks the blast radius and makes FileVault-off a much easier call.
+
+**The radio stick — identified, and it is not what was assumed.** The Aeotec **Z-Stick 10 Pro**
+in the box is **Z-Wave only** and remains missing. What is actually attached to the PVE host is
+a **CP2105 dual-UART (10c4:ea70, serial 00C3AED7)** — two serial interfaces, the Nortek
+HUSBZB-1 signature: **Z-Wave + Zigbee**. I had dismissed this device earlier in the day as a
+pre-existing serial adapter without checking, which nearly cost the owner a hardware return.
+So the estate already has a Zigbee radio; the Zigbee plugs are viable.
+
+**Shipped the bridge end-to-end** (`df623b24`, `75bb7674`, `1acf3f7b`, `75e4a77c`):
+VM **1007 `home-radio`** (10.10.201.41, 2c/2G/20G) via TF (plan reviewed: 1 to add, 0 change,
+0 destroy), USB passed through host-side with `qm set 1007 -usb0 host=10c4:ea70` + a **cold**
+start, then ansible for the host config. Architecture is deliberate: the VM does ONE job —
+expose both radios as TCP — so HA stays a reschedulable, unprivileged pod instead of being
+pinned to a node by a device mount (which would also undo H46).
+`ser2net` serves **:3333 Z-Wave** and **:6638 Zigbee**; ZHA will use `socket://` and zwave-js-ui
+`tcp://`, which avoids zigbee2mqtt and the MQTT broker this estate does not run.
+
+⚠️ **Two traps hit, both previously seen:**
+1. **`cp210x` was ABSENT** — the Ubuntu cloud image ships no `linux-modules-extra-$(uname -r)`.
+   The device enumerated in `lsusb` while **no `/dev/ttyUSB*` appeared**, with no error anywhere.
+   *Identical root cause to M91's i6300esb watchdog.* It is per-kernel-version and this VM
+   already had 6.8.0-137 staged behind the running 6.8.0-111, so the next reboot would have
+   silently removed the radios again — installed for both kernels plus the `linux-generic` meta.
+2. **Cilium tier gap** — ports were reachable from the devbox but **blocked from pods**, the
+   exact signature of the enforced-namespace allowlist tax. Fixed with an egress rule scoped to
+   `10.10.201.41/32` on those two ports only; a raw ser2net port is an unauthenticated control
+   channel for the whole radio network.
+
+Verified: both symlinks present, ser2net listening, and **both ports reachable from the HA pod**.
+
+**Next:** add ZHA in the HA UI (`socket://10.10.201.41:6638`) and pair a plug; deploy zwave-js-ui
+if/when the Z-Wave side matters. ⏳ Follow-ups: enrol `home-radio` in step-ca and strip its
+cloud-init static key (M76), and give it proxmox-firewall rules (M77) — it is currently outside
+both.
+
+---
+
 ## 2026-08-14 — GitHub tidy-up complete: cue App runtime, pull-secret cleanup, GCP drift green
 
 Closed out the org-migration tail. Four things landed.
