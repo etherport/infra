@@ -141,6 +141,21 @@ pinned to a node by a device mount (which would also undo H46).
 
 Verified: both symlinks present, ser2net listening, and **both ports reachable from the HA pod**.
 
+**Security follow-ups CLOSED same session.** ✅ **M76:** `home-radio` enrolled — step-ca user CA
+trusted (`step-ca-trust`), **cert auth proven working BEFORE** the static key was touched, then
+`step-ca-remove-static-key` run and the cloud-init bootstrap key verified **rejected**.
+⚠️ **Diagnostic trap worth remembering:** my first "the static key still works!" test was WRONG —
+the devbox ssh-config is cert-only, so `ssh -i bootstrap.key -o IdentitiesOnly=yes` still offered
+the *certificate* from config and authenticated with that. **Use `-F /dev/null` to test key
+rejection**, or you are testing a different credential than you think.
+✅ **M77:** VM 1007 brought into the firewall stack (`policy_in=DROP` + baseline SG + ser2net
+:3333/:6638). Plan reviewed (2 to add, 0 change, 0 destroy) before apply. Verified after: SSH and
+both radio ports still work from the HA pod, and an unlisted port (:111) now **times out** rather
+than refusing — proving the DROP is real. ⚠️ **The allow source is the Servers/K8s VLAN, NOT the
+pod CIDR**: pod egress is SNAT'd, confirmed on the wire with tcpdump (an HA pod's SYN arrives from
+node IP `10.10.201.55`). Allowing `10.42.0.0/16` would have produced a policy that silently
+blocked everything.
+
 **Next:** add ZHA in the HA UI (`socket://10.10.201.41:6638`) and pair a plug; deploy zwave-js-ui
 if/when the Z-Wave side matters. ⏳ Follow-ups: enrol `home-radio` in step-ca and strip its
 cloud-init static key (M76), and give it proxmox-firewall rules (M77) — it is currently outside
