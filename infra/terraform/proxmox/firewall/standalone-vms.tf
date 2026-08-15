@@ -44,11 +44,18 @@ locals {
     # port allows are KEPT as-is (source narrowing is a separate, deliberate follow-up — see notes),
     # so the flip only closes UNLISTED ports (e.g. rpcbind:111). PVE firewall is stateful, so live
     # sessions (WG tunnel, SIP registrations, the devbox session) survive the policy change.
-    step_ca      = "DROP" # :8443 from Servers VLAN + tailnet, SSH from mgmt — allows ALREADY source-scoped.
-    devbox       = "DROP" # closes rpcbind:111; access kept via SSH(mgmt-admin) + tailscale (devbox-initiated
+    step_ca = "DROP" # :8443 from Servers VLAN + tailnet, SSH from mgmt — allows ALREADY source-scoped.
+    devbox  = "DROP" # closes rpcbind:111; access kept via SSH(mgmt-admin) + tailscale (devbox-initiated
     #                       → conntrack); no VNC listener. Recoverable via CI (apply runs on gh-runner, not devbox).
     vpn_fallback = "DROP" # WireGuard 9820-9821 (any-source kept — WG is crypto-authenticated, so IP-scoping
     #                       is marginal; the single peer is the AWS EIP 44.240.60.80 if ever wanted) + baseline.
+    home_radio = "DROP" # M77: baseline (SSH + 9100) + ser2net 3333/6638 from the Servers/K8s VLAN only.
+    #                       ⚠️ ser2net is an UNAUTHENTICATED raw serial console — anything that reaches
+    #                       :3333/:6638 can pair, unpair or actuate the whole Z-Wave/Zigbee network, so
+    #                       these are the tightest allows in the stack. Pod traffic arrives SNAT'd to the
+    #                       node IP (verified 2026-08-15: HA pod appeared as 10.10.201.55), so the
+    #                       Servers/K8s VLAN CIDR covers both k8s and the devbox — the pod CIDR is never
+    #                       seen on the wire here and must NOT be relied on.
     asterisk_sbc = "DROP" # SIP 5060/5061 + RTP 10000-20000 + baseline. Stage-2b (2026-06-29) SOURCE-SCOPED
     #                       these: 5061←twilio-signaling IPset, 5060←asterisk-internal (Talk/LAN), RTP←Twilio
     #                       media (168.86.128.0/18)+internal. Mirrors the SBC pjsip identify ACL (can't drop a
@@ -355,6 +362,47 @@ resource "proxmox_virtual_environment_firewall_rules" "step_ca" {
     dport   = "8443"
     log     = "nolog"
     comment = "step-ca API (:8443) for remote human `step ssh login` over the tailnet"
+  }
+}
+
+# ---- home-radio (1007): Z-Wave + Zigbee serial bridge for Home Assistant ----
+# ser2net exposes the two radios of the CP2105 combo stick (passed through from the
+# PVE host) as TCP: :3333 Z-Wave, :6638 Zigbee. Consumers are in-cluster (HA's ZHA
+# integration, and zwave-js-ui when it lands), which reach it SNAT'd as a node IP.
+resource "proxmox_virtual_environment_firewall_options" "home_radio" {
+  node_name     = var.node_name
+  vm_id         = 1007
+  enabled       = true
+  input_policy  = local.vm_input_policy.home_radio
+  output_policy = "ACCEPT"
+  log_level_in  = "info"
+}
+resource "proxmox_virtual_environment_firewall_rules" "home_radio" {
+  node_name  = var.node_name
+  vm_id      = 1007
+  depends_on = [proxmox_virtual_environment_firewall_options.home_radio]
+
+  rule {
+    security_group = proxmox_virtual_environment_cluster_firewall_security_group.vm_baseline.name
+    comment        = "M77 baseline (SSH + node_exporter)"
+  }
+  rule {
+    type    = "in"
+    action  = "ACCEPT"
+    source  = var.ipmi_scrape_cidr # 10.10.201.0/24 — k8s nodes (pods SNAT here) + devbox
+    proto   = "tcp"
+    dport   = "3333"
+    log     = "nolog"
+    comment = "ser2net Z-Wave radio from the Servers/K8s VLAN (zwave-js-ui)"
+  }
+  rule {
+    type    = "in"
+    action  = "ACCEPT"
+    source  = var.ipmi_scrape_cidr # 10.10.201.0/24 — k8s nodes (pods SNAT here) + devbox
+    proto   = "tcp"
+    dport   = "6638"
+    log     = "nolog"
+    comment = "ser2net Zigbee radio from the Servers/K8s VLAN (HA ZHA socket://)"
   }
 }
 
