@@ -92,6 +92,36 @@ locals {
       description = "Asterisk PJSIP SBC — Twilio TLS+sRTP ⇄ UniFi Talk UDP bridge (task #80)"
       tags        = ["terraform", "voip", "sbc", "standalone"]
     }
+    home-radio = {
+      vm_id    = 1007
+      ip       = "10.10.201.41"
+      bridge   = "servers" # SDN VNet (VLAN 201) — Trusted zone; HA (in k8s) reaches it here
+      vlan_tag = null      # VNet handles VLAN tagging
+      # Hosts the Z-Wave + Zigbee radios for Home Assistant. The combo stick
+      # (Nortek HUSBZB-1 signature: Silicon Labs CP2105 dual-UART, 10c4:ea70,
+      # serial 00C3AED7) is physically attached to the PVE host and exposes TWO
+      # ports: ttyUSB0 = Z-Wave, ttyUSB1 = Zigbee (EM3581/EZSP).
+      #
+      # WHY A DEDICATED VM rather than passing USB into a k8s worker: HA runs as
+      # a pod, so a passed-through device would PIN it to one node forever —
+      # node patching would become HA downtime — and HA was deliberately
+      # de-privileged in H46, which a device mount would reopen. Here the radios
+      # are reached over the NETWORK instead (Z-Wave JS server websocket; Zigbee
+      # via zigbee2mqtt or ser2net), so HA stays reschedulable and unprivileged.
+      #
+      # ⚠️ USB PASSTHROUGH IS NOT MANAGED HERE. The bpg provider silently NO-OPs
+      # the VM `watchdog {}` block (M91) — apply "succeeds", device never lands,
+      # perpetual unresolvable plan diff — so a `usb {}` block is not trusted
+      # without proof. Attach host-side and VERIFY the LIVE config:
+      #   qm set 1007 -usb0 host=10c4:ea70
+      # The device appears in the guest only on the next COLD start; a warm
+      # reboot is NOT enough (same lesson as M91).
+      vcpus       = 2
+      memory_mb   = 2048
+      disk_gb     = 20
+      description = "Z-Wave + Zigbee radio host for Home Assistant (HUSBZB-1 passthrough; keeps HA reschedulable)"
+      tags        = ["terraform", "home-automation", "radio", "standalone"]
+    }
     devbox = {
       vm_id    = 1005
       ip       = "10.10.201.45"
