@@ -34,3 +34,15 @@ spec:
             # the pod-net announces — allow to keep the audit clean.
             - { port: "1900", protocol: UDP }
             - { port: "5353", protocol: UDP }
+    # home-radio (VM 1007, 10.10.201.41) — Z-Wave + Zigbee radios exposed over
+    # TCP by ser2net. HA's ZHA integration talks socket:// to :6638; :3333 is the
+    # Z-Wave port for zwave-js-ui when it lands. Scoped to a single /32 and two
+    # ports on purpose: a raw serial port is an UNAUTHENTICATED control channel
+    # for the entire radio network — anything that reaches it can pair, unpair
+    # or actuate devices. See infra/ansible/playbooks/home-radio.yml.
+    - toCIDR:
+        - 10.10.201.41/32
+      toPorts:
+        - ports:
+            - { port: "3333", protocol: TCP }
+            - { port: "6638", protocol: TCP }
