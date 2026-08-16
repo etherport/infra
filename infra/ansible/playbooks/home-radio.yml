@@ -31,6 +31,10 @@
   vars:
     zwave_tcp_port: 3333
     zigbee_tcp_port: 6638
+    # Both radios run at 115200 — VERIFIED EMPIRICALLY, not assumed (see the
+    # interface-mapping note below; a 57600 guess for Zigbee was wrong).
+    zwave_baud: 115200
+    zigbee_baud: 115200
     # Only the k8s pod network + the Servers VLAN should reach the raw radios.
     # A raw serial port is an unauthenticated control channel for the whole
     # Z-Wave/Zigbee network — do not expose it broadly.
@@ -64,14 +68,23 @@
     # Stable names: ttyUSB0/ttyUSB1 ordering is NOT guaranteed across reboots or
     # re-enumeration, and silently swapping the Z-Wave and Zigbee ports would
     # point each controller at the wrong radio. Bind by USB interface number.
+    #
+    # ⚠️ THE MAPPING IS THE OPPOSITE OF THE COMMON HUSBZB-1 WRITE-UP.
+    # VERIFIED ON THIS DEVICE 2026-08-16 by probing each port with both protocols:
+    #   iface 00 + EZSP/ASH reset -> `1a c1 02 0b 0a 52 7e`  (0xC1 = RSTACK) => ZIGBEE
+    #   iface 01 + Z-Wave GetVer  -> `06 01 10 01 15 "Z-Wave 7.22"` (ACK+fw)  => Z-WAVE
+    # An earlier revision had these swapped on the assumption that 00=Z-Wave.
+    # Symptom of getting it wrong: ZHA connects over TCP but reports "was not
+    # able to automatically detect serial port settings", because it is talking
+    # EZSP at a Z-Wave controller. DO NOT change this mapping without re-probing.
     - name: Install udev rules giving each radio a stable symlink
       ansible.builtin.copy:
         dest: /etc/udev/rules.d/99-home-radio.rules
         mode: "0644"
         content: |
-          # CP2105 dual-UART (HUSBZB-1). Interface 00 = Z-Wave, 01 = Zigbee.
-          SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea70", ENV{ID_USB_INTERFACE_NUM}=="00", SYMLINK+="zwave"
-          SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea70", ENV{ID_USB_INTERFACE_NUM}=="01", SYMLINK+="zigbee"
+          # CP2105 dual-UART combo radio. VERIFIED: iface 00 = ZIGBEE, 01 = Z-WAVE.
+          SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea70", ENV{ID_USB_INTERFACE_NUM}=="00", SYMLINK+="zigbee"
+          SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea70", ENV{ID_USB_INTERFACE_NUM}=="01", SYMLINK+="zwave"
       register: udev_rules
 
     - name: Reload udev rules
@@ -98,8 +111,8 @@
         name: ser2net
         state: present
 
-    # ser2net 4.x uses YAML. 115200 8N1 for both radios (Z-Wave 500/700 and
-    # EZSP Zigbee both default to 115200 on this stick).
+    # ser2net 4.x uses YAML. Per-radio baud (see vars): Z-Wave 115200,
+    # Zigbee 57600 — they are NOT the same on this stick.
     - name: Configure ser2net to expose both radios over TCP
       ansible.builtin.copy:
         dest: /etc/ser2net.yaml
@@ -113,14 +126,14 @@
             enable: on
             options:
               kickolduser: true
-            connector: serialdev,/dev/zwave,115200n81,local
+            connector: serialdev,/dev/zwave,{{ zwave_baud }}n81,local
 
           connection: &zigbee
             accepter: tcp,{{ zigbee_tcp_port }}
             enable: on
             options:
               kickolduser: true
-            connector: serialdev,/dev/zigbee,115200n81,local
+            connector: serialdev,/dev/zigbee,{{ zigbee_baud }}n81,local
       notify: restart ser2net
 
     - name: Enable and start ser2net
