@@ -22,7 +22,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: ollama
-          image: ollama/ollama:0.32.13@sha256:77f1a2a54460f0380f2611e1464233d9b82cb6e58afc8f60abec0061049d2d82 # {"$imagepolicy": "flux-system:ollama"}
+          image: ollama/ollama:0.32.14@sha256:9d30908e41144b1f1da89b9d8e33c07e4aeb43ff41a8660241b1686e2cc330ad # {"$imagepolicy": "flux-system:ollama"}
           ports:
             - containerPort: 11434
               name: http
