@@ -14,6 +14,7 @@ template) configured via cloud-init.
 | 1004  | asterisk-sbc   | 10.10.201.40   | Asterisk PJSIP SBC — Twilio TLS+sRTP ⇄ UniFi Talk UDP bridge (task #80) |
 | 1005  | devbox         | 10.10.201.45   | Persistent tmux/Claude Code remote dev workstation (M81) |
 | 1006  | step-ca        | 10.10.201.46   | smallstep step-ca SSH Certificate Authority (M76) |
+| 1007  | home-radio     | 10.10.201.41   | Z-Wave + Zigbee serial-to-TCP bridge for Home Assistant (`ser2net`) |
 
 Configuration baseline (applied to every standalone VM by the TF):
 
@@ -47,6 +48,7 @@ Per-service configuration is applied via Ansible playbooks in
 | asterisk-sbc | `asterisk-sbc.yml` | Installs Asterisk PJSIP B2BUA bridging Twilio ⇄ UniFi Talk.       |
 | devbox       | `devbox.yml`     | Sets up Claude Code + tmux auto-resume sessions, age key, kubectl. |
 | step-ca      | `step-ca.yml`    | Installs smallstep step-ca (SSH user + host CA). Idempotent.       |
+| home-radio   | `home-radio.yml` | Installs `ser2net`, exposes Z-Wave (:3333) + Zigbee (:6638) over TCP for HA. |
 
 ## Operator prerequisites
 
@@ -219,7 +221,7 @@ in your shell history.
 
    ```hcl
    new-service = {
-     vm_id       = 1007           # next free in 1000-1099 range
+     vm_id       = 1008           # next free in 1000-1099 range
      ip          = "10.10.201.31"
      vcpus       = 2
      memory_mb   = 2048

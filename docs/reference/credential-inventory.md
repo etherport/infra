@@ -45,7 +45,7 @@ Everything marked **"SOPS"** below is encrypted to this key. The path column is 
 
 | Credential | Type | Stored | Consumers | Rotation / notes |
 |---|---|---|---|---|
-| step-ca **user CA** | CA keypair | step-ca VM 1006 (`~/.step`) | signs 13h devbox certs + ≤1h CI certs; trusted via `TrustedUserCAKeys` on all 15 hosts | the trust root for fleet SSH. Break-glass if down: PVE console + IPMI. |
+| step-ca **user CA** | CA keypair | step-ca VM 1006 (`~/.step`) | signs 13h devbox certs + ≤1h CI certs; trusted via `TrustedUserCAKeys` on all 16 hosts (incl. `home-radio`, added 2026-08-16) | the trust root for fleet SSH. Break-glass if down: PVE console + IPMI. |
 | step-ca **host CA** | CA keypair | step-ca VM 1006 | `HostCertificate` on 13 Servers-VLAN hosts (kills known_hosts TOFU) | — |
 | Devbox SSH user cert | 13h cert (ECDSA) | devbox `~/.ssh/id_homelab_cert` | agent + interactive SSH to fleet | auto-renewed every 6h (`step-ssh-renew.timer`); staleness alerted (M133). |
 | `automation@homelab` static key | static SSH key | SOPS `homelab-ops.sops.yaml` (`automation_ssh_private_key`) | **bootstrap seed ONLY** — cloud-init/packer + scoped appliance keys; **rejected by the running fleet** | survives as the rebuild seed (M76); do not re-add to `authorized_keys`. |

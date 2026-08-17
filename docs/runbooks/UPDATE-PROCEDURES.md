@@ -157,8 +157,8 @@ ansible k8s_cluster -i infra/ansible/inventory/wind/inventory.ini \
 
 ### 1.3 Standalone VM OS
 
-There are **6 local PVE standalone VMs** (1001 dns-fallback, 1002 vpn-fallback,
-1003 gh-runner, 1004 asterisk-sbc, 1005 devbox, 1006 step-ca) **+ 1 AWS VM**
+There are **7 local PVE standalone VMs** (1001 dns-fallback, 1002 vpn-fallback,
+1003 gh-runner, 1004 asterisk-sbc, 1005 devbox, 1006 step-ca, 1007 home-radio) **+ 1 AWS VM**
 (vpn-aws — the single `private-infra_edge` box running VPN + Tailscale + DNS since
 M110). Only the 3 below have explicit staggered reboot windows; the other VMs
 reboot on the default schedule.

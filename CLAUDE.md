@@ -145,8 +145,9 @@ scripts/              helpers (network/safety-check.sh, render-aws-credentials.s
   or `udm_tfadmin_*` login). UniFi Protect = **`Windprotect` `10.10.212.10`** (SSH via
   `udm_ssh_user`/`udm_ssh_password`; integration API via `protect-tf` key but it's
   **read-only — Alarm Manager automations are UI-only**). UNAS `10.10.209.10`.
-- **SSH to the Ubuntu fleet is CERT-ONLY (M76, since 2026-06-26).** All 15 hosts (8 k8s nodes +
-  5 standalone VMs + step-ca + pve) trust the **step-ca user CA** (`TrustedUserCAKeys`, VM 1006
+- **SSH to the Ubuntu fleet is CERT-ONLY (M76, since 2026-06-26; extended to `home-radio` 2026-08-16).**
+  All 16 hosts (8 k8s nodes + 6 standalone VMs [incl. `home-radio`, VM 1007] + step-ca + pve) trust the
+  **step-ca user CA** (`TrustedUserCAKeys`, VM 1006
   `https://10.10.201.46:8443`); the standing `automation@homelab` static key was **removed from every
   running host's `authorized_keys`** and is now **rejected**. The **devbox** mints a 13h user cert via
   the renew-loop (`step-ssh-renew.timer` → `~/.ssh/id_homelab_cert`, ssh-config is cert-only — just
