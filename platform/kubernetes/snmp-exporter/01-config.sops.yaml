@@ -1,23 +1,26 @@
-# snmp_exporter config. Regenerated structurally (parse -> mutate -> dump) rather
-# than string-patched: two attempts at surgical edits landed at the wrong indent
-# because the anchor matched as a SUBSTRING of a longer indent, silently corrupting
-# the file. If you edit this, do it the same way.
+# snmp_exporter config. Edit STRUCTURALLY (parse -> mutate -> dump), never by string
+# patch: two surgical attempts landed at the wrong indent because the anchor matched
+# as a SUBSTRING of a longer indent, silently corrupting the file.
 #
-# auths: ups_v1 = SNMPv1 for the two Smart-UPS cards (community set via SSH CLI
-# 2026-08-19). pdu_v2 = the factory 'public' still on the PDUs.
+# auths: ups_v1 = SNMPv1 for the Smart-UPS cards; pdu_v2 = factory 'public' on the PDUs.
 #
-# apc_ups_battery_replace_date is the "RBC end of life" date the front panel warns
-# about. SNMP returns it as a STRING ("09/22/2026"), which PromQL cannot compare, so
-# regex_extracts splits it into numeric _year and _month for the alert to do
-# arithmetic on. apc_ups_output_active_power_watts exists only on the SRT 3000; the
-# 1500 RM returns noSuchInstance and that series is simply absent.
+# apc_ups_battery_replace_date is the "RBC end of life" date the front panel warns about.
+# It is emitted as an INFO METRIC with the date as a LABEL (value 1), like apc_ups_model.
+# ⚠️ regex_extracts was tried to split it into numeric _year/_month for alerting and
+# emitted NOTHING AT ALL on snmp_exporter v0.26 — not even the base metric. Do not
+# re-add it without verifying the exporter actually emits the series; an alert built on
+# a non-existent metric silently never fires (see PveFansPegged, which sat at an
+# unreachable 12000 RPM threshold for months).
+#
+# apc_ups_output_active_power_watts exists only on the SRT 3000; the 1500 RM returns
+# noSuchInstance and that series is simply absent.
 apiVersion: v1
 kind: Secret
 metadata:
     name: snmp-exporter-config
     namespace: monitoring
 stringData:
-    snmp.yml: ENC[AES256_GCM,data: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,iv:2G0l9bOGejbh3SXqzHQmsEX1gJdCXv7J9wVjoTZM0TQ=,tag:V+0sxs6q5mLXRhhlqmRBLA==,type:str]
+    snmp.yml: ENC[AES256_GCM,data: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,iv:Ia98/MnChEyXatpdJ53kgSeeTgbrUyS/eTv9XXXWUbc=,tag:IMfbiI7g/zgvtemOppF6Kg==,type:str]
 sops:
     kms: []
     gcp_kms: []
@@ -27,23 +30,23 @@ sops:
         - recipient: age1fszjt38d2jnw434z3gl6gv66ca79au03j6mgcr7f7f5w05cj85ts06m53g
           enc: |
             -----BEGIN AGE ENCRYPTED FILE-----
-            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSAzeFJYbUlGQmt0akc2MXlM
-            bWtENHZwbG1uMG40OEdXTGM5TzVDYzh2TGxBCkJsaXlVNzFTcXdqbXk3bE42bzJO
-            SDZYTkRpN3BLU3R0T0hFTFU2UFZCSGsKLS0tIFhma2NKZU1NRkdqcWQ5bHdIMERk
-            VURFUW1GZ2FZRm8yTUZweDBCOFQyZVEK515jj8ilAdDKLMvc6dBGZ9G12YIrBbbG
-            JJuuMFavhI+rju+AGARFtiBShQ4J1v961GB+Sxzfotid5M3vHSFz6Q==
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB4anRNRjRvUUZqVWw5VENI
+            ZVEzcTFpZkNGaEM5b2I4WkYyTWdpWmdrNDB3CkJRTWlvQ3MweGgwZURVUkFua1Zp
+            bHNvSElTVkJGZC9UYmxpNVVtQUpCN28KLS0tIGZiVVpZNzA0cDZXYzNIbVRCelRm
+            bjNMQlRjYUxHYktERExoMi9qUG4yTDgKnS/2XlhrFV7TrYHiqSrd7eDEJ3PWDOJQ
+            3LOGsTMoKW7IZH69IGjbEM68YWDw6ySu+dBqQZhOQWDLk3iTwyPKDw==
             -----END AGE ENCRYPTED FILE-----
         - recipient: age1phcmcgfeqr66t7kxdafckp860y67j6n6y2qrn76hk4fm2vd59pxsqr3466
           enc: |
             -----BEGIN AGE ENCRYPTED FILE-----
-            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBoMTR6eHRGMUVxWWh3Z2R3
-            VWYzR2JnS2poL0RUdEJLREROSCthSVVoZmd3CmdvN0lBcVY5TXUrdnB1cEJmV0Zx
-            Q0VtVVIvSkVqVkdrV3ZIQnEyRDV6akEKLS0tIDY1QkNKOXcrMXN1N1ZrNWYreklh
-            VWY0RnZ1OU51ZTRESE05SU01aVNYZjgK7BZgU9L4RY5AU4z+DwaJP+HGDjDddJYg
-            u75pGosagENhJAQuOudMRYmWywXzd745uK7Dd1xfFH5NnU8qK8/qsw==
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBRWHNwODN3TzV1RmdyVkZt
+            NDJXMkZ6c0FlQ2NyUnBMRDN3UWdBc0F5Wm44CmNIVnpBdmRjQUxsb0RVcXlvODIw
+            TXBhRW9SWlg1VnJYZ3NCQ1dqak1YWEUKLS0tIGRuMHAxTnRnQzRXTDcrZlBoUUtI
+            ZmVMYWQxWmlkc1hnd2ZwRS9wQml6dkUKT2ncGkNwfxLevVCxpgPA1DmXT408W9Np
+            i+F1j5UWNVPdawhvf3TI+ww+ItHekP0Za0vSAvDkWHyPK8Q8GvbVQA==
             -----END AGE ENCRYPTED FILE-----
-    lastmodified: "2026-08-19T22:40:09Z"
-    mac: ENC[AES256_GCM,data:EjIlolwGHJQwYG1S0EAsUROB5T+LjqTfZZ97gCsWRUrN/0IgK/3q1TIhrHx++9vFhC8cDG7vP7aDTEsHwSO1YHK8WZCpOvwRZCsxDnVRn2uFTi4B4JON0/BkySwLa+xTEGrOc/4W0ryIEEOKFRr8L7ze/H81y1+fnVKm6uVDc2Y=,iv:BXeB9co9MKuFIEc8mdMIaobRkYETjJOwxD8qsLuK5ns=,tag:vb2LkJ1YjkHhz8Rs+kLkaw==,type:str]
+    lastmodified: "2026-08-19T22:44:42Z"
+    mac: ENC[AES256_GCM,data:I0zlk3VsZczczLlKpByCnizP9RUXTXtjkXQ4Skei7+wwljufAEZknEBdhO60OU8iapjdL1NNiDG/Sp6fd90tFoXn/clGSnMkG6IJc/Se4KweZJTI/uqvlkHkqjVgND6snBWOoIkriwKvXGcTfWZBxj9iecFPAYN3/NMuz7kB8Ns=,iv:pzfgo22KSkR4wWZUCo2uxflp5tyEu0I61JDILfW0+1A=,tag:SOWUpcrVVLolfUAM86n36g==,type:str]
     pgp: []
     encrypted_regex: ^(data|stringData)$
     version: 3.9.4

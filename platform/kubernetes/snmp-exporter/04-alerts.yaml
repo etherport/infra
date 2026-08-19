@@ -46,30 +46,16 @@ spec:
           annotations:
             summary: "No UPS SNMP data reaching Prometheus"
             description: "snmp_exporter is not returning UPS metrics. Check the exporter pod, and remember the monitoring tier's Cilium egress must permit UDP/161 to 10.10.200.0/24 — that allowlist gap silently drops scrapes."
-        # RBC (Replacement Battery Cartridge) end-of-life. This is the warning that
-        # appears on the UPS front panel and is NOT the same as the measured
-        # "replace battery" flag (upsAdvBatteryReplaceIndicator), which stays clear
-        # until the pack actually degrades. It is a scheduled/predictive date.
-        # SNMP returns it as a string, so snmp_exporter's regex_extracts splits it
-        # into numeric _year/_month for this arithmetic.
-        - alert: UpsBatteryReplacementDue
-          expr: |
-            (apc_ups_battery_replace_date_year * 12 + apc_ups_battery_replace_date_month)
-              - (year() * 12 + month()) <= 2
-          for: 1h
-          labels: {severity: warning}
-          annotations:
-            summary: "{{ $labels.instance }} battery replacement due within ~2 months"
-            description: "The UPS reports its recommended battery-replacement date is near. UPS2 (SRT 3000) was 09/22/2026 with the pack installed 12/22/2022. Order the correct RBC for the model before it lapses — runtime degrades well before the UPS raises a hard fault, so the predictive date is the useful signal."
-        - alert: UpsBatteryReplacementOverdue
-          expr: |
-            (apc_ups_battery_replace_date_year * 12 + apc_ups_battery_replace_date_month)
-              - (year() * 12 + month()) <= 0
-          for: 1h
-          labels: {severity: critical}
-          annotations:
-            summary: "{{ $labels.instance }} battery replacement is OVERDUE"
-            description: "Past the manufacturer's recommended replacement date. Reported runtime is an estimate from a pack that is out of spec — treat it as optimistic. Replace the RBC."
+        # ⚠️ NO BATTERY-REPLACEMENT ALERT HERE — DELIBERATE.
+        # The RBC end-of-life date IS available (SNMP 1.3.6.1.4.1.318.1.1.1.2.2.21,
+        # e.g. UPS2 = "09/22/2026") but only as a STRING, exposed as a label on the
+        # apc_ups_battery_replace_date info metric. PromQL cannot do date arithmetic on
+        # a label, and snmp_exporter's regex_extracts emitted nothing at all when tried.
+        # Rather than ship an alert that silently never fires — the exact defect that
+        # let PveFansPegged sit at an unreachable threshold — this is left OPEN.
+        # The durable fix is a small CronJob that reads the date over SNMP, computes
+        # days-remaining and pushes it to Pushgateway, mirroring the unas-health pattern.
+        # Tracked in docs/planning/power-reduction-plan-2026-08.md.
 
     - name: pdu.rules
       rules:
