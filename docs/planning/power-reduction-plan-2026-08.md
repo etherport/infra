@@ -55,16 +55,39 @@ roughly with the **cube** of RPM, so halving speed cuts fan draw to about an eig
 Four chassis fans at an estimated 6-10 W each is 24-40 W now; at ~3000 RPM that
 becomes a few watts.
 
-Board is an **ASRock Rack B650D4U**; `ipmitool` is installed on the host, but the
-usual ASRock raw fan command (`0x3a 0x02`) returned nothing, so **the exact control
-interface still needs identifying** — likely a different raw command or the BMC web
-UI's fan profile.
+**ROOT CAUSE FOUND (2026-08-19): the Max-Duty clamp was never applied, or was lost.**
+`FAN1` has not dropped below **5800 RPM at any point in 30 days** (`min_over_time`
+over 1d/7d/14d/30d all return 5800-6000). A 40% clamp would sit near 2400-2600 RPM.
+So the fans are running effectively unclamped.
 
-**Risk is real but bounded, and must be handled deliberately:** this host runs every
-VM in the estate. Set a conservative floor, never a fixed low speed with no thermal
-response, and verify under load — not just at idle. The existing `ipmi_temperature_celsius`
-metrics and the M89 IPMI alerting give the feedback loop. The M91 lesson applies:
-**verify the live setting took effect, don't trust the command's exit code.**
+The *other* half of the 2026-06-04 fix is intact and persistent: `disable-cpu-boost.service`
+is enabled, `boost=0`, and `TEMP_CPU` is 59 °C — almost exactly the 57 °C that change
+predicted. So the prerequisite for a low clamp is satisfied; only the clamp itself is missing.
+
+**Known constraints on this board** (from the 2026-06-04 investigation, still valid):
+- ASRock Rack **B650D4U**, AMI MegaRAC, BMC firmware **6.04** — *unchanged since that
+  investigation*, so its conclusions still apply.
+- The BMC curve keys off **`FSC_INDEX`** (PECI/Tctl-derived, reads ~10-14 °C above
+  `TEMP_CPU`; currently 64 vs 59). The **Open Loop curve does NOT govern the fans.**
+- The only effective lever is **Fan Mode → "Maximum Duty"**, set in the BMC web UI.
+  Fan control was **not reachable via IPMI or Redfish** on this firmware.
+
+**What is new:** the BMC does serve **Redfish 1.15.1** (AMI Redfish Server, Chassis
+collection present) on `https://10.10.200.21`. That does not by itself mean fan control
+is writable — AMI often exposes it only through OEM extensions — but it is worth
+re-testing *with credentials* before accepting "web UI only". **There are no BMC
+credentials in SOPS**, so this could not be tested.
+
+**Recommended setting:** Fan Mode → Maximum Duty **50%** first, verify under real load
+(not idle), then try **40%**. Expected ~2400-2900 RPM. Fan power scales with the cube of
+RPM, so 6000 → 2600 RPM is roughly an eighth of current fan draw.
+
+⚠️ **The PSU fans (5000-5200 RPM) are likely self-regulating and not BMC-governed**, so
+the saving comes from the four chassis fans only — temper expectations accordingly.
+
+⚠️ **Verify the live effect, don't trust the UI.** Watch `ipmi_fan_speed_rpm` in Grafana
+after the change; if RPM does not fall, the clamp did not take — which is precisely how
+this was missed for 30+ days.
 
 ### 2.2 ❌ DO NOT: spin down the NAS disks
 
