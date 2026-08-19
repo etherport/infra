@@ -11,7 +11,11 @@
 #     the true nameplate differs (some revisions are 1000W), every ups1 number
 #     and the rack total are proportionally wrong. UPS2 (SRT 3000) reports watts
 #     directly and is never derived.
-#  2. The PDUs report CURRENT ONLY. pdu1 is a 120V leg, pdu2 is 208V — equal amps
+#  2. COST uses the real SCE TOU-D-PRIME blended rate $0.3185/kWh (energy charges
+#     / kWh from the Jul 2026 bill), NOT a guessed $0.20. Whole-house is 22.4 kWh/day
+#     = 933 W average, so the rack is ~46% of household electricity — update both
+#     constants when the rate or the bill changes.
+#  3. The PDUs report CURRENT ONLY. pdu1 is a 120V leg, pdu2 is 208V — equal amps
 #     are NOT equal watts, which is why the current panel is separate from the
 #     watts panel rather than combined on a second axis.
 apiVersion: v1
@@ -96,7 +100,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "(apc_ups_output_load_percent{device=\"ups1\"} / 100 * 980) + (apc_ups_output_active_power_watts{device=\"ups2\"})",
+              "expr": "sum(apc_ups_output_load_percent{device=\"ups1\"}) / 100 * 980 + sum(apc_ups_output_active_power_watts{device=\"ups2\"})",
               "legendFormat": "",
               "refId": "A"
             }
@@ -104,8 +108,8 @@ data:
         },
         {
           "type": "stat",
-          "title": "Est. cost / month",
-          "description": "At $0.20/kWh, 730h/month. Rack only \u2014 house total was ~$250/mo, so this is roughly a quarter of the bill.",
+          "title": "Rack cost / month",
+          "description": "Uses the ACTUAL blended energy rate from the SCE bill: $0.3185/kWh ($214.00 energy charges / 672 kWh, TOU-D-PRIME, Jul 2026). TOU components were on-peak $0.58699, mid $0.39595, off-peak $0.26107 \u2014 the rack is a flat 24/7 load so it spans all three; the blend is the honest single number. Excludes the fixed $23.07/mo base service charge, which you pay regardless.",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
@@ -154,7 +158,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "((apc_ups_output_load_percent{device=\"ups1\"} / 100 * 980) + (apc_ups_output_active_power_watts{device=\"ups2\"})) / 1000 * 730 * 0.20",
+              "expr": "(sum(apc_ups_output_load_percent{device=\"ups1\"}) / 100 * 980 + sum(apc_ups_output_active_power_watts{device=\"ups2\"})) / 1000 * 24 * 30 * 0.3185",
               "legendFormat": "",
               "refId": "A"
             }
@@ -397,7 +401,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "apc_ups_output_load_percent{device=\"ups1\"} / 100 * 980 or vector(0) * 0",
+              "expr": "apc_ups_output_load_percent{device=\"ups1\"} / 100 * 980",
               "legendFormat": "ups1 (120V, derived)",
               "refId": "u"
             },
@@ -415,7 +419,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "(apc_ups_output_load_percent{device=\"ups1\"} / 100 * 980) + (apc_ups_output_active_power_watts{device=\"ups2\"})",
+              "expr": "sum(apc_ups_output_load_percent{device=\"ups1\"}) / 100 * 980 + sum(apc_ups_output_active_power_watts{device=\"ups2\"})",
               "legendFormat": "total",
               "refId": "t"
             }
@@ -843,6 +847,71 @@ data:
               "expr": "apc_ups_input_voltage{device=\"ups2\"}",
               "legendFormat": "ups2 (208V leg)",
               "refId": "u"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "Rack share of house electricity",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 5,
+            "x": 19,
+            "y": 15
+          },
+          "description": "Rack kWh/day as a share of the whole-house 22.4 kWh/day (SCE bill, 672 kWh / 30 days = 933 W continuous average). The house baseline is a static figure from the bill \u2014 update it when rates or occupancy change. This is the panel that says whether optimising the rack is worth doing at all.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 30
+                  },
+                  {
+                    "color": "red",
+                    "value": 45
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "((sum(apc_ups_output_load_percent{device=\"ups1\"}) / 100 * 980 + sum(apc_ups_output_active_power_watts{device=\"ups2\"})) * 24 / 1000) / 22.4 * 100",
+              "refId": "A"
             }
           ]
         }
