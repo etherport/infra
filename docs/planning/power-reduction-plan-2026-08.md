@@ -174,6 +174,29 @@ min_over_time(ipmi_fan_speed_rpm{name="FAN1"}[6h]) > 4000
 
 i.e. "fans pinned high while the box is cold" — which is exactly the observed signature.
 
+### 2.5 ⏳ OPEN: UPS battery end-of-life alerting
+
+**UPS2 (SRT 3000) recommended battery replacement: 2026-09-22** — about a month out,
+pack installed 2022-12-22. This is the "RBC end of life" warning seen on the front
+panel. It is *not* a fault: self-test passed 2026-08-10, `upsAdvBatteryReplaceIndicator`
+is clear, capacity 100%. It is a scheduled/predictive date. **Order the RBC.**
+
+⚠️ **This is NOT alerted, deliberately.** The date is at SNMP
+`1.3.6.1.4.1.318.1.1.1.2.2.21` and reads fine by hand (`snmpget`/`snmpgetnext`, under both
+v1 and v2c). But **snmp_exporter will not return it**: with the OID in the walk list,
+`snmp_scrape_pdus_returned` is **10 for 11 walked OIDs** — the exporter silently gets
+nothing for that one. `regex_extracts` (to split the string into numeric year/month for
+PromQL) emitted nothing either.
+
+Alerts were written against it and then **removed rather than shipped**, because an alert
+on a non-existent series never fires — the exact defect that left `PveFansPegged` at an
+unreachable 12000 RPM threshold while the fans sat pegged for 30+ days. A dead alert is
+worse than none: it looks like coverage.
+
+**Durable fix:** a small CronJob that reads the date over SNMP, computes days-remaining and
+pushes a numeric to Pushgateway — the pattern `unas-health` already uses successfully for
+exactly this kind of "the data exists but not in a Prometheus-shaped form" problem.
+
 ## 3. What to measure next
 
 1. **Confirm UPS1's nameplate** off the unit's label. Everything on leg 1 is derived
