@@ -73,9 +73,13 @@ spec:
             summary: "PVE {{ $labels.name }} reads {{ $value }} RPM"
             description: "Chassis fan {{ $labels.name }} on {{ $labels.instance }} dropped to {{ $value }} RPM. Likely failed or unplugged. Other fans will need to compensate."
 
-        # Fans pegged — cooling capacity exhausted
+        # Fans pegged — cooling capacity exhausted.
+        # ⚠️ THRESHOLD WAS 12000 RPM AND COULD NEVER FIRE. These fans top out at
+        # ~6000 RPM (30d max/min across FAN1-4: 5800-6000), so the old threshold was
+        # roughly TWICE the physical maximum. That is why 30+ days of fully-pegged
+        # fans went unnoticed. Set from measured hardware behaviour, not a guess.
         - alert: PveFansPegged
-          expr: ipmi_fan_speed_rpm{job="pve-ipmi",name=~"FAN[1-4]"} > 12000
+          expr: ipmi_fan_speed_rpm{job="pve-ipmi",name=~"FAN[1-4]"} > 5000
           for: 15m
           labels:
             severity: warning
@@ -83,6 +87,24 @@ spec:
           annotations:
             summary: "PVE {{ $labels.name }} running at max ({{ $value }} RPM) for 15m"
             description: "Sustained max-RPM operation indicates the cooling system is at capacity. Either ambient temperature is high or thermal load increased. Investigate before a thermal event."
+
+        # The diagnostic companion to PveFansPegged: fans working hard while the
+        # box is COLD means the BMC "Maximum Duty" clamp is missing or was reset —
+        # not a thermal problem. That clamp is a web-UI-only setting with no IaC
+        # representation, so this alert is the only thing that can detect its loss.
+        # Observed signature 2026-08-19: 5800-6000 RPM with a 26C inlet for 30+ days.
+        - alert: PveFansHighWhileCool
+          expr: |
+            min_over_time(ipmi_fan_speed_rpm{job="pve-ipmi",name="FAN1"}[6h]) > 4000
+              and on(instance)
+            avg_over_time(ipmi_temperature_celsius{job="pve-ipmi",name="TEMP_SYS_INLET"}[6h]) < 32
+          for: 1h
+          labels:
+            severity: warning
+            component: hardware
+          annotations:
+            summary: "PVE fans pinned high ({{ $value }} RPM) while the chassis is cool"
+            description: "Fans have not dropped below 4000 RPM in 6h despite an inlet temperature under 32C. This is the signature of the BMC Fan Mode 'Maximum Duty' clamp being unset or reverted — it is a web-UI-only setting (not reachable via IPMI netfn 0x3a or Redfish on firmware 6.04). Re-apply it: BMC -> Settings -> Fan Control -> Fan Mode -> Maximum Duty 40-50%. Costs roughly 20-35W and makes the server audible from other floors. See docs/planning/power-reduction-plan-2026-08.md."
 
         # PSU degraded
         - alert: PvePsuPowerLoss
