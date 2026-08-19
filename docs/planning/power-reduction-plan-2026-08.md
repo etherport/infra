@@ -72,11 +72,24 @@ predicted. So the prerequisite for a low clamp is satisfied; only the clamp itse
 - The only effective lever is **Fan Mode → "Maximum Duty"**, set in the BMC web UI.
   Fan control was **not reachable via IPMI or Redfish** on this firmware.
 
-**What is new:** the BMC does serve **Redfish 1.15.1** (AMI Redfish Server, Chassis
-collection present) on `https://10.10.200.21`. That does not by itself mean fan control
-is writable — AMI often exposes it only through OEM extensions — but it is worth
-re-testing *with credentials* before accepting "web UI only". **There are no BMC
-credentials in SOPS**, so this could not be tested.
+**RE-TESTED WITH BMC CREDENTIALS 2026-08-19 — remote fan control is CONFIRMED
+UNAVAILABLE on firmware 6.04.0.** This is now a verified negative, not an inference,
+so it should not be re-investigated without a firmware change:
+
+| Probe | Result |
+|---|---|
+| `Chassis/Self/Thermal` | **`Allow: GET`** — no PATCH |
+| `ThermalSubsystem/Fans/{id}` | **`Allow: GET`** — `SpeedPercent` is a *reading* with a `DataSourceUri`, not a setpoint |
+| `Chassis/Self` Actions | only `#Chassis.Reset` |
+| `Managers/Self` Oem.Ami | only `ManagerServiceInfo`, `PowerSaveMode`, `VirtualMedia` — no thermal |
+| OEM fan paths (`.../Oem/Ami/FanConfiguration`, `/Thermal`, `/FanMode`) | **404** ×4 |
+| MegaRAC legacy `/api/settings/fan*`, `/api/session` | **404** |
+
+Redfish 1.15.1 is present and authenticates fine — it simply exposes fans read-only.
+
+**So the Maximum-Duty clamp remains a BMC web-UI change only.** That is also why it was
+lost: it is a click with no IaC representation and nothing that detects its absence.
+
 
 **Recommended setting:** Fan Mode → Maximum Duty **50%** first, verify under real load
 (not idle), then try **40%**. Expected ~2400-2900 RPM. Fan power scales with the cube of
@@ -124,6 +137,19 @@ Nightly jobs run 00:00-01:10 PT, inside SCE's off-peak window (12am-4pm) at
 $0.26107/kWh rather than the $0.58699 on-peak rate. Nothing to change.
 
 ---
+
+### 2.1b ✅ DO: alert on the clamp silently reverting
+
+The clamp has no IaC representation, so the only defence is detection. A rule on
+sustained high RPM at low inlet temperature would have caught this within a day
+instead of 30+:
+
+```promql
+min_over_time(ipmi_fan_speed_rpm{name="FAN1"}[6h]) > 4000
+  and on(instance) avg_over_time(ipmi_temperature_celsius{name="TEMP_SYS_INLET"}[6h]) < 32
+```
+
+i.e. "fans pinned high while the box is cold" — which is exactly the observed signature.
 
 ## 3. What to measure next
 
