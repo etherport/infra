@@ -90,6 +90,29 @@ Redfish 1.15.1 is present and authenticates fine — it simply exposes fans read
 **So the Maximum-Duty clamp remains a BMC web-UI change only.** That is also why it was
 lost: it is a click with no IaC representation and nothing that detects its absence.
 
+**Also ruled out: the ASRock Rack OEM IPMI netfn `0x3a`.** Community fan-control scripts
+(e.g. `LokiMetaSmith/ASRock-Rack-IPMI-Fan-Controler`) drive fans with
+`raw 0x3a 0x01 <duty…>`, reading state via `0x3a 0xd7` / `0x3a 0xda`. **Those boards are
+not this board.** Tested 2026-08-19 on **both channels**:
+
+| Command | In-band (KCS) | Over LAN (lanplus) |
+|---|---|---|
+| `raw 0x3a 0xd7` | `rsp=0xc1 Invalid command` | `rsp=0xc1 Invalid command` |
+| `raw 0x3a 0xda` | `rsp=0xc1 Invalid command` | `rsp=0xc1 Invalid command` |
+| `raw 0x3a 0x02` | `rsp=0xc1 Invalid command` | `rsp=0xc1 Invalid command` |
+
+`mc info` succeeds over the same LAN session, so this is not an auth or transport
+failure — **netfn `0x3a` is simply not implemented on the B650D4U**. Do not spend time
+on those scripts.
+
+**On firmware:** `0x3a` is implemented per-board by ASRock, not a generic AMI feature, and
+AMI's Redfish fan control is an optional OEM module ASRock Rack rarely ships. A BMC update
+is therefore a **low-probability fix for this specific goal**, against a real cost: a failed
+BMC flash loses IPMI — remote console, power control, and the `ipmi_exporter` sensor feed
+that the power dashboard depends on — on a machine with no on-site recovery path. **Not
+recommended for fan control alone.** Revisit only during an on-site maintenance window, or
+if a release note explicitly claims Redfish thermal control.
+
 
 **Recommended setting:** Fan Mode → Maximum Duty **50%** first, verify under real load
 (not idle), then try **40%**. Expected ~2400-2900 RPM. Fan power scales with the cube of
