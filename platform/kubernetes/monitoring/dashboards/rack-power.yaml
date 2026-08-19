@@ -15,6 +15,10 @@
 #     / kWh from the Jul 2026 bill), NOT a guessed $0.20. Whole-house is 22.4 kWh/day
 #     = 933 W average, so the rack is ~46% of household electricity — update both
 #     constants when the rate or the bill changes.
+#     The blend is EXACT for this load, not an approximation: SCE's peak window is
+#     4pm-9pm (5h of 24 = 20.83%), and the bill's peak share is (103+37)/672 =
+#     20.83%. The household load is essentially FLAT, so a 24/7 rack load splits
+#     across the TOU periods in exactly the billed proportions.
 #  3. The PDUs report CURRENT ONLY. pdu1 is a 120V leg, pdu2 is 208V — equal amps
 #     are NOT equal watts, which is why the current panel is separate from the
 #     watts panel rather than combined on a second axis.
