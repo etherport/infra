@@ -39,6 +39,7 @@ docs/
 |----------|-------------|
 | [PLATFORM-MANAGEMENT.md](runbooks/PLATFORM-MANAGEMENT.md) | High-level platform overview and quick links |
 | [UPDATE-PROCEDURES.md](runbooks/UPDATE-PROCEDURES.md) | All update procedures - automatic, semi-auto, manual |
+| [home-radio-zwave-zigbee.md](runbooks/home-radio-zwave-zigbee.md) | Z-Wave + Zigbee radio bridge (VM 1007) — why a VM not USB-into-k8s, the VERIFIED interface mapping (it is the opposite of the HUSBZB-1 write-up), the missing-cp210x landmine, ZHA settings, and the Z-Wave prep checklist |
 | [operations-guide.md](runbooks/operations-guide.md) | Command reference for all operations |
 | [kubernetes-upgrade.md](runbooks/kubernetes-upgrade.md) | Kubernetes version upgrade procedures |
 | [disaster-recovery.md](runbooks/disaster-recovery.md) | Recovery procedures for failure scenarios |

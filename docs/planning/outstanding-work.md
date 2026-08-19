@@ -263,6 +263,29 @@ This file foregrounds open/in-progress/gated work._
 > H46 + M150–M153 from the 2026-07-25 remote-access/ZT review
 > (`remote-access-zt-review-2026-07-25.md`).
 
+### ✅ M158. home-radio — Z-Wave/Zigbee bridge for HA (Zigbee LIVE 2026-08-16; Z-Wave deferred)
+- **Why a dedicated VM:** HA is a pod; USB-into-a-worker would pin it to one node forever
+  (node patching = HA downtime) and reopen the H46 privilege drop. VM 1007 (`10.10.201.41`)
+  exposes both radios over TCP via `ser2net` instead — HA stays reschedulable + unprivileged,
+  and it avoids zigbee2mqtt (which would need an MQTT broker this estate does not run).
+- ✅ **Zigbee LIVE** — ZHA via `socket://10.10.201.41:6638`, EZSP, 115200, flow control none.
+- ✅ **Secured same session:** M76 (step-ca enrolled, cert auth proven BEFORE the static key
+  was removed, bootstrap key verified rejected) + M77 (`policy_in=DROP`, baseline SG, ser2net
+  allows scoped to one /32 and two ports — a raw ser2net port is an UNAUTHENTICATED control
+  channel for the whole radio network).
+- ⚠️ **Three traps, all documented in the runbook:** (1) `cp210x` absent because the Ubuntu
+  cloud image ships no `linux-modules-extra` — device enumerates, no `/dev/ttyUSB*`, no error
+  (same root cause as M91); (2) the USB **interface mapping is the OPPOSITE** of the common
+  HUSBZB-1 write-up — verified by probing both ports with both protocols; getting it wrong
+  presents as ZHA "could not detect serial port settings"; (3) the firewall allow must target
+  the **Servers VLAN, not the pod CIDR** — pod egress is SNAT'd to the node IP.
+- ⏳ **Z-Wave: radio verified (`Z-Wave 7.22` on :3333), server NOT deployed** — deferred
+  2026-08-18, no Z-Wave devices owned. Full prep checklist in the runbook §6. ⚠️ The
+  irreversible step is generating + SOPS-storing the S0/S2 network keys BEFORE pairing
+  anything; lose them and every device needs a physical factory reset + re-pair.
+- Runbook: [`../runbooks/home-radio-zwave-zigbee.md`](../runbooks/home-radio-zwave-zigbee.md).
+  **Effort: M. Tier: M.**
+
 ### ✅ M157. GitHub org migration (`sparked-diamond` → `etherport`) + GitHub App auth — DONE 2026-08-14
 - **Why:** consolidate everything under the `etherport` name, and stop the treadmill of
   expiring per-purpose PATs. Full runbook + every gotcha: [`github-org-migration-2026-08.md`](github-org-migration-2026-08.md).
