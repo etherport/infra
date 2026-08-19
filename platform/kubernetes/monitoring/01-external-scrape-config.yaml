@@ -65,6 +65,45 @@ stringData:
           target_label: instance
           replacement: 'vpn-aws'
 
+    # ---- Rack power: APC UPS + PDU via snmp_exporter (multi-target) -------------
+    # One exporter serves all four devices; Prometheus supplies target/module/auth
+    # per scrape and the relabel swaps __address__ to the exporter.
+    # ⚠️ SNMP is UDP/161 — the monitoring tier's Cilium egress enumerates allowed
+    # world ports, so 161/UDP had to be added there or these scrape silently.
+    - job_name: 'snmp-ups'
+      scrape_interval: 60s
+      scrape_timeout: 30s
+      metrics_path: /snmp
+      params:
+        module: [apc_ups]
+        auth: [ups_v1]
+      static_configs:
+        - targets: ['10.10.200.10']
+          labels: {device: 'ups1', model: 'smart-ups-1500-rm', feeds: 'pdu1', mains_voltage: '120'}
+        - targets: ['10.10.200.11']
+          labels: {device: 'ups2', model: 'smart-ups-srt-3000', feeds: 'pdu2', mains_voltage: '208'}
+      relabel_configs:
+        - {source_labels: [__address__], target_label: __param_target}
+        - {source_labels: [__param_target], target_label: instance}
+        - {target_label: __address__, replacement: 'snmp-exporter.monitoring.svc.cluster.local:9116'}
+
+    - job_name: 'snmp-pdu'
+      scrape_interval: 60s
+      scrape_timeout: 30s
+      metrics_path: /snmp
+      params:
+        module: [apc_pdu]
+        auth: [pdu_v2]
+      static_configs:
+        - targets: ['10.10.200.15']
+          labels: {device: 'pdu1', model: 'ap7900b', fed_by: 'ups1', mains_voltage: '120'}
+        - targets: ['10.10.200.16']
+          labels: {device: 'pdu2', model: 'ap7811b', fed_by: 'ups2', mains_voltage: '208'}
+      relabel_configs:
+        - {source_labels: [__address__], target_label: __param_target}
+        - {source_labels: [__param_target], target_label: instance}
+        - {target_label: __address__, replacement: 'snmp-exporter.monitoring.svc.cluster.local:9116'}
+
     # PVE host IPMI / BMC sensors (ASRock Rack B650D4U). Deployed by
     # infra/ansible/playbooks/ipmi-monitoring.yml — see that file for
     # the threshold + ipmievd + rsyslog forwarder context.

@@ -56,6 +56,15 @@ spec:
             - { port: "587", protocol: TCP }
             - { port: "465", protocol: TCP }
             - { port: "25", protocol: TCP }
+    # SNMP to the rack power hardware (UPS .10/.11, PDU .15/.16 on the mgmt VLAN).
+    # Separate rule because it is the only UDP egress here and is scoped to that
+    # /24 rather than all of `world`. Without it snmp_exporter scrapes are dropped
+    # silently — the enumerated-port list above is TCP-only.
+    - toCIDR:
+        - 10.10.200.0/24
+      toPorts:
+        - ports:
+            - { port: "161", protocol: UDP }
             - { port: "9100", protocol: TCP }
             - { port: "9290", protocol: TCP }
   # DNS / kube-apiserver / host & remote-node (kubelet + hostNetwork node-exporter

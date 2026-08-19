@@ -92,6 +92,8 @@ resources:
   - ../../platform/kubernetes/wikijs
   # Monitoring
   - ../../platform/kubernetes/monitoring
+  # snmp_exporter — APC UPS + PDU power telemetry (rack draw, battery, load)
+  - ../../platform/kubernetes/snmp-exporter
   # unifi-poller (unpoller) — UDM/network telemetry → Prometheus (M55 / task #15).
   # STAGED but DISABLED until the operator creates a UniFi View-Only local
   # account + encrypts the creds Secret. See

@@ -1,0 +1,57 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: power-alerts
+  namespace: monitoring
+  labels: {release: monitoring}
+spec:
+  groups:
+    - name: ups.rules
+      rules:
+        # upsBasicOutputStatus: 2=onLine 3=onBattery 4=smartBoost 5=timedSleeping
+        # 12=smartTrim. Anything that is not 2 means we are not on clean mains.
+        - alert: UpsOnBattery
+          expr: apc_ups_output_status != 2
+          for: 1m
+          labels: {severity: critical}
+          annotations:
+            summary: "{{ $labels.instance }} is NOT on line power (status {{ $value }})"
+            description: "The UPS has left the onLine state — mains failure, boost or trim. Check apc_ups_battery_runtime_remaining for how long the rack has. PDU1 feeds from UPS1, PDU2 from UPS2, so a single UPS failing takes out one leg only."
+        - alert: UpsBatteryLow
+          expr: apc_ups_battery_capacity_percent < 50
+          for: 5m
+          labels: {severity: critical}
+          annotations:
+            summary: "{{ $labels.instance }} battery at {{ $value }}%"
+            description: "Battery capacity below 50%. If this is not during a recharge after an outage, the battery pack is degrading and should be replaced — runtime will be far shorter than the reported estimate under real load."
+        - alert: UpsBatteryNeedsReplacement
+          expr: apc_ups_battery_capacity_percent < 90 and apc_ups_output_status == 2
+          for: 6h
+          labels: {severity: warning}
+          annotations:
+            summary: "{{ $labels.instance }} battery not reaching full charge"
+            description: "On line power for 6h and still below 90%. Healthy packs recharge to 100%; a persistent shortfall is the classic sign of an ageing battery."
+        - alert: UpsOverloaded
+          expr: apc_ups_output_load_percent > 80
+          for: 10m
+          labels: {severity: warning}
+          annotations:
+            summary: "{{ $labels.instance }} at {{ $value }}% load"
+            description: "Sustained load above 80%. Runtime on battery falls sharply as load rises, so the reported runtime estimate is optimistic at this level."
+        # Absence matters: these are the only power telemetry in the estate.
+        - alert: UpsScrapeMissing
+          expr: absent(apc_ups_output_load_percent)
+          for: 15m
+          labels: {severity: warning}
+          annotations:
+            summary: "No UPS SNMP data reaching Prometheus"
+            description: "snmp_exporter is not returning UPS metrics. Check the exporter pod, and remember the monitoring tier's Cilium egress must permit UDP/161 to 10.10.200.0/24 — that allowlist gap silently drops scrapes."
+    - name: pdu.rules
+      rules:
+        - alert: PduHighCurrent
+          expr: apc_pdu_phase_current_deciamps / 10 > 12
+          for: 10m
+          labels: {severity: warning}
+          annotations:
+            summary: "{{ $labels.instance }} drawing {{ $value }}A"
+            description: "Above 12A sustained on a 15A-class rack PDU. Investigate before it trips."
