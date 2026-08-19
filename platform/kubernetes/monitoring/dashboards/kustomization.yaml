@@ -10,3 +10,4 @@ resources:
   - photos-export.yaml
   - icloud-backups.yaml
   - aws-cost.yaml
+  - rack-power.yaml
