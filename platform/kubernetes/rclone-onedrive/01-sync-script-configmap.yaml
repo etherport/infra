@@ -89,6 +89,12 @@ data:
     # (~1000 items/page → a handful of paginated calls instead of per-folder),
     # which is the real win here. It always lists the WHOLE drive regardless of
     # path — fine, since SRC is the drive root anyway. Requires --fast-list.
+    # WSP/Clients excluded 2026-08-18 (owner): ~16.3G, 91% of this backup. It is
+    # many redundant copies of the WSP/Classes masters AND is independently held on
+    # the WSP Dropbox, so backing it up bought nothing while dominating NAS + S3.
+    # The existing NAS copy was deleted in the same change — an rclone exclude
+    # alone would NOT have removed it, because filters apply to BOTH sides and
+    # rclone leaves excluded destination paths untouched.
     ( rclone sync "$SRC" "$DEST" \
         --config=/config/rclone/rclone.conf \
         --bind 0.0.0.0 \
@@ -100,6 +106,7 @@ data:
         --stats-log-level=INFO \
         --log-level=INFO \
         --exclude="/Personal Vault/**" \
+        --exclude="/WSP/Clients/**" \
         --exclude=.DS_Store \
         --exclude=Thumbs.db \
         --exclude=desktop.ini; \
