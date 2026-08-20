@@ -56,6 +56,15 @@ spec:
             - { port: "587", protocol: TCP }
             - { port: "465", protocol: TCP }
             - { port: "25", protocol: TCP }
+            # ⚠️ KEEP THESE IN THE `world` RULE. External node-exporters live on
+            # 10.10.201.x / 10.10.100.x, NOT the mgmt /24. On 2026-08-19 an SNMP
+            # toCIDR rule was inserted directly above these two lines; the diff was
+            # purely ADDITIVE (no deletions) yet it RE-PARENTED them into that rule,
+            # scoping them to 10.10.200.0/24 and silently killing every :9100 scrape
+            # for ~24h. :9290 kept working because pve IS in that /24, which made it
+            # look like hosts were down rather than a policy change.
+            - { port: "9100", protocol: TCP }
+            - { port: "9290", protocol: TCP }
     # SNMP to the rack power hardware (UPS .10/.11, PDU .15/.16 on the mgmt VLAN).
     # Separate rule because it is the only UDP egress here and is scoped to that
     # /24 rather than all of `world`. Without it snmp_exporter scrapes are dropped
@@ -65,7 +74,5 @@ spec:
       toPorts:
         - ports:
             - { port: "161", protocol: UDP }
-            - { port: "9100", protocol: TCP }
-            - { port: "9290", protocol: TCP }
   # DNS / kube-apiserver / host & remote-node (kubelet + hostNetwork node-exporter
   # scrape targets) via the cluster-wide allow-dns + allow-cluster-essentials CCNPs.
